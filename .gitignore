@@ -1,0 +1,15 @@
+# gitignore
+
+# ignore shells
+*.sh
+*.e*
+*.o*
+
+# ignore random test bits
+*test*.*
+*test*/
+
+# old things that will not be used/updated
+
+*deprecated*/
+*old*/

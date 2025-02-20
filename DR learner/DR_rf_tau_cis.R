@@ -1,0 +1,140 @@
+######################
+# title: getting tau estimates and confidence intervals for the DR learner with RFs
+# date started: 08/01/25
+# date finished:
+# author: Ellie Van Vogt
+#####################
+set.seed(1998)
+# simultaneous inference code - my version
+
+# libraries
+library(foreach)
+library(doParallel)
+library(dplyr)
+library(grf)
+library(syrup)
+
+# paths 
+path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
+setwd(path)
+
+# functions
+source("live/scripts/functions/collate_predictions.R")
+
+# Reading arguments
+args <- commandArgs(trailingOnly = TRUE)
+scenario <- as.character(args[1])
+n <- as.numeric(args[2])
+
+# load in the data
+datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
+datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
+
+# parameters
+n_cores <- 10 #floor(future::availableCores() *0.9)
+n_folds <- 10 
+B <- 200 # number of bootstraps
+
+# define a function to get CIs and taus for a single dataset
+taus_and_cis <- function(data) {
+  X <- as.matrix(data[, -c(1:2)])  # Keeping only the covariates
+  Y <- data$Y
+  W <- data$W
+  
+  n <- dim(X)[1]
+  
+  # Create fold indices
+  fold_indices <- sort(seq(n) %% n_folds) + 1
+  fold_list <- unique(fold_indices)
+  fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)  # Fold pairs
+  
+  # Perform cross-fits
+  cross_fits <- lapply(fold_pairs, function(fold_pair) {
+    in_train <- !(fold_indices %in% fold_pair) #train
+    in_test <- which(!in_train)  #test
+    
+    Y.hat.model <- regression_forest(cbind(W[in_train], X[in_train, ]), Y[in_train])
+    W.hat.model <- regression_forest(X[in_train, ], W[in_train])
+    
+    X_test <- X[in_test, ]
+    Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X_test))$predictions
+    Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X_test))$predictions
+    W.hat <- predict(W.hat.model, newdata = X_test)$predictions
+    
+    W_test <- W[in_test]
+    Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
+    
+    cate <- Y1.hat - Y0.hat
+    po <- cate + ((Y[in_test] - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
+    
+    list(po = po, Y.hat = Y.hat, W.hat = W.hat)
+  })
+  
+  # Collate matrices
+  po_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "po")
+  Y.hat_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "Y.hat")
+  W.hat_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "W.hat")
+
+  # out of sample po estimates
+  po <- rowMeans(po_matrix, na.rm = T)
+  
+
+  # point estimate for tau
+  tau <- c(rep(NA, n))
+  for (fold in seq_along(fold_list)) {
+    in_train <- fold_indices != fold
+    in_fold <- !in_train
+    forest <- regression_forest(X[in_train,], po[in_train])
+    tau[in_fold] <- predict(forest, newdata = X[in_fold, ])$predictions
+  }
+  
+  t2 <- Sys.time()
+  # B half bootstraps
+  draws <- replicate(B, {
+    # get your half samples
+    half_samples <- lapply(fold_list, function(fold) {
+      full <- sum(fold_indices == fold)
+      half <- c(rep(F, full))
+      half[sample(1:full, floor(full/2), replace = F)] <- T
+      return(half)
+    }) %>% unlist()
+    
+    # compute the CATEs using the half kept
+    tau_half <- lapply(fold_list, function(fold) {
+      in_train <- half_samples & (fold_indices != fold) # half samples not not in the fold
+      in_fold <- fold_indices == fold
+      DR_rf <- regression_forest(X[in_train,], po[in_train])
+      tau_half_est <- predict(DR_rf, newdata = X[in_fold,])
+      return(tau_half_est)
+    }) %>% unlist() %>% unname()
+    
+    # construct root
+    half_root <- tau - tau_half
+    return(half_root)
+  })
+  t3 <- Sys.time()
+  print(t3-t2)
+  
+  # getting the confidence intervals from summary statistics of draws
+  lambda_hat <- apply(draws, 1, var)
+  normalized <- abs(draws)/(sqrt(lambda_hat))
+  col_max    <- apply(normalized, 2, max)
+  S_star     <- quantile(col_max, 0.975) # for 95% confidence intervals
+  
+  # now get the confidence intervals
+  res <- data.frame(tau = tau,
+                    lb = tau - sqrt(lambda_hat)*S_star,
+                    ub = tau + sqrt(lambda_hat)*S_star)
+  return(res)
+}
+
+
+
+# Parallelise the function
+t0 <- Sys.time()
+results <- mclapply(datasets, taus_and_cis, mc.cores = n_cores)
+t1 <- Sys.time()
+print(t1-t0)
+
+# Save results
+saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/DR learner/", "DR_rf_taus_cis.RDS"), collapse = ""))
