@@ -18,21 +18,18 @@ setwd(path)
 # functions
 source("live/scripts/functions/collate_predictions.R")
 
-# Reading arguments
+# Read args and set parameters
 args <- commandArgs(trailingOnly = TRUE)
 scenario <- as.character(args[1])
 n <- as.numeric(args[2])
+n_cores <- as.numeric(args[3])  
+n_folds <- 10 
 
 # load in the data
 datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
-
-# Parameters to set
-n_cores <- 10  
-n_folds <- 10  
-
-
+#function for TE-VIMS
 te_vims_CF <- function(data) {
   X <- as.matrix(data[, -c(1:2)])  # Keeping only the covariates
   Y <- data$Y
@@ -69,20 +66,6 @@ te_vims_CF <- function(data) {
   
   
   # Collate Y.hat and W.hat matrices
-  collate_predictions <- function(fold_list, fold_pairs, fold_indices, cross_fits, target) {
-    lapply(fold_list, function(fold) {
-      predictions <- rep(NA, length.out = length(fold_indices))
-      for (j in seq_along(fold_pairs)) {
-        fold_pair <- fold_pairs[[j]]
-        if (fold %in% fold_pair) next
-        
-        predictions[fold_indices %in% fold_pair] <- cross_fits[[j]][[target]]
-      }
-      predictions[fold_indices == fold] <- NA
-      predictions
-    }) %>% simplify2array()
-  }
-  
   po_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "po")
   Y.hat_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "Y.hat")
   W.hat_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "W.hat")
@@ -128,17 +111,27 @@ te_vims_CF <- function(data) {
     infl <- r_subtau - r_tau - tevim
     std_err <- sqrt(sum(infl^2)) / n
     
-    list(tevim = tevim, std_err = std_err)
-  })
+    return(list(tevim = tevim, std_err = std_err))
+  }) %>% simplify2array()
   
+  te_vims <- as.data.frame(te_vims)
   return(te_vims)
 }
 
 # Parallelise the function
-t0 <- Sys.time()
-results <- mclapply(datasets, te_vims_CF, mc.cores = n_cores)
-t1 <- Sys.time()
-print(t1-t0)
+metrics <- syrup(
+  results <- mclapply(datasets, te_vims_CF, mc.cores = n_cores)
+)
+
+# resource usage
+max_time <- max(metrics$time, na.rm = T)-min(metrics$time, na.rm = T)
+max_cpu <- max(metrics$pct_cpu, na.rm = T)
+max_mem <- max(metrics$rss, na.rm = T)
+
+print(paste0("model running for ", max_time))
+print(paste0("peak CPU usage: ", max_cpu, "%"))
+print(paste0("peak memory usage: ", max_mem))
+
 
 # Save results
 saveRDS(results, file = paste0(c("live/results/", scenario, "/", n, "/CF/", "te_vims_list.rds"), collapse = ""))

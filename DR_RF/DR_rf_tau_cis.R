@@ -21,19 +21,20 @@ setwd(path)
 # functions
 source("live/scripts/functions/collate_predictions.R")
 
-# Reading arguments
+# Reading arguments and set params
 args <- commandArgs(trailingOnly = TRUE)
 scenario <- as.character(args[1])
 n <- as.numeric(args[2])
+n_cores <- as.numeric(args[3]) 
+n_folds <- 10 
+B <- 200 # number of bootstraps
 
 # load in the data
 datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
 # parameters
-n_cores <- 10 #floor(future::availableCores() *0.9)
-n_folds <- 10 
-B <- 200 # number of bootstraps
+
 
 # define a function to get CIs and taus for a single dataset
 taus_and_cis <- function(data) {
@@ -137,4 +138,4 @@ t1 <- Sys.time()
 print(t1-t0)
 
 # Save results
-saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/DR learner/", "DR_rf_taus_cis.RDS"), collapse = ""))
+saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/DR_RF/", "DR_rf_taus_cis.RDS"), collapse = ""))

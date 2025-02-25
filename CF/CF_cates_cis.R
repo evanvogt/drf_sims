@@ -10,30 +10,30 @@ set.seed(1998)
 # Load necessary packages
 library(foreach)
 library(doParallel)
-library(purrr)
 library(grf)
+library(syrup)
+library(dplyr)
 
 # paths ----
 path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
-
-
 # functions
 source("live/scripts/functions/collate_predictions.R")
 
-# Reading arguments
+# Read args and set parameters
 args <- commandArgs(trailingOnly = TRUE)
 scenario <- as.character(args[1])
 n <- as.numeric(args[2])
+n_cores <- as.numeric(args[3])
+n_folds <- 10  
 
 # load in the data
 datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
-# Set the number of cores for parallel proccess
-n_cores <- 10 #floor(future::availableCores() *0.9)
-n_folds <- 10  # Number of folds for cross-fitting
+# cores and folds
+
 
 # Run in parallel for all datasets
 cate_blp <- function(data) {
@@ -66,7 +66,7 @@ cate_blp <- function(data) {
   
   # Create causal forests
   tau <- matrix(NA, n, 3)
-  BLP <- numeric(n_folds)
+  BLP <- vector(mode = "list", length = n_folds)
   for (fold in seq_len(n_folds)) {
     in_train <- fold_indices != fold
     in_fold <- !in_train
@@ -82,25 +82,33 @@ cate_blp <- function(data) {
       pred$predictions + qnorm(0.975) * sqrt(pred$variance.estimates)
     )
     tau[in_fold, ] <- tau_est
-    BLP[fold] <- test_calibration(forest)[2, 4]
+    BLP[[fold]] <- test_calibration(forest)[, c(1,4)]
   }
-  list(tau = tau, BLP = BLP)
+  tau <- as.data.frame(tau)
+  colnames(tau) <- c("tau", "lb", "ub")
+  
+  return(list(tau = tau, BLP = BLP))
 }
 
 
 # Parallelise the function
-t0 <- Sys.time()
-results <- mclapply(datasets, cate_blp, mc.cores = n_cores)
-t1 <- Sys.time()
-print(t1-t0)
+metrics <- syrup(
+  results <- mclapply(datasets, cate_blp, mc.cores = n_cores)
+)
+
+# resource usage
+max_time <- max(metrics$time, na.rm = T) - min(metrics$time, na.rm = T)
+max_cpu <- max(metrics$pct_cpu, na.rm = T)
+max_mem <- max(metrics$rss, na.rm = T)
+
+print(max_time)
+print(paste0("peak CPU usage: ", max_cpu, "%"))
+print(paste0("peak memory usage: ", max_mem))
 
 
 # Separate results into CATEs and BLP tests
-CATEs <- sapply(results, `[[`, "tau")  # Extract the "CATE" element from each result
-BLP_tests <- sapply(results, `[[`, "BLP")  # Extract the "BLP_test" element from each result
-
-CATEs <- t(CATEs)
-BLP_tests <- t(BLP_tests)
+CATEs <- lapply(results, `[[`, "tau") 
+BLP_tests <- lapply(results, `[[`, "BLP")  
 
 # save output
 saveRDS(CATEs, paste0(c("live/results/", scenario, "/", n, "/CF/", "causal_forest_cates.RDS"), collapse = ""))

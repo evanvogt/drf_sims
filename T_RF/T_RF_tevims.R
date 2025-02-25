@@ -1,40 +1,41 @@
 ######################
-# title: TE-VIMs for the DR learner
+# title: TE-vims for the T-learner
 # date started: 08/01/25
 # date finished:
 # author: Ellie Van Vogt
 #####################
 set.seed(1998)
-# use the cross fitting code from TE-VIMS package to get the crossfitted CFs...
+# adapting O hines github code
 
-# Load necessary packages
+# libraries
+library(foreach)
 library(doParallel)
 library(dplyr)
 library(grf)
 library(syrup)
 
-# paths ----
+# paths 
 path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
 # functions
 source("live/scripts/functions/collate_predictions.R")
 
-# Reading arguments
+# Read args and set parameters
 args <- commandArgs(trailingOnly = TRUE)
 scenario <- as.character(args[1])
 n <- as.numeric(args[2])
+n_cores <- as.numeric(args[3])
+n_folds <- 10 
 
 # load in the data
 datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
-# Set the number of cores for parallel proccess
-n_cores <- 5 #floor(future::availableCores() *0.9)
-n_folds <- 10  # Number of folds for cross-fitting
 
-# Run in parallel for all datasets
-te_vims_DR <- function(data) {
+
+# TE-VIMs for a single dataset
+T_RF_tevim <- function(data) {
   X <- as.matrix(data[, -c(1:2)])  # Keeping only the covariates
   Y <- data$Y
   W <- data$W
@@ -43,20 +44,21 @@ te_vims_DR <- function(data) {
   
   # Create fold indices
   fold_indices <- sort(seq(n) %% n_folds) + 1
-  fold_list <- unique(fold_indices)
-  fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)  # Fold pairs
   
   # Perform cross-fits
-  cross_fits <- lapply(fold_pairs, function(fold_pair) {
-    in_train <- !(fold_indices %in% fold_pair) #train
+  cross_fits <- lapply(seq_len(n_folds), function(fold) {
+    in_train <- !(fold_indices == fold) #train
     in_test <- which(!in_train)  #test
+    train0 <- in_train & W==0 # train control
+    train1 <- in_train & W==1 # train treated
     
-    Y.hat.model <- regression_forest(cbind(W[in_train], X[in_train, ]), Y[in_train])
+    Y0.hat.model <- regression_forest(X[train0, ], Y[train0])
+    Y1.hat.model <- regression_forest(X[train1, ], Y[train1])
     W.hat.model <- regression_forest(X[in_train, ], W[in_train])
     
     X_test <- X[in_test, ]
-    Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X_test))$predictions
-    Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X_test))$predictions
+    Y0.hat <- predict(Y0.hat.model, newdata = X_test)$predictions
+    Y1.hat <- predict(Y1.hat.model, newdata = X_test)$predictions
     W.hat <- predict(W.hat.model, newdata = X_test)$predictions
     
     W_test <- W[in_test]
@@ -65,25 +67,19 @@ te_vims_DR <- function(data) {
     cate <- Y1.hat - Y0.hat
     po <- cate + ((Y[in_test] - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
     
-    list(po = po, Y.hat = Y.hat, W.hat = W.hat)
+    list(po = po, cate = cate)
   })
   
-  # Collate cross-fit pseudo outcomes
-  po_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "po")
-  
-  # out of sample po estimates
-  po <- rowMeans(po_matrix, na.rm = T)
-  
-  # our taus we are comparing against for TE-VIMs
-  tau <- c(rep(NA, n))
-  for (fold in seq_along(fold_list)) {
-    in_train <- fold_indices != fold
-    in_fold <- !in_train
-    forest <- regression_forest(X[in_train,], po[in_train])
-    tau[in_fold] <- predict(forest, newdata = X[in_fold, ])$predictions
+  # Collate po and tau
+  po <- rep(NA, length.out = n)
+  tau <- rep(NA, length.out = n)
+  for (fold in seq_len(n_folds)) {
+    in_fold <- fold_indices == fold
+    po[in_fold] <- cross_fits[[fold]]$po
+    tau[in_fold] <- cross_fits[[fold]]$cate
   }
   
-  # Rerunning the forests with leave-one-out method
+  # getting the subtaus for removing each variable
   covariates <- colnames(X)
   sub_taus <- matrix(nrow = n, ncol = length(covariates))
   colnames(sub_taus) <- covariates
@@ -91,18 +87,30 @@ te_vims_DR <- function(data) {
     cov <- covariates[i]
     new_X <- as.matrix(X[, -i])
     
-    for (fold in seq_along(fold_list)) {
+    #re estimate cate with new_X
+    for (fold in seq_len(n_folds)) {
       in_train <- fold_indices != fold
       in_fold <- !in_train
-      DR_sub <- regression_forest(as.matrix(new_X[in_train, ]), po[in_train])
-      sub_taus[in_fold, i] <- predict(DR_sub, newdata = as.matrix(new_X[in_fold, ]))$predictions
+      train0 <- in_train & W==0 # train control
+      train1 <- in_train & W==1 # train treated
+      
+      # re train Y models on new X
+      Y0.hat.model <- regression_forest(as.matrix(new_X[train0, ]), Y[train0])
+      Y1.hat.model <- regression_forest(as.matrix(new_X[train1, ]), Y[train1])
+
+      Y0.hat <- predict(Y0.hat.model, newdata = as.matrix(new_X[in_fold, ]))$predictions
+      Y1.hat <- predict(Y1.hat.model, newdata = as.matrix(new_X[in_fold, ]))$predictions
+      
+      # cate in fold
+      cate <- Y1.hat - Y0.hat
+      
+      sub_taus[in_fold, i] <- cate
     }
   }
   
   # Compute TE-VIMs
-  
   ate <- sum(po) / n
-
+  
   r_ate <- (po - ate)^2
   r_tau <- (po - tau)^2
   
@@ -111,24 +119,25 @@ te_vims_DR <- function(data) {
     
     # evaluate TE-VIM (Theta_s in the paper)
     tevim <- sum(r_subtau - r_tau) / n
-
+    
     infl <- r_subtau - r_tau - tevim
     std_err <- sqrt(sum(infl^2)) / n
     
     list(tevim = tevim, std_err = std_err)
-  })
-    
+  }) %>% simplify2array()
+  
+  te_vims <- as.data.frame(te_vims)
   
   return(te_vims)
 }
 
 
+
 # Parallelise the function
 t0 <- Sys.time()
-results <- mclapply(datasets, te_vims_DR, mc.cores = n_cores)
+results <- mclapply(datasets, T_RF_tevim, mc.cores = n_cores)
 t1 <- Sys.time()
 print(t1-t0)
 
-
 # Save results
-saveRDS(results, paste0(c("live/results/", scenario, "/", n,  "/DR_RF/", "DR_rf_tevims.RDS"), collapse = ""))
+saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/T_RF/", "T_RF_te_vims.RDS"), collapse = ""))
