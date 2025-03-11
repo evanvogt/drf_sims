@@ -1,5 +1,5 @@
 # gitignore
-
+ssh*
 # ignore shells
 *.sh
 *.e*
