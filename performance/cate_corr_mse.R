@@ -16,7 +16,7 @@ setwd(path)
 
 # lists and categories
 samplesizes <- c(250, 500, 1000, 5000)
-models <- c("CF", "DR_RF", "T_RF")#, "Logistic", "H_lasso")
+models <-  c("CF", "DR_RF", "T_RF")#, "Logistic", "H_lasso")
 scens <- paste0("scenario_", seq_along(1:10))
 
 

@@ -24,6 +24,14 @@ scens <- paste0("scenario_", seq_along(1:10))
 data_all <- readRDS("live/data/all_data.RDS")
 sim_results <- readRDS("live/results/all/sim_results_all.RDS")
 
+BLP_results <- lapply(sim_results, function(scenario) {
+  test_n <- lapply(samplesizes, function(n) {
+    test_m <- lapply(models, function(model) {
+      sim_results[[scenario]][[as.character(n)]][[model]][["BLP"]]
+    })
+  })
+})
+
 BLP_tests <- setNames(vector("list", length(scens)), scens)
 
 for (scenario in scens) {
@@ -40,7 +48,7 @@ for (scenario in scens) {
     
     for (model in models) {
       files <- names(sim_results[[scenario]][[as.character(n)]][[model]])
-      cates <- files[grepl("cate", files, ignore.case = T)]
+      cates <- files[grepl("BLP", files, ignore.case = T)]
       
       #check this model does generate taus that we can check out
       if (!is.null(cates) & length(cates)==1) {

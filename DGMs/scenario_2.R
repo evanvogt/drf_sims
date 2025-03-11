@@ -4,7 +4,7 @@
 # date finished:
 # author: Ellie Van Vogt
 ###############
-# binary outcome with logistic link
+rm(list = ls(all = T))
 set.seed(1998)
 # libraries ----
 
@@ -58,8 +58,13 @@ generate_dataset <- function(n) {
 
 for (size in sizes) {
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  saveRDS(dataset, file = paste0("live/data/scenario_2_", size, ".rds"))
+  saveRDS(dataset, file = paste0("live/data/scenario_2_", size, ".RDS"))
 }
+
+# save the true DGM function for the oracle DR learner
+fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)"
+oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b3 = b3, bW = bW)
+saveRDS(oracle_list, file = paste0("live/data/scenario_2_oracle.RDS"))
 
 # true subgroup effects ----
 # generate the threshold for positive and negative treatment effect:
@@ -75,5 +80,5 @@ s2 <- mean(large$tau[large$X3 == 0])
 
 gates <- c(s1, s2)
 names(gates) <- c("X3==1", "X3==0")
-saveRDS(gates, paste0("live/data/scenario_2_true_GATEs", size, ".rds"))
+saveRDS(gates, paste0("live/data/scenario_2_true_GATEs", size, ".RDS"))
 

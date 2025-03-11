@@ -4,7 +4,7 @@
 # date finished:
 # author: Ellie Van Vogt
 ###############
-# doing this with the logistic link because otherwise the errors go weird
+rm(list = ls(all= T))
 set.seed(1998)
 # libraries ----
 
@@ -57,9 +57,13 @@ generate_dataset <- function(n) {
 
 for (size in sizes) {
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  saveRDS(dataset, file = paste0("live/data/scenario_9_", size, ".rds"))
+  saveRDS(dataset, file = paste0("live/data/scenario_9_", size, ".RDS"))
 }
 
+# save the true DGM function for the oracle DR learner
+fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*cos(X$X4))"
+oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b4 = b4, bW = bW)
+saveRDS(oracle_list, file = paste0("live/data/scenario_9_oracle.RDS"))
 
 # true subgroup effects ----
 # not sure about how to calculate the truth for this yet lol - might need to fiddle more with the DGM

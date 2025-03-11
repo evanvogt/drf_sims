@@ -1,36 +1,40 @@
 ######################
-# title: model-free variable importance metric for the causal forest
+# title: TE-VIMs for the DR learner
 # date started: 08/01/25
 # date finished:
 # author: Ellie Van Vogt
 #####################
 set.seed(1998)
-# Libraries
-library(doParallel)
+
+
+# Load necessary packages
+library(furrr)
 library(dplyr)
 library(grf)
-library(syrup)
 
-# Paths
+# paths ----
 path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
 # functions
 source("live/scripts/functions/collate_predictions.R")
 
-# Read args and set parameters
+# Read args and set params
 args <- commandArgs(trailingOnly = TRUE)
 scenario <- as.character(args[1])
 n <- as.numeric(args[2])
-n_cores <- as.numeric(args[3])  
-n_folds <- 10 
+n_cores <- as.numeric(args[3]) 
+n_folds <- 10
+
+oldplan <- plan()
+plan(multisession, workers = n_cores)
 
 # load in the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
+datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
-#function for TE-VIMS
-te_vims_CF <- function(data) {
+# Run in parallel for all datasets
+te_vims_DR <- function(data) {
   X <- as.matrix(data[, -c(1:2)])  # Keeping only the covariates
   Y <- data$Y
   W <- data$W
@@ -64,18 +68,18 @@ te_vims_CF <- function(data) {
     list(po = po, Y.hat = Y.hat, W.hat = W.hat)
   })
   
-  
-  # Collate Y.hat and W.hat matrices
+  # Collate cross-fit pseudo outcomes
   po_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "po")
-  Y.hat_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "Y.hat")
-  W.hat_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "W.hat")
   
-
+  # out of sample po estimates
+  po <- rowMeans(po_matrix, na.rm = T)
+  
+  # our taus we are comparing against for TE-VIMs
   tau <- c(rep(NA, n))
   for (fold in seq_along(fold_list)) {
     in_train <- fold_indices != fold
     in_fold <- !in_train
-    forest <- causal_forest(X[in_train, ], Y[in_train], W[in_train], Y.hat_matrix[in_train, fold], W.hat_matrix[in_train, fold])
+    forest <- regression_forest(X[in_train,], po[in_train])
     tau[in_fold] <- predict(forest, newdata = X[in_fold, ])$predictions
   }
   
@@ -90,15 +94,15 @@ te_vims_CF <- function(data) {
     for (fold in seq_along(fold_list)) {
       in_train <- fold_indices != fold
       in_fold <- !in_train
-      new_forest <- causal_forest(as.matrix(new_X[in_train, ]), Y[in_train], W[in_train], Y.hat_matrix[in_train, fold], W.hat_matrix[in_train, fold])
-      sub_taus[in_fold, i] <- predict(new_forest, newdata = as.matrix(new_X[in_fold, ]))$predictions
+      DR_sub <- regression_forest(as.matrix(new_X[in_train, ]), po[in_train])
+      sub_taus[in_fold, i] <- predict(DR_sub, newdata = as.matrix(new_X[in_fold, ]))$predictions
     }
   }
   
   # Compute TE-VIMs
-  po <- rowMeans(po_matrix, na.rm = T)
-  ate <- sum(po) / n
   
+  ate <- sum(po) / n
+
   r_ate <- (po - ate)^2
   r_tau <- (po - tau)^2
   
@@ -107,32 +111,26 @@ te_vims_CF <- function(data) {
     
     # evaluate TE-VIM (Theta_s in the paper)
     tevim <- sum(r_subtau - r_tau) / n
-    
+
     infl <- r_subtau - r_tau - tevim
     std_err <- sqrt(sum(infl^2)) / n
     
-    return(list(tevim = tevim, std_err = std_err))
+    list(tevim = tevim, std_err = std_err)
   }) %>% simplify2array()
   
   te_vims <- as.data.frame(te_vims)
+    
+  
   return(te_vims)
 }
 
+
 # Parallelise the function
-metrics <- syrup(
-  results <- mclapply(datasets, te_vims_CF, mc.cores = n_cores)
-)
-
-# resource usage
-max_time <- max(metrics$time, na.rm = T)-min(metrics$time, na.rm = T)
-max_cpu <- max(metrics$pct_cpu, na.rm = T)
-max_mem <- max(metrics$rss, na.rm = T)
-
-print(paste0("model running for ", max_time))
-print(paste0("peak CPU usage: ", max_cpu, "%"))
-print(paste0("peak memory usage: ", max_mem))
-
+t0 <- Sys.time()
+results <- future_map(datasets, te_vims_DR, .options = furrr_options(seed = T))
+t1 <- Sys.time()
+print(t1-t0)
+plan(oldplan)
 
 # Save results
-saveRDS(results, file = paste0(c("live/results/", scenario, "/", n, "/CF/", "te_vims_list.rds"), collapse = ""))
-
+saveRDS(results, paste0(c("live/results/", scenario, "/", n,  "/DR_RF/", "te_vims.RDS"), collapse = ""))

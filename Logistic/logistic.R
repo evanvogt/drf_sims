@@ -4,12 +4,12 @@
 # date finished:
 # author: Ellie Van Vogt
 #####################
-
+set.seed(1998)
 
 #libraries
 library(stats)
 library(dplyr)
-library(doParallel)
+library(furrr)
 
 #paths
 path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
@@ -19,17 +19,13 @@ setwd(path)
 args <- commandArgs(trailingOnly = TRUE)
 scenario <- as.character(args[1])
 n <- as.numeric(args[2])
+n_cores <- 5
+
+oldplan <- plan(multicore, workers = n_cores)
 
 # load in the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
+datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
-
-
-# cores and folds
-# not crossfitting this because I don't think it makes sense?
-# available cores seems to not be working atm :()
-n_cores <- 10 #floor(parallelly::availableCores() *0.9)
-
 
 
 logistic_analysis <- function(data) {
@@ -61,9 +57,11 @@ logistic_analysis <- function(data) {
 
 # do the logistic regressions in parallel:
 t0 <- Sys.time()
-results <- mclapply(datasets, logistic_analysis, mc.cores = n_cores)
+results <- future_map(datasets, logistic_analysis, .progress = T, .options = furrr_options(seed = T))
 t1 <- Sys.time()
 print(t1-t0)
+
+plan(oldplan)
 
 #save the results
 saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/Logistic/", "interactions.RDS"), collapse = ""))

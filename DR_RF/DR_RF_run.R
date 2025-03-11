@@ -1,43 +1,5 @@
-######################
-# title: getting tau estimates and confidence intervals for the DR learner with RFs
-# date started: 08/01/25
-# date finished:
-# author: Ellie Van Vogt
-#####################
-set.seed(1998)
-# simultaneous inference code - my version
-
-# libraries
-library(foreach)
-library(doParallel)
-library(dplyr)
-library(grf)
-library(syrup)
-
-# paths 
-path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
-setwd(path)
-
-# functions
-source("live/scripts/functions/collate_predictions.R")
-
-# Reading arguments and set params
-args <- commandArgs(trailingOnly = TRUE)
-scenario <- as.character(args[1])
-n <- as.numeric(args[2])
-n_cores <- as.numeric(args[3]) 
-n_folds <- 10 
-B <- 200 # number of bootstraps
-
-# load in the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
-datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
-
-# parameters
-
-
-# define a function to get CIs and taus for a single dataset
-taus_and_cis <- function(data) {
+require(grf, GenericML, dplyr, furrr)
+DR_RF_output <- function(data, n_folds, scenario, B, workers) {
   X <- as.matrix(data[, -c(1:2)])  # Keeping only the covariates
   Y <- data$Y
   W <- data$W
@@ -68,30 +30,46 @@ taus_and_cis <- function(data) {
     cate <- Y1.hat - Y0.hat
     po <- cate + ((Y[in_test] - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
     
-    list(po = po, Y.hat = Y.hat, W.hat = W.hat)
+    list(po = po, Y0.hat = Y0.hat, W.hat = W.hat)
   })
   
   # Collate matrices
   po_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "po")
-  Y.hat_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "Y.hat")
+  Y0.hat_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "Y0.hat")
   W.hat_matrix <- collate_predictions(seq_len(n_folds), fold_pairs, fold_indices, cross_fits, "W.hat")
-
-  # out of sample po estimates
-  po <- rowMeans(po_matrix, na.rm = T)
   
-
-  # point estimate for tau
+  # tau ----
+  
   tau <- c(rep(NA, n))
   for (fold in seq_along(fold_list)) {
     in_train <- fold_indices != fold
     in_fold <- !in_train
-    forest <- regression_forest(X[in_train,], po[in_train])
+    forest <- regression_forest(X[in_train,], po_matrix[in_train, fold])
     tau[in_fold] <- predict(forest, newdata = X[in_fold, ])$predictions
   }
   
-  t2 <- Sys.time()
-  # B half bootstraps
-  draws <- replicate(B, {
+  # get BLP ----
+  Y0.hat <- Y0.hat_matrix %>% rowMeans(,na.rm = T)
+  W.hat <- W.hat_matrix %>% rowMeans(, na.rm = T)
+  BLP_tests <- lapply(seq_len(n_folds), function(fold) {
+    in_fold <- fold_indices == fold
+    blp_test <- BLP(Y[in_fold], W[in_fold], W.hat[in_fold], Y0.hat[in_fold], tau[in_fold])$coefficients[,c(1,4)]
+    return(blp_test)
+  })
+  
+  # BLP on the whole dataset
+  BLP_whole <- BLP(Y, W, W.hat, Y0.hat, tau)$coefficients[,c(1,4)]
+  # collate the p-values from the folds
+  HTE_pval <- lapply(BLP_tests, function(x) {
+    p_val <- x[4,2]
+  }) %>% unlist()
+  
+  
+  
+  # confidence intervals ----
+  metaplan <- plan(multicore, workers = workers)
+  on.exit(plan(metaplan), add = T)
+  draws <- future_map(seq_len(B), function(b) {
     # get your half samples
     half_samples <- lapply(fold_list, function(fold) {
       full <- sum(fold_indices == fold)
@@ -104,7 +82,7 @@ taus_and_cis <- function(data) {
     tau_half <- lapply(fold_list, function(fold) {
       in_train <- half_samples & (fold_indices != fold) # half samples not not in the fold
       in_fold <- fold_indices == fold
-      DR_rf <- regression_forest(X[in_train,], po[in_train])
+      DR_rf <- regression_forest(X[in_train,], po_matrix[in_train, fold])
       tau_half_est <- predict(DR_rf, newdata = X[in_fold,])
       return(tau_half_est)
     }) %>% unlist() %>% unname()
@@ -112,9 +90,10 @@ taus_and_cis <- function(data) {
     # construct root
     half_root <- tau - tau_half
     return(half_root)
-  })
-  t3 <- Sys.time()
-  print(t3-t2)
+  }, .options = furrr_options(seed = T))
+  plan(metaplan)
+  
+  draws <- do.call(cbind, draws)
   
   # getting the confidence intervals from summary statistics of draws
   lambda_hat <- apply(draws, 1, var)
@@ -126,16 +105,47 @@ taus_and_cis <- function(data) {
   res <- data.frame(tau = tau,
                     lb = tau - sqrt(lambda_hat)*S_star,
                     ub = tau + sqrt(lambda_hat)*S_star)
-  return(res)
+  
+  # TE-VIMS ----
+  te_vims <- NULL
+  if (any( HTE_pval < 0.1) | BLP_whole[4,2] < 0.1) {
+    po <- po_matrix %>% rowMeans(, na.rm = T)
+    covariates <- colnames(X)
+    sub_taus <- matrix(nrow = n, ncol = length(covariates))
+    colnames(sub_taus) <- covariates
+    for (i in seq_along(covariates)) {
+      cov <- covariates[i]
+      new_X <- as.matrix(X[, -i])
+      
+      for (fold in seq_along(fold_list)) {
+        in_train <- fold_indices != fold
+        in_fold <- !in_train
+        DR_sub <- regression_forest(as.matrix(new_X[in_train, ]), po_matrix[in_train, fold])
+        sub_taus[in_fold, i] <- predict(DR_sub, newdata = as.matrix(new_X[in_fold, ]))$predictions
+      }
+    }
+    
+    # Compute TE-VIMs
+    
+    ate <- sum(po) / n
+    
+    r_ate <- (po - ate)^2
+    r_tau <- (po - tau)^2
+    
+    te_vims <- apply(sub_taus, 2, function(sub_tau) {
+      r_subtau <- (po - sub_tau)^2
+      
+      # evaluate TE-VIM (Theta_s in the paper)
+      tevim <- sum(r_subtau - r_tau) / n
+      
+      infl <- r_subtau - r_tau - tevim
+      std_err <- sqrt(sum(infl^2)) / n
+      
+      list(tevim = tevim, std_err = std_err)
+    }) %>% simplify2array()
+    
+    te_vims <- as.data.frame(te_vims)
+  }
+  
+  return(list(tau = res, BLP_tests = BLP_tests, BLP_whole = BLP_whole, te_vims = te_vims, draws = draws))
 }
-
-
-
-# Parallelise the function
-t0 <- Sys.time()
-results <- mclapply(datasets, taus_and_cis, mc.cores = n_cores)
-t1 <- Sys.time()
-print(t1-t0)
-
-# Save results
-saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/DR_RF/", "DR_rf_taus_cis.RDS"), collapse = ""))

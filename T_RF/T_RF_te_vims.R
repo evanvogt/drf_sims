@@ -8,11 +8,9 @@ set.seed(1998)
 # adapting O hines github code
 
 # libraries
-library(foreach)
-library(doParallel)
+library(furrr)
 library(dplyr)
 library(grf)
-library(syrup)
 
 # paths 
 path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
@@ -28,8 +26,11 @@ n <- as.numeric(args[2])
 n_cores <- as.numeric(args[3])
 n_folds <- 10 
 
+oldplan <- plan()
+plan(multisession, workers = n_cores)
+
 # load in the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
+datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
 
@@ -91,20 +92,11 @@ T_RF_tevim <- function(data) {
     for (fold in seq_len(n_folds)) {
       in_train <- fold_indices != fold
       in_fold <- !in_train
-      train0 <- in_train & W==0 # train control
-      train1 <- in_train & W==1 # train treated
-      
-      # re train Y models on new X
-      Y0.hat.model <- regression_forest(as.matrix(new_X[train0, ]), Y[train0])
-      Y1.hat.model <- regression_forest(as.matrix(new_X[train1, ]), Y[train1])
 
-      Y0.hat <- predict(Y0.hat.model, newdata = as.matrix(new_X[in_fold, ]))$predictions
-      Y1.hat <- predict(Y1.hat.model, newdata = as.matrix(new_X[in_fold, ]))$predictions
+      # fit tau_s by regressing tau on the new_X
+      sub_model <- regression_forest(as.matrix(new_X[in_train,]), tau[in_train])
       
-      # cate in fold
-      cate <- Y1.hat - Y0.hat
-      
-      sub_taus[in_fold, i] <- cate
+      sub_taus[in_fold, i] <- predict(sub_model, newdata = as.matrix(new_X[in_fold,]))$predictions
     }
   }
   
@@ -135,9 +127,10 @@ T_RF_tevim <- function(data) {
 
 # Parallelise the function
 t0 <- Sys.time()
-results <- mclapply(datasets, T_RF_tevim, mc.cores = n_cores)
+results <- future_map(datasets, T_RF_tevim, .options = furrr_options(seed = T))
 t1 <- Sys.time()
 print(t1-t0)
+plan(oldplan)
 
 # Save results
-saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/T_RF/", "T_RF_te_vims.RDS"), collapse = ""))
+saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/T_RF/", "te_vims.RDS"), collapse = ""))

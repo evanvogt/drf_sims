@@ -10,26 +10,28 @@ set.seed(1998)
 #libraries
 library(stats)
 library(dplyr)
-library(doParallel)
+library(furrr)
 library(glinternet)
-library(syrup)
 
 # paths 
 path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
-# Reading arguments
+# arguments and parameters
 args <- commandArgs(trailingOnly = TRUE)
 scenario <- as.character(args[1])
 n <- as.numeric(args[2])
 
+n_cores <- 10 #floor(future::availableCores() *0.9)
+n_folds <- 10
+
+oldplan <- plan(multicore, workers = n_cores)
+
 # load in the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".rds"), collapse = ""))
+datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
-# parameters
-n_cores <- 20 #floor(future::availableCores() *0.9)
-n_folds <- 10 
+
 
 # functions
 get_levels <- function(x) {
@@ -51,7 +53,7 @@ hlasso <- function(data) {
   
   # extract main effect terms:
   if (length(coefs[["mainEffects"]]$cont) == 0) {
-    print("model did not keep any main effects")
+    #print("model did not keep any main effects")
     main <- NULL
   } else {
     main_names <- unique(colnames(X)[coefs[["mainEffects"]]$cont])
@@ -61,7 +63,7 @@ hlasso <- function(data) {
   }
   # extract the interactions terms
   if (length(coefs[["interactions"]]$contcont) == 0) {
-    print("model did not keep any interactions")
+    #print("model did not keep any interactions")
     interactions <- NULL
   } else {
     int_names <- unique(colnames(X)[coefs[["interactions"]]$contcont])
@@ -75,9 +77,10 @@ hlasso <- function(data) {
 
 # Parallelise the function
 t0 <- Sys.time()
-results <- mclapply(datasets, hlasso, mc.cores = n_cores)
+results <- future_map(datasets, hlasso, .progress = T, .options = furrr_options(seed = T))
 t1 <- Sys.time()
 print(t1-t0)
+plan(oldplan)
 
 # Save results
 saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/H_lasso/", "HL_interactions.RDS"), collapse = ""))
