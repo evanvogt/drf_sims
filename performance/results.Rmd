@@ -9,23 +9,101 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-res_all <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/sim_results_all.RDS")
-data_all <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/sim_results_all.RDS")
+```{r libraries}
+library(ggplot2)
+library(purrr)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+```{r results}
+cate_corr <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/cate_correlations.RDS")
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+cate_mse <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/cate_mses.RDS")
+
+cate_coverage <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/cate_coverage.RDS")
+
+```
+
+
+
+```{r summarise across 1000 scenarios, echo = FALSE}
+
+coverage_df <- map_dfr(names(cate_coverage), function(scenario) {
+  map_dfr(names(cate_coverage[[scenario]]), function(n) {
+    map_dfr(names(cate_coverage[[scenario]][[n]]), function(model) {
+      data.frame(
+        scenario = scenario,
+        n = as.numeric(n),
+        model = model,
+        coverage = mean(cate_coverage[[scenario]][[n]][[model]])
+      )
+    })
+  })
+})
+
+corr_df <- map_dfr(names(cate_corr), function(scenario) {
+  map_dfr(names(cate_corr[[scenario]]), function(n) {
+    map_dfr(names(cate_corr[[scenario]][[n]]), function(model) {
+      data.frame(
+        scenario = scenario,
+        n = as.numeric(n),
+        model = model,
+        corr = mean(cate_corr[[scenario]][[n]][[model]], na.rm = T)
+      )
+    })
+  })
+})
+
+mse_df <- map_dfr(names(cate_mse), function(scenario) {
+  map_dfr(names(cate_mse[[scenario]]), function(n) {
+    map_dfr(names(cate_mse[[scenario]][[n]]), function(model) {
+      data.frame(
+        scenario = scenario,
+        n = as.numeric(n),
+        model = model,
+        mse = mean(cate_mse[[scenario]][[n]][[model]], na.rm = T)
+      )
+    })
+  })
+})
+
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r coverage plots}
+
+
+  ggplot(coverage_df, aes(x = model, y = coverage, fill = model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_grid(n ~ scenario) + 
+  theme_minimal() +
+  labs(title = "CATE Coverage Across Scenarios and Sample Sizes",
+       x = "Model",
+       y = "Coverage")
+
+```
+
+
+```{r mse plots}
+ggplot(mse_df, aes(x = model, y = mse, fill = model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_grid(n ~ scenario) + 
+  theme_minimal() +
+  labs(title = "CATE MSE Across Scenarios and Sample Sizes",
+       x = "Model",
+       y = "MSE")
+```
+
+```{r}
+ggplot(corr_df, aes(x = model, y = corr, fill = model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_grid(n ~ scenario) + 
+  theme_minimal() +
+  labs(title = "CATE Correlation Across Scenarios and Sample Sizes",
+       x = "Model",
+       y = "Correlation")
+```
+
+
+
