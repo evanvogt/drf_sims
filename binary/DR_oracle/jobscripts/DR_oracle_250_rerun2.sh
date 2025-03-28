@@ -2,8 +2,8 @@
 #PBS -l select=1:ncpus=10:ompthreads=10:mem=10gb
 #PBS -J 1-6
 #PBS -N DR_oracle_250_array
-#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/DR_oracle/jobscripts/logs_250/
-#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/DR_oracle/jobscripts/logs_250/
+#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/DR_oracle/jobscripts/logs_250/
+#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/DR_oracle/jobscripts/logs_250/
 
 module purge
 module add tools/prod
@@ -17,7 +17,7 @@ scenarios=(1 2 3 4 5 6 7 8 9 10)
 
 #failed job ids
 failed2=(238 239 240 344 345 346)
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/DR_oracle/jobscripts"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/DR_oracle/jobscripts"
 jobid=$(sed -n "${failed2[PBS_ARRAY_INDEX-1]}p" failed_250.txt)
 
 
@@ -32,7 +32,7 @@ n="250"
 echo "rerunning: ${scenario}_${n}, simulation: $sim_id"
 
 # Navigate to the script directory
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/DR_oracle"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/DR_oracle"
 
 # Run the R script for the assigned scenario and sample size
 Rscript DR_oracle_sim.R "$scenario" "$n" "$sim_id"

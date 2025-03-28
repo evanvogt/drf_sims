@@ -13,11 +13,11 @@ path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
 # functions
-source("live/scripts/functions/collate_predictions.R")
-source("live/scripts/CF/CF_run.R")
-source("live/scripts/DR_RF/DR_RF_run.R")
-source("live/scripts/DR_oracle/DR_oracle_run.R")
-source("live/scripts/T_RF/T_RF_run.R")
+source("live/scripts/binary/functions/collate_predictions.R")
+source("live/scripts/binary/CF/CF_run.R")
+source("live/scripts/binary/DR_RF/DR_RF_run.R")
+source("live/scripts/binary/DR_oracle/DR_oracle_run.R")
+source("live/scripts/binary/T_RF/T_RF_run.R")
 
 #args and params
 n_folds <- 10
@@ -30,7 +30,7 @@ workers <- 10
 scens <- paste0("scenario_", seq_along(1:11))
 profiling <- syrup(
   lapply(scens, function(scenario) {
-    datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
+    datasets <- readRDS(paste0(c("live/data/binary/", scenario, "_", n, ".RDS"), collapse = ""))
     datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
     
     data <- datasets[[1]]
@@ -43,4 +43,4 @@ profiling <- syrup(
 )
 
 
-saveRDS(profiling, "live/data/profiling/run_500_once.RDS")
+saveRDS(profiling, "live/data/binary/profiling/run_500_once.RDS")

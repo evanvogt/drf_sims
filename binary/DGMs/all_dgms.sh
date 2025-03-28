@@ -12,7 +12,7 @@ conda activate drf-env
 
 for i in {1..10}; do
 
-  cd /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/DGMs
+  cd /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/DGMs
   
   Rscript scenario_${i}.R
 

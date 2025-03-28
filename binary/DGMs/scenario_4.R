@@ -58,14 +58,14 @@ generate_dataset <- function(n) {
 
 for (size in sizes) {
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  saveRDS(dataset, file = paste0("live/data/scenario_4_", size, ".RDS"))
+  saveRDS(dataset, file = paste0("live/data/binary/scenario_4_", size, ".RDS"))
 }
 
 
 # save the true DGM function for the oracle DR learner
 fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4)"
 oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b3 = b3, b4 = b4, bW = bW)
-saveRDS(oracle_list, file = paste0("live/data/scenario_4_oracle.RDS"))
+saveRDS(oracle_list, file = paste0("live/data/binary/scenario_4_oracle.RDS"))
 
 # true subgroup effects ----
 # not sure about how to calculate the truth for this yet lol - might need to fiddle more with the DGM
@@ -85,4 +85,4 @@ saveRDS(oracle_list, file = paste0("live/data/scenario_4_oracle.RDS"))
 # 
 # gates <- c(s1, s2)
 # names(gates) <- c("X4>1", "X4<1")
-# saveRDS(gates, paste0("live/data/scenario_4_true_GATEs", size, ".rds"))
+# saveRDS(gates, paste0("live/data/binary/scenario_4_true_GATEs", size, ".rds"))

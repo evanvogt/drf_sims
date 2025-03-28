@@ -17,7 +17,7 @@ path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
 # functions
-source("live/scripts/functions/collate_predictions.R")
+source("live/scripts/binary/functions/collate_predictions.R")
 
 # Read args and set params
 args <- commandArgs(trailingOnly = TRUE)
@@ -30,7 +30,7 @@ oldplan <- plan()
 plan(multisession, workers = n_cores)
 
 # load in the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
+datasets <- readRDS(paste0(c("live/data/binary/", scenario, "_", n, ".RDS"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
 # Run in parallel for all datasets
@@ -133,4 +133,4 @@ print(t1-t0)
 plan(oldplan)
 
 # Save results
-saveRDS(results, paste0(c("live/results/", scenario, "/", n,  "/DR_RF/", "te_vims.RDS"), collapse = ""))
+saveRDS(results, paste0(c("live/results/binary/", scenario, "/", n,  "/DR_RF/", "te_vims.RDS"), collapse = ""))

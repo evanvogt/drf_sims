@@ -2,8 +2,8 @@
 #PBS -l select=1:ncpus=5:mem=10gb
 #PBS -J 1-160
 #PBS -N col_n_sim_mod
-#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/performance/jobscripts/logs/
-#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/performance/jobscripts/logs/
+#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/performance/jobscripts/logs/
+#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/performance/jobscripts/logs/
 
 module purge
 module add tools/prod
@@ -34,7 +34,7 @@ MODEL=${MODELS[$MODEL_IDX]}
 
 
 # Navigate to the script directory
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/performance"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/performance"
 
 echo "running ${SCENARIO}_${SAMPLE_SIZE} ${MODEL}"
 

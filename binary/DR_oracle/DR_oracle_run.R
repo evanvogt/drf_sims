@@ -1,7 +1,7 @@
 require(grf, GenericML, dplyr, furrr)
 DR_oracle_output <- function(data, n_folds, scenario, B, workers) {
   # data preparation ----
-  fmla_info <- readRDS(paste0(c("live/data/", scenario, "_oracle.RDS"), collapse = ""))
+  fmla_info <- readRDS(paste0(c("live/data/binary/", scenario, "_oracle.RDS"), collapse = ""))
   fmla <- parse(text = fmla_info[[1]])
   
   param_names <- names(fmla_info)[-1]

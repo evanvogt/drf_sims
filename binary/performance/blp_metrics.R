@@ -22,8 +22,8 @@ scens <- paste0("scenario_", seq_along(1:10))
 
 
 # collated datasets
-data_all <- readRDS("live/data/all_data.RDS")
-BLPs_whole <- readRDS("live/results/all/BLP_wholes.RDS")
+data_all <- readRDS("live/data/binary/all_data.RDS")
+BLPs_whole <- readRDS("live/results/binary/all/BLP_wholes.RDS")
 
 # maybe just look at the whole set sets for now?
 beta_2_whole <- setNames(vector("list", length(scens)), scens)
@@ -125,4 +125,4 @@ performance_df <- performance_df %>%
     specificity = TN/(TN+FP)
   )
 
-saveRDS(performance_df, "live/results/all/BLP_tests_metrics.RDS")
+saveRDS(performance_df, "live/results/binary/all/BLP_tests_metrics.RDS")

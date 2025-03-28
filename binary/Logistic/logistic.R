@@ -24,7 +24,7 @@ n_cores <- 5
 oldplan <- plan(multicore, workers = n_cores)
 
 # load in the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
+datasets <- readRDS(paste0(c("live/data/binary/", scenario, "_", n, ".RDS"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
 
@@ -64,4 +64,4 @@ print(t1-t0)
 plan(oldplan)
 
 #save the results
-saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/Logistic/", "interactions.RDS"), collapse = ""))
+saveRDS(results, paste0(c("live/results/binary/", scenario, "/", n, "/Logistic/", "interactions.RDS"), collapse = ""))

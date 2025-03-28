@@ -56,10 +56,10 @@ generate_dataset <- function(n) {
 
 for (size in sizes) {
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  saveRDS(dataset, file = paste0("live/data/scenario_1_", size, ".RDS"))
+  saveRDS(dataset, file = paste0("live/data/binary/scenario_1_", size, ".RDS"))
 }
 
 # save the true DGM function for the oracle DR learner
 fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*bW"
 oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, bW = bW)
-saveRDS(oracle_list, file = paste0("live/data/scenario_1_oracle.RDS"))
+saveRDS(oracle_list, file = paste0("live/data/binary/scenario_1_oracle.RDS"))

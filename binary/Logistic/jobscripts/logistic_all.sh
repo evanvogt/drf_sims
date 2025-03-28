@@ -15,7 +15,7 @@ conda activate drf-env
 for i in {1..11}; do
   for j in 250 500 1000 5000; do
 
-    cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/Logistic"
+    cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/Logistic"
 
     scenario="scenario_${i}"
     n="${j}"

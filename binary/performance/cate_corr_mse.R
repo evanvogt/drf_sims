@@ -21,8 +21,8 @@ scens <- paste0("scenario_", seq_along(1:10))
 
 
 # collated datasets
-data_all <- readRDS("live/data/all_data.RDS")
-cate_preds <- readRDS("live/results/all/cate_preds.RDS")
+data_all <- readRDS("live/data/binary/all_data.RDS")
+cate_preds <- readRDS("live/results/binary/all/cate_preds.RDS")
 
 cate_corr <- setNames(vector("list", length(scens)), scens)
 cate_mse <- setNames(vector("list", length(scens)), scens)
@@ -77,8 +77,8 @@ for (scenario in scens) {
   }
 }
 
-saveRDS(cate_corr, "live/results/all/cate_correlations.RDS")
-saveRDS(cate_mse, "live/results/all/cate_mses.RDS")
-saveRDS(cate_bias, "live/results/all/cate_bias.RDS")
-saveRDS(cate_coverage, "live/results/all/cate_coverage.RDS")
-saveRDS(ci_length, "live/results/all/ci_length.RDS")
+saveRDS(cate_corr, "live/results/binary/all/cate_correlations.RDS")
+saveRDS(cate_mse, "live/results/binary/all/cate_mses.RDS")
+saveRDS(cate_bias, "live/results/binary/all/cate_bias.RDS")
+saveRDS(cate_coverage, "live/results/binary/all/cate_coverage.RDS")
+saveRDS(ci_length, "live/results/binary/all/ci_length.RDS")

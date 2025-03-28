@@ -2,8 +2,8 @@
 #PBS -l select=1:ncpus=30:ompthreads=30:mem=20gb
 #PBS -J 1-5
 #PBS -N CF_1000_reruns
-#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/CF/jobscripts/logs_1000/
-#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/CF/jobscripts/logs_1000/
+#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/CF/jobscripts/logs_1000/
+#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/CF/jobscripts/logs_1000/
 
 module purge
 module add tools/prod
@@ -29,7 +29,7 @@ n="1000"
 echo "running: scenario_$scenario_$n, simulation: $sim_id"
 
 # Navigate to the script directory
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/CF"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/CF"
 
 # Run the R script for the assigned scenario and sample size
 Rscript CF_sim.R "$scenario" "$n" "$sim_id"

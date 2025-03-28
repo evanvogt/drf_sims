@@ -2,8 +2,8 @@
 #PBS -l select=1:ncpus=40:ompthreads=40:mem=40gb
 #PBS -J 1-10000
 #PBS -N T_RF_5000_array
-#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/T_RF/jobscripts/logs_5000/
-#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/T_RF/jobscripts/logs_5000/
+#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/T_RF/jobscripts/logs_5000/
+#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/T_RF/jobscripts/logs_5000/
 
 module purge
 module add tools/prod
@@ -27,7 +27,7 @@ n="5000"
 echo "running: scenario_${scenario}_${n}, simulation: $sim_id"
 
 # Navigate to the script directory
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/T_RF"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/T_RF"
 
 # Run the R script for the assigned scenario and sample size
 Rscript T_RF_sim.R "$scenario" "$n" "$sim_id"

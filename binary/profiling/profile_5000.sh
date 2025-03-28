@@ -10,6 +10,6 @@ eval "$(~/miniforge3/bin/conda shell.bash hook)"
 conda activate drf-env
 
 # Navigate to the script directory
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/profiling"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/profiling"
 
 Rscript profile_5000.R

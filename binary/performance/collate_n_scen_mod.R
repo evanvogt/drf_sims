@@ -20,7 +20,7 @@ n <- as.numeric(args[2])
 model <- as.character(args[3])
 
 # path to results
-res_dir <- paste0("live/results/", scenario, "/", n, "/", model)
+res_dir <- paste0("live/results/binary/", scenario, "/", n, "/", model)
 
 # all the simulation runs
 all_files <- list.files(res_dir, "res_sim", full.names = T)
@@ -60,7 +60,7 @@ if (length(all_files) == 1000) {
   scen_num <- substr(scenario, nchar(scenario), nchar(scenario)) %>% as.numeric()
   array_nums <- 1000*(scen_num - 1) + failed_sims %>% sort()
   
-  writeLines(as.character(array_nums), paste0("live/scripts/", model, "/jobscripts/failed_", n, "_", scenario, ".txt"))
+  writeLines(as.character(array_nums), paste0("live/scripts/binary/", model, "/jobscripts/failed_", n, "_", scenario, ".txt"))
   
   print(paste0(scenario, "_", n, " ", model, " has ", length(failed_sims), " missing sims, missing sims list saved to jobscripts folder"))
 }

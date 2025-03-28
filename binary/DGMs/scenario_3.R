@@ -55,13 +55,13 @@ generate_dataset <- function(n) {
 
 for (size in sizes) {
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  saveRDS(dataset, file = paste0("live/data/scenario_3_", size, ".RDS"))
+  saveRDS(dataset, file = paste0("live/data/binary/scenario_3_", size, ".RDS"))
 }
 
 # save the true DGM function for the oracle DR learner
 fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*X$X4)"
 oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b4 = b4, bW = bW)
-saveRDS(oracle_list, file = paste0("live/data/scenario_3_oracle.RDS"))
+saveRDS(oracle_list, file = paste0("live/data/binary/scenario_3_oracle.RDS"))
 
 # true subgroup effects ----
 # generate the threshold for positive and negative treatment effect:
@@ -78,4 +78,4 @@ s2 <- mean(large$tau[large$X4 < thr])
 
 gates <- c(s1, s2)
 names(gates) <- c("X4>1", "X4<1")
-saveRDS(gates, paste0("live/data/scenario_3_true_GATEs", size, ".RDS"))
+saveRDS(gates, paste0("live/data/binary/scenario_3_true_GATEs", size, ".RDS"))

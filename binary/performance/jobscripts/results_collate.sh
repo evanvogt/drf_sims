@@ -9,7 +9,7 @@ module add R/4.2.1-foss-2022a
 eval "$(~/miniforge3/bin/conda shell.bash hook)"
 conda activate drf-env
 
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/performance"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/performance"
 
 
 Rscript results_collate.R

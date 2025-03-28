@@ -23,7 +23,7 @@ SCENARIO="scenario_${SCENARIOS[$SCENARIO_IDX]}"
 N="${SAMPLESIZES[$SIZE_IDX]}"
 
 # Navigate to the script directory
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/H_lasso"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/H_lasso"
 
 # Run the R script for the assigned scenario and sample size
 Rscript hlasso.R "$SCENARIO" "$N"

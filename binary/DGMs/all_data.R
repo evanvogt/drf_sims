@@ -24,9 +24,9 @@ for (scenario in scens) {
   data_list[[scenario]] <- setNames(vector("list", length(samplesizes)), as.character(samplesizes))
   
   for (n in samplesizes) {
-    data <- readRDS(paste0("live/data/", scenario, "_", n, ".RDS"))
+    data <- readRDS(paste0("live/data/binary/", scenario, "_", n, ".RDS"))
     data_list[[scenario]][[as.character(n)]] <- data
   }
 }
 
-saveRDS(data_list, "live/data/all_data.RDS")
+saveRDS(data_list, "live/data/binary/all_data.RDS")
