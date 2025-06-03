@@ -18,7 +18,7 @@ path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
 # functions
-source("live/scripts/functions/collate_predictions.R")
+source("live/scripts/continuous/functions/collate_predictions.R")
 
 # Reading arguments and set params
 args <- commandArgs(trailingOnly = TRUE)
@@ -31,7 +31,7 @@ B <- 200 # number of bootstraps
 oldplan <- plan(multisession, workers = n_cores)
 
 # load in the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
+datasets <- readRDS(paste0(c("live/data/continuous/", scenario, "_", n, ".RDS"), collapse = ""))
 truths <- lapply(datasets, `[[`, 2)
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
@@ -154,6 +154,6 @@ BLP_tests <- lapply(results, `[[`, "BLP_tests")
 draws <- lapply(results, `[[`, "draws") 
 
 # Save results
-saveRDS(CATEs, paste0(c("live/results/", scenario, "/", n, "/DR_RF/", "taus_cis.RDS"), collapse = ""))
-saveRDS(BLP_tests, paste0(c("live/results/", scenario, "/", n, "/DR_RF/", "BLP.RDS"), collapse = ""))
-saveRDS(draws, paste0(c("live/results/", scenario, "/", n, "/DR_RF/", "draws.RDS"), collapse = ""))
+saveRDS(CATEs, paste0(c("live/results/continuous/", scenario, "/", n, "/DR_RF/", "taus_cis.RDS"), collapse = ""))
+saveRDS(BLP_tests, paste0(c("live/results/continuous/", scenario, "/", n, "/DR_RF/", "BLP.RDS"), collapse = ""))
+saveRDS(draws, paste0(c("live/results/continuous/", scenario, "/", n, "/DR_RF/", "draws.RDS"), collapse = ""))

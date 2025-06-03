@@ -1,5 +1,5 @@
 ###############
-# title: simulating data for scenario 7 - two-way interaction with HTE
+# title: simulating data for scenario 7 - two-way interaction with HTE + bigger HTE
 # date started: 07/01/2025
 # date finished:
 # author: Ellie Van Vogt
@@ -15,43 +15,53 @@ setwd(path)
 # parameters -----
 sims <- 1000
 
-sizes <- c(250, 500, 1000, 5000) # sample sizes
-
-
+sizes <- as.numeric(commandArgs(trailingOnly = TRUE)) # sample sizes
 
 X1_prob <- 0.4 # probability of being female
 X3_prob <- 0.7 # mechvent prob
 
-b0 <- -0.4 # baseline log odds risk
-bW <- -0.2 # average treatment effect
-b1 <- 0.5 # prognostic - female
-b2 <- 0.5 # prognostic - APACHE ish
-b3 <- 0.2
+b0 <- 1 # creatinine increase
+bW <- -1 # average treatment effect
+b1 <- -0.05 # prognostic - female
+b2 <- 2 # prognostic - APACHE ish
+b3 <- 2
 b4 <- 0.5
 b5 <- -0.5
 b45 <- -0.5 # two way interaction
 
+s2 <- 1 # var prognostic
+s4 <- 1
+s5 <- 1
+s_err <- 0.5 # var error term
+s <- s_err + s2 # total variation (from apriori knowledge only?)
 
 # function for generating the data
-
 
 generate_dataset <- function(n) {
   W <- rbinom(n, 1, 0.5)
   X1 <- rbinom(n, 1, X1_prob)
-  X2 <- rnorm(n, 0, 1)
+  X2 <- rnorm(n, 0, s2)
   X3 <- rbinom(n, 1, X3_prob)
-  X4 <- rnorm(n, 0, 1)
-  X5 <- rnorm(n, 0, 1)
+  X4 <- rnorm(n, 0, s4)
+  X5 <- rnorm(n, 0, s5)
   
-  lp <- b0 + b1*X1 + b2*X2 + W*(bW + b45*X4*X5)
-  prob <- plogis(lp)
-  Y <- rbinom(n, 1, prob)
+  err <- rnorm(n, s_err)
   
-  p0 <- plogis(b0 + b1*X1 + b2*X2)
-  p1 <- plogis(b0 + b1*X1 + b2*X2 + (bW + b45*X4*X5))
+  Y <- b0 + b1*X1 + b2*X2 + W*(bW + b45*X4*X5) + err
+
+  p0 <- b0 + b1*X1 + b2*X2
+  p1 <- b0 + b1*X1 + b2*X2 + (bW + b45*X4*X5)
   tau <- p1 - p0
   
-  dataset <- as.data.frame(cbind(Y, W, X1, X2, X3, X4, X5))
+  # add a bunch of variables with no relation to outcome or treatment
+  X01 <- rnorm(n, 0, 1)
+  X02 <- rnorm(n, 0, 1)
+  X03 <- rnorm(n, 0, 1)
+  cats <- sample(c("A", "B", "C"), size = n, replace = TRUE, prob = c(0.45, 0.3, 0.25))
+  X04 <- as.integer(cats == "A")
+  X05 <- as.integer(cats == "B")
+  
+  dataset <- as.data.frame(cbind(Y, W, X1, X2, X3, X4, X5, X01, X02, X03, X04, X05))
   truth <- as.data.frame(cbind(p0, p1, tau))
   
   return(list(dataset = dataset, truth = truth))
@@ -60,32 +70,17 @@ generate_dataset <- function(n) {
 # generating the data ----
 
 for (size in sizes) {
+  # make sure bW is right size for power
+  diff <- power.t.test(n = size/2, delta = NULL, sd = s, power = 0.75)$delta
+  bW <- round(-diff, digits = 2)
+  
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  saveRDS(dataset, file = paste0("live/data/scenario_7_", size, ".RDS"))
+  saveRDS(dataset, file = paste0("live/data/continuous/scenario_7_", size, ".RDS"))
+  
+  # save the true DGM function for the oracle DR learner
+  fmla <- "b0 + b1*X1 + b2*X2 + W*(bW + b45*X4*X5)"
+  fmla <- gsub("\\b(X\\d+)\\b", "X$\\1", fmla)
+  oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b45 = b45, bW = bW)
+  saveRDS(oracle_list, file = paste0("live/data/continuous/scenario_7_", size, "_oracle.RDS"))
 }
 
-
-# save the true DGM function for the oracle DR learner
-fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b45*X$X4*X$X5)"
-oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b45 = b45, bW = bW)
-saveRDS(oracle_list, file = paste0("live/data/scenario_7_oracle.RDS"))
-
-# true subgroup effects ----
-# not sure about how to calculate the truth for this yet lol - might need to fiddle more with the DGM
-
-# 
-# # create a heat map of the variables to find the cut offs??
-# thr <- -bW/b4 #1
-# 
-# 
-# large <- generate_dataset(100000)
-# 
-# large <- cbind(large[[1]], large[[2]])
-# 
-# s1 <- mean(large$tau[large$X4 > thr])
-# 
-# s2 <- mean(large$tau[large$X4 < thr])
-# 
-# gates <- c(s1, s2)
-# names(gates) <- c("X4>1", "X4<1")
-# saveRDS(gates, paste0("live/data/scenario_5_true_GATEs", size, ".rds"))

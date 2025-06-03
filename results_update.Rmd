@@ -1,0 +1,300 @@
+---
+title: "Simulation Updates"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    fig_width: 10
+    fig_height: 8
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r libraries, include=FALSE}
+library(ggplot2)
+library(paletteer)
+library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(purrr)
+
+res_path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/"
+```
+
+```{r bin_results, include=FALSE}
+cate_corr_bin <- readRDS(paste0(res_path, "binary/all/cate_correlations.RDS"))
+
+cate_mse_bin <- readRDS(paste0(res_path, "binary/all/cate_mses.RDS"))
+
+cate_coverage_bin <- readRDS(paste0(res_path, "binary/all/cate_coverage.RDS"))
+
+cate_bias_bin <- readRDS(paste0(res_path, "binary/all/cate_bias.RDS"))
+
+ci_length_bin <- readRDS(paste0(res_path, "binary/all/ci_length.RDS"))
+
+BLP_df_bin <- readRDS(paste0(res_path, "binary/all/BLP_tests_metrics.RDS"))
+```
+
+```{r cont_results, include=FALSE}
+cate_corr_cont <- readRDS(paste0(res_path, "continuous/all/cate_correlations.RDS"))
+
+cate_mse_cont <- readRDS(paste0(res_path, "continuous/all/cate_mses.RDS"))
+
+cate_coverage_cont <- readRDS(paste0(res_path, "continuous/all/cate_coverage.RDS"))
+
+cate_bias_cont <- readRDS(paste0(res_path, "continuous/all/cate_bias.RDS"))
+
+ci_length_cont <- readRDS(paste0(res_path, "continuous/all/ci_length.RDS"))
+
+BLP_df_cont <- readRDS(paste0(res_path, "continuous/all/BLP_tests_metrics.RDS"))
+```
+
+```{r functions, include=FALSE}
+create_long_df <- function(nested_list, summary_name) {
+  map_dfr(names(nested_list), function(scenario) {
+    map_dfr(names(nested_list[[scenario]]), function(n) {
+      map_dfr(names(nested_list[[scenario]][[n]]), function(model) {
+        values <- nested_list[[scenario]][[n]][[model]]
+        df <- data.frame(
+          scenario = as.numeric(gsub("scenario_", "", scenario)), 
+          n = as.factor(n),
+          model = model,
+          sim = seq_along(values),
+          value = values
+        )
+        names(df)[names(df) == "value"] <- summary_name
+        return(df)
+      })
+    })
+  })
+}
+filter_df <- function(df) {
+  df <- df %>%
+          mutate(
+            model = ifelse(model == "CF", "causal forest",
+                           ifelse(model == "DR_RF", "DR-learner",
+                                  ifelse(model == "T_RF", "T-learner",
+                                         ifelse(model == "DR_oracle", "Oracle DR-learner", NA))))
+          )
+  df <- df %>%
+    mutate(
+      model = factor(model, levels = c("causal forest", "T-learner", "DR-learner", "Oracle DR-learner"))
+    )
+  return(df)
+}
+```
+
+```{r df_manipulation_bin, include=FALSE}
+mse_df_bin <- create_long_df(cate_mse_bin, "mse")
+coverge_df_bin <- create_long_df(cate_coverage_bin, "coverage")
+bias_df_bin <- create_long_df(cate_bias_bin, "bias")
+length_df_bin <- create_long_df(ci_length_bin, "length")
+
+mse_df_bin <- filter_df(mse_df_bin)
+coverage_df_bin <- filter_df(coverge_df_bin)
+bias_df_bin <- filter_df(bias_df_bin)
+length_df_bin <- filter_df(length_df_bin)
+```
+
+```{r df_manipulation_cont, include=FALSE}
+mse_df_cont <- create_long_df(cate_mse_cont, "mse")
+coverge_df_cont <- create_long_df(cate_coverage_cont, "coverage")
+bias_df_cont <- create_long_df(cate_bias_cont, "bias")
+length_df_cont <- create_long_df(ci_length_cont, "length")
+
+mse_df_cont <- filter_df(mse_df_cont)
+coverage_df_cont <- filter_df(coverge_df_cont)
+bias_df_cont <- filter_df(bias_df_cont)
+length_df_cont <- filter_df(length_df_cont)
+```
+
+```{r plotting functions, include=FALSE}
+
+plot_violin <- function(df, var, title) {
+  ggplot(df, aes(x = n, y = .data[[var]], colour = model, fill = model)) +
+    geom_violin(alpha = 0.7, trim = FALSE) +
+    facet_wrap(~scenario, nrow = 2) + 
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      axis.ticks.x = element_blank()
+    ) +
+    labs(
+      title = title,
+      x = "Sample size",
+      y = var
+    ) + 
+    scale_color_paletteer_d("PrettyCols::Dark") +
+    scale_fill_paletteer_d("PrettyCols::Dark")
+}
+
+plot_box <- function(df, var, title) {
+  ggplot(df, aes(x = n, y = .data[[var]], colour = model, fill = model)) +
+    geom_boxplot(alpha = 0.7) +
+    facet_wrap(~scenario, nrow = 2) + 
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      axis.ticks.x = element_blank()
+    ) +
+    labs(
+      title = title,
+      x = "Sample size",
+      y = var
+    ) + 
+    scale_color_paletteer_d("PrettyCols::Dark") + 
+    scale_fill_paletteer_d("PrettyCols::Dark")
+}
+
+plot_average <- function(df, var, title) {
+  measure <- sym(var)
+  summary_df <- df %>%
+  group_by(scenario, n, model) %>%
+  summarise(
+    mean_perf = mean(!!measure, na.rm = TRUE),
+    mcse_perf = sd(!!measure, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+  summary_df <- summary_df %>% mutate(
+    lb = mean_perf - 1.96*mcse_perf,
+    ub = mean_perf + 1.96*mcse_perf
+  )
+  ggplot(summary_df, aes(x = n, y = mean_perf, colour = model)) +
+    geom_point() + 
+    geom_segment(aes(x = n, xend = n, y = lb, yend = ub)) +
+    facet_wrap(~scenario, nrow = 2) + 
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      axis.ticks.x = element_blank()
+    ) +
+    labs(
+      title = title,
+      x = "sample size",
+      y = var
+    ) + 
+    scale_color_paletteer_d("PrettyCols::Dark") +
+    scale_fill_paletteer_d("PrettyCols::Dark")
+}
+```
+
+# Binary outcome
+
+## Mean-squared Error of true CATE vs predicted CATE
+
+```{r bin_MSE}
+plot_box(mse_df_bin, "mse", "")
+plot_violin(mse_df_bin, "mse", "")
+plot_average(mse_df_bin, "mse", "")
+```
+
+## average bias of true CATE vs predicted CATE
+
+```{r bin_bias}
+plot_box(bias_df_bin, "bias", "")
+plot_violin(bias_df_bin, "bias", "")
+plot_average(bias_df_bin, "bias", "")
+```
+
+## coverage of true CATE vs predicted CATE
+
+```{r bincov}
+plot_box(coverage_df_bin, "coverage", "")
+plot_violin(coverage_df_bin, "coverage", "")
+plot_average(coverage_df_bin, "coverage", "")
+```
+
+## average CI length
+
+```{r bin_ci}
+plot_box(length_df_bin, "length", "")
+plot_violin(length_df_bin, "length", "")
+plot_average(length_df_bin, "length", "")
+```
+
+```{r BLP_bin_df, include=FALSE}
+BLP_df_bin <- BLP_df_bin %>% mutate(
+  TP = TP/1000,
+  FP = FP/1000,
+  TN = TN/1000,
+  FN = FN/1000)
+
+BLP_df_bin <- BLP_df_bin %>%
+  mutate(agreement = ifelse(scenario == "scenario_1", TN, TP),
+         disagreement = ifelse(scenario == "scenario_1", FP, FN)
+  )
+```
+
+## BLP results
+
+```{r - BLP_bin}
+compact_bin <- BLP_df_bin %>%
+  select(model, n, scenario, agreement) %>%
+  pivot_wider(
+    names_from = scenario,
+    values_from = agreement
+  ) %>%
+  arrange(model, n)
+
+knitr::kable(compact_bin)
+```
+
+# Continuous outcome
+
+## Mean-squared Error of true CATE vs predicted CATE
+
+```{r cont_MSE}
+plot_box(mse_df_cont, "mse", "")
+plot_violin(mse_df_cont, "mse", "")
+plot_average(mse_df_cont, "mse", "")
+```
+
+## average bias of true CATE vs predicted CATE
+
+```{r cont_bias}
+plot_box(bias_df_cont, "bias", "")
+plot_violin(bias_df_cont, "bias", "")
+plot_average(bias_df_cont, "bias", "")
+```
+
+## coverage of true CATE vs predicted CATE
+
+```{r contcov}
+plot_box(coverage_df_cont, "coverage", "")
+plot_violin(coverage_df_cont, "coverage", "")
+plot_average(coverage_df_cont, "coverage", "")
+```
+
+## average CI length
+
+```{r cont_ci}
+plot_box(length_df_cont, "length", "")
+plot_violin(length_df_cont, "length", "")
+plot_average(length_df_cont, "length", "")
+```
+
+```{r BLP_cont_df, include=FALSE}
+BLP_df_cont <- BLP_df_cont %>% mutate(
+  TP = TP/1000,
+  FP = FP/1000,
+  TN = TN/1000,
+  FN = FN/1000)
+
+BLP_df_cont <- BLP_df_cont %>%
+  mutate(agreement = ifelse(scenario == "scenario_1", TN, TP),
+         disagreement = ifelse(scenario == "scenario_1", FP, FN)
+  )
+```
+
+## BLP results
+
+```{r - BLP_cont}
+compact_cont <- BLP_df_cont %>%
+  select(model, n, scenario, agreement) %>%
+  pivot_wider( names_from = scenario, values_from = agreement ) %>%
+  arrange(model, n)
+
+knitr::kable(compact_cont)
+```

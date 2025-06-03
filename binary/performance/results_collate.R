@@ -20,7 +20,7 @@ source("live/scripts/binary/functions/extract_results.R")
 
 # headings
 # i thjikn results up to 1000 will be available for all the models fingers crossed
-samplesizes <- c(250, 500, 1000, 5000)
+samplesizes <- c(250, 500, 1000)#, 5000)
 models <- c("CF", "DR_RF", "DR_oracle", "T_RF")#, "Logistic", "H_lasso")
 scens <- paste0("scenario_", seq_along(1:10))
 

@@ -1,5 +1,5 @@
 ###############
-# title: simulating data for secnario 1 - no HTE
+# title: simulating data for cts outcome and no HTE
 # date started: 07/01/2025
 # date finished:
 # author: Ellie Van Vogt
@@ -15,18 +15,17 @@ setwd(path)
 # parameters -----
 sims <- 1000
 
-sizes <- c(250, 500, 1000, 5000) # sample sizes
-
-
-
+sizes <- as.numeric(commandArgs(trailingOnly = TRUE)) # sample sizes
+cat(sizes)
 X1_prob <- 0.4 # probability of being female
 
-b0 <- -0.4 # baseline log odds risk
-bW <- -0.2 # average treatment effect
-b1 <- 0.5 # prognostic - female
-b2 <- 0.5 # prognostic - APACHE ish
+b0 <- 0.4 # creatinine increase
+b1 <- -0.05 # prognostic - female
+b2 <- 2 # prognostic - APACHE ish
 
-
+s2 <- 1 # var prognostic
+s_err <- 0.5 # var error term
+s <- s_err + s2 # total variation
 
 
 # function for generating the data
@@ -35,17 +34,25 @@ b2 <- 0.5 # prognostic - APACHE ish
 generate_dataset <- function(n) {
   W <- rbinom(n, 1, 0.5)
   X1 <- rbinom(n, 1, X1_prob)
-  X2 <- rnorm(n, 0, 1)
-
-  lp <- b0 + b1*X1 + b2*X2 + W*bW
-  prob <- plogis(lp)
-  Y <- rbinom(n, 1, prob)
+  X2 <- rnorm(n, 0, s2)
   
-  p0 <- plogis(b0 + b1*X1 + b2*X2)
-  p1 <- plogis(b0 + b1*X1 + b2*X2 + bW)
+  err <- rnorm(n, 0, s_err)
+
+  Y <- b0 + b1*X1 + b2*X2 + W*bW + err
+
+  p0 <- b0 + b1*X1 + b2*X2
+  p1 <- b0 + b1*X1 + b2*X2 + bW
   tau <- p1 - p0
   
-  dataset <- as.data.frame(cbind(Y, W, X1, X2))
+  # add a bunch of variables with no relation to outcome or treatment
+  X01 <- rnorm(n, 0, 1)
+  X02 <- rnorm(n, 0, 1)
+  X03 <- rnorm(n, 0, 1)
+  cats <- sample(c("A", "B", "C"), size = n, replace = TRUE, prob = c(0.45, 0.3, 0.25))
+  X04 <- as.integer(cats == "A")
+  X05 <- as.integer(cats == "B")
+  
+  dataset <- as.data.frame(cbind(Y, W, X1, X2, X01, X02, X03, X04, X05))
   truth <- as.data.frame(cbind(p0, p1, tau))
   
   return(list(dataset = dataset, truth = truth))
@@ -55,11 +62,17 @@ generate_dataset <- function(n) {
 # generating the data ----
 
 for (size in sizes) {
+  # make sure bW is right size for power
+  diff <- power.t.test(n = size/2, delta = NULL, sd = s, power = 0.75)$delta
+  bW <- round(-diff, digits = 2)
+  
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  saveRDS(dataset, file = paste0("live/data/scenario_1_", size, ".RDS"))
+  saveRDS(dataset, file = paste0("live/data/continuous/scenario_1_", size, ".RDS"))
+  
+  # save the true DGM function for the oracle DR learner
+  fmla <- "b0 + b1*X1 + b2*X2 + W*bW"
+  fmla <- gsub("\\b(X\\d+)\\b", "X$\\1", fmla)
+  oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, bW = bW)
+  saveRDS(oracle_list, file = paste0("live/data/continuous/scenario_1_", size, "_oracle.RDS"))
 }
 
-# save the true DGM function for the oracle DR learner
-fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*bW"
-oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, bW = bW)
-saveRDS(oracle_list, file = paste0("live/data/scenario_1_oracle.RDS"))

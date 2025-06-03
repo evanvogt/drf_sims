@@ -9,6 +9,7 @@ set.seed(1998)
 # libraries
 library(dplyr)
 library(furrr)
+library(future.apply)
 library(grf)
 library(GenericML)
 library(syrup)
@@ -18,8 +19,8 @@ path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
 # functions
-source("live/scripts/functions/collate_predictions.R")
-source("live/scripts/CF/CF_run.R")
+source("live/scripts/continuous/functions/collate_predictions.R")
+source("live/scripts/continuous/CF/CF_run.R")
 
 #args and params
 args <- commandArgs(trailingOnly = T)
@@ -30,12 +31,15 @@ n_folds <- 10
 
 
 # load the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
+datasets <- readRDS(paste0(c("live/data/continuous/", scenario, "_", n, ".RDS"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
 # pick out the data set to be analysed
 data <- datasets[[sim]]
 #CF run
+t0 <- Sys.time()
 CF_res <- CF_output(data, n_folds, scenario)
-saveRDS(CF_res, paste0("live/results/", scenario, "/", n, "/CF/res_sim_", sim, ".RDS"))
+t1 <- Sys.time()
+saveRDS(CF_res, paste0("live/results/continuous/", scenario, "/", n, "/CF/res_sim_", sim, ".RDS"))
 print(paste0(scenario, "_", n, " ran successfully!"))
+print(t1-t0)

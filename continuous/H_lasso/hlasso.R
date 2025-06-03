@@ -28,7 +28,7 @@ n_folds <- 10
 oldplan <- plan(multicore, workers = n_cores)
 
 # load in the data
-datasets <- readRDS(paste0(c("live/data/", scenario, "_", n, ".RDS"), collapse = ""))
+datasets <- readRDS(paste0(c("live/data/continuous/", scenario, "_", n, ".RDS"), collapse = ""))
 datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 
 
@@ -44,7 +44,7 @@ hlasso <- function(data) {
   X <- as.matrix(data[,-1])  # treatment and covariates for interactions
   Y <- data$Y
 
-  model.cv <- glinternet.cv(X, Y, numLevels = rep(1, ncol(X)), nFolds = n_folds, nLambda = 100, interactionCandidates = 1, family = "binomial")
+  model.cv <- glinternet.cv(X, Y, numLevels = rep(1, ncol(X)), nFolds = n_folds, nLambda = 100, interactionCandidates = 1, family = "gaussian")
   
   lam <- model.cv$lambdaHat1Std
   ind <- which(model.cv$lambda == lam)
@@ -83,4 +83,4 @@ print(t1-t0)
 plan(oldplan)
 
 # Save results
-saveRDS(results, paste0(c("live/results/", scenario, "/", n, "/H_lasso/", "HL_interactions.RDS"), collapse = ""))
+saveRDS(results, paste0(c("live/results/continuous/", scenario, "/", n, "/H_lasso/", "HL_interactions.RDS"), collapse = ""))

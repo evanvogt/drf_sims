@@ -8,18 +8,18 @@ extract_results <- function(result_type, scens, samplesizes, models) {
       result_list[[scenario]][[as.character(n)]] <- setNames(vector("list", length(models)), models)
       
       for (model in models) {
-        dir_path <- file.path("live/results", scenario, n, model)
+        dir_path <- file.path("live/results/binary", scenario, n, model)
         
         if (dir.exists(dir_path)) {
           files <- list.files(dir_path, pattern = result_type, full.names = TRUE)
         }
         
         if (is.null(files)) {
-          print(paste0(scenario, "_", n, " ", model, " result is not there - check !"))
+          print(paste0(scenario, "_", n, " ", model, " ", result_type, " is not there - check !"))
         }
         
         if (length(files) > 1) {
-          print(paste0(scenario, "_", n, " ", model, " multiple files - check directory and remove non-relevant files"))
+          print(paste0(scenario, "_", n, " ", model, " ", result_type, " multiple files - check directory and remove non-relevant files"))
         }
         
         if (length(files) == 1) {

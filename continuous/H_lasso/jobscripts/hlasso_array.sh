@@ -2,6 +2,8 @@
 #PBS -l select=1:ncpus=30:ompthreads=30:mem=30gb
 #PBS -J 1-44  
 #PBS -N h_lasso_array
+#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/continuous/H_lasso/jobscripts/logs/
+#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/continuous/H_lasso/jobscripts/logs/
 
 module purge
 module add tools/prod
@@ -23,7 +25,7 @@ SCENARIO="scenario_${SCENARIOS[$SCENARIO_IDX]}"
 N="${SAMPLESIZES[$SIZE_IDX]}"
 
 # Navigate to the script directory
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/H_lasso"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/continuous/H_lasso"
 
 # Run the R script for the assigned scenario and sample size
 Rscript hlasso.R "$SCENARIO" "$N"

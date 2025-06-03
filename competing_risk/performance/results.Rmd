@@ -1,0 +1,134 @@
+---
+title: "simulation updates"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(purrr)
+```
+
+
+```{r results}
+cate_corr <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/cate_correlations.RDS")
+
+cate_mse <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/cate_mses.RDS")
+
+cate_coverage <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/cate_coverage.RDS")
+
+cate_bias <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/cate_bias.RDS")
+
+ci_length <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/ci_length.RDS")
+
+BLP_df <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/all/BLP_tests_metrics.RDS")
+
+```
+
+```{r functions}
+create_summary_df <- function(nested_list, summary_name = "coverage") {
+  map_dfr(names(nested_list), function(scenario) {
+    map_dfr(names(nested_list[[scenario]]), function(n) {
+      map_dfr(names(nested_list[[scenario]][[n]]), function(model) {
+        df <- data.frame(
+          scenario = as.numeric(gsub("scenario_", "", scenario)), 
+          n = as.numeric(n),
+          model = model
+        )
+        df[[summary_name]] <- mean(nested_list[[scenario]][[n]][[model]])
+        df %>% arrange(scenario)
+        df
+      })
+    })
+  })
+}
+
+plot_all <- function(df, bench, var, title) {
+  ggplot(df, aes(x = model, y = .data[[var]], colour = model)) +
+    geom_point() + 
+    geom_segment(aes(x = model, xend = model, y = bench, yend = .data[[var]])) +
+    facet_grid(n ~ scenario) + 
+    theme_minimal() +
+    theme(
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+    ) +
+    labs(
+      title = title,
+      x = "Model",
+      y = var
+    )
+}
+```
+
+
+```{r summarise across 1000 scenarios, include=FALSE}
+
+coverage_df  <- create_summary_df(cate_coverage, "coverage")
+
+corr_df <- create_summary_df(cate_corr, "correlation")
+
+mse_df <- create_summary_df(cate_mse, "mse")
+
+bias_df <- create_summary_df(cate_bias, "bias")
+
+ci_df <- create_summary_df(ci_length, "length")
+
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r coverage plots}
+
+plot_all(coverage_df, 0.5, "coverage", "CATE Coverage Across Scenarios and Sample Sizes")
+
+```
+
+
+```{r mse plots}
+
+plot_all(mse_df, 0, "mse", "CATE MSE Across Scenarios and Sample Sizes")
+
+```
+
+```{r}
+
+plot_all(corr_df, 0, "correlation", "CATE Correlation Across Scenarios and Sample Sizes")
+
+```
+
+```{r}
+
+plot_all(bias_df, 0, "bias", "CATE Bias Across Scenarios and Sample Sizes")
+
+```
+
+```{r}
+
+plot_all(ci_df, 0.1, "length", "CATE CI Length Across Scenarios and Sample Sizes")
+
+```
+
+```{r}
+# BLP metrics
+
+BLP_df <- BLP_df %>% mutate(
+  TP = TP/1000,
+  FP = FP/1000,
+  TN = TN/1000,
+  FN = FN/1000,
+  scenario = as.numeric(gsub("scenario_", "", scenario))
+)
+plot_all(BLP_df, 0, "FN", "proportion of false negatives across all sample sizes and scenarios")
+plot_all(BLP_df, 0, "TP", "proportion of true positives across all sample sizes and scenarios")
+plot_all(BLP_df, 0, "sensitivity", "Sensitivity across all sample sizes and scenarios")
+```
+

@@ -1,7 +1,11 @@
-require(grf, GenericML, dplyr, furrr)
+require(grf)
+require(GenericML)
+require(dplyr)
+require(furrr)
+require(future.apply)
 DR_oracle_output <- function(data, n_folds, scenario, B, workers) {
   # data preparation ----
-  fmla_info <- readRDS(paste0(c("live/data/", scenario, "_oracle.RDS"), collapse = ""))
+  fmla_info <- readRDS(paste0(c("live/data/continuous/", scenario, "_oracle.RDS"), collapse = ""))
   fmla <- parse(text = fmla_info[[1]])
   
   param_names <- names(fmla_info)[-1]
@@ -62,10 +66,12 @@ DR_oracle_output <- function(data, n_folds, scenario, B, workers) {
     p_val <- x[4,2]
   }) %>% unlist()
   
+  print(paste0("BLP test result: ", min(HTE_pval, BLP_whole[4,2])))
+  
   # confidence intervals ----
   metaplan <- plan(multicore, workers = workers)
   on.exit(plan(metaplan), add = T)
-  draws <- future_map(seq_len(B), function(b) {
+  draws <- future_replicate(B, {
     # get your half samples
     half_samples <- lapply(seq_len(n_folds), function(fold) {
       full <- sum(fold_indices == fold)
@@ -86,11 +92,9 @@ DR_oracle_output <- function(data, n_folds, scenario, B, workers) {
     # construct root
     half_root <- tau - tau_half
     return(half_root)
-  }, .options = furrr_options(seed = T))
-  plan(metaplan)
-  
-  draws <- do.call(cbind, draws)
-  
+  }, future.seed = T)
+
+
   # getting the confidence intervals from summary statistics of draws
   lambda_hat <- apply(draws, 1, var)
   normalized <- abs(draws)/(sqrt(lambda_hat))
@@ -107,20 +111,29 @@ DR_oracle_output <- function(data, n_folds, scenario, B, workers) {
   # TE-VIMS -----
   te_vims <- NULL
   if (any( HTE_pval < 0.1) | BLP_whole[4,2] < 0.1) {
+    print("HTE signal - running TE_VIMS")
     covariates <- colnames(X)
     sub_taus <- matrix(nrow = n, ncol = length(covariates))
     colnames(sub_taus) <- covariates
-    for (i in seq_along(covariates)) {
+    
+    compute_fold <- function(i) {
       cov <- covariates[i]
       new_X <- as.matrix(X[, -i])
+      sub_taus_col <- numeric(n)
       
       for (fold in seq_len(n_folds)) {
         in_train <- fold_indices != fold
         in_fold <- !in_train
         DR_sub <- regression_forest(as.matrix(new_X[in_train, ]), po[in_train])
-        sub_taus[in_fold, i] <- predict(DR_sub, newdata = as.matrix(new_X[in_fold, ]))$predictions
+        sub_taus_col[in_fold] <- predict(DR_sub, newdata = as.matrix(new_X[in_fold, ]))$predictions
       }
+      return(sub_taus_col)
     }
+    
+    results <- future_lapply(seq_along(covariates), compute_fold, future.seed = T)
+    sub_taus <- do.call(cbind, results)
+    colnames(sub_taus) <- covariates
+    
     
     # Compute TE-VIMs
     

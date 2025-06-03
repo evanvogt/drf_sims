@@ -1,6 +1,6 @@
 #PBS -l walltime=00:15:00  
 #PBS -l select=1:ncpus=5:ompthreads=5:mem=5gb
-#PBS -J 1-10000 
+#PBS -J 1-10000
 #PBS -N CF_250_array
 #PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/CF/jobscripts/logs_250/
 #PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/CF/jobscripts/logs_250/

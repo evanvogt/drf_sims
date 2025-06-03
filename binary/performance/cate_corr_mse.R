@@ -15,7 +15,7 @@ path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
 # lists and categories
-samplesizes <- c(250, 500, 1000, 5000)
+samplesizes <- c(250, 500, 1000)#, 5000) # removing 5000 while it sorts itself out
 models <-  c("CF", "DR_oracle", "DR_RF", "T_RF")#, "Logistic", "H_lasso")
 scens <- paste0("scenario_", seq_along(1:10))
 
@@ -64,7 +64,7 @@ for (scenario in scens) {
           corrs[i] <- cor(truth[[i]][["tau"]], cates[[i]][["tau"]])
           mse[i] <- mean(((truth[[i]][["tau"]] - cates[[i]][["tau"]])^2), na.rm = T)
           coverage[i] <- sum(data.table::between(truth[[i]][["tau"]], cates[[i]][["lb"]], cates[[i]][["ub"]]))/n
-          bias[i] <- mean(truth[[i]][["tau"]] - cates[[i]][["tau"]], na.rm = T)
+          bias[i] <- mean(abs(truth[[i]][["tau"]] - cates[[i]][["tau"]]), na.rm = T)
           ci_len[i] <- mean(cates[[i]][["ub"]] - cates[[i]][["lb"]], na.rm = T)
         }
         cate_corr[[scenario]][[as.character(n)]][[model]] <- corrs

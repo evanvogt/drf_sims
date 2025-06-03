@@ -1,6 +1,6 @@
 #PBS -l walltime=1:00:00  
 #PBS -l select=1:ncpus=5:mem=10gb
-#PBS -J 1-160
+#PBS -J 1-120
 #PBS -N col_n_sim_mod
 #PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/performance/jobscripts/logs/
 #PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/performance/jobscripts/logs/
@@ -14,7 +14,7 @@ conda activate drf-env
 
 # parameter grid
 SCENARIOS=(1 2 3 4 5 6 7 8 9 10)
-SAMPLE_SIZES=(250 500 1000 5000)
+SAMPLE_SIZES=(250 500 1000)
 MODELS=(CF DR_oracle DR_RF T_RF)
 
 # numbers for dividing the index

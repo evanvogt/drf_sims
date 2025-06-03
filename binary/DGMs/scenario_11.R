@@ -15,9 +15,7 @@ setwd(path)
 # parameters -----
 sims <- 1000
 
-sizes <- c(250, 500, 1000, 5000) # sample sizes
-
-
+sizes <- as.numeric(commandArgs(trailingOnly = TRUE)) # sample sizes
 
 X1_prob <- 0.4 # probability of being female
 

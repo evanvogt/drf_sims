@@ -1,0 +1,148 @@
+---
+title: "Research Summary Stuff"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r libraries}
+library(ggplot2)
+library(paletteer)
+library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(purrr)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r functions}
+create_long_df <- function(nested_list, summary_name) {
+  map_dfr(names(nested_list), function(scenario) {
+    map_dfr(names(nested_list[[scenario]]), function(n) {
+      map_dfr(names(nested_list[[scenario]][[n]]), function(model) {
+        values <- nested_list[[scenario]][[n]][[model]]
+        df <- data.frame(
+          scenario = as.numeric(gsub("scenario_", "", scenario)), 
+          n = as.factor(n),
+          model = model,
+          sim = seq_along(values),
+          value = values
+        )
+        names(df)[names(df) == "value"] <- summary_name
+        return(df)
+      })
+    })
+  })
+}
+filter_df <- function(df) {
+  df <- df %>%
+          filter(scenario %in% c(1,3,8,10)) %>%
+          filter(model != "DR_oracle") %>%
+          mutate(
+            scenario = ifelse(scenario == 1, "null",
+                              ifelse(scenario == 3, "simple",
+                                     ifelse(scenario == 8, "complex",
+                                            ifelse(scenario == 10, "non-linear", scenario)))),
+            model = ifelse(model == "CF", "causal forest",
+                           ifelse(model == "DR_RF", "DR-learner",
+                                  ifelse(model == "T_RF", "T-learner", scenario)))
+          )
+  df <- df %>%
+    mutate(
+      scenario = factor(scenario, levels = c("null", "simple", "complex", "non-linear")),
+      model = factor(model, levels = c("causal forest", "T-learner", "DR-learner"))
+    )
+  return(df)
+}
+```
+
+```{r data, echo=FALSE}
+cate_mse <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/binary/all/cate_mses.RDS")
+
+cate_coverage <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/binary/all/cate_coverage.RDS")
+
+cate_bias <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/binary/all/cate_bias.RDS")
+
+BLP_df <- readRDS("/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/binary/all/BLP_tests_metrics.RDS")
+```
+
+```{r - data manipulation}
+mse_df <- create_long_df(cate_mse, "mse")
+coverge_df <- create_long_df(cate_coverage, "coverage")
+bias_df <- create_long_df(cate_bias, "bias")
+
+mse_df <- filter_df(mse_df)
+coverage_df <- filter_df(coverge_df)
+bias_df <- filter_df(bias_df)
+```
+
+
+```{r - plotting functions}
+plot_violin <- function(df, var, title) {
+  ggplot(df, aes(x = n, y = .data[[var]], colour = model, fill = model)) +
+    geom_violin(alpha = 0.7, trim = FALSE) +
+    facet_grid(cols = vars(scenario)) + 
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      axis.ticks.x = element_blank()
+    ) +
+    labs(
+      title = title,
+      x = "Sample size",
+      y = var
+    ) + 
+    scale_color_paletteer_d("khroma::highcontrast") +
+    scale_fill_paletteer_d("khroma::highcontrast")
+}
+
+plot_box <- function(df, var, title) {
+  ggplot(df, aes(x = n, y = .data[[var]], colour = model, fill = model)) +
+    geom_boxplot(alpha = 0.7) +
+    facet_grid(cols = vars(scenario)) + 
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      axis.ticks.x = element_blank()
+    ) +
+    labs(
+      title = title,
+      x = "Sample size",
+      y = var
+    ) + 
+    scale_color_paletteer_d("khroma::highcontrast") +
+    scale_fill_paletteer_d("khroma::highcontrast")
+}
+```
+
+
+```{r}
+plot_violin(bias_df, "bias", "average bias across all simulations")
+plot_box(bias_df, "bias", "average bias across all simulations")
+```
+
+
+```{r}
+plot_violin(mse_df, "mse", "MSE across all simulations")
+plot_box(mse_df, "mse", "MSE across all simulations")
+```
+
+```{r}
+plot_violin(coverage_df, "coverage", "Coverage across all simulations")
+plot_box(coverage_df, "coverage", "Coverage across all simulations")
+```
+
+

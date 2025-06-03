@@ -1,9 +1,9 @@
-#PBS -l walltime=2:00:00  
-#PBS -l select=1:ncpus=20:ompthreads=20:mem=10gb
+#PBS -l walltime=00:15:00  
+#PBS -l select=1:ncpus=15:ompthreads=15:mem=8gb
 #PBS -J 1-10000
 #PBS -N DR_oracle_1000_array
-#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/DR_oracle/jobscripts/logs_1000/
-#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/DR_oracle/jobscripts/logs_1000/
+#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/continuous/DR_oracle/jobscripts/logs_1000/
+#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/continuous/DR_oracle/jobscripts/logs_1000/
 
 module purge
 module add tools/prod
@@ -27,7 +27,7 @@ n="1000"
 echo "running: ${scenario}_${n}, simulation: $sim_id"
 
 # Navigate to the script directory
-cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/DR_oracle"
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/continuous/DR_oracle"
 
 # Run the R script for the assigned scenario and sample size
 Rscript DR_oracle_sim.R "$scenario" "$n" "$sim_id"

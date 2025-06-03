@@ -15,8 +15,7 @@ path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
 setwd(path)
 
 # lists and categories
-samplesizes <- c(250, 500, 1000, 5000)
-models <-  c("CF", "DR_RF", "T_RF")#, "Logistic", "H_lasso")
+samplesizes <- c(100, 250, 500, 1000)
 scens <- paste0("scenario_", seq_along(1:10))
 
 data_list <- setNames(vector("list", length(scens)), scens)
