@@ -1,7 +1,7 @@
 require(grf, GenericML, dplyr, furrr)
-DR_oracle_output <- function(data, n_folds, scenario, B, workers) {
+DR_oracle_output <- function(data, n, n_folds, scenario, B, workers) {
   # data preparation ----
-  fmla_info <- readRDS(paste0(c("live/data/binary/", scenario, "_oracle.RDS"), collapse = ""))
+  fmla_info <- readRDS(paste0(c("live/data/binary/", scenario, "_", n, "_oracle.RDS"), collapse = ""))
   fmla <- parse(text = fmla_info[[1]])
   
   param_names <- names(fmla_info)[-1]
@@ -51,8 +51,16 @@ DR_oracle_output <- function(data, n_folds, scenario, B, workers) {
   # BLP tests ----
   BLP_tests <- lapply(seq_len(n_folds), function(fold) {
     in_fold <- fold_indices == fold
-    blp_test <- BLP(Y[in_fold], W[in_fold], W.hat[in_fold], Y0.hat[in_fold], tau[in_fold])$coefficients[,c(1,4)]
-    return(blp_test)
+    result <- tryCatch({
+      blp_test <- BLP(Y[in_fold], W[in_fold], W.hat[in_fold], Y0.hat[in_fold], tau[in_fold])$coefficients[,c(1,4)]
+      return(blp_test)
+    },
+    error = function(e) {
+      # get matrix of the same dim with just NAs to make next steps work
+      return(matrix(1, nrow = 4, ncol = 2))
+    })
+    
+    return(result)
   })
   
   # BLP on the whole dataset
@@ -60,6 +68,10 @@ DR_oracle_output <- function(data, n_folds, scenario, B, workers) {
   # collate the p-values from the folds
   HTE_pval <- lapply(BLP_tests, function(x) {
     p_val <- x[4,2]
+    if(is.na(p_val)) {
+      p_val <- 1
+    }
+    return(p_val)
   }) %>% unlist()
   
   # confidence intervals ----

@@ -69,8 +69,16 @@ CF_output <- function(data, n_folds, scenario) {
   
   BLP_tests <- lapply(seq_len(n_folds), function(fold) {
     in_fold <- fold_indices == fold
-    blp_test <- BLP(Y[in_fold], W[in_fold], W.hat[in_fold], Y0.hat[in_fold], tau$tau[in_fold])$coefficients[,c(1,4)]
-    return(blp_test)
+    result <- tryCatch({
+      blp_test <- BLP(Y[in_fold], W[in_fold], W.hat[in_fold], Y0.hat[in_fold], tau$tau[in_fold])$coefficients[,c(1,4)]
+      return(blp_test)
+    },
+    error = function(e) {
+      # get matrix of the same dim with 1s to ensure checking process can work
+      return(matrix(1, nrow = 4, ncol = 2))
+    })
+    
+    return(result)
   })
   
   #BLP on the whole dataset
@@ -79,8 +87,15 @@ CF_output <- function(data, n_folds, scenario) {
   # make the te-vims conditional on there being a HTE signal
   HTE_pval <- lapply(BLP_tests, function(x) {
     p_val <- x[4,2]
+    # 
+    if(is.na(p_val)) {
+      p_val <- 1
+    }
+    return(p_val)
   }) %>% unlist()
   
+  cat(any( HTE_pval < 0.1))
+  cat(BLP_whole[4,2] < 0.1)
   # TE-vims ----
   te_vims <- NULL
   if (any( HTE_pval < 0.1) | BLP_whole[4,2] < 0.1) {

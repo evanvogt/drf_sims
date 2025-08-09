@@ -1,9 +1,9 @@
-#PBS -l walltime=4:00:00  
-#PBS -l select=1:ncpus=40:ompthreads=40:mem=40gb
+#PBS -l walltime=00:45:00  
+#PBS -l select=1:ncpus=10:ompthreads=10:mem=7gb
 #PBS -J 1-10000
-#PBS -N T_RF_5000_array
-#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/T_RF/jobscripts/logs_5000/
-#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/T_RF/jobscripts/logs_5000/
+#PBS -N T_RF_100_array
+#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/T_RF/jobscripts/logs_100/
+#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/T_RF/jobscripts/logs_100/
 
 module purge
 module add tools/prod
@@ -22,7 +22,7 @@ scen_id=$(((PBS_ARRAY_INDEX - 1) / 1000))  # 0-10
 
 
 scenario="scenario_${scenarios[$scen_id]}"
-n="5000"
+n="100"
 
 echo "running: scenario_${scenario}_${n}, simulation: $sim_id"
 

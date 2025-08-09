@@ -1,9 +1,9 @@
-#PBS -l walltime=00:20:00  
-#PBS -l select=1:ncpus=10:ompthreads=10:mem=7gb
+#PBS -l walltime=2:00:00  
+#PBS -l select=1:ncpus=20:ompthreads=20:mem=10gb
 #PBS -J 1-10000
-#PBS -N DR_semi_oracle_100_array
-#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/DR_semi_oracle/jobscripts/logs_100/
-#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/DR_semi_oracle/jobscripts/logs_100/
+#PBS -N DR_semi_oracle_1000_array
+#PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/DR_semi_oracle/jobscripts/logs_1000/
+#PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/binary/DR_semi_oracle/jobscripts/logs_1000/
 
 module purge
 module add tools/prod
@@ -15,13 +15,14 @@ conda activate drf-env
 # scenarios
 scenarios=(1 2 3 4 5 6 7 8 9 10)
 
+
 # Compute indices from the array job ID
 sim_id=$(((PBS_ARRAY_INDEX-1) % 1000 + 1)) # 1-1000
 scen_id=$(((PBS_ARRAY_INDEX - 1) / 1000))  # 0-10
 
 
 scenario="scenario_${scenarios[$scen_id]}"
-n="100"
+n="1000"
 
 echo "running: ${scenario}_${n}, simulation: $sim_id"
 

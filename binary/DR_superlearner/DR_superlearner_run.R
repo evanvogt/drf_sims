@@ -34,6 +34,10 @@ DR_SL_output <- function(data, n_folds, scenario, B, workers, sl_lib) {
       W.hat <- rep(mean(W[in_test]), length = length(in_test))
     }
     
+    # some W.hat predictions are way too big or too small, trim these
+    W.hat[W.hat < 0.05] <- 0.05
+    W.hat[W.hat > 0.95] <- 0.95
+    
     W_test <- W[in_test]
     Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
     
@@ -71,7 +75,7 @@ DR_SL_output <- function(data, n_folds, scenario, B, workers, sl_lib) {
     },
     error = function(e) {
       # get matrix of the same dim with just NAs to make next steps work
-      return(matrix(NA, nrow = 4, ncol = 2))
+      return(matrix(1, nrow = 4, ncol = 2))
     })
     
     return(result)
@@ -82,6 +86,10 @@ DR_SL_output <- function(data, n_folds, scenario, B, workers, sl_lib) {
   # collate the p-values from the folds
   HTE_pval <- lapply(BLP_tests, function(x) {
     p_val <- x[4,2]
+    if(is.na(p_val)) {
+      p_val <- 1
+    }
+    return(p_val)
   }) %>% unlist()
   
   

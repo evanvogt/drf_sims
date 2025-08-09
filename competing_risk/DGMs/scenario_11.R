@@ -1,5 +1,5 @@
 ###############
-# title: simulating data for scenario 3
+# title: simulating data for scenario 11 - larger ATE
 # date started: 07/01/2025
 # date finished:
 # author: Ellie Van Vogt
@@ -20,11 +20,14 @@ sizes <- as.numeric(commandArgs(trailingOnly = TRUE)) # sample sizes
 X1_prob <- 0.4 # probability of being female
 
 b0 <- -0.4 # baseline log odds risk
+bW <- -1 # average treatment effect
 b1 <- 0.5 # prognostic - female
 b2 <- 0.5 # prognostic - APACHE ish
-b4 <- 0.2 # predictive
+b4 <- 0.6 # predictive
+
 
 # function for generating the data
+
 
 generate_dataset <- function(n) {
   W <- rbinom(n, 1, 0.5)
@@ -40,15 +43,7 @@ generate_dataset <- function(n) {
   p1 <- plogis(b0 + b1*X1 + b2*X2 + (bW + b4*X4))
   tau <- p1 - p0
   
-  # add a bunch of variables with no relation to outcome or treatment
-  X01 <- rnorm(n, 0, 1)
-  X02 <- rnorm(n, 0, 1)
-  X03 <- rnorm(n, 0, 1)
-  cats <- sample(c("A", "B", "C"), size = n, replace = TRUE, prob = c(0.45, 0.3, 0.25))
-  X04 <- as.integer(cats == "A")
-  X05 <- as.integer(cats == "B")
-  
-  dataset <- as.data.frame(cbind(Y, W, X1, X2, X4, X01, X02, X03, X04, X05))
+  dataset <- as.data.frame(cbind(Y, W, X1, X2, X4))
   truth <- as.data.frame(cbind(p0, p1, tau))
   
   return(list(dataset = dataset, truth = truth))
@@ -57,19 +52,28 @@ generate_dataset <- function(n) {
 # generating the data ----
 
 for (size in sizes) {
-  cat(size)
-  # adequately powered bW
-  p1 <- plogis(b0)
-  p2 <- power.prop.test(size/2, p2 = p1, power = 0.75)$p1 # makes sure that p2 is less than p1
-  bW <- round(qlogis(p2) - b0, digits = 2)
-  
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  cat(paste0("saving new dataset scenario 3 ", size))
-  saveRDS(dataset, file = paste0("live/data/binary/scenario_3_", size, ".RDS"))
-  
-  # save the true DGM function for the oracle DR learner
-  fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*X$X4)"
-  oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b4 = b4, bW = bW)
-  saveRDS(oracle_list, file = paste0("live/data/binary/scenario_3_", size, "_oracle.RDS"))
+  saveRDS(dataset, file = paste0("live/data/binary/scenario_11_", size, ".RDS"))
 }
 
+# save the true DGM function for the oracle DR learner
+fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*X$X4)"
+oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b4 = b4, bW = bW)
+saveRDS(oracle_list, file = paste0("live/data/binary/scenario_11_oracle.RDS"))
+
+# true subgroup effects ----
+# generate the threshold for positive and negative treatment effect:
+
+thr <- -bW/b4 #2.5
+
+large <- generate_dataset(100000)
+
+large <- cbind(large[[1]], large[[2]])
+
+s1 <- mean(large$tau[large$X4 > thr])
+
+s2 <- mean(large$tau[large$X4 < thr])
+
+gates <- c(s1, s2)
+names(gates) <- c("X4>1.67", "X4<1.67")
+saveRDS(gates, paste0("live/data/binary/scenario_11_true_GATEs", size, ".RDS"))

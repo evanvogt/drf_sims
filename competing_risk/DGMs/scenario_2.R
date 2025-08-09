@@ -1,5 +1,5 @@
 ###############
-# title: simulating data for secnario 2 - binary HTE
+# title: simulating data for secnario 2 - simple HTE
 # date started: 07/01/2025
 # date finished:
 # author: Ellie Van Vogt
@@ -15,16 +15,15 @@ setwd(path)
 # parameters -----
 sims <- 1000
 
-sizes <- c(250, 500, 1000, 5000) # sample sizes
+sizes <- as.numeric(commandArgs(trailingOnly = TRUE)) # sample sizes
 
 X1_prob <- 0.4 # probability of being female
 X3_prob <- 0.7 # mechvent prob
 
-b0 <- 0.2 # creatinine increase
-bW <- -0.1 # average treatment effect
-b1 <- -0.05 # prognostic - female
-b2 <- 2 # prognostic - APACHE ish
-b3 <- 2 
+b0 <- -0.4 # baseline log odds risk
+b1 <- 0.5 # prognostic - female
+b2 <- 0.5 # prognostic - APACHE ish
+b3 <- -0.4 # predictive
 
 # function for generating the data
 
@@ -34,12 +33,12 @@ generate_dataset <- function(n) {
   X2 <- rnorm(n, 0, 1)
   X3 <- rbinom(n, 1, X3_prob)
   
-  err <- rnorm(n, 0, 0.5)
+  lp <- b0 + b1*X1 + b2*X2 + W*(bW + b3*X3)
+  prob <- plogis(lp)
+  Y <- rbinom(n, 1, prob)
   
-  Y <- b0 + b1*X1 + b2*X2 + W*(bW + b3*X3) + err
-
-  p0 <- b0 + b1*X1 + b2*X2
-  p1 <- b0 + b1*X1 + b2*X2 + (bW + b3*X3)
+  p0 <- plogis(b0 + b1*X1 + b2*X2)
+  p1 <- plogis(b0 + b1*X1 + b2*X2 + (bW + b3*X3))
   tau <- p1 - p0
   
   # add a bunch of variables with no relation to outcome or treatment
@@ -60,28 +59,20 @@ generate_dataset <- function(n) {
 # generating the data ----
 
 for (size in sizes) {
+  cat(size)
+  # adequately powered bW
+  p1 <- plogis(b0)
+  p2 <- power.prop.test(size/2, p2 = p1, power = 0.75)$p1 # makes sure that p2 is less than p1
+  bW <- round(qlogis(p2) - b0, digits = 2)
+  
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  saveRDS(dataset, file = paste0("live/data/competing_risk//scenario_2_", size, ".RDS"))
+  cat(paste0("saving new dataset scenario 2 ", size))
+  saveRDS(dataset, file = paste0("live/data/binary/scenario_2_", size, ".RDS"))
+  
+  # save the true DGM function for the oracle DR learner
+  fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)"
+  oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b3 = b3, bW = bW)
+  saveRDS(oracle_list, file = paste0("live/data/binary/scenario_2_", size, "_oracle.RDS"))
 }
 
-# save the true DGM function for the oracle DR learner
-fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)"
-oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, b3 = b3, bW = bW)
-saveRDS(oracle_list, file = paste0("live/data/competing_risk//scenario_2_oracle.RDS"))
-
-# true subgroup effects ----
-# generate the threshold for positive and negative treatment effect:
-
-
-large <- generate_dataset(100000)
-
-large <- cbind(large[[1]], large[[2]])
-
-s1 <- mean(large$tau[large$X3 == 1])
-
-s2 <- mean(large$tau[large$X3 == 0])
-
-gates <- c(s1, s2)
-names(gates) <- c("X3==1", "X3==0")
-saveRDS(gates, paste0("live/data/competing_risk//scenario_2_true_GATEs", size, ".RDS"))
 

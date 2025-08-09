@@ -37,6 +37,6 @@ datasets <- lapply(datasets, `[[`, 1) # just want the data not the truth
 # pick out the data set to be analysed
 data <- datasets[[sim]]
 #DR oracle run
-DR_oracle_res <- DR_oracle_output(data, n_folds, scenario, B, workers)
+DR_oracle_res <- DR_oracle_output(data, n, n_folds, scenario, B, workers)
 saveRDS(DR_oracle_res, paste0("live/results/binary/", scenario, "/", n, "/DR_oracle/res_sim_", sim, ".RDS"))
 print(paste0(scenario, "_", n, " ran successfully!"))

@@ -1,5 +1,5 @@
 ###############
-# title: simulating data for cts outcome and no HTE
+# title: simulating data for secnario 1 - no HTE
 # date started: 07/01/2025
 # date finished:
 # author: Ellie Van Vogt
@@ -7,9 +7,6 @@
 rm(list = ls(all = T))
 set.seed(1998)
 # libraries ----
-library(survival)
-library(survRM2)
-library(dplyr)
 
 # paths ----
 path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
@@ -18,8 +15,8 @@ setwd(path)
 # parameters -----
 sims <- 1000
 
-sizes <- c(250, 500, 1000, 5000) # sample sizes
-
+sizes <- as.numeric(commandArgs(trailingOnly = TRUE)) # sample sizes
+cat(sizes)
 
 
 X1_prob <- 0.4 # probability of being female
@@ -31,52 +28,34 @@ b1 <- -0.05 # prognostic - female
 b2 <- 0.7 # prognostic - APACHE ish
 
 #mortality parameters
-c0 <- 2 # baseline mortality time
+c0 <- 8 # baseline mortality time
 cW <- 1 # treatment prolongs mortality
 c1 <- 0.05 # prognostic - female
 c2 <- -1
 
-
-
-# function for generating the data
-
-
 generate_dataset <- function(n) {
+
   W <- rbinom(n, 1, 0.5)
   X1 <- rbinom(n, 1, X1_prob)
   X2 <- rnorm(n, 0, 1)
-  
-  
-  scale_discharge <- exp(b0 + b1*X1 + b2*X2 + W*bW)
-  scale_mortality <- exp(c0 + c1*X1 + c2*X2 + W*cW)
-  
-  shape_discharge <- 2
-  shape_mortality <- 0.75
-  
-  time_discharge <- rweibull(n, shape_discharge, scale_discharge)
-  time_mortality <- rweibull(n, shape_mortality, scale_mortality)
 
-  summary(time_discharge)
-  summary(time_mortality)
+  lp <- b0 + b1*X1 + b2*X2 + W*bW
+  prob <- plogis(lp)
+  Y <- rbinom(n, 1, prob)
   
-  hist(time_discharge)
-  hist(time_mortality)
-  
-  time_event <- pmin(time_discharge, time_mortality)
-  
-  event_type <- ifelse(time_discharge < time_mortality, 1, 2)
-  
-  
-  censoring_time <- runif(n, 0, 90)  
-  censored <- time_event > censoring_time
-  time_event[censored] <- censoring_time[censored]
-  event_type[censored] <- 0 
-  
-  tau <- rmst2(time_event, event_type == 1, W, tau = 90)
-  
+  p0 <- plogis(b0 + b1*X1 + b2*X2)
+  p1 <- plogis(b0 + b1*X1 + b2*X2 + bW)
   tau <- p1 - p0
   
-  dataset <- as.data.frame(cbind(Y, W, X1, X2))
+  # add a bunch of variables with no relation to outcome or treatment
+  X01 <- rnorm(n, 0, 1)
+  X02 <- rnorm(n, 0, 1)
+  X03 <- rnorm(n, 0, 1)
+  cats <- sample(c("A", "B", "C"), size = n, replace = TRUE, prob = c(0.45, 0.3, 0.25))
+  X04 <- as.integer(cats == "A")
+  X05 <- as.integer(cats == "B")
+  
+  dataset <- as.data.frame(cbind(Y, W, X1, X2, X01, X02, X03, X04, X05))
   truth <- as.data.frame(cbind(p0, p1, tau))
   
   return(list(dataset = dataset, truth = truth))
@@ -86,11 +65,18 @@ generate_dataset <- function(n) {
 # generating the data ----
 
 for (size in sizes) {
+  cat(size)
+  # adequately powered bW
+  p1 <- plogis(b0)
+  p2 <- power.prop.test(size/2, p2 = p1, power = 0.75)$p1 # makes sure that p2 is less than p1
+  bW <- round(qlogis(p2) - b0, digits = 2)
+  
   dataset <- lapply(1:sims, function(i) generate_dataset(size))
-  saveRDS(dataset, file = paste0("live/data/competing_risk//scenario_1_", size, ".RDS"))
+  cat(paste0("saving new dataset scenario 1 ", size))
+  saveRDS(dataset, file = paste0("live/data/binary/scenario_1_", size, ".RDS"))
+  
+  # save the true DGM function for the oracle DR learner with the correctly powered bW
+  fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*bW"
+  oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, bW = bW)
+  saveRDS(oracle_list, file = paste0("live/data/binary/scenario_1_", size, "_oracle.RDS"))
 }
-
-# save the true DGM function for the oracle DR learner
-fmla <- "b0 + b1*X$X1 + b2*X$X2 + W*bW"
-oracle_list <- list(fmla = fmla, b0 = b0, b1 = b1, b2 = b2, bW = bW)
-saveRDS(oracle_list, file = paste0("live/data/competing_risk//scenario_1_oracle.RDS"))

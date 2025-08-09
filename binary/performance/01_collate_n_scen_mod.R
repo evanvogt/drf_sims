@@ -1,0 +1,92 @@
+#####################
+# title: collecting results in an array job to make things quicker - modified for all scenarios
+# date started: 18/03/2025
+# date finished:
+# author: Ellie Van Vogt
+####################
+#libraries
+library(dplyr)
+library(tidyr)
+
+# paths
+path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
+setwd(path)
+
+# arguments and parameters
+args <- commandArgs(trailingOnly = T)
+n <- as.numeric(args[1])
+model <- as.character(args[2])
+
+print(paste0("Processing model: ", model, ", sample size: ", n))
+print("Processing scenarios 1-10")
+
+# Initialize list to collect all failed simulation IDs across scenarios
+all_failed_sims <- c()
+
+# Loop through all 10 scenarios
+for (scen_num in 1:10) {
+  scenario <- paste0("scenario_", scen_num)
+  res_dir <- paste0("live/results/binary/", scenario, "/", n, "/", model)
+  print(paste0("Processing: ", res_dir))
+  
+  # Check if directory exists
+  if (!dir.exists(res_dir)) {
+    print(paste0("Directory does not exist: ", res_dir, " - skipping"))
+    next
+  }
+  
+  # all the simulation runs
+  all_files <- list.files(res_dir, "res_sim", full.names = T)
+  
+  if (length(all_files) == 1000) {
+    res_sims_list <- lapply(all_files, readRDS)
+    
+    # all the taus and CIs
+    tau_list <- lapply(res_sims_list, `[[`, "tau")
+    saveRDS(tau_list, paste0(res_dir, "/tau_CI_all.RDS"))
+    
+    # BLP tests on each fold
+    BLP_folds <- lapply(res_sims_list, `[[`, "BLP_tests")
+    saveRDS(BLP_folds, paste0(res_dir, "/BLP_tests_all.RDS"))
+    
+    # BLP on the whole dataset
+    BLP_wholes <- lapply(res_sims_list, `[[`, "BLP_whole")
+    saveRDS(BLP_wholes, paste0(res_dir, "/BLP_whole_all.RDS"))
+    
+    # TEVIMS 
+    te_vims_list <- lapply(res_sims_list, `[[`, "te_vims") 
+    saveRDS(te_vims_list, paste0(res_dir, "/te_vims_all.RDS"))
+    
+    if (model != "CF") {
+      draws_list <- lapply(res_sims_list, `[[`, "draws")
+      saveRDS(draws_list, paste0(res_dir, "/draws_all.RDS"))
+    }
+    
+    print(paste0(scenario, "_", n, " ", model, " has all the sims and results have been collated"))
+    
+  } else {
+    # Find missing simulations for this scenario
+    complete_sims <- list.files(res_dir, "res_sim")
+    complete_nums <- gsub("res_sim_", "", complete_sims)
+    complete_nums <- gsub(".RDS", "", complete_nums, ignore.case = T) %>% as.numeric()
+    failed_sims <- setdiff(seq_len(1000), complete_nums)
+    
+    # Convert to array job numbers for this scenario
+    scenario_array_nums <- 1000*(scen_num - 1) + failed_sims
+    
+    # Add to overall failed simulations list
+    all_failed_sims <- c(all_failed_sims, scenario_array_nums)
+    
+    print(paste0(scenario, "_", n, " ", model, " has ", length(failed_sims), " missing sims"))
+  }
+}
+
+# Save consolidated failed simulations list if there are any failures
+if (length(all_failed_sims) > 0) {
+  all_failed_sims <- sort(all_failed_sims)
+  writeLines(as.character(all_failed_sims), paste0("live/scripts/binary/", model, "/jobscripts/failed_", n, ".txt"))
+  
+  print(paste0("Total failed simulations across all scenarios for ", model, " (n=", n, "): ", length(all_failed_sims)))
+} else {
+  print(paste0("All simulations completed successfully for ", model, " (n=", n, ") across all scenarios"))
+}
