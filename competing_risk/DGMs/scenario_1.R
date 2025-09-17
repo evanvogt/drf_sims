@@ -31,7 +31,7 @@ b2 <- 0.7 # prognostic - APACHE ish
 c0 <- 8 # baseline mortality time
 cW <- 1 # treatment prolongs mortality
 c1 <- 0.05 # prognostic - female
-c2 <- -1
+c2 <- -1 # prognostic
 
 generate_dataset <- function(n) {
 

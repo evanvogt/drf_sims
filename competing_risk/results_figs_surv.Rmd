@@ -1,0 +1,126 @@
+---
+title: "survival_results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# libraries and data
+library(ggplot2)
+library(paletteer)
+library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(purrr)
+
+res_path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/"
+
+metrics <- readRDS(paste0(res_path, "new_format/metrics_competing_risks.RDS"))
+```
+```{r}
+scenarios <- c(1, 2, 3, 4)
+scenario_names <- paste0("scenario_", scenarios)
+sample_sizes <- c(250, 500, 1000)
+ss_names <- paste0("size_", sample_sizes)
+model_names <- names(metrics[[scenario_names[1]]][[ss_names[1]]])
+# turn the nested list into a long dataframe:
+long_df <- imap_dfr(metrics, function(scenario_names, scenario_name) {
+  imap_dfr(scenario_names, function(ss_names, sample_size_name) {
+    imap_dfr(ss_names, function(model_names, model_name) {
+      imap_dfr(model_names, function(df, sim_run) {
+        df %>%
+          mutate(
+            scenario = factor(ifelse(grepl("4", scenario_name), "HTE on both",
+                              ifelse(grepl("3", scenario_name), "HTE on CE",
+                                     ifelse(grepl("2", scenario_name), "HTE on EOI",
+                                     "No HTE"))), levels = c("No HTE", "HTE on EOI", "HTE on CE", "HTE on both")),
+            sample_size = factor(ifelse(grepl("1000", sample_size_name), "1000",
+                                        ifelse(grepl("500", sample_size_name), "500",
+                                               "250")), levels = c("250", "500", "1000")),
+            Model = factor(ifelse(grepl("sub_dist", model_name), "CSF sub distribution IPCW", "CSF cause-specific IPCW"), levels = c("CSF sub distribution IPCW", "CSF cause-specific IPCW")),
+            simulation_run = sim_run
+          )
+      })
+    })
+  })
+})
+
+```
+
+
+```{r}
+# summarising bias across the simulation scenarios and sample sizes
+
+# average bias per simulation
+long_df %>%
+  select(-c(mse, corr)) %>%
+  group_by(scenario, sample_size, Model, simulation_run) %>%
+  summarise(average_bias = mean(bias, na.rm = T), .groups = "drop") %>%
+  ggplot(aes(x = sample_size, y = average_bias, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario) +
+  scale_fill_paletteer_d("PrettyCols::Bold") +
+  scale_color_paletteer_d("PrettyCols::Bold") +
+  theme_minimal() +
+    labs(title = "Average conditional bias in RMST CATEs",
+       y = "Bias",
+       x = "Sample size")
+  
+```
+
+```{r}
+# individual biases per simulation
+# average bias per simulation
+long_df %>%
+  select(-c(mse, corr)) %>%
+  filter(sample_size != "250") %>%
+  ggplot(aes(x = sample_size, y = bias, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  #theme(legend.title = "Model") +
+  labs(title = "Conditional bias in RMST CATEs",
+       y = "Bias",
+       x = "Sample size")
+```
+```{r}
+long_df %>%
+  select(-c(bias, corr)) %>%
+  distinct() %>%
+  ggplot(aes(x = sample_size, y = mse, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  #theme(legend.title = "Model") +
+  labs(title = "MSE in RMST CATEs",
+       y = "MSE",
+       x = "Sample size")
+```
+
+```{r}
+long_df %>%
+  select(-c(bias, mse)) %>%
+  distinct() %>%
+  filter(scenario != "No HTE") %>%
+  ggplot(aes(x = sample_size, y = corr, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  #theme(legend.title = "Model") +
+  labs(title = "Correlation between true and estimated RMST CATEs",
+       y = expression("Pearson's " * rho),
+       x = "Sample size")
+```
+
+
