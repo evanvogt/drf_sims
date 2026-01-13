@@ -1,7 +1,7 @@
 #PBS -l walltime=02:00:00  
 #PBS -l select=1:ncpus=20:ompthreads=20:mem=15gb
-#PBS -J 1-7
-#PBS -N cts_500
+#PBS -J 1-69
+#PBS -N cts_500_rerun
 #PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/drf_sims/continuous/all_methods/jobscripts/logs_500
 #PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/drf_sims/continuous/all_methods/jobscripts/logs_500
 

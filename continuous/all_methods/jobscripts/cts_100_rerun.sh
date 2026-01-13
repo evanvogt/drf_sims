@@ -1,6 +1,7 @@
 #PBS -l walltime=01:00:00  
 #PBS -l select=1:ncpus=10:ompthreads=10:mem=10gb
 #PBS -N cts_100_rerun
+#PBS -J 1-29
 #PBS -o /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/drf_sims/continuous/all_methods/jobscripts/logs_100
 #PBS -e /rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/drf_sims/continuous/all_methods/jobscripts/logs_100
 
@@ -15,8 +16,12 @@ conda activate sim-env
 n=100
 scenarios=(1 2 3 4 5 6 7 8 9 10) 
 
-# single id failed
-id=469
+# read in failed ids
+cd "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/scripts/drf_sims/continuous/all_methods/jobscripts"
+jobid=$(sed -n "${PBS_ARRAY_INDEX}p" failed_ids_100.txt)
+
+# convert to 0-based for counting along arrays
+id=$((jobid - 1))
 
 # calculate parameters
 scen_id=$((id/1000))
@@ -26,7 +31,7 @@ sim_id=$((id % 1000 + 1))
 scenario=${scenarios[$scen_id]}
 
 # Display the mapping
-echo "original id: $id"
+echo "original id: $jobid"
 echo "Sample Size: $n"
 echo "Scenario: $scenario" 
 echo "Simulation Run: $sim_id"

@@ -56,11 +56,12 @@ for (scenario in scenarios) {
         BLP <- BLP_obj
         indep <- indep_obj
         
-        # Continue as originally written...
         BLP_p <- tryCatch({
           BLP[4,2]
         }, error = function(e) { 1 })
         indep_p <- indep$p_value
+        
+        indep_failed <- as.numeric(indep$method == "independence_test_failed")
         
         bias <- mean(tau_est - truth_val, na.rm = TRUE)
         corr <- ifelse(scenario != 1, cor(truth_val, tau_est, use = "pairwise.complete.obs"), 0)
@@ -70,14 +71,14 @@ for (scenario in scenarios) {
           BLP_correct <- ifelse(BLP_p > threshold, 1, 0)
           indep_correct <- ifelse(indep_p > threshold, 1, 0)
         } else {
-          BLP_correct <- ifelse(BLP_p < threshold, 0, 1)
-          indep_correct <- ifelse(indep_p < threshold, 0, 1)
+          BLP_correct <- ifelse(BLP_p < threshold, 1, 0)
+          indep_correct <- ifelse(indep_p < threshold, 1, 0)
         }
         
         value <- data.frame(sim = sim_num, bias = bias, corr = corr, mse = mse,
                             BLP_p = as.numeric(BLP_p), BLP_correct = BLP_correct,
                             indep_p = as.numeric(indep_p), indep_correct = indep_correct,
-                            model = model, scenario = scenario, n = n)
+                            indep_failed = indep_failed, model = model, scenario = scenario, n = n)
         temp_metrics <- c(temp_metrics, list(value))
       }
       metrics[[scenario_name]][[sample_size]][[model]] <- bind_rows(temp_metrics)

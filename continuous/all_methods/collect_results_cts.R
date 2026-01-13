@@ -30,7 +30,7 @@ for (result_type in result_types) {
       sample_size <- paste0("size_", n)
       results_by_type[[result_type]][[scenario_name]][[sample_size]] <- list()
       
-      res_dir <- file.path(base_path, "live/results/continuous", 
+      res_dir <- file.path(base_path, "/live/results/continuous", 
                            paste0("scenario_", scenario), as.character(n), "all_methods")
       
       result_files <- list.files(res_dir, pattern = "res_sim_", full.names = TRUE)
@@ -77,24 +77,27 @@ for (scenario in scenarios) {
     
     result_files <- list.files(res_dir, pattern = "res_sim_", full.names = TRUE)
     if (length(result_files) != 1000) {
-      complete_sims <- list.files(res_dir, "res_sim")
+      complete_sims <- list.files(res_dir, pattern = "res_sim_")
       complete_nums <- gsub("res_sim_", "", complete_sims)
-      complete_nums <- gsub(".RDS", "", complete_nums, ignore.case = TRUE) %>% as.numeric()
-      failed_sims <- setdiff(seq_len(100), complete_nums)
-      sample_idx <- match(n, sample_sizes) - 1
-      scenario_idx <- match(scenario, scenarios) - 1
-      failed_array_indices <- (sample_idx * 400) + (scenario_idx * 100) + (failed_sims - 1) + 1
-      missing_ids_by_sample_size[[as.character(n)]] <- c(missing_ids_by_sample_size[[as.character(n)]], failed_array_indices)
+      complete_nums <- gsub(".RDS", "", complete_nums, ignore.case = TRUE)
+      complete_nums <- as.numeric(complete_nums)
+      failed_sims <- setdiff(seq_len(1000), complete_nums)
+      scenario_idx <- which(scenarios == scenario) - 1
+      pbs_idx <- scenario_idx * 1000 + failed_sims
+      missing_ids_by_sample_size[[as.character(n)]] <- c(
+        missing_ids_by_sample_size[[as.character(n)]], pbs_idx
+      )
     }
   }
 }
+
 
 # Sort each list
 for (n in sample_sizes) {
   missing_ids_by_sample_size[[as.character(n)]] <- sort(missing_ids_by_sample_size[[as.character(n)]])
 }
 # Save the lists of missing array ids separately by sample size
-failed_ids_dir <- file.path(base_path, "live/scripts/drf_sims/continuous/all_methods/jobscripts")
+failed_ids_dir <- file.path(base_path, "/live/scripts/drf_sims/continuous/all_methods/jobscripts")
 dir.create(failed_ids_dir, recursive = TRUE, showWarnings = FALSE)
 
 for (n in sample_sizes) {
@@ -106,7 +109,7 @@ for (n in sample_sizes) {
 }
 
 # save the collected up results
-results_outfile <- file.path(base_path, "live/results/new_format/continuous_all.RDS")
+results_outfile <- file.path(base_path, "/live/results/new_format/continuous_all.RDS")
 dir.create(dirname(results_outfile), recursive = TRUE, showWarnings = FALSE)
 saveRDS(results_by_type, results_outfile)
 

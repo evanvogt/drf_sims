@@ -205,12 +205,16 @@ run_dr_superlearner <- function(X, Y, W, fold_indices, fold_list, fold_pairs, wo
     X_train <- X[in_train, ]
     X_W_train <- cbind(W = W[in_train], X_train)
     
-    Y.hat.model <- SuperLearner(Y = Y[in_train], X = X_W_train, SL.library = sl_lib)
-    W.hat.model <- SuperLearner(W[in_train], X[in_train, ], family = binomial(), SL.library = sl_lib)
+    # pre-test base learners - failed algorithms will break the superlearner so must be removed manually to avoid error throwing
+    Y_lib <- pretest_superlearner(Y[in_train], X_W_train, sl_lib, gaussian())
+    Y.hat.model <- SuperLearner(Y[in_train], X_W_train, SL.library = Y_lib, method = "method.CC_LS")
+    W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib, binomial())
+    W.hat.model <- SuperLearner(W[in_train], X_train, family = binomial(), SL.library = W_lib, method = "method.CC_LS")
     
     Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X[in_test,]))$pred
     Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X[in_test,]))$pred
     W.hat  <- predict(W.hat.model, newdata = X[in_test,])$pred
+    
     
     W_test <- W[in_test]
     Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
@@ -231,7 +235,42 @@ run_dr_superlearner <- function(X, Y, W, fold_indices, fold_list, fold_pairs, wo
   W.hat[W.hat < 0.05] <- 0.05
   W.hat[W.hat > 0.95] <- 0.95
   
-  tau <- estimate_cate(X, po, fold_indices, fold_list, workers, po_matrix, sl_lib)
+  tau <- c(rep(NA, n))
+  for (fold in seq_along(fold_list)) {
+    in_train <- fold_indices != fold
+    in_fold <- !in_train
+    tau_lib <- pretest_superlearner(po_matrix[in_train, fold], X[in_train,], sl_lib, gaussian())
+    
+    # If no learners work, assign mean
+    if (length(tau_lib) == 0) {
+      tau[in_fold] <- mean(po_matrix[in_train, fold], na.rm = TRUE)
+      next
+    }
+    
+    warning_flag <- FALSE
+    sl_fit <- withCallingHandlers(
+      {
+        SuperLearner(po_matrix[in_train, fold], X[in_train,], family = gaussian(), SL.library = tau_lib)
+      },
+      warning = function(w) {
+        if (any(grepl("All metalearner coefficients are zero, predictions will all be equal to 0", conditionMessage(w)))) {
+          warning_flag <<- TRUE
+          invokeRestart("muffleWarning")
+        }
+      }
+    )
+    # replace failed predictions with the mean
+    if (warning_flag || is.null(sl_fit)) {
+      tau[in_fold] <- mean(po_matrix[in_train, fold], na.rm = TRUE)
+    } else {
+      tau[in_fold] <- tryCatch(
+        predict(sl_fit, newdata = X[in_fold, ])$pred,
+        error = function(e) mean(po_matrix[in_train, fold], na.rm = TRUE)
+      )
+    }
+  }
+  
+  
   return(list(
     tau = tau,
     BLP_whole = run_blp_whole(Y, W, W.hat, Y0.hat, tau),
@@ -242,6 +281,29 @@ run_dr_superlearner <- function(X, Y, W, fold_indices, fold_list, fold_pairs, wo
 ###################
 # Helper Functions
 ###################
+pretest_superlearner <- function(Y, X, SL.library, family) {
+  working_lib <- character()
+  removed_lib <- character()
+  for (alg in SL.library) {
+    fit <- tryCatch(
+      SuperLearner(Y = Y, X = X, SL.library = alg, family = family,
+                   cvControl = list(V = 2)),
+      error = function(e) NULL,
+      warning = function(w) NULL
+    )
+    preds <- if (!is.null(fit) && !is.null(fit$SL.predict)) fit$SL.predict else NULL
+    if (!is.null(preds) && any(!is.na(preds))) {
+      working_lib <- c(working_lib, alg)
+    } else {
+      removed_lib <- c(removed_lib, alg)
+    }
+  }
+  if (length(removed_lib) > 0) {
+    cat("Removed libraries due to NA/error:\n")
+    print(removed_lib)
+  }
+  return(working_lib)
+}
 
 collate_predictions <- function(fold_list, fold_pairs, fold_indices, cross_fits, target) {
   n_obs <- length(fold_indices)
