@@ -1,0 +1,228 @@
+---
+title: "Missing data simulations"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    fig_width: 24
+    fig_height: 10
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries and data set up, include=FALSE, echo=FALSE}
+# libraries
+library(ggplot2)
+library(paletteer)
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(gridExtra)
+
+# paths#purrr paths
+path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live"
+
+# metrics per run
+metrics <- readRDS(file.path(path, "results/new_format/metrics_cts_miss_df.RDS"))
+
+# means and mcses df
+metrics_summary <- metrics %>%
+  group_by(scenario, type, mechanism, method, model) %>%
+  summarise(
+    mean_bias = mean(bias, na.rm = T),
+    mcse_bias = sd(bias, na.rm = T)/sqrt(n()),
+    mean_mse = mean(mse, na.rm = T),
+    mcse_mse = sd(mse, na.rm = T)/sqrt(n()),
+    .groups = "drop"
+  )
+```
+
+```{r functions for generating plots, include=FALSE}
+# summarise over simulation runs
+plot_bias_mcse <- function(df) {
+  ggplot(df, aes(x = model, y = mean_bias, color = model, fill = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = mean_bias - mcse_bias,
+                      ymax = mean_bias + mcse_bias),
+                  width = 0.2) +
+    facet_grid(mechanism ~ method) +
+    scale_fill_paletteer_d("rcartocolor::Safe") +
+    scale_color_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(
+      title = paste0("Mean Bias ± MCSE (", unique(df$scenario), ", ", unique(df$type), ")"),
+      x = "Missing data handling method",
+      y = "Bias"
+    ) +
+    theme(axis.text.x = element_blank())
+}
+
+plot_mse_mcse <- function(df) {
+  ggplot(df, aes(x = model, y = mean_mse, color = model, fill = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(size = 3) +
+    geom_errorbar(aes(ymin = mean_mse - mcse_mse,
+                      ymax = mean_mse + mcse_mse),
+                  width = 0.2) +
+    facet_grid(mechanism ~ method) +
+    scale_fill_paletteer_d("rcartocolor::Safe") +
+    scale_color_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(
+      title = paste0("Mean MSE ± MCSE (", unique(df$scenario), ", ", unique(df$type), ")"),
+      x = "Missing data handling method",
+      y = "MSE"
+    ) +
+    theme(axis.text.x = element_blank())
+}
+
+# box plots to show variation over simulation runs
+plot_bias_box <- function(df) {
+  ggplot(df, aes(x = model, y = bias, color = model, fill = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(alpha = 0.7) +
+    facet_grid(mechanism ~ method) +
+    scale_fill_paletteer_d("rcartocolor::Safe") +
+    scale_color_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(
+      title = paste0("Bias distribution (", unique(df$scenario), ", ", unique(df$type), ")"),
+      y = "Bias",
+      x = "Missing data handling method"
+    ) +
+    theme(axis.text.x = element_blank())
+}
+
+plot_mse_box <- function(df) {
+  ggplot(df, aes(x = model, y = mse, color = model, fill = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(alpha = 0.7) +
+    facet_grid(mechanism ~ method) +
+    scale_fill_paletteer_d("rcartocolor::Safe") +
+    scale_color_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(
+      title = paste0("MSE distribution (", unique(df$scenario), ", ", unique(df$type), ")"),
+      y = "MSE",
+      x = "Missing data handling method"
+    ) +
+    theme(axis.text.x = element_blank())
+}
+
+```
+
+```{r generate mcse plots, include = FALSE}
+# mcse
+mcse_list <- metrics_summary %>%
+  group_by(scenario, type) %>%
+  group_split()
+
+bias_mcse_plots <- lapply(mcse_list, plot_bias_mcse)
+mse_mcse_plots <- lapply(mcse_list, plot_mse_mcse)
+
+# boxplots
+box_list <- metrics %>%
+  group_by(scenario, type ) %>%
+  group_split()
+
+bias_boxplots <- lapply(box_list, plot_bias_box)
+mse_boxplots <- lapply(box_list, plot_mse_box)
+
+```
+
+# Metrics
+
+Plot per scenario and missingness location, for bias and MSE. Each plot is this facetted by the mechansim of the missing data and the method of handling missing data
+
+## Scenario 1 (no HTE)
+
+Prognostic missingness only
+
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[1]], bias_boxplots[[1]], ncol = 2)
+grid.arrange(mse_mcse_plots[[1]], mse_boxplots[[1]], ncol = 2)
+```
+
+# Scenario 2
+
+## Prognostic
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[2]], bias_boxplots[[2]], ncol = 2)
+grid.arrange(mse_mcse_plots[[2]], mse_boxplots[[2]], ncol = 2)
+```
+
+## Predictive
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[3]], bias_boxplots[[3]], ncol = 2)
+grid.arrange(mse_mcse_plots[[3]], mse_boxplots[[3]], ncol = 2)
+```
+
+## Both
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[4]], bias_boxplots[[4]], ncol = 2)
+grid.arrange(mse_mcse_plots[[4]], mse_boxplots[[4]], ncol = 2)
+```
+
+# Scenario 3
+## Prognostic
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[5]], bias_boxplots[[5]], ncol = 2)
+grid.arrange(mse_mcse_plots[[5]], mse_boxplots[[5]], ncol = 2)
+```
+
+## Predictive
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[6]], bias_boxplots[[6]], ncol = 2)
+grid.arrange(mse_mcse_plots[[6]], mse_boxplots[[6]], ncol = 2)
+```
+
+
+## Both
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[7]], bias_boxplots[[7]], ncol = 2)
+grid.arrange(mse_mcse_plots[[7]], mse_boxplots[[7]], ncol = 2)
+```
+
+
+# Scenario 4
+
+## Prognostic
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[8]], bias_boxplots[[8]], ncol = 2)
+grid.arrange(mse_mcse_plots[[8]], mse_boxplots[[8]], ncol = 2)
+```
+
+## Predictive
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[9]], bias_boxplots[[9]], ncol = 2)
+grid.arrange(mse_mcse_plots[[9]], mse_boxplots[[9]], ncol = 2)
+```
+
+## Both
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[10]], bias_boxplots[[10]], ncol = 2)
+grid.arrange(mse_mcse_plots[[10]], mse_boxplots[[10]], ncol = 2)
+```
+
+# Scenario 5
+
+## Prognostic
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[11]], bias_boxplots[[11]], ncol = 2)
+grid.arrange(mse_mcse_plots[[11]], mse_boxplots[[11]], ncol = 2)
+```
+
+## Predictive
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[12]], bias_boxplots[[12]], ncol = 2)
+grid.arrange(mse_mcse_plots[[12]], mse_boxplots[[12]], ncol = 2)
+```
+
+## Both
+```{r, echo=FALSE}
+grid.arrange(bias_mcse_plots[[13]], bias_boxplots[[13]], ncol = 2)
+grid.arrange(mse_mcse_plots[[13]], mse_boxplots[[13]], ncol = 2)
+```

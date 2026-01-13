@@ -1,75 +1,79 @@
-###############
-# script for running all the CATE models in one run - cts outcome with missing data
-# 
-###############
+##########
+# title: fit all CATE models under various missingness settings and handlings
+##########
 
+# libraries
+library(here)
 library(dplyr)
-library(furrr)
-library(grf)
-library(GenericML)
-library(SuperLearner)
-library(mice)
 
-path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
-setwd(path)
+# paths
+path <- here()
 
 # functions
-source("/rds/general/project/nihr_drf_simulations/live/scripts/drf_sims/missing/continuous/cts_miss_dgms.R")
-source("/rds/general/project/nihr_drf_simulations/live/scripts/drf_sims/missing/continuous/cts_miss_modelling.R")
-source("/rds/general/project/nihr_drf_simulations/live/scripts/drf_sims/utils.R")
+source(here("missing/continuous/cts_miss_dgms.R"))
+source(here("missing/continuous/cts_miss_models.R"))
+source(here("utils.R"))
 
-# arguments to get scenario and simulation number
-args <- commandArgs(trailingOnly = T)
-scenario <- as.numeric(args[1])
-n <- as.numeric(args[2])
-sim <- as.numeric(args[3])
-miss_type <- as.character(args[4])
-miss_prop <- as.numeric(args[5])
-miss_method <- as.character(args[6])
-B <- 200
-workers <- 2
+# parameters for the simulation
+i <- as.numeric(commandArgs(trailingOnly = T))
 
+workers <- 1
 
-# SuperLearner library
+params <- expand.grid(scenario = c(1:5),
+                      n = c(500),
+                      prop = c(0.3),
+                      type = c("prognostic", "predictive", "both"),
+                      mechanism = c("MAR", "AUX"),# , "AUX-Y"), # only for 1 scenario
+                      method = c("complete_cases", "mean_imputation", "missforest", "regression", "missing_indicator", "IPW", "none"),
+                      run = c(1:100))
+
+# can't have predictive missingness in the scenario where there are no predictive variables
+params <- params %>%
+  filter(!(scenario == 1 & type != "prognostic"))
+
+# select parameters for this run
+param <- params[i,]
+scenario <- as.numeric(param$scenario)
+n <- as.numeric(param$n)
+prop <- as.numeric(param$prop)
+type <- as.character(param$type)
+mechanism <- as.character(param$mechanism)
+method <- as.character(param$method)
+run <- as.numeric(param$run)
+
 sl_lib <- c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.randomForest")
 
-
 # set up simulation seed
-setup_rng_stream(sim)
+setup_rng_stream(run)
 
-# dataset
-gen <- generate_and_process_continuous_data(
-  scenario, n, return_truth = TRUE, seed = NULL,
-  add_missingness = TRUE, miss_type = miss_type, 
-  miss_prop = miss_prop, miss_seed = NULL,
-  handle_missing = miss_method, m_imputations = 100, 
-  imputation_seed = 1998
-)
+# data generation and missing data handling
 
+gen <- generate_and_process_continuous_data(scenario, n, TRUE, type, prop, mechanism, method)
 
 data <- gen$dataset
 
-n_folds <- ifelse(nrow(data) < 201, 4, 10)
+n_folds <- ifelse(nrow(data) < 201, 5, 10)
 
 fmla_info <- get_continuous_oracle_info(scenario, gen$bW)
 
-# Run all CATE methods
-results <- run_all_cate_methods(
-  data = data, 
-  n_folds = n_folds, 
-  B = B, 
-  workers = workers,
-  sl_lib = sl_lib,
-  fmla_info = fmla_info
-)
+
+# Run all the CATE models
+
+results <- run_all_cate_methods(data, n_folds, workers, sl_lib, fmla_info, ipw = if (method == "IPW") gen$ipw else NULL)
+warnings()
 
 results$data <- data
 results$truth <- gen$truth
 
-# Save results
-output_dir <- paste0("live/results/missing/continuous/", miss_type, "/", miss_prop, "/", miss_method, "/scenario_", scenario, "/", n, "/all_methods/")
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, paste0(output_dir, "res_sim_", sim, ".RDS"))
+if (param$method == "IPW") {
+  results$ipw <- gen$ipw
+}
 
-print(paste0("All methods for scenario ", scenario, "_", n, " sim ", sim, " completed successfully!"))
+# Save results
+output_dir <- file.path("/rds/general/project/nihr_drf_simulations", "live", "results", "missing", "continuous", paste0("scenario_", scenario), n, type, prop, mechanism, method)
+
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+saveRDS(results, here(output_dir, paste0("res_sim_", run, ".RDS")))
+
+print("Simulation completed!")
 
