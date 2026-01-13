@@ -13,7 +13,7 @@ library(purrr)
 
 res_path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/"
 
-metrics <- readRDS(paste0(res_path, "new_format/metrics_competing_risks_tidy.RDS"))
+metrics <- readRDS(paste0(res_path, "new_format/metrics_competing_risks_no_cens_tidy.RDS"))
 
 metrics <- metrics %>%
   mutate(

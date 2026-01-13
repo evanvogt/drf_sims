@@ -19,7 +19,7 @@ sample_sizes  <- c(250, 500, 1000)
 model_names   <- c("causal_survival_forest_sub_dist", "causal_survival_forest_cause_spec")
 
 # load collected results
-results <- readRDS(file.path(res_path, "new_format/competing_risk_all.RDS"))
+results <- readRDS(file.path(res_path, "new_format/competing_risk_no_censoring.RDS"))
 
 # Map each model to its corresponding truth column
 model_truth_map <- list(
@@ -87,5 +87,5 @@ metrics_df <- bind_rows(
 )
 
 # Save outputs
-saveRDS(metrics,     file.path(res_path, "new_format/metrics_competing_risks_nested.RDS"))
-saveRDS(metrics_df, file.path(res_path, "new_format/metrics_competing_risks_tidy.RDS"))
+saveRDS(metrics,     file.path(res_path, "new_format/metrics_competing_risks_no_cens_nested.RDS"))
+saveRDS(metrics_df, file.path(res_path, "new_format/metrics_competing_risks_no_cens_tidy.RDS"))

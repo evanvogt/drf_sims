@@ -136,10 +136,6 @@ generate_csh_data <- function(scenario, n, return_truth = TRUE, seed = NULL) {
   D <- ifelse(Y > admin, 0, D)
   Y <- ifelse(Y > admin, admin, Y)
   
-  # uninformative censoring
-  cens_time <- runif(n, 0, admin)
-  D <- ifelse(Y > cens_time, 0, D)
-  Y <- ifelse(Y > cens_time, cens_time, Y)
   
   # Add irrelevant covariates
   X01 <- rnorm(n, 0, 1)
