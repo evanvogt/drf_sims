@@ -1,5 +1,5 @@
 ###############
-# script for running all the CATE models in one run - binary outcome
+# script for running all the CATE models in one run - cts outcome
 ###############
 
 library(dplyr)
@@ -45,7 +45,6 @@ fmla_info <- get_binary_oracle_info(scenario, gen$bW)
 results <- run_all_cate_methods(
   data = data, 
   n_folds = n_folds, 
-  B = B, 
   workers = workers,
   sl_lib = sl_lib,
   fmla_info = fmla_info

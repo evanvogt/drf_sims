@@ -1,7 +1,5 @@
 ###############
-# title: Data Generating Functions - binary outcome
-# author: Ellie Van Vogt
-# Date started: 
+# title: Streamlined data generating process for continuous outcomes - all scenarios
 ###############
 
 # Define scenario parameters

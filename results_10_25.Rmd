@@ -1,0 +1,304 @@
+---
+title: "Simulation Results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    fig_width: 8
+    fig_height: 7
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, include=FALSE}
+library(ggplot2)
+library(paletteer)
+library(ggridges)
+library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(purrr)
+```
+
+```{r files, include=FALSE}
+res_path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live/results/"
+
+metrics_cts <- readRDS(paste0(res_path, "new_format/metrics_continuous_tidy.RDS"))
+
+metrics_bin <- readRDS(paste0(res_path, "new_format/metrics_binary_tidy.RDS"))
+
+metrics_csf <- readRDS(paste0(res_path, "new_format/metrics_competing_risks_tidy.RDS"))
+
+metrics_miss <- readRDS(paste0(res_path, "new_format/metrics_continuous_miss_tidy.RDS"))
+```
+
+```{r tidy bin, include=FALSE}
+res_bin <- metrics_bin %>%
+  filter(scenario %in% c(1,3,8,9)) %>%
+  mutate(
+    scenario = factor(
+      recode(scenario,
+             `1` = "Null (ATE)",
+             `3` = "Simple (X4)",
+             `8` = "Complex (X3 + X4 + X4*X5)",
+             `9` = "Non-linear (cos(X4))"),
+      levels = c("Null (ATE)", "Simple (X4)", "Complex (X3 + X4 + X4*X5)", "Non-linear (cos(X4))")
+    ),
+    n = factor(
+      recode(n,
+             `100` = "100",
+             `250` = "250",
+             `500` = "500",
+             `1000` = "1000"),
+      levels = c("100", "250", "500", "1000")
+    ),
+    model = factor(
+      recode(model,
+             causal_forest = "Causal forest",
+             dr_random_forest = "DR-RandomForest",
+             dr_superlearner = "DR-SuperLearner",
+             dr_oracle = "DR-oracle",
+             dr_semi_oracle = "DR-semi-oracle"),
+      levels = c("Causal forest", "DR-RandomForest", "DR-SuperLearner", "DR-oracle", "DR-semi-oracle"))
+  )
+```
+
+```{r tidy cts, include=FALSE}
+res_cts <- metrics_cts %>%
+  filter(scenario %in% c(1,3,8,9)) %>%
+  mutate(
+    scenario = factor(
+      recode(scenario,
+             `1` = "Null (ATE)",
+             `3` = "Simple (X4)",
+             `8` = "Complex (X3 + X4 + X4*X5)",
+             `9` = "Non-linear (cos(X4))"),
+      levels = c("Null (ATE)", "Simple (X4)", "Complex (X3 + X4 + X4*X5)", "Non-linear (cos(X4))")
+    ),
+    n = factor(
+      recode(n,
+             `100` = "100",
+             `250` = "250",
+             `500` = "500",
+             `1000` = "1000"),
+      levels = c("100", "250", "500", "1000")
+    ),
+    model = factor(
+      recode(model,
+             causal_forest = "Causal forest",
+             dr_random_forest = "DR-RandomForest",
+             dr_superlearner = "DR-SuperLearner",
+             dr_oracle = "DR-oracle",
+             dr_semi_oracle = "DR-semi-oracle"),
+      levels = c("Causal forest", "DR-RandomForest", "DR-SuperLearner", "DR-oracle", "DR-semi-oracle"))
+  )
+```
+
+```{r tidy csf, include=FALSE}
+
+res_csf <- metrics_csf %>%
+  mutate(
+    scenario = factor(
+      recode(scenario,
+             `1` = "ATE event 1",
+             `2` = "ATE event 2",
+             `3` = "HTE event 1",
+             `4` = "HTE event 1, ATE event 2",
+             `5` = "HTE event 2",
+             `6` = "HTE event 2, ATE event 1",
+             `7` = "HTE event 1 & 2"),
+      levels = c("ATE event 1", "ATE event 2", "HTE event 1", "HTE event 1, ATE event 2", "HTE event 2", "HTE event 2, ATE event 1", "HTE event 1 & 2")
+    ),
+    n = factor(
+      recode(n,
+             `250` = "250",
+             `500` = "500",
+             `1000` = "1000"),
+      levels = c("250", "500", "1000")
+    ),
+    model = factor(
+      recode(model,
+             causal_survival_forest_sub_dist = "CSF sub-distrubtion",
+             causal_survival_forest_cause_spec = "CSF cause-specific"),
+      levels = c("CSF sub-distrubtion", "CSF cause-specific"))
+  )
+```
+
+```{r tidy miss, include=FALSE}
+res_miss <- metrics_miss %>%
+  filter(scenario != 3) %>%
+  mutate(
+    scenario = factor(
+      recode(scenario,
+             `1` = "Null (ATE)",
+             `2` = "Simple (X3)",
+             `4` = "Complex (X3 + X4 + X4*X5)",
+             `5` = "Non-linear (cos(X4))"),
+      levels = c("Null (ATE)", "Simple (X3)", "Complex (X3 + X4 + X4*X5)", "Non-linear (cos(X4))")
+    ),
+    model = factor(
+      recode(model,
+             causal_forest = "Causal forest",
+             dr_random_forest = "DR-RandomForest",
+             dr_superlearner = "DR-SuperLearner",
+             dr_oracle = "DR-oracle",
+             dr_semi_oracle = "DR-semi-oracle"),
+      levels = c("Causal forest", "DR-RandomForest", "DR-SuperLearner", "DR-oracle", "DR-semi-oracle")
+      ),
+    mechanism = as.factor(miss_mech),
+    method = factor(
+      recode(miss_method,
+             `complete_cases` = "complete case",
+             `mean_imputation` = "mean imputation",
+             `missforest` = "non-parametric model-based",
+             `regression` = "parametric model-based",
+             `missing_indicator` = "missing indicator"),
+      levels = c("complete case", "mean imputation", "non-parametric model-based", "parametric model-based", "missing indicator"))
+    ) %>% select(-c(miss_mech, miss_method))
+
+```
+
+something has gone wrong in the missing data simulations because everything is turning out the same...
+```{r missing data figures}
+# bias
+res_miss %>%
+  ggplot(aes(x = mechanism, y = bias, color = method, fill = method)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario, nrow = 2) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(y = "Bias",
+       x = "Sample size")
+```
+
+Anyway... look more in depth at the CSF?
+
+```{r}
+# bias
+res_csf %>%
+#  filter(abs(bias) < 10) %>%
+  ggplot(aes(x = n, y = bias, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(y = "Bias",
+       x = "Sample size")
+```
+so the errors for the cause-specific method are not working well, zoom in a bit more
+
+```{r}
+res_csf %>%
+  filter(abs(bias) < 5) %>%
+  ggplot(aes(x = n, y = bias, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(y = "Bias",
+       x = "Sample size")
+
+```
+how is the correlation between true and estimated CATEs
+```{r}
+res_csf %>%
+  ggplot(aes(x = n, y = corr, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(y = expression("Pearson's " * rho),
+       x = "Sample size")
+```
+how is the MSE
+```{r}
+# MSE
+res_csf %>%
+  filter(mse < 20) %>%
+  ggplot(aes(x = n, y = mse, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(y = "MSE",
+       x = "Sample size")
+```
+
+binary results - HTE tests
+```{r}
+res_bin %>%
+  pivot_longer(
+    cols = c(BLP_p, indep_p),
+    names_to = "Test",
+    values_to = "p_value"
+  ) %>%
+  mutate(Test = factor(recode(Test, `BLP_p` = "BLP", `indep_p` = "Permutation"), levels = c("BLP", "Permutation"))) %>%
+  ggplot(aes(x = p_value, y = n, color = n, fill = n, group = interaction(n, scenario, Test))) +
+  geom_density_ridges2(alpha = 0.5) +
+  facet_grid(Test~scenario) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  xlim(0,1) +
+  labs(x = "p-value",
+       y = "Sample size") +
+  theme(axis.text.x = element_text(size = 5))
+```
+
+continuous results - HTE tests
+```{r}
+res_cts %>%
+  pivot_longer(
+    cols = c(BLP_p, indep_p),
+    names_to = "Test",
+    values_to = "p_value"
+  ) %>%
+  mutate(Test = factor(recode(Test, `BLP_p` = "BLP", `indep_p` = "Permutation"), levels = c("BLP", "Permutation"))) %>%
+  ggplot(aes(x = p_value, y = n, color = n, fill = n, group = interaction(n, scenario, Test))) +
+  geom_density_ridges2(alpha = 0.5) +
+  facet_grid(Test~scenario) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  xlim(0,1) +
+  labs(x = "p-value",
+       y = "Sample size") +
+  theme(axis.text.x = element_text(size = 5))
+```
+
+
+continuous results - MSE
+```{r}
+res_cts %>%
+  filter(mse < 0.5) %>%
+  ggplot(aes(x = n, y = mse, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario, nrow = 2) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(y = "MSE",
+       x = "Sample size")
+```
+binary results - MSE
+```{r}
+res_bin %>%
+  filter(mse < 0.5) %>%
+  filter(model != "DR-SuperLearner") %>%
+  ggplot(aes(x = n, y = mse, color = model, fill = model)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~scenario, nrow = 2) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  scale_color_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(y = "MSE",
+       x = "Sample size")
+```
+
