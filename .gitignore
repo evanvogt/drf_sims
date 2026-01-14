@@ -1,18 +1,21 @@
 # gitignore
 ssh*
-# ignore shells
+
+# ignore log files
 *.e*
 *.o*
 *.ER
 *.OU
 *logs*/
+
+# ignore compiled rmd files
+*.html
+
 # ignore random test bits
 *test*.*
 *test*/
 
 # old things that will not be used/updated
-
 *deprecated*/
 *old*/
-*shells*/
 .Rproj.user

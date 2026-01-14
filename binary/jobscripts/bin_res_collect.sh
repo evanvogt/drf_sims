@@ -1,7 +1,6 @@
-#!/bin/bash
 #PBS -l walltime=01:00:00  
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
-#PBS -N cts_miss_collect
+#PBS -l select=1:ncpus=10:ompthreads=10:mem=15gb
+#PBS -N bin_results_collect
 #PBS -o logs_collect/
 #PBS -e logs_collect/
 
@@ -12,8 +11,8 @@ module add R/4.3.2-gfbf-2023a
 eval "$(~/miniforge3/bin/conda shell.bash hook)"
 conda activate sim-env
 
-# Navigate to script directory
+# Navigate to the script directory
 cd "${PBS_O_WORKDIR}/.."
 
-# Run R script with parameters
-Rscript cts_miss_collect.R 
+# Run the R script for the assigned scenario and sample size
+Rscript collect_results_bin.R
