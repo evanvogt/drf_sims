@@ -58,8 +58,10 @@ fmla_info <- get_continuous_oracle_info(scenario, gen$bW)
 
 
 # Run all the CATE models
+metaplan <- plan(multisession, workers = workers)
+on.exit(plan(metaplan), add = TRUE)
 
-results <- run_all_cate_methods(data, n_folds, workers, sl_lib, fmla_info, ipw = if (method == "IPW") gen$ipw else NULL)
+results <- run_all_cate_methods(data, n_folds, sl_lib, fmla_info, ipw = if (method == "IPW") gen$ipw else NULL)
 warnings()
 
 results$data <- data

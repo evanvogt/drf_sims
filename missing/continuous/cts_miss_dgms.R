@@ -33,6 +33,9 @@ continuous_scenario_params <- data.frame(
   s4 = 1,
   s5 = 1,
   s_err = 0.5,
+  # Auxiliary variable parameters
+  bU = 1,
+  sU = 1,
   # Variables needed for each scenario
   needs_X3 = c(FALSE, TRUE, TRUE, TRUE, FALSE),
   needs_X4 = c(FALSE, FALSE, TRUE, TRUE, TRUE),
@@ -44,12 +47,14 @@ continuous_scenario_params <- data.frame(
 #' 
 #' @param scenario Integer 1-5 specifying which scenario to generate
 #' @param n Sample size
+#' @param mech c("MAR", "AUX") required to check if unseen variable generation is required
 #' @param return_truth Logical, whether to return true values (p0, p1, tau)
 #' @param seed Optional seed for reproducibility
-generate_continuous_scenario_data <- function(scenario, n, return_truth = TRUE, seed = NULL) {
+generate_continuous_scenario_data <- function(scenario, n, mech, return_truth = TRUE, seed = NULL) {
   # Checks
   if (!is.null(seed)) set.seed(seed)
   if (!scenario %in% 1:5) { stop("Scenario must be between 1 and 5") }
+  if (scenario == 1 & mech == "AUX") {stop("Auxialiary missingness not applicable to no HTE scenario")}
   
   # Get parameters, total variance, and appropriate bW
   params <- continuous_scenario_params[continuous_scenario_params$scenario == scenario, ]
@@ -66,6 +71,8 @@ generate_continuous_scenario_data <- function(scenario, n, return_truth = TRUE, 
   X3 <- if(params$needs_X3) rbinom(n, 1, params$X3_prob) else NULL
   X4 <- if(params$needs_X4) rnorm(n, 0, params$s4) else NULL  
   X5 <- if(params$needs_X5) rnorm(n, 0, params$s5) else NULL
+  U <- if (mech == "AUX") rnorm(n, 0, params$sU) else NULL
+  
   
   # Error term
   err <- rnorm(n, 0, params$s_err)
@@ -73,10 +80,10 @@ generate_continuous_scenario_data <- function(scenario, n, return_truth = TRUE, 
   # Select treatment effect function
   treatment_effect <- switch(scenario,
                              rep(bW, n),
-                             bW + params$b3 * X3,
-                             bW + params$b3 * X3 + params$b4 * X4,
-                             bW + params$b3 * X3 + params$b4 * X4 + params$b45 * X4 * X5,
-                             bW + params$b4 * cos(X4)
+                             bW + params$b3 * X3 + if(!is.null(U)) params$bU * U else 0,
+                             bW + params$b3 * X3 + params$b4 * X4 + if(!is.null(U)) params$bU * U else 0,
+                             bW + params$b3 * X3 + params$b4 * X4 + params$b45 * X4 * X5 + if(!is.null(U)) params$bU * U else 0,
+                             bW + params$b4 * cos(X4) + if(!is.null(U)) params$bU * U else 0
   )
   
   # Outcome calc
@@ -111,6 +118,7 @@ generate_continuous_scenario_data <- function(scenario, n, return_truth = TRUE, 
     tau <- p1 - p0
     
     truth <- data.frame(p0 = p0, p1 = p1, tau = tau)
+    if (mech == "AUX") truth$U <- U
     result$truth <- truth
   }
   return(result)
@@ -122,12 +130,14 @@ generate_continuous_scenario_data <- function(scenario, n, return_truth = TRUE, 
 #' @param type Where the missingness should be introduced ("predictive", "prognostic", "both")
 #' @param prop Proportion of missingness in (0,1)
 #' @param mech Mechanism of missingness, either MAR (based on observed variables) or AUX (based on unseen auxillary variable)
+#' @param U Auxiliary variable for missingness generation (required if mech = "AUX")
 #' @param seed Optional seed
-introduce_missingness_continuous <- function(data, type, prop, mech, seed = NULL) {
+introduce_missingness_continuous <- function(data, type, prop, mech, U = NULL, seed = NULL) {
   # Checks
   if (!is.null(seed)) set.seed(seed)
   if (!type %in% c("prognostic", "predictive", "both")) stop("type must be 'prognostic', 'predictive', or 'both'")
   if (prop < 0 || prop > 1) stop("miss_prop must be between 0 and 1")
+  if (mech == "AUX" & is.null(U)) stop("auxiliary variable required for AUX missingness generation")
   
   # Get sample size and covariates
   n <- nrow(data)
@@ -145,7 +155,6 @@ introduce_missingness_continuous <- function(data, type, prop, mech, seed = NULL
                       "both" = c(pred_vars, prog_vars))
   
   if (mech == "AUX") {
-    U <- rnorm(n, 0, 1)
     covs <- c(covs, "U")
     data <- cbind(data, U)
   }
@@ -201,7 +210,7 @@ handle_missingness_continuous <- function(data, method, seed = NULL) {
     message("No missing data found. Returning original dataset.")
     return(data)
   }
-  method <- match.arg(method, c("complete_cases", "mean_imputation", "missforest", "regression", "missing_indicator", "IPW", "none"))
+  method <- match.arg(method, c("complete_cases", "mean_imputation", "missforest", "regression", "missing_indicator", "IPW", "multiple_imputation", "none"))
   
   switch(method,
          "complete_cases" = {
@@ -286,6 +295,20 @@ handle_missingness_continuous <- function(data, method, seed = NULL) {
            message(paste("Final sample size:", nrow(complete_data)))
            list(data = complete_data, ipw = ipw, retained_indices = retained_indices)
          },
+         "multiple_imputation" = {
+           n_var <- ncol(data)
+           predMat <- matrix(1, nrow = n_var, ncol = n_var)
+           diag(predMat) <- 0
+           predMat[,which(colnames(data) %in% c("Y", "W"))] <- 0
+           
+           imputation <- mice(data, m = 10, predictorMatrix = predMat)
+           
+           data_mi <- lapply(seq(1:10), function(i) {
+             complete(imputation, i)
+           })
+           message("Missing imputation completed - returning 10 imputed datasets")
+           list(data = data_mi)
+         },
          "none" = {
            message("No missing data handling applied, original data set with missingness returned")
            list(data = data)
@@ -304,10 +327,10 @@ handle_missingness_continuous <- function(data, method, seed = NULL) {
 #' @param seed Optional seed
 generate_and_process_continuous_data <- function(scenario, n, return_truth = TRUE, type, prop, mech, method, seed = NULL) {
   # Data and truth generation step
-  data_result <- generate_continuous_scenario_data(scenario, n, return_truth, seed)
+  data_result <- generate_continuous_scenario_data(scenario, n, mech, return_truth, seed)
   
   # Add missingness
-  miss_dataset <- introduce_missingness_continuous(data_result$dataset, type, prop, mech, seed)
+  miss_dataset <- introduce_missingness_continuous(data_result$dataset, type, prop, mech, U = if(mech == "AUX") data_result$truth$U else NULL, seed)
   
   # Handle missing data
   processed_dataset <- handle_missingness_continuous(miss_dataset, method, seed)

@@ -11,11 +11,7 @@ require(future)
 library(furrr)
 
 # Main function
-run_all_cate_methods <- function(data, n_folds = 10, workers = 2, sl_lib = NULL, fmla_info = NULL, ipw = NULL) {
-  
-  # Set up parallelisation
-  metaplan <- plan(multisession, workers = workers)
-  on.exit(plan(metaplan), add = TRUE)
+run_all_cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL, ipw = NULL) {
   
   # Data set up
   X <- as.matrix(data[, -c(1:2)])
@@ -56,13 +52,15 @@ run_all_cate_methods <- function(data, n_folds = 10, workers = 2, sl_lib = NULL,
     cat("Running DR Semi-Oracle...\n")
     results$dr_semi_oracle <- run_dr_semi_oracle(X, Y, W, fold_indices, fold_list, ipw)
     
-    # DR SuperLearner (if data is complete)
-    cat("Running DR Super Learner...")
-    X <- as.data.frame(X)
-    nuisances_sl <- nuisance_sl(X, Y, W, fold_indices, fold_pairs, sl_lib, ipw)
-    
-    results$dr_superlearner <- list(tau = stage_2_sl(X, nuisances_sl$po_matrix, fold_indices, fold_list, sl_lib, ipw))
-    results$nuisances_sl <- nuisances_sl
+    if (!is.null(fmla_info)) {
+      # DR SuperLearner (if data is complete)
+      cat("Running DR Super Learner...")
+      X <- as.data.frame(X)
+      nuisances_sl <- nuisance_sl(X, Y, W, fold_indices, fold_pairs, sl_lib, ipw)
+      
+      results$dr_superlearner <- list(tau = stage_2_sl(X, nuisances_sl$po_matrix, fold_indices, fold_list, sl_lib, ipw))
+      results$nuisances_sl <- nuisances_sl
+    }
   }
   
   # keep nuisances for running post estimation tests
