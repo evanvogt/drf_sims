@@ -32,10 +32,8 @@ params <- expand.grid(
 # select parameters for current run
 param <- params[i,]
 print(param)
-scenario <- as.numeric(param$scenario)
-n <- as.numeric(param$n)
-CI_sf <- as.numeric(param$CI_sf)
-run <- as.numeric(param$run)
+
+list2env(param, envir = .GlobalEnv)
 
 # set up simulation seed
 setup_rng_stream(run)

@@ -19,7 +19,7 @@ miss_dataset <- introduce_missingness_continuous(
   type = "both",
   prop = 0.3,
   mech = "AUX",
-  U = U
+  U = data_result$truth$U
 )
 
 
@@ -45,7 +45,6 @@ result_list <- future_map(short_mi, function(data) {
   run_all_cate_methods(
     data = data,
     n_folds = n_folds,
-    workers = 3,
     sl_lib = NULL,
     fmla_info = NULL
   )
@@ -83,3 +82,17 @@ results$dr_semi_oracle <- combine_mi(result_list, "dr_semi_oracle")
 
 # now need to think about how the bootstrapping is gonna work 
 
+
+
+
+# future package problems
+expr <- quote({run_all_cate_methods(
+  data = data, 
+  n_folds = n_folds,
+  sl_lib = sl_lib,
+  fmla_info = fmla_info,
+  ipw = if (method == "IPW") gen$ipw else NULL
+)})
+
+expr
+future::

@@ -1,7 +1,7 @@
 #!/bin/bash
-#PBS -l walltime=01:00:00  
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
-#PBS -N cts_miss_collect
+#PBS -l walltime=02:00:00  
+#PBS -l select=1:ncpus=4:ompthreads=4:mem=200gb
+#PBS -N ci_cts_collect
 
 module purge
 module add tools/prod
@@ -13,5 +13,5 @@ conda activate sim-env
 # Navigate to script directory
 cd "${PBS_O_WORKDIR}/.."
 
-# Run R script with parameters
-Rscript cts_miss_collect.R 
+# Run R script
+Rscript cts_ci_collect.R

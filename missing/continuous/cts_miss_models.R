@@ -316,7 +316,7 @@ nuisance_sl <- function(X, Y, W, fold_indices, fold_pairs, sl_lib, ipw = NULL) {
     
     W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib, binomial())
     W.hat.model <- SuperLearner(W[in_train], X_train, family = binomial(), 
-                                SL.library = W_lib, method = method.NNloglik(), obsWeights = if(!is.null(ipw)) ipw[in_train] else NULL)
+                                SL.library = W_lib, method = "method.NNloglik", obsWeights = if(!is.null(ipw)) ipw[in_train] else NULL)
     
     # predictions
     X_test <- X[in_test, ]
@@ -365,20 +365,6 @@ nuisance_sl <- function(X, Y, W, fold_indices, fold_pairs, sl_lib, ipw = NULL) {
   ))
 }
 
-# collation of list to matrix
-collate_predictions <- function(fold_list, fold_pairs, fold_indices, reslist, target) {
-  lapply(fold_list, function(fold) {
-    predictions <- rep(NA, length(fold_indices))
-    for (j in seq_along(fold_pairs)) {
-      if (fold %in% fold_pairs[[j]]) {
-        predictions[fold_indices %in% fold_pairs[[j]]] <- reslist[[j]][[target]]
-      }
-    }
-    predictions[fold_indices == fold] <- NA
-    predictions
-  }) %>% simplify2array()
-}
-
 # check superlearner algorithms and remove failures
 pretest_superlearner <- function(Y, X, SL.library, family) {
   working_lib <- character()
@@ -402,4 +388,26 @@ pretest_superlearner <- function(Y, X, SL.library, family) {
     print(removed_lib)
   }
   return(working_lib)
+}
+
+combine_mi <- function(res_list, model) {
+  res <- list()
+  # combine point estimates
+  tau_list <- lapply(res_list, function(x) x[[model]][["tau"]])
+  tau_mat <- do.call(cbind, tau_list)
+  tau <- rowMeans(tau_mat)
+  res$tau <- tau
+  
+  # combine variance estimates if they exist
+  var_list <- lapply(res_list, function(x) x[[model]][["variance"]])
+  var_mat <- do.call(cbind, var_list)
+  tot_var <- NULL
+  if (!is.null(var_mat)) {
+    w_var <- rowMeans(var_mat)
+    b_var <- apply(tau_mat, 1, var)
+    tot_var <- w_var + (1 + 1/length(res_list))*b_var
+    res$variance <- tot_var
+  }
+  
+  return(res)
 }
