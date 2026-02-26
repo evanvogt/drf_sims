@@ -1,228 +1,257 @@
 ---
-title: "Missing data simulations"
+title: "Missing Data Handling for Continuous Outcomes"
 author: "Ellie Van Vogt"
 date: "`r Sys.Date()`"
-output: 
-  html_document: 
-    fig_width: 24
-    fig_height: 10
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, fig.width = 12, fig.height = 8)
 ```
 
-```{r libraries and data set up, include=FALSE, echo=FALSE}
-# libraries
+```{r libraries, include=FALSE}
+library(dplyr)
 library(ggplot2)
 library(paletteer)
-library(dplyr)
+library(here)
+library(cowplot)
 library(purrr)
-library(tidyr)
-library(gridExtra)
 
-# paths#purrr paths
-path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations/live"
+# paths
+path <- here()
+res_path <- file.path(dirname(here()), "results", "missing", "continuous")
+```
 
-# metrics per run
-metrics <- readRDS(file.path(path, "results/new_format/metrics_cts_miss_df.RDS"))
+```{r data, include=FALSE}
+metrics <- readRDS(file.path(res_path, "cts_miss_metrics.RDS"))
 
-# means and mcses df
+metrics <- metrics %>%
+  mutate(scenario = factor(scenario, levels = c(1:5)),
+         n = factor(n, levels = c(500)),
+         type = factor(type, levels = c("prognostic", "predictive", "both")),
+         prop = factor(prop, levels = c(0.3)),
+         mechanism = factor(mechanism, levels = c("MAR", "AUX", "AUX-Y")),
+         method = factor(
+           recode(method,
+                  complete_cases = "Complete case",
+                  mean_imputation = "Single mean imputation",
+                  missforest = "Single forest-based imputation",
+                  regression = "Single model-based imputation",
+                  missing_indicator = "Missing indicators",
+                  IPW = "IPW",
+                  multiple_imputation = "Multiple imputation (rf)",
+                  none = "Inbuilt missingness handling"),
+           levels = c("Complete case", "Single mean imputation", "Single forest-based imputation", "Single model-based imputation", "Missing indicators", "IPW", "Multiple imputation (rf)", "Inbuilt missingness handling")
+         ),
+         model = factor(
+           recode(model,
+                  causal_forest = "Causal forest",
+                  dr_random_forest = "DR-RandomForest",
+                  dr_oracle = "DR-oracle",
+                  dr_semi_oracle = "DR-semi-oracle",
+                  dr_superlearner = "DR-SuperLearner"),
+           levels = c("Causal forest", "DR-RandomForest", "DR-oracle", "DR-semi-oracle", "DR-SuperLearner")
+         ))
+
 metrics_summary <- metrics %>%
-  group_by(scenario, type, mechanism, method, model) %>%
+  group_by(scenario, n, type, prop, mechanism, method, model) %>%
   summarise(
     mean_bias = mean(bias, na.rm = T),
     mcse_bias = sd(bias, na.rm = T)/sqrt(n()),
     mean_mse = mean(mse, na.rm = T),
     mcse_mse = sd(mse, na.rm = T)/sqrt(n()),
+    mean_corr = mean(corr, na.rm = T),
+    mcse_corr = sd(corr, na.rm = T)/sqrt(n()),
     .groups = "drop"
   )
 ```
 
-```{r functions for generating plots, include=FALSE}
-# summarise over simulation runs
-plot_bias_mcse <- function(df) {
-  ggplot(df, aes(x = model, y = mean_bias, color = model, fill = model)) +
+```{r plot_generation, include=FALSE}
+make_sum_plots <- function(scen, t) {
+  bias_plot <- metrics_summary %>%
+    filter(scenario == scen & type == t) %>%
+    ggplot(aes(x = model, y = mean_bias, colour = method)) +
     geom_hline(yintercept = 0, linetype = "dashed") +
-    geom_point(size = 3) +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(aes(ymin = mean_bias - mcse_bias,
                       ymax = mean_bias + mcse_bias),
-                  width = 0.2) +
-    facet_grid(mechanism ~ method) +
-    scale_fill_paletteer_d("rcartocolor::Safe") +
-    scale_color_paletteer_d("rcartocolor::Safe") +
+                  position = position_dodge(width = 0.5), linewidth = 0.3) +
+    facet_grid(~mechanism) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
     theme_minimal() +
-    labs(
-      title = paste0("Mean Bias ± MCSE (", unique(df$scenario), ", ", unique(df$type), ")"),
-      x = "Missing data handling method",
-      y = "Bias"
-    ) +
-    theme(axis.text.x = element_blank())
-}
-
-plot_mse_mcse <- function(df) {
-  ggplot(df, aes(x = model, y = mean_mse, color = model, fill = model)) +
+    labs(title = paste0("Mean bias in CATEs, scenario ", scen, ", ", t, " missingness type"),
+         y = "Bias",
+         x = "Model") +
+  theme(axis.text = element_text(angle = 90))
+  
+  mse_plot <- metrics_summary %>%
+    filter(scenario == scen & type == t) %>%
+    ggplot(aes(x = model, y = mean_mse, colour = method)) +
     geom_hline(yintercept = 0, linetype = "dashed") +
-    geom_point(size = 3) +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(aes(ymin = mean_mse - mcse_mse,
                       ymax = mean_mse + mcse_mse),
-                  width = 0.2) +
-    facet_grid(mechanism ~ method) +
-    scale_fill_paletteer_d("rcartocolor::Safe") +
-    scale_color_paletteer_d("rcartocolor::Safe") +
+                  position = position_dodge(width = 0.5), linewidth = 0.3) +
+    facet_grid(~mechanism) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
     theme_minimal() +
-    labs(
-      title = paste0("Mean MSE ± MCSE (", unique(df$scenario), ", ", unique(df$type), ")"),
-      x = "Missing data handling method",
-      y = "MSE"
-    ) +
-    theme(axis.text.x = element_blank())
-}
-
-# box plots to show variation over simulation runs
-plot_bias_box <- function(df) {
-  ggplot(df, aes(x = model, y = bias, color = model, fill = model)) +
+    labs(title = paste0("Mean MSE in CATEs, scenario ", scen, ", ", t, " missingness type"),
+         y = "MSE",
+         x = "Model") +
+  theme(axis.text = element_text(angle = 90))
+  
+  corr_plot <- metrics_summary %>%
+    filter(scenario == scen & type == t) %>%
+    ggplot(aes(x = model, y = mean_corr, colour = method)) +
     geom_hline(yintercept = 0, linetype = "dashed") +
-    geom_boxplot(alpha = 0.7) +
-    facet_grid(mechanism ~ method) +
-    scale_fill_paletteer_d("rcartocolor::Safe") +
-    scale_color_paletteer_d("rcartocolor::Safe") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(aes(ymin = mean_corr - mcse_corr,
+                      ymax = mean_corr + mcse_corr),
+                  position = position_dodge(width = 0.5), linewidth = 0.3) +
+    facet_grid(~mechanism) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
     theme_minimal() +
-    labs(
-      title = paste0("Bias distribution (", unique(df$scenario), ", ", unique(df$type), ")"),
-      y = "Bias",
-      x = "Missing data handling method"
-    ) +
-    theme(axis.text.x = element_blank())
+    labs(title = paste0("Mean Correlation in CATEs, scenario ", scen, ", ", t, " missingness type"),
+         y = "Correlation",
+         x = "Model") +
+  theme(axis.text = element_text(angle = 90))
+  
+  list(bias_plot = bias_plot, mse_plot = mse_plot, corr_plot = corr_plot)
 }
 
-plot_mse_box <- function(df) {
-  ggplot(df, aes(x = model, y = mse, color = model, fill = model)) +
-    geom_hline(yintercept = 0, linetype = "dashed") +
-    geom_boxplot(alpha = 0.7) +
-    facet_grid(mechanism ~ method) +
-    scale_fill_paletteer_d("rcartocolor::Safe") +
-    scale_color_paletteer_d("rcartocolor::Safe") +
-    theme_minimal() +
-    labs(
-      title = paste0("MSE distribution (", unique(df$scenario), ", ", unique(df$type), ")"),
-      y = "MSE",
-      x = "Missing data handling method"
-    ) +
-    theme(axis.text.x = element_blank())
-}
+scen_types <- metrics %>% select(scenario, type) %>% unique()
 
+sum_plots <- pmap(list(scen_types$scenario, scen_types$type), make_sum_plots)
 ```
 
-```{r generate mcse plots, include = FALSE}
-# mcse
-mcse_list <- metrics_summary %>%
-  group_by(scenario, type) %>%
-  group_split()
+In this document, 
 
-bias_mcse_plots <- lapply(mcse_list, plot_bias_mcse)
-mse_mcse_plots <- lapply(mcse_list, plot_mse_mcse)
+# Scenario 1 - no HTE
+$b_0 + b_1 X_1 + b_2 X_2 + W*b_W$
+```{r s_1}
+i <- which(scen_types$scenario == 1 & scen_types$type == "prognostic")
 
-# boxplots
-box_list <- metrics %>%
-  group_by(scenario, type ) %>%
-  group_split()
-
-bias_boxplots <- lapply(box_list, plot_bias_box)
-mse_boxplots <- lapply(box_list, plot_mse_box)
-
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
 ```
 
-# Metrics
+# Scenario 2 - simple HTE binary variable
+$b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_3 X_3)$
 
-Plot per scenario and missingness location, for bias and MSE. Each plot is this facetted by the mechansim of the missing data and the method of handling missing data
+## Prognostic missingness
+```{r s_2_prog}
+i <- which(scen_types$scenario == 2 & scen_types$type == "prognostic")
 
-## Scenario 1 (no HTE)
-
-Prognostic missingness only
-
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[1]], bias_boxplots[[1]], ncol = 2)
-grid.arrange(mse_mcse_plots[[1]], mse_boxplots[[1]], ncol = 2)
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-# Scenario 2
+## Predictive missingness
+```{r s_2_pred}
+i <- which(scen_types$scenario == 2 & scen_types$type == "predictive")
 
-## Prognostic
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[2]], bias_boxplots[[2]], ncol = 2)
-grid.arrange(mse_mcse_plots[[2]], mse_boxplots[[2]], ncol = 2)
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-## Predictive
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[3]], bias_boxplots[[3]], ncol = 2)
-grid.arrange(mse_mcse_plots[[3]], mse_boxplots[[3]], ncol = 2)
+## Both types of missingness
+```{r s_2_both}
+i <- which(scen_types$scenario == 2 & scen_types$type == "both")
+
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-## Both
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[4]], bias_boxplots[[4]], ncol = 2)
-grid.arrange(mse_mcse_plots[[4]], mse_boxplots[[4]], ncol = 2)
+# Scenario 3 - two HTE variables
+$b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_3 X_3 + b_4 X_4)$
+
+## Prognostic missingness
+```{r s_3_prog}
+i <- which(scen_types$scenario == 3 & scen_types$type == "prognostic")
+
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-# Scenario 3
-## Prognostic
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[5]], bias_boxplots[[5]], ncol = 2)
-grid.arrange(mse_mcse_plots[[5]], mse_boxplots[[5]], ncol = 2)
+## Predictive missingness
+```{r s_3_pred}
+i <- which(scen_types$scenario == 3 & scen_types$type == "predictive")
+
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-## Predictive
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[6]], bias_boxplots[[6]], ncol = 2)
-grid.arrange(mse_mcse_plots[[6]], mse_boxplots[[6]], ncol = 2)
+## Both types of missingness
+```{r s_3_both}
+i <- which(scen_types$scenario == 3 & scen_types$type == "both")
+
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
+# Scenario 4 - two way interaction
+$b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_3 X_3 + b_4 X_4 + b_{45} X_4 X_5)$
 
-## Both
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[7]], bias_boxplots[[7]], ncol = 2)
-grid.arrange(mse_mcse_plots[[7]], mse_boxplots[[7]], ncol = 2)
+## Prognostic missingness
+```{r s_4_prog}
+i <- which(scen_types$scenario == 4 & scen_types$type == "prognostic")
+
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
+## Predictive missingness
+```{r s_4_pred}
+i <- which(scen_types$scenario == 4 & scen_types$type == "predictive")
 
-# Scenario 4
-
-## Prognostic
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[8]], bias_boxplots[[8]], ncol = 2)
-grid.arrange(mse_mcse_plots[[8]], mse_boxplots[[8]], ncol = 2)
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-## Predictive
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[9]], bias_boxplots[[9]], ncol = 2)
-grid.arrange(mse_mcse_plots[[9]], mse_boxplots[[9]], ncol = 2)
+## Both types of missingness
+```{r s_4_both}
+i <- which(scen_types$scenario == 4 & scen_types$type == "both")
+
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-## Both
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[10]], bias_boxplots[[10]], ncol = 2)
-grid.arrange(mse_mcse_plots[[10]], mse_boxplots[[10]], ncol = 2)
+# Scenario 5 - non linear effect
+$b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_4 \cos(X_4))$
+
+## Prognostic missingness
+```{r s_5_prog}
+i <- which(scen_types$scenario == 5 & scen_types$type == "prognostic")
+
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-# Scenario 5
+## Predictive missingness
+```{r s_5_pred}
+i <- which(scen_types$scenario == 5 & scen_types$type == "predictive")
 
-## Prognostic
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[11]], bias_boxplots[[11]], ncol = 2)
-grid.arrange(mse_mcse_plots[[11]], mse_boxplots[[11]], ncol = 2)
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-## Predictive
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[12]], bias_boxplots[[12]], ncol = 2)
-grid.arrange(mse_mcse_plots[[12]], mse_boxplots[[12]], ncol = 2)
+## Both types of missingness
+```{r s_5_both}
+i <- which(scen_types$scenario == 5 & scen_types$type == "both")
+
+sum_plots[[i]]$bias_plot
+sum_plots[[i]]$mse_plot
+sum_plots[[i]]$corr_plot
 ```
 
-## Both
-```{r, echo=FALSE}
-grid.arrange(bias_mcse_plots[[13]], bias_boxplots[[13]], ncol = 2)
-grid.arrange(mse_mcse_plots[[13]], mse_boxplots[[13]], ncol = 2)
-```

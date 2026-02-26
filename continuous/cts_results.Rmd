@@ -1,0 +1,643 @@
+---
+title: "Continuous outcome results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 12, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(cowplot)
+library(purrr)
+
+# paths
+path <- here()
+res_path <- file.path(dirname(here()), "results", "continuous")
+```
+
+```{r data, include=FALSE}
+# data
+metrics <- readRDS(file.path(res_path, "cts_metrics.RDS"))
+
+metrics <- metrics %>%
+  mutate(scenario = factor(scenario, levels = c(1:10)),
+         n = factor(n, levels = c(100, 250, 500, 1000)),
+         model = factor(
+           recode(model,
+                  causal_forest = "Causal forest",
+                  dr_random_forest = "DR-RandomForest",
+                  dr_oracle = "DR-oracle",
+                  dr_semi_oracle = "DR-semi-oracle",
+                  dr_superlearner = "DR-SuperLearner"),
+           levels = c("Causal forest", "DR-RandomForest", "DR-oracle", "DR-semi-oracle", "DR-SuperLearner")))
+
+# per scenario summaries
+metrics_summary <- metrics %>%
+  group_by(scenario, n, model) %>%
+  summarise(
+    mean_bias = mean(bias, na.rm = T),
+    mcse_bias = sd(bias, na.rm = T)/sqrt(n()),
+    mean_mse = mean(mse, na.rm = T),
+    mcse_mse = sd(mse, na.rm = T)/sqrt(n()),
+    mean_corr = mean(corr, na.rm = T),
+    mcse_corr = sd(corr, na.rm = T)/sqrt(n()),
+    mean_BLP = mean(BLP_p, na.rm = T),
+    mcse_BLP = sd(BLP_p, na.rm = T)/sqrt(n()),
+    mean_indep_cate = mean(indep_cate, na.rm = T),
+    mcse_indep_cate = sd(indep_cate, na.rm = T)/sqrt(n()),
+    mean_indep_po = mean(indep_po, na.rm = T),
+    mcse_indep_po = sd(indep_po, na.rm = T)/sqrt(n()),
+    .groups = "drop"
+  )
+```
+
+```{r plot_generatiom, include=FALSE}
+
+make_all_plots <- function(scen) {
+  bias_plot <- metrics %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = bias, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Bias distribution, scenario ", scen),
+         y = "Bias",
+         x = "Sample size") +
+    theme(legend.position = "none")
+  
+  bias_sum_plot <- metrics_summary %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = mean_bias, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(aes(ymin = mean_bias - mcse_bias,
+                      ymax = mean_bias + mcse_bias),
+                  position = position_dodge(width = 0.5), linewidth = 0.3) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+     labs(title = paste0("Mean bias in CATEs, scenario ", scen),
+         y = "Bias",
+         x = "sample_size") +
+    theme(legend.position = "none")
+  
+  mse_plot <- metrics %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = mse, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("MSE distribution, scenario ", scen),
+         y = "MSE",
+         x = "Sample size") +
+    theme(legend.position = "none")
+  
+  mse_sum_plot <- metrics_summary %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = mean_mse, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(aes(ymin = mean_mse - mcse_mse,
+                      ymax = mean_mse + mcse_mse),
+                  position = position_dodge(width = 0.5), linewidth = 0.3) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Mean MSE in CATEs, scenario ", scen),
+         y = "MSE",
+         x = "sample_size") +
+    theme(legend.position = "none")
+  
+  corr_plot <- metrics %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = corr, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Correlation distribution, scenario ", scen),
+         y = "Correlation",
+         x = "Sample size") +
+    theme(legend.position = "none")
+  
+  corr_sum_plot <- metrics_summary %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = mean_corr, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(aes(ymin = mean_corr - mcse_corr,
+                      ymax = mean_corr + mcse_corr),
+                  position = position_dodge(width = 0.5), linewidth = 0.3) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Mean correlation in CATEs, scenario ", scen),
+         y = "Correlation",
+         x = "sample_size") +
+    theme(legend.position = "none")
+  
+  BLP_plot <- metrics %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = BLP_p, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("BLP p-values distribution, scenario ", scen),
+         y = "p-value",
+         x = "Sample size") +
+    theme(legend.position = "none")
+  
+  BLP_sum_plot <- metrics_summary %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = mean_BLP, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(aes(ymin = mean_BLP - mcse_BLP,
+                      ymax = mean_BLP + mcse_BLP),
+                  position = position_dodge(width = 0.5), linewidth = 0.3) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("mean BLP p-value, scenario ", scen),
+         y = "p-value",
+         x = "sample_size") +
+    theme(legend.position = "none")
+  
+  indep_cate_plot <- metrics %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = indep_cate, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("CATE permutation test p-value distribution, scenario ", scen),
+         y = "p-value",
+         x = "Sample size") +
+    theme(legend.position = "none")
+  
+  indep_cate_sum_plot <- metrics_summary %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = mean_indep_cate, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(aes(ymin = mean_indep_cate - mcse_indep_cate,
+                      ymax = mean_indep_cate + mcse_indep_cate),
+                  position = position_dodge(width = 0.5), linewidth = 0.3) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Mean CATE permutation test p-value, scenario ", scen),
+         y = "p-value",
+         x = "sample_size") +
+    theme(legend.position = "none")
+  
+  indep_po_plot <- metrics %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = indep_po, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("PO permutation test p-value distribution, scenario ", scen),
+         y = "p-value",
+         x = "Sample size") +
+    theme(legend.position = "none")
+  
+  indep_po_sum_plot <- metrics_summary %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = n, y = mean_indep_po, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(aes(ymin = mean_indep_po - mcse_indep_po,
+                      ymax = mean_indep_po + mcse_indep_po),
+                  position = position_dodge(width = 0.5), linewidth = 0.3) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Mean PO permutation test p-value, scenario ", scen),
+         y = "p-value",
+         x = "sample_size") +
+    theme(legend.position = "none")
+  
+  legend <- get_legend(bias_plot + theme(legend.position = "right"))
+  
+  list(bias_plot = bias_plot, bias_sum_plot = bias_sum_plot, mse_plot = mse_plot,
+       mse_sum_plot = mse_sum_plot, corr_plot = corr_plot, corr_sum_plot = corr_sum_plot,
+       BLP_plot = BLP_plot, BLP_sum_plot = BLP_sum_plot, indep_cate_plot = indep_cate_plot,
+       indep_po_plot = indep_po_plot, indep_po_sum_plot = indep_po_sum_plot, legend = legend)
+}
+
+scenarios <- unique(metrics$scenario)
+all_plots <- map(scenarios, make_all_plots)
+```
+
+
+# Scenario 1 - no HTE
+$b_0 + b_1 X_1 + b_2 X_2 + W*b_W$
+```{r}
+scenario <- 1
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 2 - simply HTE with a binary variable
+$b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_3 X_3)$
+```{r}
+scenario <- 2
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$corr_plot,
+          all_plots[[scenario]]$corr_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 3 - simple HTE with a continuous variable
+$b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_4 X_4)$
+```{r}
+scenario <- 3
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$corr_plot,
+          all_plots[[scenario]]$corr_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 4 - two HTE variables
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4)$
+```{r}
+scenario <- 4
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$corr_plot,
+          all_plots[[scenario]]$corr_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 5 - cts-binary interaction in HTE variables
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{34} X_3 X_4)$
+```{r}
+scenario <- 5
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$corr_plot,
+          all_plots[[scenario]]$corr_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 6 - 2 HTE variables + cts-binary interaction
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{34} X_3 X_4)$
+```{r}
+scenario <- 6
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$corr_plot,
+          all_plots[[scenario]]$corr_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 7 - cts-cts interaction in HTE variables
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{45} X_4 X_5)$
+```{r}
+scenario <- 7
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$corr_plot,
+          all_plots[[scenario]]$corr_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 8 - 2 HTE variables + cts-cts interaction
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{45} X_4 X_5)$
+```{r}
+scenario <- 8
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$corr_plot,
+          all_plots[[scenario]]$corr_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 9 - Cosine HTE
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_4 \cos(X_4))$
+```{r}
+scenario <- 9
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$corr_plot,
+          all_plots[[scenario]]$corr_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 10 - Exponential HTE
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 \exp(-\lvert X_4 \rvert))$
+
+```{r}
+scenario <- 10
+plot_grid(all_plots[[scenario]]$bias_plot,
+          all_plots[[scenario]]$bias_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$mse_plot,
+          all_plots[[scenario]]$mse_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$corr_plot,
+          all_plots[[scenario]]$corr_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$BLP_plot,
+          all_plots[[scenario]]$BLP_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_cate_plot,
+          all_plots[[scenario]]$indep_cate_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+plot_grid(all_plots[[scenario]]$indep_po_plot,
+          all_plots[[scenario]]$indep_po_sum_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+

@@ -1,40 +1,51 @@
-###############
+##########
 # script for running all the CATE models in one run - cts outcome
-###############
+##########
 
 library(dplyr)
 library(furrr)
 library(grf)
 library(GenericML)
 library(SuperLearner)
+library(here)
 
-
-path <- "/rds/general/user/evanvogt/projects/nihr_drf_simulations"
-setwd(path)
+# path
+path <- here()
 
 # functions
-source("/rds/general/project/nihr_drf_simulations/live/scripts/drf_sims/continuous/all_methods/cts_dgms.R")
-source("/rds/general/project/nihr_drf_simulations/live/scripts/drf_sims/continuous/all_methods/cts_modelling.R")
-source("/rds/general/project/nihr_drf_simulations/live/scripts/drf_sims/utils.R")
+source(here("utils.R"))
+source(here("continuous", "cts_dgms.R"))
+source(here("continuous", "cts_models.R"))
 
-# arguments to get scenario and simulation number
-args <- commandArgs(trailingOnly = T)
-scenario <- as.numeric(args[1])
-n <- as.numeric(args[2])
-sim <- as.numeric(args[3])
-n_folds <- ifelse(n == 100, 4, 10)
-B <- 200
+
+# simulation parameters
+i <- as.numeric(commandArgs(trailingOnly = T))
+
 workers <- 2
 
+params <- expand.grid(
+  scenario = c(1:10),
+  n = c(100, 250, 500, 1000),
+  run = c(1:100),
+  stringsAsFactors = F
+)
 
-# SuperLearner library
+# select parameters for current run
+param <- params[i,]
+print(param)
+
+scenario <- param$scenario
+n <- param$n
+run <- param$run
+
+n_folds <- ifelse(n == 100, 4, 10)
+
 sl_lib <- c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.randomForest")
 
-
 # set up simulation seed
-setup_rng_stream(sim)
+setup_rng_stream(run)
 
-# dataset
+# data generation
 gen <- generate_continuous_scenario_data(scenario, n)
 
 data <- gen$dataset
@@ -42,10 +53,12 @@ data <- gen$dataset
 fmla_info <- get_continuous_oracle_info(scenario, gen$bW)
 
 # Run all CATE methods
+metaplan <- plan(multisession, workers = workers)
+on.exit(plan(metaplan), add = TRUE)
+
 results <- run_all_cate_methods(
   data = data, 
   n_folds = n_folds, 
-  workers = workers,
   sl_lib = sl_lib,
   fmla_info = fmla_info
 )
@@ -54,9 +67,8 @@ results$data <- data
 results$truth <- gen$truth
 
 # Save results
-output_dir <- paste0("live/results/continuous/scenario_", scenario, "/", n, "/all_methods/")
+output_dir <- file.path(dirname(path), "results", "continuous", paste0("scenario_", scenario), n)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, paste0(output_dir, "res_sim_", sim, ".RDS"))
+saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
 
-print(paste0("All methods for scenario ", scenario, "_", n, " sim ", sim, " completed successfully!"))
-
+print("Simulation completed!")

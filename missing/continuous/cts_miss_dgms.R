@@ -49,7 +49,6 @@ continuous_scenario_params <- data.frame(
 #' @param n Sample size
 #' @param mech c("MAR", "AUX", "AUX-Y") required to check if unseen variable generation is required
 #' @param return_truth Logical, whether to return true values (p0, p1, tau)
-#' @param seed Optional seed for reproducibility
 generate_continuous_scenario_data <- function(scenario, n, mech, return_truth = TRUE) {
   # Checks
   if (!scenario %in% 1:5) { stop("Scenario must be between 1 and 5") }
@@ -113,7 +112,7 @@ generate_continuous_scenario_data <- function(scenario, n, mech, return_truth = 
   # true CATEs
   if(return_truth) {
     p0 <- params$b0 + params$b1 * X1 + params$b2 * X2
-    p1 <- params$b0 + params$b1 * X1 + params$b2 * X2 + treatment_effect
+    p1 <- p0 + treatment_effect - if(mech == "AUX-Y") params$bU * U else 0 # marginal is just b_W  + ... + b_U*(E[U]=0) (U generated independently from the Xs)
     tau <- p1 - p0
     
     truth <- data.frame(p0 = p0, p1 = p1, tau = tau)
@@ -129,8 +128,7 @@ generate_continuous_scenario_data <- function(scenario, n, mech, return_truth = 
 #' @param type Where the missingness should be introduced ("predictive", "prognostic", "both")
 #' @param prop Proportion of missingness in (0,1)
 #' @param mech Mechanism of missingness, either MAR (based on observed variables) or AUX (based on unseen auxillary variable)
-#' @param U Auxiliary variable for missingness generation (required if mech = "AUX")
-#' @param seed Optional seed
+#' @param U Auxiliary variable for missingness generation ("AUX", "AUX-Y")
 introduce_missingness_continuous <- function(data, type, prop, mech, U = NULL) {
   # Checks
   if (!type %in% c("prognostic", "predictive", "both")) stop("type must be 'prognostic', 'predictive', or 'both'")
@@ -177,7 +175,7 @@ introduce_missingness_continuous <- function(data, type, prop, mech, U = NULL) {
   
 
   
-  # Variables that can influence the missingness (only for when there is an auxillary variable)
+  # Variables that can influence the missingness (only for when there is an unseen auxillary variable)
   if (mech %in% c("AUX", "AUX-Y")) {
     weights <- matrix(0, ncol = length(covs), nrow = if (is.null(nrow(indicators))) 1 else nrow(indicators))
     weights[,length(covs)] <- 1
@@ -200,7 +198,6 @@ introduce_missingness_continuous <- function(data, type, prop, mech, U = NULL) {
 #' 
 #' @param data Simulated dataset with missing data
 #' @param method Missing data handling method (complete cases, mean imputation, missForsest imputation, regression imputation, missing indicator, IPW, or none)
-#' @param seed Optional seed
 handle_missingness_continuous <- function(data, method) {
   # Checks
   if (!any(is.na(data))) {
@@ -320,8 +317,7 @@ handle_missingness_continuous <- function(data, method) {
 #' @param type Where the missingness should be introduced ("predictive", "prognostic", "both")
 #' @param prop Proportion of missingness in (0,1)
 #' @param mech Mechanism of missingness, either MAR (based on observed variables) or AUX (based on unseen auxillary variable)
-#' @param method Missing data handling method (complete cases, mean imputation, missForsest imputation, regression imputation, missing indicator, IPW, or none)
-#' @param seed Optional seed
+#' @param method Missing data handling method (complete cases, mean imputation, missForest imputation, regression imputation, missing indicator, IPW, or none)
 generate_and_process_continuous_data <- function(scenario, n, return_truth = TRUE, type, prop, mech, method) {
   # Data and truth generation step
   data_result <- generate_continuous_scenario_data(scenario, n, mech, return_truth)

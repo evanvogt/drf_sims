@@ -1,6 +1,6 @@
 #!/bin/bash
 #PBS -l walltime=01:00:00  
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=90gb
 #PBS -N cts_miss_collect
 
 module purge

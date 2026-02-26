@@ -1,0 +1,339 @@
+---
+title: "Confidence Intervals for CATEs - Binary Outcomes"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 12, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(cowplot)
+library(purrr)
+
+# paths
+path <- here()
+res_path <- file.path(dirname(here()), "results", "confidence_intervals", "binary")
+```
+
+```{r data, include=FALSE}
+# data
+metrics <- readRDS(file.path(res_path, "ci_bin_metrics.RDS"))
+
+metrics <- metrics %>%
+  mutate(scenario = factor(scenario, levels = c(1:10)),
+         n = factor(n, levels = c(500, 1000)),
+         CI_sf = factor(CI_sf, levels = seq(0.05, 0.5, 0.05)),
+         model = factor(
+           recode(model,
+                  causal_forest = "Causal forest",
+                  causal_forest_inbuilt = "Causal forest (inbuilt CIs)",
+                  dr_random_forest = "DR-RandomForest",
+                  dr_oracle = "DR-oracle",
+                  dr_semi_oracle = "DR-semi-oracle"),
+           levels = c("Causal forest", "Causal forest (inbuilt CIs)", "DR-RandomForest", "DR-oracle", "DR-semi-oracle")
+         ))
+# per scenario summaries
+metrics_summary <- metrics %>%
+  group_by(scenario, n, CI_sf, model) %>%
+  summarise(
+    mean_marg_cov = mean(marginal_coverage, na.rm = T),
+    mcse_marg_cov = sd(marginal_coverage, na.rm = T)/sqrt(n()),
+    mean_simul_cov = mean(simultaneous_coverage, na.rm = T),
+    mcse_simul_cov = sd(simultaneous_coverage, na.rm = T)/sqrt(n()),
+    mean_ci_len = mean(mean_ci_length, na.rm = T),
+    mcse_ci_len = sd(mean_ci_length, na.rm = T)/sqrt(n()),
+    .groups = "drop"
+  )
+
+```
+
+```{r plot_generation, include = FALSE}
+make_plots <- function(scen) {
+  m_plot <- metrics %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = CI_sf, y = marginal_coverage, colour = model)) +
+    geom_hline(yintercept = 0.95, linetype = "dashed") +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    facet_grid(~n) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Marginal coverage, scenario ", scen),
+         y = "Marginal Coverage",
+         x = "Subsampling ratio") +
+    theme(legend.position = "none")
+  
+  sm_plot <- metrics_summary %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = CI_sf, y = mean_marg_cov, colour = model)) +
+    geom_hline(yintercept = 0.95, linetype = "dashed") +
+    geom_point() +
+    geom_errorbar(aes(ymin = mean_marg_cov - mcse_marg_cov,
+                      ymax = mean_marg_cov + mcse_marg_cov)) +
+    facet_grid(~n) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Mean marginal coverage, scenario ", scen),
+         y = "Marginal Coverage",
+         x = "Subsampling ratio") +
+    theme(legend.position = "none")
+  
+  sim_plot <- metrics_summary %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = CI_sf, y = mean_simul_cov, colour = model)) +
+    geom_hline(yintercept = 0.95, linetype = "dashed") +
+    geom_point() +
+    geom_errorbar(aes(ymin = mean_simul_cov - mcse_simul_cov,
+                      ymax = mean_simul_cov + mcse_simul_cov)) +
+    facet_grid(~n) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Mean simultaneous coverage, scenario ", scen),
+         y = "Simultaneous coverage",
+         x = "Subsampling ratio")
+  
+  l_plot <- metrics %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = CI_sf, y = mean_ci_length, colour = model)) +
+    geom_boxplot(fill = "transparent", outliers = FALSE) +
+    facet_grid(~n) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("CI length across simulation runs, scenario ", scen),
+         y = "CI length",
+         x = "Subsampling ratio") +
+    theme(legend.position = "none")
+  
+  sl_plot <- metrics_summary %>%
+    filter(scenario == scen) %>%
+    ggplot(aes(x = CI_sf, y = mean_ci_len, colour = model)) +
+    geom_point() +
+    geom_errorbar(aes(ymin = mean_ci_len - mcse_ci_len,
+                      ymax = mean_ci_len + mcse_ci_len)) +
+    facet_grid(~n) +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    labs(title = paste0("Mean CI length, scenario ", scen),
+         y = "Mean CI length",
+         x = "Subsampling ratio") +
+    theme(legend.position = "none")
+  
+  legend <- get_legend(m_plot + theme(legend.position = "right"))
+  
+  list(m_plot = m_plot, sm_plot = sm_plot, sim_plot = sim_plot, l_plot = l_plot, sl_plot = sl_plot, legend = legend)
+}
+
+# make plots for all the scenarios
+scenarios <- unique(metrics$scenario)
+all_plots <- map(scenarios, make_plots)
+```
+
+In this document, I've explored the variation of the subsampling ratio on the resulting confidence intervals from the half-sample bootstrap procedure. The subsampling ratio controls what proportion of the data is used to grow a single tree in the random forest. Ritzwoller, who wrote the bootstrap paper with Syrgkanis, noted that the CIs perform well when the subsampling ratio is 0.05. The GRF papers also note that a lower ratio improves confidence intervals, but the default subsampling ratio is 0.5. Therefore, I tried out ratios 0.05, 0.1, ..., 0.5. This is compared against confidence intervals built using the variance estimates available from the causal forest function, assuming we can build Gaussian confidence intervals.
+
+# Performance measures explored
+* Marginal coverage
+  + proportion of CIs which contain the true CATE in a single dataset
+  + displayed with a value per simulation and mean across simulation runs
+* Simultaneous coverage
+  + 1 => all CIs contain the true CATE
+  + mean across simulation runs displayed
+* Confidence interval length
+  + Mean length of CIs in a single dataset
+  + displayed with value per simulation and mean across simulation runs
+
+# Scenario 1 - no HTE
+$b_0 + b_1 X_1 + b_2 X_2 + W*b_W$
+
+```{r scenario_1}
+scenario <- 1
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 2 - simply HTE with a binary variable
+$b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_3 X_3)$
+```{r scenario_2}
+scenario <- 2
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 3 - simple HTE with a continuous variable
+$b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_4 X_4)$
+```{r scenario_3}
+scenario <- 3
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 4 - two HTE variables
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4)$
+```{r scenario_4}
+scenario <- 4
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 5 - cts-binary interaction in HTE variables
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{34} X_3 X_4)$
+```{r scenario_5}
+scenario <- 5
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 6 - 2 HTE variables + cts-binary interaction
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{34} X_3 X_4)$
+```{r scenario_6}
+scenario <- 6
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 7 - cts-cts interaction in HTE variables
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{45} X_4 X_5)$
+```{r scenario_7}
+scenario <- 7
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 8 - 2 HTE variables + cts-cts interaction
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{45} X_4 X_5)$
+```{r scenario_8}
+scenario <- 8
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 9 - Cosine HTE
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_4 \cos(X_4))$
+```{r scenario_9}
+scenario <- 9
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```
+
+# Scenario 10 - Exponential HTE
+$b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 \exp(-\lvert X_4 \rvert))$
+```{r scenario_10}
+scenario <- 10
+plot_grid(all_plots[[scenario]]$m_plot,
+          all_plots[[scenario]]$sm_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+
+all_plots[[scenario]]$sim_plot
+
+plot_grid(all_plots[[scenario]]$l_plot,
+          all_plots[[scenario]]$sl_plot,
+          all_plots[[scenario]]$legend,
+          ncol = 3,
+          rel_widths = c(1, 1, 0.2))
+```

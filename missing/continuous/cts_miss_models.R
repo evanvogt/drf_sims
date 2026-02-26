@@ -70,6 +70,57 @@ run_all_cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = 
   return(results)
 }
 
+# crossing fitting of nuisance parameters using RF
+nuisance_rf <- function(X, Y, W, fold_indices, fold_pairs, ipw = NULL) {
+  
+  # double crossfitting across fold pairs
+  cross_fits <- future_map(seq_along(fold_pairs), function(i) {
+    fold_pair <- fold_pairs[[i]]
+    in_train <- !(fold_indices %in% fold_pair)
+    in_test <- !in_train
+    
+    Y.hat.model <- regression_forest(cbind(W[in_train], X[in_train, ]), Y[in_train], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
+    Y.hat.cf.model <- regression_forest(X[in_train, ], Y[in_train], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
+    W.hat.model <- regression_forest(X[in_train, ], W[in_train], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
+    
+    X_test <- X[in_test, ]
+    
+    Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X_test))$predictions
+    Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X_test))$predictions
+    Y.hat.cf <- predict(Y.hat.cf.model, newdata = X_test)$predictions
+    W.hat <- predict(W.hat.model, newdata = X_test)$predictions
+    
+    W_test <- W[in_test]
+    Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
+    
+    cate <- Y1.hat - Y0.hat
+    po <- cate + ((Y[in_test] - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
+    
+    list(po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat, fold_pair = fold_pair)
+  }, .options = furrr_options(seed = TRUE))
+  
+  # make matrices of predctions
+  fold_list <- unique(fold_indices)
+  po_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "po")
+  Y.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "Y.hat")
+  Y.hat.cf_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "Y.hat.cf")
+  Y0.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "Y0.hat") 
+  W.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "W.hat")
+  
+  return(list(
+    po_matrix = po_matrix,
+    po = rowMeans(po_matrix, na.rm = T),
+    Y.hat_matrix = Y.hat_matrix,
+    Y.hat = rowMeans(Y.hat_matrix, na.rm = T),
+    Y.hat.cf_matrix = Y.hat.cf_matrix,
+    Y.hat.cf = rowMeans(Y.hat.cf_matrix, na.rm = T),
+    Y0.hat_matrix = Y0.hat_matrix,
+    Y0.hat = rowMeans(Y0.hat_matrix, na.rm = T),
+    W.hat_matrix = W.hat_matrix,
+    W.hat = rowMeans(W.hat_matrix, na.rm = T)
+  ))
+}
+
 # fit the causal forest
 run_causal_forest <- function(X, Y, W, nuisances, fold_indices, fold_list, ipw = NULL) {
   n_obs <- nrow(X)
@@ -104,7 +155,55 @@ run_causal_forest <- function(X, Y, W, nuisances, fold_indices, fold_list, ipw =
   
   return(list(
     tau = tau,
-    variance = tau_var
+    variance = tau_var,
+    BLP_whole = run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, tau),
+    independence_cate = run_independence_test_whole(X, tau),
+    independence_po = run_independence_test_whole(X, nuisances$po)
+  ))
+}
+
+# second stage regression function (RF)
+stage_2_rf <- function(X, po, fold_indices, fold_list, ipw = NULL) {
+  n_obs <- nrow(X)
+  
+  # check if we have a po_matrix or vector
+  single <- is.vector(po)
+  
+  tau_results <- future_map(seq_along(fold_list), function(i) {
+    fold <- fold_list[i]
+    in_train <- fold_indices != fold
+    in_fold <- !in_train
+    
+    if (single) {
+      # Single vector case (oracle, semi-oracle)
+      forest <- regression_forest(X[in_train, ], po[in_train], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
+    } else {
+      # Matrix case (RF)
+      forest <- regression_forest(X[in_train, ], po[in_train, fold], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
+    }
+    tau_pred <- predict(forest, newdata = X[in_fold, ])$predictions
+    list(fold = fold, predictions = tau_pred)
+  }, .options = furrr_options(seed = TRUE))
+  
+  # Reconstruct tau vector
+  tau <- rep(NA, n_obs)
+  for (result in tau_results) {
+    fold <- result$fold
+    in_fold <- fold_indices == fold
+    tau[in_fold] <- result$predictions
+  }
+  return(tau)
+}
+
+# DR learner with random forests
+run_dr_random_forest <- function(X, Y, W, nuisances, fold_indices, fold_list, ipw = NULL) {
+  tau <- stage_2_rf(X, nuisances$po_matrix, fold_indices, fold_list, ipw)
+  
+  return(list(
+    tau = tau,
+    BLP_whole = run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, tau),
+    independence_cate = run_independence_test_whole(X, tau),
+    independence_po = run_independence_test_whole(X, nuisances$po)
   ))
 }
 
@@ -135,7 +234,12 @@ run_dr_oracle <- function(X, Y, W, fmla_info, fold_indices, fold_list, ipw = NUL
   
   tau <- stage_2_rf(X, po, fold_indices, fold_list, ipw)
   return(list(
-    tau = tau
+    tau = tau,
+    po = po,
+    Y0.hat = Y0.hat,
+    BLP_whole = run_blp_whole(Y, W, W.hat, Y0.hat, tau),
+    independence_cate = run_independence_test_whole(X, tau),
+    independence_po = run_independence_test_whole(X, po)
   ))
 }
 
@@ -181,41 +285,11 @@ run_dr_semi_oracle <- function(X, Y, W, fold_indices, fold_list, ipw = NULL) {
   return(list(
     tau = tau,
     po = po,
-    Y0.hat = Y0.hat
+    Y0.hat = Y0.hat,
+    BLP_whole = run_blp_whole(Y, W, W.hat, Y0.hat, tau),
+    independence_cate = run_independence_test_whole(X, tau),
+    independence_po = run_independence_test_whole(X, po)
   ))
-}
-
-# second stage regression function (RF)
-stage_2_rf <- function(X, po, fold_indices, fold_list, ipw = NULL) {
-  n_obs <- nrow(X)
-  
-  # check if we have a po_matrix or vector
-  single <- is.vector(po)
-  
-  tau_results <- future_map(seq_along(fold_list), function(i) {
-    fold <- fold_list[i]
-    in_train <- fold_indices != fold
-    in_fold <- !in_train
-    
-    if (single) {
-      # Single vector case (oracle, semi-oracle)
-      forest <- regression_forest(X[in_train, ], po[in_train], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
-    } else {
-      # Matrix case (RF)
-      forest <- regression_forest(X[in_train, ], po[in_train, fold], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
-    }
-    tau_pred <- predict(forest, newdata = X[in_fold, ])$predictions
-    list(fold = fold, predictions = tau_pred)
-  }, .options = furrr_options(seed = TRUE))
-  
-  # Reconstruct tau vector
-  tau <- rep(NA, n_obs)
-  for (result in tau_results) {
-    fold <- result$fold
-    in_fold <- fold_indices == fold
-    tau[in_fold] <- result$predictions
-  }
-  return(tau)
 }
 
 # second stage regression function (SuperLearner)
@@ -250,52 +324,6 @@ stage_2_sl <- function(X, po, fold_indices, fold_list, sl_lib, ipw = NULL) {
     tau[in_fold] <- result$predictions
   }
   return(tau)
-}
-
-# crossing fitting of nuisance parameters using RF
-nuisance_rf <- function(X, Y, W, fold_indices, fold_pairs, ipw = NULL) {
-  
-  # double crossfitting across fold pairs
-  cross_fits <- future_map(seq_along(fold_pairs), function(i) {
-    fold_pair <- fold_pairs[[i]]
-    in_train <- !(fold_indices %in% fold_pair)
-    in_test <- !in_train
-    
-    Y.hat.model <- regression_forest(cbind(W[in_train], X[in_train, ]), Y[in_train], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
-    Y.hat.cf.model <- regression_forest(X[in_train, ], Y[in_train], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
-    W.hat.model <- regression_forest(X[in_train, ], W[in_train], sample.weights = if(!is.null(ipw)) ipw[in_train] else NULL)
-    
-    X_test <- X[in_test, ]
-    
-    Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X_test))$predictions
-    Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X_test))$predictions
-    Y.hat.cf <- predict(Y.hat.cf.model, newdata = X_test)$predictions
-    W.hat <- predict(W.hat.model, newdata = X_test)$predictions
-    
-    W_test <- W[in_test]
-    Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
-    
-    cate <- Y1.hat - Y0.hat
-    po <- cate + ((Y[in_test] - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
-    
-    list(po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat, fold_pair = fold_pair)
-  }, .options = furrr_options(seed = TRUE))
-  
-  # make matrices of predctions
-  fold_list <- unique(fold_indices)
-  po_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "po")
-  Y.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "Y.hat")
-  Y.hat.cf_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "Y.hat.cf")
-  Y0.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "Y0.hat") 
-  W.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "W.hat")
-  
-  return(list(
-    po_matrix = po_matrix,
-    Y.hat_matrix = Y.hat_matrix,
-    Y.hat.cf_matrix = Y.hat.cf_matrix,
-    Y0.hat_matrix = Y0.hat_matrix,
-    W.hat_matrix = W.hat_matrix
-  ))
 }
 
 # crossfitting for nuisances with SL
@@ -410,4 +438,29 @@ combine_mi <- function(res_list, model) {
   }
   
   return(res)
+}
+
+# Single BLP test on whole data
+run_blp_whole <- function(Y, W, W.hat, Y0.hat, tau) {
+  # Requires BLP function from your library
+  BLP(Y, W, W.hat, Y0.hat, tau)$coefficients[, c(1, 4)]
+}
+
+# Single independence test on whole CATEs
+run_independence_test_whole <- function(X, tau) {
+  test_data <- data.frame(tau = tau, X)
+  tryCatch({
+    test_result <- coin::independence_test(
+      tau ~ ., 
+      data = test_data,
+      teststat = "quadratic"
+    )
+    list(
+      p_value = coin::pvalue(test_result),
+      statistic = coin::statistic(test_result),
+      method = "independence_test"
+    )
+  }, error = function(e) {
+    list(p_value = 1, statistic = 0, method = "independence_test_failed")
+  })
 }

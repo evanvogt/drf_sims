@@ -23,8 +23,8 @@ workers <- 2
 params <- expand.grid(
   scenario = c(1:5),
   n = c(500),
-  prop = c(0.3),
   type = c("prognostic", "predictive", "both"),
+  prop = c(0.3),
   mechanism = c("MAR", "AUX", "AUX-Y"), # only for 1 scenario?
   method = c("complete_cases", "mean_imputation", "missforest", "regression", 
              "missing_indicator", "IPW", "multiple_imputation", "none"),
@@ -33,8 +33,7 @@ params <- expand.grid(
 
 # redundant scenarios
 params <- params %>%
-  filter(!(scenario == 1 & (type != "prognostic" | mechanism == "AUX-Y"))) %>%
-  filter((mechanism == "AUX-Y") | (method == "multiple_imputation")) # outstanding scenarios
+  filter(!(scenario == 1 & (type != "prognostic" | mechanism == "AUX-Y")))
 
 # select parameters for this run
 param <- params[i,]
