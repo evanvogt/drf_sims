@@ -10,8 +10,8 @@ library(dplyr)
 path <- here()
 
 # functions
-source(here("missing/continuous/cts_miss_dgms.R"))
-source(here("missing/continuous/cts_miss_models.R"))
+source(here("missing/binary/bin_miss_dgms.R"))
+source(here("missing/binary/bin_miss_models.R"))
 source(here("utils.R"))
 
 # simulation parameters
@@ -20,6 +20,7 @@ i <- as.numeric(commandArgs(trailingOnly = T))
 n_folds <- 10
 workers <- 2
 
+# NB: removed different types of missingness - not so interesting
 params <- expand.grid(
   scenario = c(1, 2, 4, 5),
   n = c(500),
@@ -53,7 +54,7 @@ sl_lib <- c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.randomFo
 setup_rng_stream(run)
 
 # data generation and missing data handling
-gen <- generate_and_process_continuous_data(
+gen <- generate_and_process_binary_data(
   scenario = scenario,
   n = n, 
   return_truth = TRUE, 
@@ -64,7 +65,7 @@ gen <- generate_and_process_continuous_data(
 
 data <- gen$dataset
 
-fmla_info <- get_continuous_oracle_info(scenario, gen$bW)
+fmla_info <- get_binary_oracle_info(scenario, gen$bW)
 
 # set up parallelisation
 metaplan <- plan(multisession, workers = workers)
@@ -106,7 +107,7 @@ if (param$method == "IPW") {
 }
 
 # Save results
-out_path <- file.path(dirname(here()),"results", "missing", "continuous", paste0("scenario_", scenario), n, type, prop, mechanism, method)
+out_path <- file.path(dirname(here()),"results", "missing", "binary", paste0("scenario_", scenario), n, type, prop, mechanism, method)
 dir.create(out_path, recursive = TRUE, showWarnings = FALSE)
 saveRDS(results, file.path(out_path, paste0("res_sim_", run, ".RDS")))
 

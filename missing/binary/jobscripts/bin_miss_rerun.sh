@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -l walltime=02:00:00  
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=15gb
-#PBS -J 1-3
-#PBS -N cts_miss_rerun
+#PBS -l walltime=04:00:00  
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=20gb
+#PBS -J 1-48
+#PBS -N bin_miss_rerun
 #PBS -o logs_rerun/
 #PBS -e logs_rerun/
 
@@ -17,10 +17,10 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}"
 jobid=$(sed -n "${PBS_ARRAY_INDEX}p" failed_ids.txt)
 
-echo "rerunning index: $jobid"
+echo "rerunning index: ${jobid}"
 
 # Navigate to script directory
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script with parameters
-Rscript cts_miss_analysis.R "$jobid"
+Rscript bin_miss_analysis.R "$jobid"

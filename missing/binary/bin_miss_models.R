@@ -1,16 +1,16 @@
 ##########
-# title: CATE model fitting functions - missing covariates and continuous outcome
+# title: CATE model fitting functions - missing covariates and binary outcome
 ##########
 
 # packages
 
 require(grf)
 require(SuperLearner)
-require(dplyr)
-require(future)
-require(furrr)
 require(GenericML)
 require(coin)
+require(dplyr)
+require(future)
+library(furrr)
 
 # Main function
 run_all_cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL, ipw = NULL) {
@@ -293,6 +293,18 @@ run_dr_semi_oracle <- function(X, Y, W, fold_indices, fold_list, ipw = NULL) {
   ))
 }
 
+# DR SuperLearner
+run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list, fold_pairs, sl_lib, ipw = NULL) {
+  
+  tau <- stage_2_sl(X, nuisances$po_matrix, fold_indices, fold_list, sl_lib, ipw)
+  
+  return(list(
+    tau = tau,
+    BLP_whole = run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, tau),
+    independence_cate = run_independence_test_whole(X, tau),
+    independence_po = run_independence_test_whole(X, nuisances$po)
+  ))
+}
 # second stage regression function (SuperLearner)
 stage_2_sl <- function(X, po, fold_indices, fold_list, sl_lib, ipw = NULL) {
   n_obs <- nrow(X)
@@ -340,8 +352,8 @@ nuisance_sl <- function(X, Y, W, fold_indices, fold_pairs, sl_lib, ipw = NULL) {
     X_W_train <- cbind(W = W[in_train], X_train)
     
     # train models + pretest SL libraries
-    Y_lib <- pretest_superlearner(Y[in_train], X_W_train, sl_lib, gaussian())
-    Y.hat.model <- SuperLearner(Y = Y[in_train], X = X_W_train, SL.library = Y_lib, obsWeights = if(!is.null(ipw)) ipw[in_train] else NULL)
+    Y_lib <- pretest_superlearner(Y[in_train], X_W_train, sl_lib, binomial())
+    Y.hat.model <- SuperLearner(Y = Y[in_train], X = X_W_train, SL.library = Y_lib, family = binomial(), method = "method.NNloglik", obsWeights = if(!is.null(ipw)) ipw[in_train] else NULL)
     
     W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib, binomial())
     W.hat.model <- SuperLearner(W[in_train], X_train, family = binomial(), 
@@ -379,7 +391,7 @@ nuisance_sl <- function(X, Y, W, fold_indices, fold_pairs, sl_lib, ipw = NULL) {
     list(po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, W.hat = W.hat, fold_pair = fold_pair)
   }, .options = furrr_options(seed = TRUE))
   
-    # make matrices of predctions
+  # make matrices of predctions
   fold_list <- unique(fold_indices)
   po_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "po")
   Y.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "Y.hat")
@@ -423,18 +435,6 @@ pretest_superlearner <- function(Y, X, SL.library, family) {
   return(working_lib)
 }
 
-# DR SuperLearner
-run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list, fold_pairs, sl_lib, ipw = NULL) {
-  
-  tau <- stage_2_sl(X, nuisances$po_matrix, fold_indices, fold_list, sl_lib, ipw)
-  
-  return(list(
-    tau = tau,
-    BLP_whole = run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, tau),
-    independence_cate = run_independence_test_whole(X, tau),
-    independence_po = run_independence_test_whole(X, nuisances$po)
-  ))
-}
 combine_mi <- function(res_list, model) {
   res <- list()
   # combine point estimates

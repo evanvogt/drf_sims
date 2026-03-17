@@ -198,12 +198,12 @@ run_dr_oracle <- function(X, Y, W, fmla_info, fold_indices, fold_list) {
   
   # calculate true values
   W_temp <- rep(1, n_obs)
-  Y1.hat <- eval(fmla, envir = list2env(c(list(W = W_temp), X)))
+  Y1.hat <- plogis(eval(fmla, envir = list2env(c(list(W = W_temp), X))))
   
   W_temp <- rep(0, n_obs)
-  Y0.hat <- eval(fmla, envir = list2env(c(list(W = W_temp), X)))
+  Y0.hat <- plogis(eval(fmla, envir = list2env(c(list(W = W_temp), X))))
   
-  Y.hat <- eval(fmla, envir = list2env(c(list(W = W), X)))
+  Y.hat <- plogis(eval(fmla, envir = list2env(c(list(W = W), X))))
   W.hat <- rep(0.5, n_obs)
   
   X <- as.matrix(X)
@@ -285,7 +285,7 @@ nuisance_sl <- function(X, Y, W, fold_indices, fold_pairs, sl_lib) {
     
     # train models + pretest SL libraries
     Y_lib <- pretest_superlearner(Y[in_train], X_W_train, sl_lib, binomial())
-    Y.hat.model <- SuperLearner(Y = Y[in_train], X = X_W_train, SL.library = Y_lib, family = binomial())
+    Y.hat.model <- SuperLearner(Y = Y[in_train], X = X_W_train, SL.library = Y_lib, family = binomial(), method = "method.NNloglik")
     
     W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib, binomial())
     W.hat.model <- SuperLearner(W[in_train], X_train, family = binomial(), 

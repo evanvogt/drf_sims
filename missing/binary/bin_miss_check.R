@@ -1,5 +1,5 @@
 ##########
-# title: check for failed simulations - cts + missing
+# title: check for failed simulations - bin + missing
 ##########
 
 # libraries
@@ -8,8 +8,8 @@ library(here)
 library(purrr)
 
 # path
-res_path <- file.path(dirname(here()), "results", "missing", "continuous")
-failed_file <- here("missing", "continuous" ,"jobscripts", "failed_ids.txt")
+res_path <- file.path(dirname(here()), "results", "missing", "binary")
+failed_file <- here("missing", "binary" ,"jobscripts", "failed_ids.txt")
 
 # parameters
 n_sims <- 100
@@ -23,6 +23,8 @@ params <- expand.grid(
   method = c("complete_cases", "mean_imputation", "missforest", "regression", 
              "missing_indicator", "IPW", "multiple_imputation", "none"),
   stringsAsFactors = F)
+
+# redundant scenarios
 params <- params %>%
   filter(!(scenario == 1 & mechanism == "MNAR-Y"))
 
@@ -59,9 +61,10 @@ if (nrow(failed) > 0) {
                "missing_indicator", "IPW", "multiple_imputation", "none"),
     run = c(1:100),
     stringsAsFactors = F)
-  full_params <- full_params %>%
-    filter(!(scenario == 1 & mechanism == "MNAR-Y"))
   
+  # redundant scenarios
+  full_params <- full_params %>%
+    filter(!(scenario == 1 & mechanism == "MNAR-Y"))  
   failed_idx <- which(interaction(full_params) %in% interaction(failed))
   
   cat(failed_idx, file = failed_file, sep = "\n")

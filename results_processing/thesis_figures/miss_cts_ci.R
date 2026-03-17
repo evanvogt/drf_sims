@@ -15,8 +15,8 @@ library(scales)
 # paths
 path <- here()
 res_path <- file.path(dirname(path), "results", "missing", "ci_example")
-fig_path <- file.path(dirname(path), "results", "thesis_figures", "cts_ss")
-
+fig_path <- file.path(dirname(path), "results", "thesis_figures", "miss_cts_ci")
+dir.create(fig_path, showWarnings = F, recursive = T)
 
 metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS"))
 
@@ -62,7 +62,7 @@ metrics_summary <- metrics %>%
 # marginal coverage
 mar_cov_plot <- metrics %>%
   ggplot(aes(x=CI_method, y = marginal_coverage, colour = model)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
@@ -73,7 +73,7 @@ mar_cov_plot <- metrics %>%
 # summary
 mar_cov_sum_plot <- metrics_summary %>%
   ggplot(aes(x = CI_method, y = mean_mar_cov, colour = model, ymin = mean_mar_cov - mcse_mar_cov, ymax = mean_mar_cov + mcse_mar_cov)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
   facet_wrap(~scenario) +
@@ -85,7 +85,7 @@ mar_cov_sum_plot <- metrics_summary %>%
 # simultaneous coverage
 sim_cov_plot <- metrics %>%
   ggplot(aes(x=CI_method, y = simultaneous_coverage, colour = model)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
@@ -97,7 +97,7 @@ sim_cov_plot <- metrics %>%
 # summary
 sim_cov_sum_plot <- metrics_summary %>%
   ggplot(aes(x = CI_method, y = mean_sim_cov, colour = model, ymin = mean_sim_cov - mcse_sim_cov, ymax = mean_sim_cov + mcse_sim_cov)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
   facet_wrap(~scenario) +
@@ -109,7 +109,6 @@ sim_cov_sum_plot <- metrics_summary %>%
 # CI length
 ci_len_plot <- metrics %>%
   ggplot(aes(x=CI_method, y = mean_ci_length, colour = model)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
@@ -120,7 +119,6 @@ ci_len_plot <- metrics %>%
 # summary
 ci_len_sum_plot <- metrics_summary %>%
   ggplot(aes(x = CI_method, y = mean_ci_len, colour = model, ymin = mean_ci_len - mcse_ci_len, ymax = mean_ci_len + mcse_ci_len)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
   facet_wrap(~scenario) +

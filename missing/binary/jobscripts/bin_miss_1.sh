@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -l walltime=03:00:00  
+#PBS -l walltime=02:00:00  
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
 #PBS -J 1-8800%190
-#PBS -N cts_miss_1
+#PBS -N bin_miss_1
 #PBS -o logs_1/
 #PBS -e logs_1/
 
@@ -17,4 +17,4 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script with parameters
-Rscript cts_miss_analysis.R "${PBS_ARRAY_INDEX}"
+Rscript bin_miss_analysis.R "$PBS_ARRAY_INDEX"

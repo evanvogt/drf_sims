@@ -1,5 +1,5 @@
 ###############
-# title: continuous DGMs with missingness and imputations
+# title: binary DGMs with missingness and imputations
 ###############
 require(dplyr)
 require(mice)
@@ -7,7 +7,7 @@ require(missForest)
 require(VIM)
 
 # Define scenario parameters
-continuous_scenario_params <- data.frame(
+binary_scenario_params <- data.frame(
   scenario = 1:5,
   description = c(
     "No HTE",
@@ -33,7 +33,7 @@ continuous_scenario_params <- data.frame(
   s4 = 1,
   s5 = 1,
   s_err = 0.5,
-  # MNARiliary variable parameters
+  # Auxiliary variable parameters
   bU = 1,
   sU = 1,
   # Variables needed for each scenario
@@ -43,19 +43,19 @@ continuous_scenario_params <- data.frame(
   stringsAsFactors = FALSE
 )
 
-#' Generate continuous outcome dataset for specified scenario (missing data reduced scenarios)
+#' Generate binary outcome dataset for specified scenario (missing data reduced scenarios)
 #' 
 #' @param scenario Integer 1-5 specifying which scenario to generate
 #' @param n Sample size
 #' @param mech c("MAR", "MNAR", "MNAR-Y") required to check if unseen variable generation is required
 #' @param return_truth Logical, whether to return true values (p0, p1, tau)
-generate_continuous_scenario_data <- function(scenario, n, mech, return_truth = TRUE) {
+generate_binary_scenario_data <- function(scenario, n, mech, return_truth = TRUE) {
   # Checks
   if (!scenario %in% 1:5) { stop("Scenario must be between 1 and 5") }
   if (scenario == 1 & mech == "MNAR-Y") {stop("MNAR-Y missingness not applicable to no HTE scenario")}
   
   # Get parameters, total variance, and appropriate bW
-  params <- continuous_scenario_params[continuous_scenario_params$scenario == scenario, ]
+  params <- binary_scenario_params[binary_scenario_params$scenario == scenario, ]
   s_total <- params$s_err + params$s2
   diff <- power.t.test(n = n/2, delta = NULL, sd = s_total, power = 0.75)$delta
   bW <- round(-diff, digits = 2)
@@ -72,9 +72,7 @@ generate_continuous_scenario_data <- function(scenario, n, mech, return_truth = 
   U <- if (mech %in% c("MNAR", "MNAR-Y")) rnorm(n, 0, params$sU) else NULL
   
   
-  # Error term
-  err <- rnorm(n, 0, params$s_err)
-  
+
   # Select treatment effect function
   treatment_effect <- switch(scenario,
                              rep(bW, n),
@@ -84,8 +82,10 @@ generate_continuous_scenario_data <- function(scenario, n, mech, return_truth = 
                              bW + params$b4 * cos(X4) + if(mech == "MNAR-Y") params$bU * U else 0
   )
   
-  # Outcome calc
-  Y <- params$b0 + params$b1 * X1 + params$b2 * X2 + W * treatment_effect + err
+  # Linear predictor and outcome
+  lp <- params$b0 + params$b1 * X1 + params$b2 * X2 + W * treatment_effect
+  prob <- plogis(lp)
+  Y <- rbinom(n, 1, prob)
   
   # Unrelated variables
   X01 <- rnorm(n, 0, 1)
@@ -127,13 +127,13 @@ generate_continuous_scenario_data <- function(scenario, n, mech, return_truth = 
 #' @param data Simulated dataset to be amputed
 #' @param type Where the missingness should be introduced ("predictive", "prognostic", "both")
 #' @param prop Proportion of missingness in (0,1)
-#' @param mech Mechanism of missingness, either MAR (based on observed variables) or MNAR (based on unseen MNARillary variable)
-#' @param U MNARiliary variable for missingness generation ("MNAR", "MNAR-Y")
-introduce_missingness_continuous <- function(data, type, prop, mech, U = NULL) {
+#' @param mech Mechanism of missingness, either MAR (based on observed variables) or MNAR (based on unseen auxillary variable)
+#' @param U Auxiliary variable for missingness generation ("MNAR", "MNAR-Y")
+introduce_missingness_binary <- function(data, type, prop, mech, U = NULL) {
   # Checks
   if (!type %in% c("prognostic", "predictive", "both")) stop("type must be 'prognostic', 'predictive', or 'both'")
   if (prop < 0 || prop > 1) stop("miss_prop must be between 0 and 1")
-  if (mech %in% c("MNAR", "MNAR-Y") & is.null(U)) stop("MNARiliary variable required for MNAR missingness generation")
+  if (mech %in% c("MNAR", "MNAR-Y") & is.null(U)) stop("auxiliary variable required for MNAR missingness generation")
   
   # Get sample size and covariates
   n <- nrow(data)
@@ -173,9 +173,9 @@ introduce_missingness_continuous <- function(data, type, prop, mech, U = NULL) {
     names(indicators) <- covs
   }
   
-
   
-  # Variables that can influence the missingness (only for when there is an unseen MNARillary variable)
+  
+  # Variables that can influence the missingness (only for when there is an unseen auxillary variable)
   if (mech %in% c("MNAR", "MNAR-Y")) {
     weights <- matrix(0, ncol = length(covs), nrow = if (is.null(nrow(indicators))) 1 else nrow(indicators))
     weights[,length(covs)] <- 1
@@ -198,7 +198,7 @@ introduce_missingness_continuous <- function(data, type, prop, mech, U = NULL) {
 #' 
 #' @param data Simulated dataset with missing data
 #' @param method Missing data handling method (complete cases, mean imputation, missForsest imputation, regression imputation, missing indicator, IPW, or none)
-handle_missingness_continuous <- function(data, method) {
+handle_missingness_binary <- function(data, method) {
   # Checks
   if (!any(is.na(data))) {
     message("No missing data found. Returning original dataset.")
@@ -316,17 +316,17 @@ handle_missingness_continuous <- function(data, method) {
 #' @param return_truth Logical, whether to return true values (p0, p1, tau)
 #' @param type Where the missingness should be introduced ("predictive", "prognostic", "both")
 #' @param prop Proportion of missingness in (0,1)
-#' @param mech Mechanism of missingness, either MAR (based on observed variables) or MNAR (based on unseen MNARillary variable)
+#' @param mech Mechanism of missingness, either MAR (based on observed variables) or MNAR (based on unseen auxillary variable)
 #' @param method Missing data handling method (complete cases, mean imputation, missForest imputation, regression imputation, missing indicator, IPW, or none)
-generate_and_process_continuous_data <- function(scenario, n, return_truth = TRUE, type, prop, mech, method) {
+generate_and_process_binary_data <- function(scenario, n, return_truth = TRUE, type, prop, mech, method) {
   # Data and truth generation step
-  data_result <- generate_continuous_scenario_data(scenario, n, mech, return_truth)
+  data_result <- generate_binary_scenario_data(scenario, n, mech, return_truth)
   
   # Add missingness
-  miss_dataset <- introduce_missingness_continuous(data_result$dataset, type, prop, mech, U = if(mech %in% c("MNAR", "MNAR-Y")) data_result$truth$U else NULL)
+  miss_dataset <- introduce_missingness_binary(data_result$dataset, type, prop, mech, U = if(mech %in% c("MNAR", "MNAR-Y")) data_result$truth$U else NULL)
   
   # Handle missing data
-  processed_dataset <- handle_missingness_continuous(miss_dataset, method)
+  processed_dataset <- handle_missingness_binary(miss_dataset, method)
   data_result$dataset <- processed_dataset$data
   data_result$missing_method <- method
   
@@ -343,12 +343,12 @@ generate_and_process_continuous_data <- function(scenario, n, return_truth = TRU
   return(data_result)
 }
 
-#' Generate oracle formula and parameters for a continuous outcome scenario
+#' Generate oracle formula and parameters for a binary outcome scenario
 #' 
 #' @param scenario Integer 1-5 specifying scenario
 #' @param bW ATE value from generated data
-get_continuous_oracle_info <- function(scenario, bW) {
-  params <- continuous_scenario_params[continuous_scenario_params$scenario == scenario, ]
+get_binary_oracle_info <- function(scenario, bW) {
+  params <- binary_scenario_params[binary_scenario_params$scenario == scenario, ]
   param_list <- list(
     b0 = params$b0,
     b1 = params$b1, 
@@ -360,11 +360,11 @@ get_continuous_oracle_info <- function(scenario, bW) {
   if(!is.na(params$b5)) param_list$b5 <- params$b5
   if(!is.na(params$b45)) param_list$b45 <- params$b45
   formula_str <- switch(scenario,
-                        "b0 + b1*X$X1 + b2*X$X2 + W*bW",
-                        "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)", 
-                        "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4)",
-                        "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4 + b45*X$X4*X$X5)",
-                        "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*cos(X$X4))"
+                        "plogis(b0 + b1*X$X1 + b2*X$X2 + W*bW)",
+                        "plogis(b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3))", 
+                        "plogis(b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4))",
+                        "plogis(b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4 + b45*X$X4*X$X5))",
+                        "plogis(b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*cos(X$X4)))"
   )
   return(list(fmla = formula_str, params = param_list))
 }
