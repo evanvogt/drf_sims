@@ -24,14 +24,15 @@ framework_targets <- list(
   pseudo_dr = c("RMTL1", "RMTL2", "RMSTc")
 )
 
-# lookup: target -> truth tau column name
-truth_tau_map <- c(
-  RMTL1   = "tau_RMTL1",
-  RMTL2   = "tau_RMTL2",
-  RMST1   = "tau_RMST1",
-  RMST2   = "tau_RMST2",
-  RMSTc   = "tau_RMSTc",
-  sh_RMST = "tau_sh"
+# framework-specific truth column mapping
+# ipw and csf_cs remove competing events so they target the cause-specific (net) RMST = integral of S*(t)
+# csf_sh keeps competing events in the risk set (Fine-Gray) so it targets the subdistribution RMST = horizon - RMTL
+framework_truth_map <- list(
+  ipw       = c(RMST1 = "tau_RMST1_cs", RMST2 = "tau_RMST2_cs", RMSTc = "tau_RMSTc"),
+  csf_cs    = c(RMST1 = "tau_RMST1_cs", RMST2 = "tau_RMST2_cs", RMSTc = "tau_RMSTc"),
+  csf_sh    = c(RMST1 = "tau_RMST1",    RMST2 = "tau_RMST2"),
+  pseudo_cf = c(RMTL1 = "tau_RMTL1",    RMTL2 = "tau_RMTL2",    RMSTc = "tau_RMSTc"),
+  pseudo_dr = c(RMTL1 = "tau_RMTL1",    RMTL2 = "tau_RMTL2",    RMSTc = "tau_RMSTc")
 )
 
 # results
@@ -62,7 +63,7 @@ metrics <- all_results_df %>%
         map_dfr(targets_run, function(target) {
           
           model_tau <- fw_data[[target]]
-          true_tau  <- truth[[ truth_tau_map[[target]] ]]
+          true_tau  <- truth[[ framework_truth_map[[framework]][[target]] ]]
           
           bias <- mean(true_tau - model_tau, na.rm = TRUE)
           mse  <- mean((true_tau - model_tau)^2, na.rm = TRUE)

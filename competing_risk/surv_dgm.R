@@ -114,23 +114,23 @@ truth_individual <- function(shape1, shape2, scale1_1, scale1_0, scale2_1, scale
   RMST2_1 <- horizon - RMTL2_1
   RMST2_0 <- horizon - RMTL2_0
   
-  # # subdistribution hazard estimands
-  # # sub-dist hazards
-  # sh_1 <- function(t) h1_1(t) / (1 + CIF2_1(t)/S_all_1(t))
-  # sh_0 <- function(t) h1_0(t) / (1 + CIF2_0(t)/S_all_0(t))
-  # 
-  # # survival functions
-  # S_sh_1 <- Vectorize(function(t) exp(-integrate(sh_1, 0, t)$value))
-  # S_sh_0 <- Vectorize(function(t) exp(-integrate(sh_0, 0, t)$value))
-  # 
-  # # RMST - time to event - keeping competing events in the risk set
-  # # this actually comes out the same (up to 6 decimals) as the cause-specific stuff - could just remove?
-  # sh_RMST_1 <- integrate(function(u) S_sh_1(u), 0, horizon)$value
-  # sh_RMST_0 <- integrate(function(u) S_sh_0(u), 0, horizon)$value
-  
+  # Cause-specific (net) RMST — ignores competing events, uses cause-specific survival only
+  # Target estimand for IPW and csf_cs approaches
+  S1_cs_1 <- function(t) exp(-(t/scale1_1)^shape1)
+  S1_cs_0 <- function(t) exp(-(t/scale1_0)^shape1)
+  S2_cs_1 <- function(t) exp(-(t/scale2_1)^shape2)
+  S2_cs_0 <- function(t) exp(-(t/scale2_0)^shape2)
+
+  RMST1_cs_1 <- integrate(function(u) S1_cs_1(u), 0, horizon)$value
+  RMST1_cs_0 <- integrate(function(u) S1_cs_0(u), 0, horizon)$value
+  RMST2_cs_1 <- integrate(function(u) S2_cs_1(u), 0, horizon)$value
+  RMST2_cs_0 <- integrate(function(u) S2_cs_0(u), 0, horizon)$value
+
   list(RMTL1_1 = RMTL1_1, RMTL1_0 = RMTL1_0, RMTL2_1 = RMTL2_1, RMTL2_0 = RMTL2_0,
        RMSTc_1 = RMSTc_1, RMSTc_0 = RMSTc_0, RMST1_1 = RMST1_1, RMST1_0 = RMST1_0,
-       RMST2_1 = RMST2_1, RMST2_0 = RMST2_0)
+       RMST2_1 = RMST2_1, RMST2_0 = RMST2_0,
+       RMST1_cs_1 = RMST1_cs_1, RMST1_cs_0 = RMST1_cs_0,
+       RMST2_cs_1 = RMST2_cs_1, RMST2_cs_0 = RMST2_cs_0)
 }
 
 #' Generate Competing Risks Survival Data
@@ -241,7 +241,9 @@ generate_surv_data <- function(scenario, n, return_truth = TRUE, censoring = FAL
         tau_RMTL2 = RMTL2_1 - RMTL2_0,
         tau_RMSTc = RMSTc_1 - RMSTc_0,
         tau_RMST1 = RMST1_1 - RMST1_0,
-        tau_RMST2 = RMST2_1 - RMST2_0
+        tau_RMST2 = RMST2_1 - RMST2_0,
+        tau_RMST1_cs = RMST1_cs_1 - RMST1_cs_0,
+        tau_RMST2_cs = RMST2_cs_1 - RMST2_cs_0
         )
     result$truth <- truth
   }

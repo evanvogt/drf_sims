@@ -131,7 +131,8 @@ cf_ipw <- function(X, Y, D, W, horizon, fold_indices, fold_list, event = 1) {
     include <- train_idx[total_observed]
     
     # causal forest (not survival because we've sorted out weights - see grf tutorial)
-    forest <- causal_forest(X[include,], Y[include], W[include], sample.weights = sample_weights)
+    # Y truncated at horizon so the outcome is min(T1*, horizon), matching the RMST estimand
+    forest <- causal_forest(X[include,], pmin(Y[include], horizon), W[include], sample.weights = sample_weights)
     
     pred <- predict(forest, newdata = X[in_fold,])
     
