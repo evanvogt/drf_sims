@@ -38,9 +38,13 @@ scenario <- param$scenario
 n <- param$n
 run <- param$run
 
-n_folds <- ifelse(n == 100, 4, 10)
+n_folds <- dplyr::case_when(n == 100 ~ 4L, n == 250 ~ 5L, TRUE ~ 10L)
 
-sl_lib <- c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.randomForest")
+sl_lib <- if (n <= 100) {
+  c("SL.glm", "SL.glmnet", "SL.gam", "SL.mean")
+} else {
+  c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.ranger")
+}
 
 # set up simulation seed
 setup_rng_stream(run)

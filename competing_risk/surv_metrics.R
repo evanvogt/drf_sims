@@ -65,14 +65,29 @@ metrics <- all_results_df %>%
           model_tau <- fw_data[[target]]
           true_tau  <- truth[[ framework_truth_map[[framework]][[target]] ]]
           
-          bias <- mean(true_tau - model_tau, na.rm = TRUE)
-          mse  <- mean((true_tau - model_tau)^2, na.rm = TRUE)
+          bias     <- mean(true_tau - model_tau, na.rm = TRUE)
+          mse      <- mean((true_tau - model_tau)^2, na.rm = TRUE)
+          rmse     <- sqrt(mse)
+          mae      <- mean(abs(true_tau - model_tau), na.rm = TRUE)
+          ate_bias <- mean(model_tau, na.rm = TRUE) - mean(true_tau, na.rm = TRUE)
+          sign_acc <- mean(sign(model_tau) == sign(true_tau), na.rm = TRUE)
           corr <- ifelse(
             scenario != 1,
             cor(true_tau, model_tau, use = "pairwise.complete.obs"),
             0
           )
-          
+          spearman <- ifelse(
+            scenario != 1,
+            cor(true_tau, model_tau, method = "spearman", use = "pairwise.complete.obs"),
+            0
+          )
+          # C-statistic = (Kendall tau_b + 1) / 2 — equivalent to Harrell's C for continuous outcomes
+          c_stat <- ifelse(
+            scenario != 1,
+            (cor(true_tau, model_tau, method = "kendall", use = "pairwise.complete.obs") + 1) / 2,
+            0.5
+          )
+
           tibble(
             scenario  = scenario,
             n         = n,
@@ -81,8 +96,14 @@ metrics <- all_results_df %>%
             framework = framework,
             target    = target,
             bias      = bias,
+            ate_bias  = ate_bias,
             mse       = mse,
-            corr      = corr
+            rmse      = rmse,
+            mae       = mae,
+            corr      = corr,
+            spearman  = spearman,
+            c_stat    = c_stat,
+            sign_acc  = sign_acc
           )
         })
       })

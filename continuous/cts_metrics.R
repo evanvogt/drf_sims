@@ -36,8 +36,13 @@ metrics <- all_results_df %>%
       model_tau <- sim_res[[model]]$tau
       bias <- mean(true_tau - model_tau, na.rm = T)
       mse <- mean((true_tau - model_tau)^2, na.rm = T)
+      rmse <- sqrt(mse)
+      mae <- mean(abs(true_tau - model_tau), na.rm = T)
       corr <- ifelse(scenario != 1, cor(true_tau, model_tau, use = "pairwise.complete.obs"), 0)
-      
+      spearman <- ifelse(scenario != 1, cor(true_tau, model_tau, method = "spearman", use = "pairwise.complete.obs"), 0)
+      ate_bias <- mean(model_tau, na.rm = T) - mean(true_tau, na.rm = T)
+      sign_acc <- mean(sign(model_tau) == sign(true_tau), na.rm = T)
+
       # HTE test metrics - add in once sims have rerun with HTE tests
       BLP_p <- sim_res[[model]]$BLP_whole[4,2]
       indep_cate <- sim_res[[model]]$independence_cate$p_value
@@ -48,8 +53,13 @@ metrics <- all_results_df %>%
         model = model,
         run = run,
         bias = bias,
+        ate_bias = ate_bias,
         mse = mse,
+        rmse = rmse,
+        mae = mae,
         corr = corr,
+        spearman = spearman,
+        sign_acc = sign_acc,
         BLP_p = BLP_p,
         indep_cate = indep_cate,
         indep_po = indep_po

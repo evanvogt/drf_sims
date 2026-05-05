@@ -23,7 +23,7 @@ i <- as.numeric(commandArgs(trailingOnly = T))
 workers <- 2
 
 params <- expand.grid(
-  scenario = c(1, 3, 8, 9),
+  scenario = c(1:10),
   n = c(100, 250, 500, 1000),
   run = c(1:100),
   stringsAsFactors = F
@@ -37,9 +37,13 @@ scenario <- param$scenario
 n <- param$n
 run <- param$run
 
-n_folds <- ifelse(n == 100, 4, 10)
+n_folds <- dplyr::case_when(n == 100 ~ 4L, n == 250 ~ 5L, TRUE ~ 10L)
 
-sl_lib <- c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.randomForest")
+sl_lib <- if (n <= 100) {
+  c("SL.glm", "SL.glmnet", "SL.gam", "SL.mean")
+} else {
+  c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.ranger")
+}
 
 # set up simulation seed
 setup_rng_stream(run)
