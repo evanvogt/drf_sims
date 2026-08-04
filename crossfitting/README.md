@@ -97,7 +97,7 @@ SuperLearner, so the OOB arms and the T-learner control are dropped.
 | `cf_models.R` | DGP wrapper, nuisance producers, stage-2 consumers, `run_all_crossfit_variants` |
 | `cf_analysis.R` | array entry point, one replicate per index |
 | `cf_test.R` | verification checks — run before submitting anything |
-| `cf_profile.R` | timing / memory sweep over `(workers, grf_threads)` |
+| `cf_profile.R` | timing / memory / CPU sweep over `(workers, grf_threads)`, instrumented with `syrup` |
 | `cf_profile_summary.R` | turns the sweep into PBS directives and writes them into `cf_1.sh` |
 | `cf_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt` |
 | `cf_metrics.R` | metric definitions (functions only, no side effects) |
@@ -115,6 +115,7 @@ Nothing is forked: `utils.R` supplies `setup_rng_stream` and `collate_prediction
 Rscript crossfitting/cf_test.R              # structure + regression checks (fast)
 Rscript crossfitting/cf_test.R full         # adds the SuperLearner family
 
+Rscript crossfitting/cf_profile.R 1         # smoke-test the profiler locally
 qsub crossfitting/jobscripts/cf_profile.sh  # 36 profiling jobs
 Rscript crossfitting/cf_profile_summary.R   # writes measured directives into cf_1.sh
 
@@ -125,6 +126,42 @@ Rscript crossfitting/cf_results.R
 ```
 
 Results land in `../results/crossfitting/` (a sibling of the repo, as elsewhere).
+
+## Sizing the array job
+
+`cf_1.sh` ships with **placeholder** `#PBS -l` lines. `cf_profile.R` measures what
+one replicate actually costs across a `(workers, grf_threads)` sweep, and
+`cf_profile_summary.R` turns that into directives and writes them in.
+
+Profiling is instrumented with [`syrup`](https://simonpcouch.github.io/syrup/),
+which runs a separate R session that samples `ps` every second and reports every R
+process — so it sees the `multisession` workers, which the parent's own `gc()`
+cannot. Nothing depends on the scheduler, so `Rscript crossfitting/cf_profile.R 1`
+runs on a laptop as a smoke test of the harness (but not for the final numbers: a
+machine with fewer cores than `workers x grf_threads` self-oversubscribes, and the
+summary flags any cell where that happened).
+
+Two things to know about the memory figure:
+
+- `syrup` reports every R session `ps` can see, which on a shared node can include
+  another of your own jobs. `cf_profile.R` filters to `pid == Sys.getpid() |
+  ppid == Sys.getpid()` — `multisession` workers are PSOCK children — and warns if
+  the tracked process count is not `workers + 1`.
+- Peak memory is the summed RSS across the tree at the worst snapshot. That
+  overcounts shared library pages, so it is an upper bound — the safe direction for
+  a `mem=` request. Cross-check it once against `qstat -fx <jobid> | grep
+  resources_used` on the first real subjobs; PBS's cgroup figure counts shared
+  pages once and should sit below the request.
+
+`syrup`'s `pct_cpu` also settles the oversubscription question outright rather than
+inferring it from wall-clock differences: the summary prints observed CPU% against
+`workers x grf_threads x 100` per configuration. This matters because
+`continuous/jobscripts/cts_1.sh` asks for `ompthreads=2` alongside
+`cts_analysis.R`'s `workers <- 2`, and `num.threads` is set nowhere in the repo — so
+each worker may be claiming two threads against two allocated cores.
+
+`syrup` must be installed in the `sim-env` conda environment; `cf_profile.R` fails
+in the first second with a clear message if it is not.
 
 ## Deviations from the rest of the study, on purpose
 
