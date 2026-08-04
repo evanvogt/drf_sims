@@ -30,7 +30,7 @@ params <- expand.grid(
 )
 
 # select parameters for current run
-param <- params[i,]
+param <- params[i, ]
 print(param)
 
 scenario <- param$scenario
@@ -61,8 +61,8 @@ on.exit(plan(metaplan), add = TRUE)
 
 
 results <- run_all_cate_methods(
-  data = data, 
-  n_folds = n_folds, 
+  data = data,
+  n_folds = n_folds,
   sl_lib = sl_lib,
   fmla_info = fmla_info
 )
@@ -71,7 +71,13 @@ results$data <- data
 results$truth <- gen$truth
 
 # Save results
-output_dir <- file.path(dirname(path), "results", "binary", paste0("scenario_", scenario), n)
+output_dir <- file.path(
+  dirname(path),
+  "results",
+  "binary",
+  paste0("scenario_", scenario),
+  n
+)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
 
