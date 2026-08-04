@@ -1,131 +1,181 @@
 # drf_sims
 
-Simulation study evaluating CATE (Conditional Average Treatment Effect) estimation methods across outcome types and data settings. Part of WP2 of a PhD at Imperial College London on causal machine learning methods in survival and competing-risks settings.
+Simulation studies evaluating CATE (Conditional Average Treatment Effect)
+estimation across outcome types and data settings. Part of WP2 of a PhD at
+Imperial College London on causal machine learning methods in survival and
+competing-risks settings.
 
-## Overview
+The question throughout: **when the treatment effect varies between people, which
+estimators recover that variation, and under what conditions do they stop
+working?** Each folder answers one version of it — as sample size shrinks, as the
+outcome becomes binary or time-to-event, as covariates go missing, and when an
+interval rather than a point estimate is needed.
 
-This project benchmarks doubly-robust and forest-based CATE estimators under a range of data-generating processes (DGPs) covering continuous, binary, and time-to-event outcomes. Simulations are designed to run on an HPC cluster and cover scenarios with varying heterogeneous treatment effect (HTE) structures, missing covariates, and competing risks.
-
-## Repository structure
+## Layout
 
 ```
-drf_sims/
-├── utils.R                        # Shared utilities (RNG streams, cross-fitting helpers)
-│
-├── continuous/                    # Continuous outcome simulations
-│   ├── cts_dgms.R                 # DGM: 10 HTE scenarios
-│   ├── cts_models.R               # CATE estimation functions
-│   ├── cts_analysis.R             # HPC entry point (reads commandArgs)
-│   ├── cts_collect.R              # Collects distributed results
-│   ├── cts_metrics.R              # Computes performance metrics
-│   └── results_cts.R              # Results summaries
-│
-├── binary/                        # Binary outcome simulations (same structure)
-│   ├── bin_dgms.R
-│   ├── bin_models.R
-│   ├── bin_analysis.R
-│   ├── bin_collect.R
-│   └── bin_metrics.R
-│
-├── competing_risk/                # Competing risks simulations
-│   ├── surv_dgm.R                 # DGM: 7 scenarios, Weibull joint hazards
-│   ├── surv_models.R              # CATE estimation functions
-│   ├── surv_analysis.R            # HPC entry point
-│   ├── surv_collect.R             # Collects distributed results
-│   └── surv_metrics.R             # Computes performance metrics
-│
-├── missing/
-│   ├── continuous/                # Missing covariates, continuous outcome
-│   └── binary/                    # Missing covariates, binary outcome
-│
-├── confidence_intervals/
-│   ├── continuous/                # CI estimation for continuous outcome CATEs
-│   ├── binary/                    # CI estimation for binary outcome CATEs
-│   └── optimal_sf/                # Optimal sample-fraction calibration
-│
-├── case_study/                    # Factorial platform trial case study
-│   ├── cs_surv_models.R           # Multi-arm competing risks CATE models
-│   └── cs_bin_models.R            # Multi-arm binary CATE models
-│
-├── validation/                    # DGM and CATE validation scripts
-├── results_processing/            # Thesis figure generation
-│   └── thesis_figures/
-│
-└── renv/                          # renv lockfile for reproducibility
+R/                    shared library - every study sources from here
+├── utils.R           RNG streams, crossfitting fold bookkeeping
+├── dgm_scenarios.R   scenario tables + the data generator
+├── missingness.R     amputation and missing-data handling
+├── cate_models.R     the estimators + cate_methods()
+├── bootstrap_ci.R    half-sample bootstrap, MI pooling, sf calibration
+├── metrics.R         metric definitions + the metrics pipeline
+├── pipeline.R        study configs, collect, check
+├── figures.R         display labels, palette, plot helpers
+└── regression_check.R  old-vs-new equivalence harness
+
+continuous/           continuous outcome, sample size sweep
+binary/               binary outcome, sample size sweep
+competing_risk/       competing risks - the target setting
+missing/              missing covariates (continuous, binary, CI example)
+confidence_intervals/ interval estimation (continuous, binary, optimal_sf)
+crossfitting/         does double crossfitting earn its 4.5x cost?
+results_processing/   thesis figures
+scratch/              unmaintained exploratory code
 ```
+
+Each study folder has the same shape:
+
+| file | |
+|---|---|
+| `<s>_config.R` | the parameter grid and results path — **the** definition |
+| `<s>_dgms.R` | names this study's scenario set |
+| `<s>_models.R` | this study's configuration of the shared estimators |
+| `<s>_analysis.R` | array entry point; one grid row per index |
+| `<s>_check.R` | finds missing runs |
+| `<s>_collect.R` | gathers per-run files |
+| `<s>_metrics.R` | computes metrics |
+| `jobscripts/` | PBS submission scripts |
+
+Results are written **outside the repo**, to `../results/<study>/...`.
+
+Every folder has its own README with that study's design, gotchas and status.
+
+## Why `R/` exists
+
+The repo grew by copy-paste: each new study started as a duplicate of
+`continuous/`. By the time that stopped, `continuous/cts_models.R` and
+`binary/bin_models.R` differed in **two** places out of 438 lines, the same DGM
+existed in four files, and the same collect/check boilerplate in eight.
+
+Consolidating removed about 3,000 lines. The more useful outcome is that the
+copies can no longer drift — which is where most of the bugs below came from.
+`crossfitting/` was the model: it already sourced shared code rather than
+forking it.
+
+See `R/README.md` for the four axes of `cate_methods()`, the orchestration
+profiles, and the grid contract.
 
 ## Methods
 
-| Method | Description |
+| method | |
 |---|---|
 | Causal Forest | `grf::causal_forest` with cross-fitted nuisances |
-| DR-RF | Doubly-robust learner, random forest second stage |
-| DR-SL | Doubly-robust learner, SuperLearner nuisances and second stage |
-| DR-Oracle | DR learner with true nuisance functions |
-| DR-Semi-Oracle | DR learner with known propensity (0.5), estimated outcome model |
+| DR-RF | doubly-robust learner, random forest second stage |
+| DR-SL | doubly-robust learner, SuperLearner throughout |
+| DR-Oracle | true outcome model, known propensity |
+| DR-Semi-Oracle | known propensity, estimated outcome model |
 
-For competing risks, additional methods are available:
+Competing risks adds IPW-transformed RMST, cause-specific and subdistribution
+causal survival forests, and pseudo-value approaches — see
+`competing_risk/README.md`.
 
-| Method | Description |
-|---|---|
-| IPW-CF | Causal forest on IPW-transformed RMST outcomes (event 1, event 2, composite) |
-| CSF-cs | Causal survival forest using cause-specific hazards |
-| CSF-sh | Causal survival forest using subdistribution hazards |
-| Pseudo-CF | Causal forest on pseudo-values (RMTL1, RMTL2, RMSTc) |
-| Pseudo-DR | DR learner on jackknife pseudo-values |
+Nuisances use **double crossfitting**: models are fit over all `C(V,2)` fold
+pairs, so the pseudo-outcome column used to predict fold `k` was never touched by
+fold `k`. At `V = 10` that is 45 fits rather than 10. Whether it earns that cost
+is exactly what `crossfitting/` measures.
 
-Nuisance functions use double cross-fitting (10 folds, pairwise fold combinations). SuperLearner libraries are adapted to sample size.
+## Metrics
 
-## Simulation scenarios
+**Point estimation** — bias, ATE bias, MSE, RMSE, MAE, correlation, Spearman
+correlation, sign accuracy. `bias` is `estimate - truth` throughout.
 
-### Continuous and binary outcomes (10 scenarios)
-Scenarios vary the structure of the CATE function:
-1. No HTE (ATE only)
-2. Simple HTE — binary variable
-3. Simple HTE — continuous variable
-4. Two HTE variables (additive)
-5. Continuous × binary interaction
-6. Single effects + interaction
-7. Continuous × continuous interaction
-8. Single effects + different interaction
-9. Cosine HTE
-10. Exponential HTE
+**HTE detection** — BLP test p-value (`GenericML`), independence test p-value
+(`coin`).
 
-### Competing risks (7 scenarios)
-Event of interest (EOI) and competing event (CE) generated from Weibull distributions via joint hazards (Beyersmann 2009). Scenarios vary ATE/HTE presence across EOI and CE:
-1. ATE on EOI only
-2. ATE on CE only
-3. HTE on EOI, no ATE on CE
-4. HTE on EOI, ATE on CE
-5. HTE on CE, no ATE on EOI
-6. HTE on CE, ATE on EOI
-7. HTE on both events
+**Intervals** — marginal coverage, simultaneous coverage, mean width.
 
-Sample sizes: n ∈ {100, 250, 500, 1000}, 100 simulation runs per parameter combination.
-
-## Performance metrics
-
-- **Point estimation:** bias, ATE bias, RMSE, MAE, correlation, Spearman correlation, sign accuracy
-- **HTE detection:** BLP test p-value (`GenericML`), independence test p-value (`coin`)
-
-## Running the simulations
-
-Scripts are designed for array job submission on an HPC cluster. The job index `i` selects a row from the full parameter grid:
+## Running a study
 
 ```bash
-Rscript continuous/cts_analysis.R $SGE_TASK_ID
+qsub continuous/jobscripts/cts_1.sh      # the array job
+Rscript continuous/cts_check.R           # any missing runs?
+qsub continuous/jobscripts/cts_collect.sh
+qsub continuous/jobscripts/cts_metrics.sh
 ```
 
-Each script sources its own DGM and model files, sets up reproducible parallel RNG streams, fits all CATE methods, and saves results to `../results/<outcome_type>/`.
+The array index is a **row number** of `study$grid`. Never filter or reorder the
+grid — that renumbers every job. To run a subset:
 
-Results are collected with the corresponding `*_collect.R` script and metrics computed with `*_metrics.R`.
+```r
+idx <- grid_indices(study, method = "complete_data")
+```
+
+## Bug ledger
+
+Found during the de-duplication. Each is written up in the relevant folder README.
+
+| | what | where | fixed |
+|---|---|---|---|
+| A | ran on the **continuous coefficient table** on a logit scale | `confidence_intervals/binary` | yes — re-run |
+| B | collect looked for `AUX` where everything else said `MNAR` | `missing/continuous` | yes |
+| C | `rel_efficiency` was `NA` everywhere — the reference arm was never collected | `missing/*` | yes |
+| D | grid filtered after `expand.grid`, so the array index meant two different things | `missing/*` | yes — structurally |
+| E | `.gitignore` `*test*.*` hid the verification harness from git | repo | yes |
+| F | `stage_2_sl` discarded the pretested SuperLearner library; the correct branch was dead code | shared | yes — re-run |
+| G | `bias` and `ate_bias` had **opposite signs** | all metrics | yes |
+| H | propensity trimming only on the SuperLearner path | shared | documented |
+| I | competing risks never validates its SuperLearner library | `competing_risk` | open |
+| J | stale comments and filenames | various | yes |
+
+Three more surfaced along the way:
+
+- `missing/binary` was a **half-converted fork**: continuous coefficients, a
+  continuous power calculation, and truth on the **log-odds** scale while every
+  estimator targets a risk difference
+- `binary`'s grid disagreed three ways, so the study silently has **40
+  replicates per cell, not 100**
+- `combine_mi()` in `missing/ci_example` read `alpha` as a **free variable** from
+  the global environment
+
+## Status
+
+| study | |
+|---|---|
+| `confidence_intervals/continuous`, `optimal_sf/cts` | unchanged — must stay bit-identical |
+| `missing/ci_example` | unchanged |
+| `crossfitting` | unchanged |
+| `continuous`, `missing/continuous` | re-run for bug F (`dr_superlearner` only) |
+| `binary` | re-run for bug F **and** the grid fix |
+| `missing/binary` | re-run — the DGM was wrong three ways |
+| `confidence_intervals/binary`, `optimal_sf/bin` | re-run — the DGM was wrong |
+| `competing_risk` | **currently fails to run** — see its README |
+
+Roughly 32,000 array jobs. Bug G costs no cluster time: it is computed from the
+saved `*_all.RDS` files, so only the metrics scripts and the figures rerun.
+
+## Verifying a change
+
+```bash
+Rscript R/regression_check.R baseline   # before touching anything
+Rscript R/regression_check.R verify     # after - must be 8/8
+Rscript crossfitting/cf_testing.R       # independent check of the estimators
+```
+
+The harness fingerprints generated datasets, estimates **and** saved nuisance
+structure, and runs each study in its own subprocess. It proves the code
+reproduces the current behaviour on this machine; it is not a claim about the
+cluster's numbers (R 4.5.3 locally vs 4.3.2 there).
 
 ## Dependencies
 
-Package versions are managed with `renv`. To restore the environment:
+Managed with `renv`:
 
 ```r
 renv::restore()
 ```
 
-Key packages: `grf`, `SuperLearner`, `GenericML`, `pseudo`, `coin`, `furrr`, `future`, `ranger`, `glmnet`, `gam`, `dplyr`, `here`.
+Key packages: `grf`, `SuperLearner`, `GenericML`, `pseudo`, `coin`, `furrr`,
+`future`, `ranger`, `glmnet`, `gam`, `mice`, `missForest`, `VIM`, `dplyr`,
+`here`.

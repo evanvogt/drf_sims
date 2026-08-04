@@ -3,15 +3,13 @@
 ##########
 
 # libraries
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(paletteer)
+# Labels, palette and figure sizing come from R/figures.R.
 library(here)
 library(patchwork)
 library(purrr)
 library(ggridges)
 library(scales)
+source(here("R", "figures.R"))
 # paths
 path <- here()
 res_path <- file.path(dirname(path), "results", "missing", "ci_example")
@@ -21,21 +19,14 @@ dir.create(fig_path, showWarnings = F, recursive = T)
 metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS"))
 
 # tidy up
+MISS_SCENARIO_LABELS <- c(`1` = "Null", `2` = "Simple", `4` = "Complex",
+                          `5` = "Non-linear")
+
 metrics <- metrics %>%
   filter(scenario %in% c(1, 2, 4, 5)) %>%
-  mutate(scenario = factor(
-    case_when(scenario == 1 ~ "Null",
-              scenario == 2 ~ "Simple",
-              scenario == 4 ~ "Complex",
-              scenario == 5 ~ "Non-linear"), levels = c("Null", "Simple", "Complex", "Non-linear")),
+  apply_labels(MISS_SCENARIO_LABELS) %>%
+  mutate(
     n = factor(n, levels = c(100, 250, 500, 1000)),
-    model = factor(
-      recode(model,
-             causal_forest = "Causal forest",
-             dr_random_forest = "DR-RandomForest",
-             dr_oracle = "DR-oracle",
-             dr_semi_oracle = "DR-semi-oracle"),
-      levels = c("Causal forest", "DR-RandomForest", "DR-oracle", "DR-semi-oracle")),
     CI_method = factor(CI_method, levels = c("pooled", "MI boot", "hybrid")))
 
 

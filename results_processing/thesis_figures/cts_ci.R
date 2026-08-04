@@ -2,16 +2,13 @@
 # title: figures for the thesis chapter - cts outcome confidence intervals
 ##########
 
-# libraries
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(paletteer)
+# Labels, palette and figure sizing come from R/figures.R.
 library(here)
 library(patchwork)
 library(purrr)
 library(ggridges)
 library(scales)
+source(here("R", "figures.R"))
 
 # paths
 path <- here()
@@ -23,23 +20,11 @@ metrics <- readRDS(file.path(res_path, "ci_cts_metrics.RDS"))
 
 metrics <- metrics %>%
   filter(scenario %in% c(1, 3, 8, 9)) %>%
+  apply_labels(SS_SCENARIO_LABELS) %>%
+  # model labels (including causal_forest_inbuilt) come from apply_labels()
   mutate(
-    scenario = factor(
-      case_when(scenario == 1 ~ "Null",
-                scenario == 3 ~ "Simple",
-                scenario == 8 ~ "Complex",
-                scenario == 9 ~ "Non-linear"), levels = c("Null", "Simple", "Complex", "Non-linear")),
     n = factor(n, levels = c(500, 1000)),
-    CI_sf = factor(CI_sf, levels = seq(0.05, 0.5, 0.05)),
-    model = factor(
-      recode(model,
-             causal_forest = "Causal forest",
-             causal_forest_inbuilt = "Causal forest (inbuilt CIs)",
-             dr_random_forest = "DR-RandomForest",
-             dr_oracle = "DR-oracle",
-             dr_semi_oracle = "DR-semi-oracle"),
-      levels = c("Causal forest", "Causal forest (inbuilt CIs)", "DR-RandomForest", "DR-oracle", "DR-semi-oracle")
-    )
+    CI_sf = factor(CI_sf, levels = seq(0.05, 0.5, 0.05))
   )
 
 metrics_summary <- metrics %>%

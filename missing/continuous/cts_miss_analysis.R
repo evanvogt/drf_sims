@@ -12,6 +12,7 @@ path <- here()
 # functions
 source(here("missing/continuous/cts_miss_dgms.R"))
 source(here("missing/continuous/cts_miss_models.R"))
+source(here("missing/continuous/cts_miss_config.R"))
 source(here("utils.R"))
 
 # simulation parameters
@@ -20,27 +21,13 @@ i <- as.numeric(commandArgs(trailingOnly = T))
 n_folds <- 10
 workers <- 2
 
-params <- expand.grid(
-  scenario = c(1, 2, 4, 5),
-  n = c(500),
-  type = c("both"),
-  prop = c(0.3),
-  mechanism = c("MAR", "MNAR", "MNAR-Y"), # only for 1 scenario?
-  method = c("complete_cases", "mean_imputation", "missforest", "regression",
-             "missing_indicator", "IPW", "multiple_imputation", "none", "complete_data"),
-  run = c(1:100),
-  stringsAsFactors = F)
-
-# redundant scenarios
-params <- params %>%
-  filter(!(scenario == 1 & mechanism == "MNAR-Y"))
-
-# add in - get the complete datascenarios only:
-params <- params %>%
-  filter(method == "complete_data")
-
-# select parameters for this run
-param <- params[i,]
+# The grid lives in cts_miss_config.R and is NEVER filtered here. It used to be
+# (`filter(method == "complete_data")`), which renumbered every row, so index i
+# meant one thing here and another in cts_miss_check.R - a failed_ids.txt would
+# have resubmitted the wrong parameters. To run one arm, select indices instead:
+#   idx <- grid_indices(study, method = "complete_data")
+# and submit those, leaving the numbering intact.
+param <- study$grid[i, ]
 print(param)
 
 scenario <- param$scenario

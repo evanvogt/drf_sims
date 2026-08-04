@@ -16,21 +16,16 @@ path <- here()
 source(here("binary", "bin_dgms.R"))
 source(here("binary", "bin_models.R"))
 source(here("utils.R"))
+source(here("binary/bin_config.R"))
 
 # simulation parameters
 i <- as.numeric(commandArgs(trailingOnly = T))
 
 workers <- 2
 
-params <- expand.grid(
-  scenario = c(1:10),
-  n = c(100, 250, 500, 1000),
-  run = c(1:100),
-  stringsAsFactors = F
-)
-
-# select parameters for current run
-param <- params[i, ]
+# The parameter grid lives in the study config, so this script and the
+# check/collect scripts cannot disagree about what index i means.
+param <- study$grid[i, ]
 print(param)
 
 scenario <- param$scenario

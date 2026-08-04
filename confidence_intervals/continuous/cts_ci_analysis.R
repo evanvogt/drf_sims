@@ -13,6 +13,7 @@ path <- here()
 source(here("utils.R"))
 source(here("confidence_intervals", "continuous", "cts_ci_dgms.R")) # maybe this can just be the cts folder?
 source(here("confidence_intervals", "continuous", "cts_ci_models.R"))
+source(here("confidence_intervals/continuous/cts_ci_config.R"))
 
 # simulation parameters
 i <- as.numeric(commandArgs(trailingOnly = T))
@@ -22,16 +23,9 @@ alpha <- 0.05
 n_folds <- 10
 workers <- 2
 
-params <- expand.grid(
-  scenario = c(1:10),
-  n = c(500, 1000),
-  CI_sf = seq(0.05, 0.5, 0.05),
-  run = c(1:100),
-  stringsAsFactors = F
-)
-
-# select parameters for current run
-param <- params[i,]
+# The parameter grid lives in the study config, so this script and the
+# check/collect scripts cannot disagree about what index i means.
+param <- study$grid[i, ]
 print(param)
 
 scenario <- param$scenario

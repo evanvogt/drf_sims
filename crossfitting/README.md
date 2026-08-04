@@ -3,7 +3,7 @@
 Does the double crossfitting procedure used throughout this study earn its cost?
 
 Everywhere else in `drf_sims`, two-stage estimators fit nuisances over all `C(V,2)`
-fold *pairs*; `collate_predictions` (`utils.R:16`) assembles an `n x V` pseudo-outcome
+fold *pairs*; `collate_predictions` (`R/utils.R`) assembles an `n x V` pseudo-outcome
 matrix whose column `k` is untouched by fold `k`, and the second stage trains on
 `po_matrix[, k]` before predicting fold `k`. At `V = 10` that is 45 nuisance fits
 instead of 10 — 4.5x the cost — and it has never been benchmarked.
@@ -31,7 +31,7 @@ the label the stage-2 model saw is a noisy pseudo-outcome. An in-sample predicti
 is a weighted average of neighbouring pseudo-outcomes that includes the unit's own,
 so it is pulled towards that unit's noise and therefore *away* from the truth. In
 this setting in-sample predictions score **worse** against truth, not better — which
-is what `cf_test.R` observes, and it is why `naive` is expected to lose rather than
+is what `cf_testing.R` observes, and it is why `naive` is expected to lose rather than
 to look deceptively good.
 
 What the two scoring sets are actually for: the **training** score is the estimand
@@ -96,7 +96,7 @@ SuperLearner, so the OOB arms and the T-learner control are dropped.
 |---|---|
 | `cf_models.R` | DGP wrapper, nuisance producers, stage-2 consumers, `run_all_crossfit_variants` |
 | `cf_analysis.R` | array entry point, one replicate per index |
-| `cf_test.R` | verification checks — run before submitting anything |
+| `cf_testing.R` | verification checks — run before submitting anything |
 | `cf_profile.R` | timing / memory / CPU sweep over `(workers, grf_threads)`, instrumented with `syrup` |
 | `cf_profile_summary.R` | turns the sweep into PBS directives and writes them into `cf_1.sh` |
 | `cf_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt` |
@@ -104,16 +104,22 @@ SuperLearner, so the OOB arms and the T-learner control are dropped.
 | `cf_collect.R` | streams the per-run files through `cf_metrics.R` into `cf_metrics.RDS` |
 | `cf_results.R` | figures |
 
-Nothing is forked: `utils.R` supplies `setup_rng_stream` and `collate_predictions`,
-`continuous/cts_dgms.R` supplies the DGP, and `continuous/cts_models.R` supplies
-`pretest_superlearner` plus the reference implementation the regression check in
-`cf_test.R` compares against.
+Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
+`collate_predictions`, `continuous/cts_dgms.R` supplies the DGP, and
+`R/cate_models.R` supplies `pretest_superlearner` plus the reference
+implementation the regression check in `cf_testing.R` compares against.
+
+This folder was the model for the repo-wide `R/` refactor: it was already
+sourcing shared code rather than copying it, at a time when the same CATE
+estimators existed in seven files. The reference implementations it compares
+against moved from `continuous/cts_models.R` into `R/cate_models.R`, which is
+now the only copy - `cts_models.R` is a thirteen-line profile shim.
 
 ## Running it
 
 ```bash
-Rscript crossfitting/cf_test.R              # structure + regression checks (fast)
-Rscript crossfitting/cf_test.R full         # adds the SuperLearner family
+Rscript crossfitting/cf_testing.R              # structure + regression checks (fast)
+Rscript crossfitting/cf_testing.R full         # adds the SuperLearner family
 
 Rscript crossfitting/cf_profile.R 1         # smoke-test the profiler locally
 qsub crossfitting/jobscripts/cf_profile.sh  # 36 profiling jobs
@@ -167,14 +173,18 @@ in the first second with a clear message if it is not.
 
 - **Propensities are trimmed to `[0.05, 0.95]` in every arm**, including the RF ones.
   `cts_models.R` only trims for SuperLearner. With `W ~ Bernoulli(0.5)` this is a
-  no-op for the crossfit arms — `cf_test.R` asserts it — but it stops the in-sample
+  no-op for the crossfit arms — `cf_testing.R` asserts it — but it stops the in-sample
   nuisances from producing exploding pseudo-outcomes and losing on a technicality.
-- **`bias` is `estimate - truth`**, the usual convention. `cts_metrics.R:37` uses
-  `mean(true - est)` for `bias` while its `ate_bias` at line 43 uses the opposite
-  sign, so these numbers are not sign-comparable with the main continuous study.
-- **`stage2_crossfit_sl` uses the pretested library in both branches.**
-  `cts_models.R:387` computes `po_lib` and then passes the untested `sl_lib` in the
-  matrix branch; line 384 uses `po_lib` correctly in the vector branch.
+- **`bias` is `estimate - truth`**, the usual convention. This used to be a
+  deviation: `cts_metrics.R` computed `bias` as `mean(true - est)` while its
+  `ate_bias` used the opposite sign. That was bug G, and the whole repo now uses
+  `est - true` (`R/metrics.R`), so these numbers ARE comparable with the other
+  studies once their metrics are regenerated.
+- **`stage2_crossfit_sl` uses the pretested library in both branches.** This was
+  bug F, and it was worse than it looked: every caller of the shared `stage_2_sl`
+  passed a matrix, so the pretested library had never been used in stage 2 in any
+  study and the correct vector branch was dead code. Fixed repo-wide
+  (`PRETEST_STAGE2` in `R/cate_models.R`); this folder was right all along.
 - **The per-run files carry no `data` and no nuisance matrices** — only `tau`,
   `tau_test` and timings per arm, plus the truth vectors. Replicates are
   reproducible from `run` via `setup_rng_stream`. This is why `cf_collect.sh` asks

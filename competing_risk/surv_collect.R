@@ -1,53 +1,16 @@
 ##########
-# title: collect up competing risks outcome results
+# title: collect up results - competing risks
 ##########
-#libraries
-library(dplyr)
-library(tidyr)
+# The grid and the results path come from the study config. Produces one row per
+# parameter combination with a list-column of per-run results, which is the shape
+# the metrics script unnests.
+
 library(here)
-library(future)
-library(furrr)
+source(here("competing_risk/surv_config.R"))
 
-# paths
-res_path <- file.path(dirname(here()), "results", "competing_risk")
-out_file <- file.path(res_path, "surv_all.RDS")
+workers <- 2
 
-# parameters
-n_sims <- 100
-workers <- 4
+all_results_df <- get_results(study, workers = workers)
 
-params <- expand.grid(scenario = c(1:7),
-                      n = c(500),
-                      censoring = c(TRUE, FALSE),
-                      stringsAsFactors = F)
-
-get_results <- function(scenario, n, censoring) {
-  folder <- file.path(res_path, paste0("scenario_", scenario), n, paste0("censor_", censoring))
-  result_files <- list.files(folder, pattern = "^res_sim_\\d+\\.RDS$", full.names = TRUE)
-  
-  if (length(result_files) == 0) return(NULL)
-  
-  temp <- map(result_files, function(res_file) {
-    sim_res <- readRDS(res_file)
-    sim_num <- as.integer(gsub(".*res_sim_(\\d+)\\.RDS$", "\\1", res_file))
-    list(run = sim_num, result = sim_res)
-  })
-  gc()
-  tibble(
-    scenario = scenario,
-    n = n,
-    censoring = censoring,
-    results = list(temp)
-  )
-}
-
-plan(multisession, workers = workers)
-all_results <- future_pmap(params, get_results)
-plan(sequential)
-
-# remove nulls
-all_results_df <- bind_rows(all_results[!sapply(all_results, is.null)])
-
-# Save results
-saveRDS(all_results_df, out_file)
+saveRDS(all_results_df, file.path(study$res_path, "surv_all.RDS"))
 print("Collection complete!")

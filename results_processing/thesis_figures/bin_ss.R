@@ -1,62 +1,29 @@
 ##########
-# title: figures for the thesis chapter - bin outcomes
+# title: figures for the thesis chapter - binary outcomes, sample size
 ##########
+# Labels, palette, summaries and figure sizing come from R/figures.R. This
+# script carries only the paths and this study's filters.
 
-# libraries
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(paletteer)
 library(here)
 library(patchwork)
 library(purrr)
-library(ggridges)
 library(scales)
+source(here("R", "figures.R"))
+
 # paths
 path <- here()
 res_path <- file.path(dirname(path), "results", "binary")
 fig_path <- file.path(dirname(path), "results", "thesis_figures", "bin_ss")
-
+dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
 metrics <- readRDS(file.path(res_path, "bin_metrics.RDS"))
 
-# tidy up
 metrics <- metrics %>%
   filter(scenario %in% c(1, 3, 8, 9)) %>%
-  mutate(scenario = factor(
-    case_when(scenario == 1 ~ "Null",
-              scenario == 3 ~ "Simple",
-              scenario == 8 ~ "Complex",
-              scenario == 9 ~ "Non-linear"), levels = c("Null", "Simple", "Complex", "Non-linear")),
-    n = factor(n, levels = c(100, 250, 500, 1000)),
-    model = factor(
-      recode(model,
-             causal_forest = "Causal forest",
-             dr_random_forest = "DR-RandomForest",
-             dr_oracle = "DR-oracle",
-             dr_semi_oracle = "DR-semi-oracle",
-             dr_superlearner = "DR-SuperLearner"),
-      levels = c("Causal forest", "DR-RandomForest", "DR-oracle", "DR-semi-oracle", "DR-SuperLearner")))
+  apply_labels(SS_SCENARIO_LABELS) %>%
+  mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
 
-
-# per scenario summaries
-metrics_summary <- metrics %>%
-  group_by(scenario, n, model) %>%
-  summarise(
-    mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T)/sqrt(n()),
-    mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T)/sqrt(n()),
-    mean_corr = mean(corr, na.rm = T),
-    mcse_corr = sd(corr, na.rm = T)/sqrt(n()),
-    mean_BLP = mean(BLP_p, na.rm = T),
-    mcse_BLP = sd(BLP_p, na.rm = T)/sqrt(n()),
-    mean_indep_cate = mean(indep_cate, na.rm = T),
-    mcse_indep_cate = sd(indep_cate, na.rm = T)/sqrt(n()),
-    mean_indep_po = mean(indep_po, na.rm = T),
-    mcse_indep_po = sd(indep_po, na.rm = T)/sqrt(n()),
-    .groups = "drop"
-  )
+metrics_summary <- summarise_metrics(metrics, c("scenario", "n", "model"))
 
 # bias plots
 bias_plot <- metrics %>%

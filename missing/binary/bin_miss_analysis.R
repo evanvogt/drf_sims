@@ -12,6 +12,7 @@ path <- here()
 # functions
 source(here("missing/binary/bin_miss_dgms.R"))
 source(here("missing/binary/bin_miss_models.R"))
+source(here("missing/binary/bin_miss_config.R"))
 source(here("utils.R"))
 
 # simulation parameters
@@ -20,28 +21,10 @@ i <- as.numeric(commandArgs(trailingOnly = T))
 n_folds <- 10
 workers <- 2
 
-# NB: removed different types of missingness - not so interesting
-params <- expand.grid(
-  scenario = c(1, 2, 4, 5),
-  n = c(500),
-  type = c("both"),
-  prop = c(0.3),
-  mechanism = c("MAR", "MNAR", "MNAR-Y"), # only for 1 scenario?
-  method = c("complete_cases", "mean_imputation", "missforest", "regression",
-             "missing_indicator", "IPW", "multiple_imputation", "none", "complete_data"),
-  run = c(1:100),
-  stringsAsFactors = F)
-
-# redundant scenarios
-params <- params %>%
-  filter(!(scenario == 1 & mechanism == "MNAR-Y"))
-
-# add in - get the complete datascenarios only:
-params <- params %>%
-  filter(method == "complete_data")
-
-# select parameters for this run
-param <- params[i,]
+# The grid lives in bin_miss_config.R and is NEVER filtered here - see the note
+# in missing/continuous/cts_miss_analysis.R. To run one arm:
+#   idx <- grid_indices(study, method = "complete_data")
+param <- study$grid[i, ]
 print(param)
 
 scenario <- param$scenario

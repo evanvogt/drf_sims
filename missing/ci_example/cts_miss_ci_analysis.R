@@ -12,6 +12,7 @@ path <- here()
 source(here("missing", "ci_example", "cts_miss_ci_dgms.R"))
 source(here("missing", "ci_example", "cts_miss_ci_models.R"))
 source(here("utils.R"))
+source(here("missing/ci_example/cts_miss_ci_config.R"))
 
 # simulation parameters
 i <- as.numeric(commandArgs(trailingOnly = T))
@@ -22,22 +23,9 @@ CI_boot <- 200
 CI_sf <- 0.5
 alpha <- 0.05
 
-params <- expand.grid(
-  scenario = c(1:5),
-  n = c(500),
-  type = c("both"),
-  prop = c(0.3),
-  mechanism = c("MAR"),
-  method = c("multiple_imputation"),
-  run = c(1:100),
-  stringsAsFactors = F
-)
-
-params <- params %>%
-  arrange(scenario, run)
-
-# select parameters for this run
-param <- params[i,]
+# The parameter grid lives in the study config, so this script and the
+# check/collect scripts cannot disagree about what index i means.
+param <- study$grid[i, ]
 print(param)
 
 scenario <- param$scenario

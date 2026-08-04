@@ -16,6 +16,7 @@ path <- here()
 source(here("competing_risk", "surv_dgm.R"))
 source(here("competing_risk", "surv_models.R"))
 source(here("utils.R"))
+source(here("competing_risk/surv_config.R"))
 
 # Simulation parameters
 i <- as.numeric(commandArgs(trailingOnly = T))
@@ -24,16 +25,9 @@ workers <- 2
 
 horizon <- 28
 
-params <- expand.grid(
-  scenario = 1:7,
-  censoring = c(TRUE, FALSE),
-  n = c(500),
-  run = 1:100,
-  stringsAsFactors = FALSE
-)
-
-# Select parameters for current run
-param <- params[i,]
+# The parameter grid lives in the study config, so this script and the
+# check/collect scripts cannot disagree about what index i means.
+param <- study$grid[i, ]
 print(param)
 
 scenario <- param$scenario

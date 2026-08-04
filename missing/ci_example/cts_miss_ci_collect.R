@@ -1,61 +1,16 @@
 ##########
-# Title: collect up the results - missing cts CIs
+# title: collect up results - MI confidence-interval example
 ##########
+# The grid and the results path come from the study config. Produces one row per
+# parameter combination with a list-column of per-run results, which is the shape
+# the metrics script unnests.
 
-# libraries
 library(here)
-library(dplyr)
-library(future)
-library(furrr)
+source(here("missing/ci_example/cts_miss_ci_config.R"))
 
-# path
-res_path <- file.path(dirname(here()), "results", "missing", "ci_example")
-out_file <- file.path(res_path, "cts_miss_ci_all.RDS")
-
-# parameters
-n_sims <- 100
 workers <- 2
 
-params <- expand.grid(
-  scenario = c(1:5),
-  n = c(500),
-  type = c("both"),
-  prop = c(0.3),
-  mechanism = c("MAR"),
-  method = c("multiple_imputation"),
-  stringsAsFactors = F
-)
+all_results_df <- get_results(study, workers = workers)
 
-get_results <- function(scenario, n, type, prop, mechanism, method) {
-  folder <- file.path(res_path, paste0("scenario_", scenario), n, type, prop, mechanism, method)
-  result_files <- list.files(folder, pattern = "^res_sim_\\d+\\.RDS$", full.names = TRUE)
-  
-  if (length(result_files) == 0) return(NULL)
-  
-  temp <- map(result_files, function(res_file) {
-    sim_res <- readRDS(res_file)
-    sim_num <- as.integer(gsub(".*res_sim_(\\d+)\\.RDS$", "\\1", res_file))
-    list(run = sim_num, result = sim_res)
-  })
-  gc()
-  tibble(
-    scenario = scenario,
-    n = n,
-    type = type,
-    prop = prop,
-    mechanism = mechanism,
-    method = method,
-    results = list(temp)
-  )
-}
-
-plan(multisession, workers = workers)
-all_results <- future_pmap(params, get_results)
-plan(sequential)
-
-# remove nulls
-all_results_df <- bind_rows(all_results[!sapply(all_results, is.null)])
-
-# save results
-saveRDS(all_results_df, out_file)
-print("Collection complete")
+saveRDS(all_results_df, file.path(study$res_path, "cts_miss_ci_all.RDS"))
+print("Collection complete!")

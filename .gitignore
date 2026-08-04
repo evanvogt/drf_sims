@@ -11,9 +11,13 @@ ssh*
 # ignore compiled rmd files
 *.html
 
-# ignore random test bits
-*test*.*
-*test*/
+# ignore random test bits (scoped to scratch/ - the old repo-wide *test*.* rule
+# silently excluded crossfitting/cf_testing.R, the verification harness that
+# crossfitting/README.md tells you to run before submitting any job)
+scratch/*test*
+
+# regression harness baselines - machine-local, re-captured not shared
+.regression_baseline/
 
 # old things that will not be used/updated
 *deprecated*/
