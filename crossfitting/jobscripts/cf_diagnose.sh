@@ -4,9 +4,9 @@
 # Single job, under a minute. Read the "=== reading ===" block at the end of
 # logs_diagnose/ for the verdict.
 #
-# ncpus=8 matches cf_profile.sh so the contention is comparable.
+# ncpus=8:ompthreads=8 matches cf_profile.sh so the contention is comparable.
 #PBS -l walltime=00:20:00
-#PBS -l select=1:ncpus=8:mem=32gb
+#PBS -l select=1:ncpus=8:ompthreads=8:mem=32gb
 #PBS -N cf_diagnose
 #PBS -o logs_diagnose/
 #PBS -e logs_diagnose/

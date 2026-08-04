@@ -1,5 +1,5 @@
 #PBS -l walltime=01:00:00
-#PBS -l select=1:ncpus=4:ompthreads=1:mem=8gb
+#PBS -l select=1:ncpus=4:ompthreads=4:mem=8gb
 #PBS -N cf_collect
 
 

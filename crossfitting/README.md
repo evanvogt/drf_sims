@@ -196,3 +196,12 @@ in the first second with a clear message if it is not.
   the `multisession` workers spawn. Elsewhere in the repo neither is set, which
   means `ompthreads=2` alongside `workers <- 2` lets each worker claim 2 threads
   against 2 allocated cores. The profiling sweep measures whether that matters.
+- **The select lines now request `ompthreads=ncpus`, like every other study's
+  jobscripts.** PBS Pro sets `NCPUS` from `ompthreads`, and
+  `parallelly::availableCores()` reads `NCPUS` — so `ompthreads` below `ncpus`
+  understates the cores available to `plan(multisession, workers = ...)` and can
+  make it fail outright once `workers` exceeds `ompthreads`. Per-worker thread
+  control is unaffected: it's still done in R, via the `Sys.setenv(OMP_NUM_THREADS
+  = grf_threads)` call before `plan()` and via grf's `num.threads`, both of which
+  run before or independently of whatever PBS put in the environment.
+  `cf_profile_summary.R` writes `ompthreads=ncpus` into `cf_1.sh` accordingly.

@@ -182,7 +182,7 @@ cat("  this overcounts shared library pages, so it is an upper bound - the safe\
 cat("  direction for a mem= request. cross-check once against qstat -fx on the\n")
 cat("  first real subjobs; PBS's cgroup figure should sit below it.\n")
 cat(sprintf("\n#PBS -l walltime=%s\n", walltime_str))
-cat(sprintf("#PBS -l select=1:ncpus=%d:ompthreads=%d:mem=%dgb\n", ncpus, best$grf_threads, mem_gb))
+cat(sprintf("#PBS -l select=1:ncpus=%d:ompthreads=%d:mem=%dgb\n", ncpus, ncpus, mem_gb))
 cat(sprintf("\nand in cf_analysis.R: workers <- %d ; grf_threads <- %d\n\n",
             best$workers, best$grf_threads))
 
@@ -193,7 +193,7 @@ if (file.exists(jobscript)) {
                sprintf("#PBS -l walltime=%s", walltime_str), lines)
   lines <- sub("^#PBS -l select=.*$",
                sprintf("#PBS -l select=1:ncpus=%d:ompthreads=%d:mem=%dgb",
-                       ncpus, best$grf_threads, mem_gb), lines)
+                       ncpus, ncpus, mem_gb), lines)
   writeLines(lines, jobscript)
   cat(sprintf("directives written into %s\n", jobscript))
   cat("check that workers / grf_threads in cf_analysis.R match before submitting.\n")

@@ -1,13 +1,15 @@
 #!/bin/bash
 # Deliberately over-provisioned so nothing fails for the wrong reason. ncpus=8
 # covers the largest configuration in the sweep (workers=4 x grf_threads=2).
-# ompthreads is left off the select line: cf_profile.R sets OMP_NUM_THREADS from
-# the sweep grid before spawning its multisession workers.
+# ompthreads=8 matches ncpus so parallelly::availableCores() sees all 8 and
+# plan(multisession, workers = 4) doesn't fail; cf_profile.R still sets
+# OMP_NUM_THREADS from the sweep grid before spawning its multisession workers,
+# so per-worker thread counts are controlled there, not by ompthreads.
 #
 # Memory and CPU are measured inside R by syrup, so there is no background
 # qstat sampler here and nothing depends on the scheduler.
 #PBS -l walltime=08:00:00
-#PBS -l select=1:ncpus=8:mem=32gb
+#PBS -l select=1:ncpus=8:ompthreads=8:mem=32gb
 #PBS -J 1-36
 #PBS -N cf_profile
 #PBS -o logs_profile/
