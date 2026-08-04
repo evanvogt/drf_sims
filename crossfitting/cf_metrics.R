@@ -1,0 +1,87 @@
+##########
+# title: metric definitions for the crossfitting comparison
+##########
+# Definitions only - no side effects. cf_collect.R sources this and applies it
+# while streaming the per-run files, so the metrics tibble is built in one pass
+# and the large nested intermediate the other studies write is never materialised.
+#
+# Note on sign: bias is (estimate - truth) here, the usual convention. cts_metrics.R:37
+# uses mean(true - est) for bias while its ate_bias at line 43 uses the opposite
+# sign, so these numbers are not sign-comparable with the main continuous study.
+
+require(dplyr)
+require(tibble)
+
+#' Point metrics for one set of CATE estimates against the known truth
+#'
+#' @param est estimated CATEs
+#' @param true true CATEs
+#' @param scenario scenario index; scenario 1 has no heterogeneity so the
+#'   correlation metrics are undefined and forced to 0, as in cts_metrics.R:41
+cate_metrics <- function(est, true, scenario) {
+  tibble(
+    bias = mean(est - true, na.rm = TRUE),
+    ate_bias = mean(est, na.rm = TRUE) - mean(true, na.rm = TRUE),
+    mse = mean((est - true)^2, na.rm = TRUE),
+    rmse = sqrt(mean((est - true)^2, na.rm = TRUE)),
+    mae = mean(abs(est - true), na.rm = TRUE),
+    corr = if (scenario != 1) cor(true, est, use = "pairwise.complete.obs") else 0,
+    spearman = if (scenario != 1) {
+      cor(true, est, method = "spearman", use = "pairwise.complete.obs")
+    } else 0,
+    sign_acc = mean(sign(est) == sign(true), na.rm = TRUE),
+    n_na = sum(is.na(est))
+  )
+}
+
+#' Metrics for every arm of one replicate, on both the training and test samples
+#'
+#' @param sim_res one per-run object as written by cf_analysis.R
+#' @param scenario scenario index
+#' @return tibble, one row per (arm, set)
+run_metrics <- function(sim_res, scenario) {
+  bind_rows(lapply(names(sim_res$arms), function(nm) {
+    a <- sim_res$arms[[nm]]
+
+    train <- cate_metrics(a$tau, sim_res$truth_tau, scenario)
+    test <- cate_metrics(a$tau_test, sim_res$truth_test_tau, scenario)
+
+    bind_rows(mutate(train, set = "train"), mutate(test, set = "test")) %>%
+      mutate(
+        scenario = scenario,
+        run = sim_res$run,
+        arm = nm,
+        family = a$family,
+        variant = a$variant,
+        time_nuisance = a$time_nuisance,
+        time_stage2 = a$time_stage2,
+        time_total = a$time_nuisance + a$time_stage2,
+        .before = 1
+      )
+  }))
+}
+
+# display order and labels, used by cf_results.R
+variant_levels <- c("dcf", "scf_scf", "scf_scf_new", "scf_full", "scf_oob",
+                    "scf_oob_t", "oob_oob", "naive",
+                    "cf_dcf", "cf_scf", "cf_full_oob", "cf_default", "cf_naive")
+
+variant_labels <- c(
+  dcf = "Double CF",
+  scf_scf = "CF + CF (same folds)",
+  scf_scf_new = "CF + CF (fresh split)",
+  scf_full = "CF + whole (in-sample)",
+  scf_oob = "CF + whole (OOB)",
+  scf_oob_t = "CF + whole (OOB, T-learner)",
+  oob_oob = "OOB + OOB",
+  naive = "No crossfitting",
+  cf_dcf = "Double CF nuisances",
+  cf_scf = "CF nuisances, fold-wise",
+  cf_full_oob = "CF nuisances, whole (OOB)",
+  cf_default = "grf internal nuisances",
+  cf_naive = "CF nuisances, whole (in-sample)"
+)
+
+family_labels <- c(dr_rf = "DR-learner (RF)",
+                   dr_sl = "DR-learner (SuperLearner)",
+                   causal_forest = "Causal forest")
