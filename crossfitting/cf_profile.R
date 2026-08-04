@@ -72,7 +72,8 @@ total <- system.time({
     X_test = gen$X_test,
     n_folds = n_folds,
     sl_lib = sl_lib,
-    num.threads = grf_threads
+    num.threads = grf_threads,
+    truth_test = gen$truth_test_tau
   )
 })
 

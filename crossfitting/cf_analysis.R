@@ -61,7 +61,8 @@ res <- run_all_crossfit_variants(
   X_test = gen$X_test,
   n_folds = n_folds,
   sl_lib = sl_lib,
-  num.threads = grf_threads
+  num.threads = grf_threads,
+  truth_test = gen$truth_test_tau   # scoring only, never seen by a model
 )
 
 results <- list(

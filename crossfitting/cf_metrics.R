@@ -46,6 +46,9 @@ run_metrics <- function(sim_res, scenario) {
     train <- cate_metrics(a$tau, sim_res$truth_tau, scenario)
     test <- cate_metrics(a$tau_test, sim_res$truth_test_tau, scenario)
 
+    # `%||%` is only base R from 4.4.0 and the cluster runs 4.3.2
+    single <- if (is.null(a$mse_test_single)) NA_real_ else a$mse_test_single
+
     bind_rows(mutate(train, set = "train"), mutate(test, set = "test")) %>%
       mutate(
         scenario = scenario,
@@ -56,6 +59,10 @@ run_metrics <- function(sim_res, scenario) {
         time_nuisance = a$time_nuisance,
         time_stage2 = a$time_stage2,
         time_total = a$time_nuisance + a$time_stage2,
+        # like-for-like test score: each fold model scored separately then
+        # averaged, rather than the V-model ensemble that mse scores. equals mse
+        # on the test row for whole-sample arms. see arm() in cf_models.R
+        mse_test_single = single,
         .before = 1
       )
   }))

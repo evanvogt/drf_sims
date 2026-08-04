@@ -22,9 +22,31 @@ All variants within a replicate share one fold assignment, so differences are
 attributable to the procedure rather than to the fold draw.
 
 Every arm is scored twice: against the known truth on the **training** sample, and
-on an independent **test** sample of 2000 drawn from the same DGP. The test set is
-the only like-for-like comparison of the fitted final models, and the train-to-test
-gap is the overfitting measure for the whole-sample arms.
+on an independent **test** sample of 2000 drawn from the same DGP.
+
+**There is no optimism to detect, and the train-to-test gap is not an overfitting
+diagnostic here.** Optimism is what you see when a model is scored against the
+labels it was fit to. Every arm here is scored against the *known true CATE*, while
+the label the stage-2 model saw is a noisy pseudo-outcome. An in-sample prediction
+is a weighted average of neighbouring pseudo-outcomes that includes the unit's own,
+so it is pulled towards that unit's noise and therefore *away* from the truth. In
+this setting in-sample predictions score **worse** against truth, not better — which
+is what `cf_test.R` observes, and it is why `naive` is expected to lose rather than
+to look deceptively good.
+
+What the two scoring sets are actually for: the **training** score is the estimand
+the study cares about (CATEs for the units you have), and the **test** score
+measures how the fitted surface generalises to fresh covariate draws, which is the
+only like-for-like comparison of the fitted final models across procedures.
+
+**Two test scores, because crossfit and whole-sample arms predict differently.**
+A crossfit arm ends up with `V` fitted models and averages their test predictions —
+that is the estimator you would actually deploy, so `mse` uses it — but the
+averaging is a variance-reducing ensemble stacked on top of the honesty effect
+being studied. `mse_test_single` scores each fold model on the test set separately
+and averages the `V` scores, which is the like-for-like reading against a
+whole-sample arm's single model. For whole-sample arms the two coincide, so any
+gap between them is the ensembling effect alone (`cf_ensemble_effect.png`).
 
 ### DR-learner, random forest (8 arms)
 

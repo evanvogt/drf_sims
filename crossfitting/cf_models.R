@@ -316,7 +316,10 @@ stage2_crossfit_rf <- function(X, po, X_test, fold_indices, num.threads = NULL) 
   tau <- rep(NA_real_, nrow(X))
   for (fit in fits) tau[fold_indices == fit$fold] <- fit$tau
 
-  list(tau = tau, tau_test = rowMeans(sapply(fits, `[[`, "tau_test")))
+  # tau_test_folds is kept in memory only, for the single-model test score in
+  # arm() - it is never saved, being n_test x V per crossfit arm
+  tau_test_folds <- sapply(fits, `[[`, "tau_test")
+  list(tau = tau, tau_test = rowMeans(tau_test_folds), tau_test_folds = tau_test_folds)
 }
 
 # whole-sample stage 2. one forest, three views of it: in-sample, out-of-bag and
@@ -352,7 +355,8 @@ stage2_crossfit_sl <- function(X, po, X_test, fold_indices, sl_lib) {
   tau <- rep(NA_real_, nrow(X))
   for (fit in fits) tau[fold_indices == fit$fold] <- fit$tau
 
-  list(tau = tau, tau_test = rowMeans(sapply(fits, `[[`, "tau_test")))
+  tau_test_folds <- sapply(fits, `[[`, "tau_test")
+  list(tau = tau, tau_test = rowMeans(tau_test_folds), tau_test_folds = tau_test_folds)
 }
 
 stage2_whole_sl <- function(X, po, X_test, sl_lib) {
@@ -385,7 +389,8 @@ cf_foldwise <- function(X, Y, W, X_test, Y.hat, W.hat, fold_indices, num.threads
   tau <- rep(NA_real_, nrow(X))
   for (fit in fits) tau[fold_indices == fit$fold] <- fit$tau
 
-  list(tau = tau, tau_test = rowMeans(sapply(fits, `[[`, "tau_test")))
+  tau_test_folds <- sapply(fits, `[[`, "tau_test")
+  list(tau = tau, tau_test = rowMeans(tau_test_folds), tau_test_folds = tau_test_folds)
 }
 
 # whole-sample causal forest, three views as in stage2_whole_rf. Y.hat / W.hat
@@ -399,10 +404,29 @@ cf_whole <- function(X, Y, W, X_test, Y.hat = NULL, W.hat = NULL, num.threads = 
 
 # ---- orchestrator -----------------------------------------------------------
 
-# assemble one arm's record
-arm <- function(family, variant, tau, tau_test, time_nuisance, time_stage2) {
+# assemble one arm's record.
+#
+# mse_test_single exists because the crossfit and whole-sample arms do not predict
+# on the test set in the same way. A crossfit arm ends up with V fitted models and
+# averages their test predictions - that is the estimator you would actually deploy,
+# so tau_test keeps it - but the averaging is a variance-reducing ensemble on top of
+# the honesty effect being studied. mse_test_single scores each fold model on the
+# test set separately and averages the V scores, which is the like-for-like reading
+# against a whole-sample arm's single model. For whole-sample arms the two coincide.
+arm <- function(family, variant, tau, tau_test, time_nuisance, time_stage2,
+                tau_test_folds = NULL, truth_test = NULL) {
+
+  mse_test_single <- if (is.null(truth_test)) {
+    NA_real_
+  } else if (is.null(tau_test_folds)) {
+    mean((tau_test - truth_test)^2)
+  } else {
+    mean(apply(tau_test_folds, 2, function(p) mean((p - truth_test)^2)))
+  }
+
   list(family = family, variant = variant, tau = tau, tau_test = tau_test,
-       time_nuisance = time_nuisance, time_stage2 = time_stage2)
+       time_nuisance = time_nuisance, time_stage2 = time_stage2,
+       mse_test_single = mse_test_single)
 }
 
 #' Run every crossfitting variant on one simulated dataset
@@ -412,9 +436,12 @@ arm <- function(family, variant, tau, tau_test, time_nuisance, time_stage2) {
 #' @param n_folds number of folds V
 #' @param sl_lib SuperLearner library; NULL skips the SuperLearner family
 #' @param num.threads grf thread count; NULL is grf's default (all cores)
+#' @param truth_test true CATEs on the test sample. Used for scoring only - it is
+#'   never seen by any model - and only to compute the per-arm mse_test_single.
+#'   NULL leaves that field NA.
 #' @return list with $arms (named list of arm records), $fold_indices, $fold_indices_b
 run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
-                                      num.threads = NULL) {
+                                      num.threads = NULL, truth_test = NULL) {
 
   X <- as.matrix(data[, -c(1:2)])
   Y <- data$Y
@@ -449,32 +476,35 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   cat("DR-RF variants...\n")
 
   s <- timed(stage2_crossfit_rf(X, nz_double$value$po, X_test, fold_indices, num.threads))
-  arms$dcf <- arm("dr_rf", "dcf", s$value$tau, s$value$tau_test, nz_double$time, s$time)
+  arms$dcf <- arm("dr_rf", "dcf", s$value$tau, s$value$tau_test, nz_double$time, s$time,
+                  s$value$tau_test_folds, truth_test)
 
   s <- timed(stage2_crossfit_rf(X, nz_single$value$po, X_test, fold_indices, num.threads))
-  arms$scf_scf <- arm("dr_rf", "scf_scf", s$value$tau, s$value$tau_test, nz_single$time, s$time)
+  arms$scf_scf <- arm("dr_rf", "scf_scf", s$value$tau, s$value$tau_test, nz_single$time, s$time,
+                      s$value$tau_test_folds, truth_test)
 
   s <- timed(stage2_crossfit_rf(X, nz_single$value$po, X_test, fold_indices_b, num.threads))
-  arms$scf_scf_new <- arm("dr_rf", "scf_scf_new", s$value$tau, s$value$tau_test, nz_single$time, s$time)
+  arms$scf_scf_new <- arm("dr_rf", "scf_scf_new", s$value$tau, s$value$tau_test,
+                          nz_single$time, s$time, s$value$tau_test_folds, truth_test)
 
   # scf_full and scf_oob are two views of one whole-sample forest
   s <- timed(stage2_whole_rf(X, nz_single$value$po, X_test, num.threads))
   arms$scf_full <- arm("dr_rf", "scf_full", s$value$tau_insample, s$value$tau_test,
-                       nz_single$time, s$time)
+                       nz_single$time, s$time, truth_test = truth_test)
   arms$scf_oob <- arm("dr_rf", "scf_oob", s$value$tau_oob, s$value$tau_test,
-                      nz_single$time, s$time)
+                      nz_single$time, s$time, truth_test = truth_test)
 
   s <- timed(stage2_whole_rf(X, nz_single_t$value$po, X_test, num.threads))
   arms$scf_oob_t <- arm("dr_rf", "scf_oob_t", s$value$tau_oob, s$value$tau_test,
-                        nz_single_t$time, s$time)
+                        nz_single_t$time, s$time, truth_test = truth_test)
 
   s <- timed(stage2_whole_rf(X, nz_oob$value$po, X_test, num.threads))
   arms$oob_oob <- arm("dr_rf", "oob_oob", s$value$tau_oob, s$value$tau_test,
-                      nz_oob$time, s$time)
+                      nz_oob$time, s$time, truth_test = truth_test)
 
   s <- timed(stage2_whole_rf(X, nz_insample$value$po, X_test, num.threads))
   arms$naive <- arm("dr_rf", "naive", s$value$tau_insample, s$value$tau_test,
-                    nz_insample$time, s$time)
+                    nz_insample$time, s$time, truth_test = truth_test)
 
   # -- causal forest ---------------------------------------------------------
   cat("Causal forest variants...\n")
@@ -482,25 +512,25 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   s <- timed(cf_foldwise(X, Y, W, X_test, nz_double$value$Y.hat.cf_matrix,
                          nz_double$value$W.hat_matrix, fold_indices, num.threads))
   arms$cf_dcf <- arm("causal_forest", "cf_dcf", s$value$tau, s$value$tau_test,
-                     nz_double$time, s$time)
+                     nz_double$time, s$time, s$value$tau_test_folds, truth_test)
 
   s <- timed(cf_foldwise(X, Y, W, X_test, nz_single$value$Y.hat.cf,
                          nz_single$value$W.hat, fold_indices, num.threads))
   arms$cf_scf <- arm("causal_forest", "cf_scf", s$value$tau, s$value$tau_test,
-                     nz_single$time, s$time)
+                     nz_single$time, s$time, s$value$tau_test_folds, truth_test)
 
   # cf_full_oob and cf_naive are two views of one whole-sample causal forest
   s <- timed(cf_whole(X, Y, W, X_test, nz_single$value$Y.hat.cf,
                       nz_single$value$W.hat, num.threads))
   arms$cf_full_oob <- arm("causal_forest", "cf_full_oob", s$value$tau_oob, s$value$tau_test,
-                          nz_single$time, s$time)
+                          nz_single$time, s$time, truth_test = truth_test)
   arms$cf_naive <- arm("causal_forest", "cf_naive", s$value$tau_insample, s$value$tau_test,
-                       nz_single$time, s$time)
+                       nz_single$time, s$time, truth_test = truth_test)
 
   # grf's own internally cross-fit OOB nuisances - no separate nuisance stage
   s <- timed(cf_whole(X, Y, W, X_test, num.threads = num.threads))
   arms$cf_default <- arm("causal_forest", "cf_default", s$value$tau_oob, s$value$tau_test,
-                         0, s$time)
+                         0, s$time, truth_test = truth_test)
 
   # -- DR learner, SuperLearner ----------------------------------------------
   # no OOB analogue exists for SuperLearner, so the OOB arms and the T-learner
@@ -519,22 +549,24 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
     cat("DR-SL variants...\n")
 
     s <- timed(stage2_crossfit_sl(X_df, sz_double$value$po, X_test_df, fold_indices, sl_lib))
-    arms$sl_dcf <- arm("dr_sl", "dcf", s$value$tau, s$value$tau_test, sz_double$time, s$time)
+    arms$sl_dcf <- arm("dr_sl", "dcf", s$value$tau, s$value$tau_test, sz_double$time, s$time,
+                       s$value$tau_test_folds, truth_test)
 
     s <- timed(stage2_crossfit_sl(X_df, sz_single$value$po, X_test_df, fold_indices, sl_lib))
-    arms$sl_scf_scf <- arm("dr_sl", "scf_scf", s$value$tau, s$value$tau_test, sz_single$time, s$time)
+    arms$sl_scf_scf <- arm("dr_sl", "scf_scf", s$value$tau, s$value$tau_test,
+                           sz_single$time, s$time, s$value$tau_test_folds, truth_test)
 
     s <- timed(stage2_crossfit_sl(X_df, sz_single$value$po, X_test_df, fold_indices_b, sl_lib))
     arms$sl_scf_scf_new <- arm("dr_sl", "scf_scf_new", s$value$tau, s$value$tau_test,
-                               sz_single$time, s$time)
+                               sz_single$time, s$time, s$value$tau_test_folds, truth_test)
 
     s <- timed(stage2_whole_sl(X_df, sz_single$value$po, X_test_df, sl_lib))
     arms$sl_scf_full <- arm("dr_sl", "scf_full", s$value$tau_insample, s$value$tau_test,
-                            sz_single$time, s$time)
+                            sz_single$time, s$time, truth_test = truth_test)
 
     s <- timed(stage2_whole_sl(X_df, sz_insample$value$po, X_test_df, sl_lib))
     arms$sl_naive <- arm("dr_sl", "naive", s$value$tau_insample, s$value$tau_test,
-                         sz_insample$time, s$time)
+                         sz_insample$time, s$time, truth_test = truth_test)
   }
 
   list(arms = arms, fold_indices = fold_indices, fold_indices_b = fold_indices_b)

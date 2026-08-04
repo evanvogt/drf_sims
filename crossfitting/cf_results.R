@@ -50,6 +50,8 @@ metrics_summary <- metrics %>%
     mcse_corr = sd(corr, na.rm = T) / sqrt(n()),
     mean_sign_acc = mean(sign_acc, na.rm = T),
     mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(n()),
+    mean_mse_single = mean(mse_test_single, na.rm = T),
+    mcse_mse_single = sd(mse_test_single, na.rm = T) / sqrt(n()),
     mean_time = mean(time_total, na.rm = T),
     mean_time_nuisance = mean(time_nuisance, na.rm = T),
     mean_time_stage2 = mean(time_stage2, na.rm = T),
@@ -96,7 +98,12 @@ corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != "Null"),
 ggsave("cf_corr_summary.png", plot = corr_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
-# --- the overfitting gap: test MSE minus train MSE, per run -----------------
+# --- generalisation gap: test MSE minus train MSE, per run ------------------
+# NOT an optimism measure. Every arm is scored against the known true CATE, not
+# against the pseudo-outcomes it was fit to, so there is no optimism to detect -
+# an in-sample prediction is contaminated by the unit's own noisy pseudo-outcome
+# and so scores worse against truth, not better. This plot shows how far each
+# fitted surface degrades on fresh covariate draws.
 gap <- metrics %>%
   select(scenario, family, variant, run, set, mse) %>%
   pivot_wider(names_from = set, values_from = mse) %>%
@@ -110,10 +117,34 @@ gap_plot <- gap %>%
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
-  labs(title = "Optimism: test MSE minus training MSE",
-       subtitle = "A gap above zero means the training-sample estimates are flattering the procedure",
+  labs(title = "Generalisation gap: test MSE minus training MSE",
+       subtitle = "How far each fitted surface degrades on fresh covariate draws",
        y = "Test MSE - training MSE", x = "Crossfitting procedure")
-ggsave("cf_optimism.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("cf_generalisation_gap.png", path = fig_path, width = 21, height = 15, units = "cm")
+
+# --- ensemble vs single model on the test set -------------------------------
+# a crossfit arm deploys V fold models and averages their test predictions, while
+# a whole-sample arm has one model. mean_mse is the ensemble; mean_mse_single
+# scores each fold model separately, which is the like-for-like reading. the two
+# coincide for the whole-sample arms, so any gap is the ensembling effect.
+ensemble_plot <- metrics_summary %>%
+  filter(set == "Test sample") %>%
+  select(scenario, family, variant, mean_mse, mean_mse_single) %>%
+  pivot_longer(c(mean_mse, mean_mse_single),
+               names_to = "scoring", values_to = "mse") %>%
+  mutate(scoring = recode(scoring,
+                          mean_mse = "Averaged fold models (deployed)",
+                          mean_mse_single = "Single fold model (like-for-like)")) %>%
+  ggplot(aes(x = variant, y = mse, colour = scoring)) +
+  geom_point(position = position_dodge(width = 0.5), size = 2) +
+  facet_grid(rows = vars(family), cols = vars(scenario), scales = "free_y") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Test MSE: ensemble of fold models against a single fold model",
+       subtitle = "Identical for whole-sample arms; the gap on crossfit arms is the ensembling effect",
+       y = "Mean test MSE", x = "Crossfitting procedure", colour = "Scoring")
+ggsave("cf_ensemble_effect.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 # --- bias -------------------------------------------------------------------
 bias_plot <- metrics %>%
@@ -181,7 +212,8 @@ ggsave("cf_frontier.png", path = fig_path, width = 21, height = 15, units = "cm"
 # --- headline table ---------------------------------------------------------
 headline <- metrics_summary %>%
   filter(set == "Test sample") %>%
-  select(scenario, family, variant, mean_mse, mcse_mse, mean_corr, mean_time) %>%
+  select(scenario, family, variant, mean_mse, mcse_mse, mean_mse_single,
+         mean_corr, mean_time) %>%
   arrange(family, scenario, mean_mse)
 
 print(headline, n = Inf)
