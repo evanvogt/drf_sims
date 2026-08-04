@@ -3,8 +3,8 @@
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=5gb
 #PBS -J 1-2000%190
 #PBS -N ci_sf_1
-#PBS -o logs_1/
-#PBS -e logs_1/
+#PBS -o logs_cts/
+#PBS -e logs_cts/
 
 module purge
 module add tools/prod

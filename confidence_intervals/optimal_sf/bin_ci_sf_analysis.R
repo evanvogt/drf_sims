@@ -20,7 +20,7 @@ i <- as.numeric(commandArgs(trailingOnly = T))
 
 n_folds <- 10
 CI_boot <- 200
-alpha   <- 0.05
+alpha   <- 0.1
 workers <- 2
 
 # no CI_sf axis — that is what we are finding

@@ -1,0 +1,187 @@
+---
+title: "Binary results - new metrics"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, include=FALSE}
+library(tidyverse)
+library(here)
+
+path <- here()
+
+res_path <- file.path(dirname(path), "results", "binary")
+
+```
+
+```{r functions, inlcude=FALSE}
+summarise_metrics <- function(data, metrics, group_vars = c("scenario", "n", "model")) {
+  
+  # Build the list of summary expressions dynamically
+  summary_exprs <- purrr::map(metrics, \(metric) {
+    list(
+      mean = rlang::expr(mean(!!rlang::sym(metric), na.rm = TRUE)),
+      mcse = rlang::expr(sd(!!rlang::sym(metric), na.rm = TRUE) / sqrt(dplyr::n()))
+    )
+  }) |>
+    purrr::set_names(metrics)
+  
+  # Flatten into a named list: mean_<metric> and mcse_<metric>
+  flat_exprs <- purrr::imap(summary_exprs, \(exprs, metric) {
+    rlang::set_names(
+      list(exprs$mean, exprs$mcse),
+      c(paste0("mean_", metric), paste0("mcse_", metric))
+    )
+  }) |>
+    purrr::list_flatten()
+  
+  data |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
+    dplyr::summarise(!!!flat_exprs, .groups = "drop")
+}
+
+make_metric_plots <- function(
+    data,
+    data_summary,
+    metric,
+    scenario_val,
+    scenario_var    = "scenario",
+    group_var       = "n",
+    colour_var      = "model",
+    hline           = NULL,
+    metric_label    = NULL,
+    group_label     = "Sample size",
+    title_dist      = NULL,
+    title_mean      = NULL
+) {
+  
+  # Fall back to the metric name as the axis label if none provided
+  metric_label <- metric_label %||% metric
+  
+  # Default titles
+  title_dist <- title_dist %||% paste0(metric_label, " distribution, scenario ", scenario_val)
+  title_mean <- title_mean %||% paste0("Mean ", metric_label, ", scenario ", scenario_val)
+  
+  mean_col <- paste0("mean_", metric)
+  mcse_col <- paste0("mcse_", metric)
+  
+  # Filter both datasets to the requested scenario
+  data_filt    <- data         |> dplyr::filter(.data[[scenario_var]] == scenario_val)
+  summary_filt <- data_summary |> dplyr::filter(.data[[scenario_var]] == scenario_val)
+  
+  # --- Distribution plot (boxplot) ---
+  dist_plot <- ggplot2::ggplot(
+    data_filt,
+    ggplot2::aes(
+      x      = .data[[group_var]],
+      y      = .data[[metric]],
+      colour = .data[[colour_var]]
+    )
+  ) +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    paletteer::scale_colour_paletteer_d("rcartocolor::Safe") +
+    ggplot2::theme_minimal() +
+    ggplot2::labs(
+      title = title_dist,
+      y     = metric_label,
+      x     = group_label
+    ) +
+    ggplot2::theme(legend.position = "none")
+  
+  # Optionally add a horizontal reference line
+  if (!is.null(hline)) {
+    dist_plot <- dist_plot +
+      ggplot2::geom_hline(yintercept = hline, linetype = "dashed")
+  }
+  
+  # --- Summary plot (mean + MCSE error bars) ---
+  mean_plot <- ggplot2::ggplot(
+    summary_filt,
+    ggplot2::aes(
+      x      = .data[[group_var]],
+      y      = .data[[mean_col]],
+      colour = .data[[colour_var]]
+    )
+  ) +
+    ggplot2::geom_point(position = ggplot2::position_dodge(width = 0.5), size = 2) +
+    ggplot2::geom_errorbar(
+      ggplot2::aes(
+        ymin = .data[[mean_col]] - .data[[mcse_col]],
+        ymax = .data[[mean_col]] + .data[[mcse_col]]
+      ),
+      position  = ggplot2::position_dodge(width = 0.5),
+      linewidth = 0.3
+    ) +
+    paletteer::scale_colour_paletteer_d("rcartocolor::Safe") +
+    ggplot2::theme_minimal() +
+    ggplot2::labs(
+      title = title_mean,
+      y     = metric_label,
+      x     = group_label
+    ) +
+    ggplot2::theme(legend.position = "none")
+  
+  if (!is.null(hline)) {
+    mean_plot <- mean_plot +
+      ggplot2::geom_hline(yintercept = hline, linetype = "dashed")
+  }
+  
+  list(dist_plot = dist_plot, mean_plot = mean_plot)
+}
+
+
+```
+
+
+```{r data, include=FALSE}
+
+metrics <- readRDS(file.path(res_path, "bin_metrics.RDS"))
+
+# tidy
+metrics <- metrics %>%
+  filter(scenario %in% c(1, 3, 8, 9)) %>%
+  mutate(scenario = factor(
+    case_when(scenario == 1 ~ "Null",
+              scenario == 3 ~ "Simple",
+              scenario == 8 ~ "Complex",
+              scenario == 9 ~ "Non-linear"), levels = c("Null", "Simple", "Complex", "Non-linear")),
+    n = factor(n, levels = c(100, 250, 500, 1000)),
+    model = factor(
+      recode(model,
+             causal_forest = "Causal forest",
+             dr_random_forest = "DR-RandomForest",
+             dr_oracle = "DR-oracle",
+             dr_semi_oracle = "DR-semi-oracle",
+             dr_superlearner = "DR-SuperLearner"),
+      levels = c("Causal forest", "DR-RandomForest", "DR-oracle", "DR-semi-oracle", "DR-SuperLearner")))
+
+# summary metrics
+metrics_summary <- summarise_metrics(
+  data = metrics,
+  metrics = c("bias", "ate_bias", "mse", "rmse", "mae", "corr", "spearman", "sign_acc", "BLP_p", "indep_cate", "indep_po")
+)
+
+```
+
+```{r make_all_plots, include=FALSE}
+all_metric_plots <- c("bias", "ate_bias", "mse", "rmse", "mae", "corr", "spearman", "sign_acc", "BLP_p", "indep_cate", "indep_po") |>
+  purrr::set_names() |>
+  purrr::map(\(m) make_metric_plots(
+    data         = metrics,
+    data_summary = metrics_summary,
+    metric       = m,
+    scenario_val = scen,
+    hline        = 0
+  ))
+
+# Access individual plots like:
+all_metric_plots$bias$dist_plot
+all_metric_plots$mse$mean_plot
+
+```
+

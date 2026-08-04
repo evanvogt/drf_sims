@@ -35,6 +35,10 @@ params <- expand.grid(
 params <- params %>%
   filter(!(scenario == 1 & mechanism == "MNAR-Y"))
 
+# add in - get the complete datascenarios only:
+params <- params %>%
+  filter(method == "complete_data")
+
 # select parameters for this run
 param <- params[i,]
 print(param)

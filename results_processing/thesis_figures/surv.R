@@ -13,6 +13,7 @@ library(purrr)
 library(ggridges)
 library(scales)
 
+
 # paths
 path <- here()
 res_path <- file.path(dirname(path), "results", "competing_risk")
@@ -62,31 +63,83 @@ metrics_summary <- metrics %>%
     .groups = "drop"
   )
 
+# create a cleaner metrics table to save and look at to write results
+metrics_sum_tidy <- metrics_summary %>%
+  mutate(
+    bias_lb = signif(mean_bias - mcse_bias, 4),
+    bias_ub = signif(mean_bias + mcse_bias, 4),
+    mse_lb = signif(mean_mse - mcse_mse, 4),
+    mse_ub = signif(mean_mse + mcse_mse, 4),
+    corr_lb = signif(mean_corr - mcse_corr, 4),
+    corr_ub = signif(mean_corr + mcse_corr, 4),
+    bias = signif(mean_bias, 4),
+    mse = signif(mean_mse, 4),
+    corr = signif(mean_corr, 4)
+  ) %>%
+  mutate(
+    bias_tidy = paste0(bias, " (", bias_lb, ", ", bias_ub, ")"),
+    mse_tidy = paste0(mse, " (", mse_lb, ", ", mse_ub, ")"),
+    corr_tidy = paste0(corr, " (", corr_lb, ", ", corr_ub, ")")
+  ) %>%
+  select(scenario, description, censoring, target, framework, bias, bias_lb, bias_ub, bias_tidy, mse, mse_lb, mse_ub, mse_tidy, corr, corr_lb, corr_ub, corr_tidy)
+write.csv(metrics_sum_tidy, file.path(res_path, "surv_metric_sum_tidy.csv"))
+
 bias_plot <- metrics_summary %>%
+  filter(!(framework == "IPW" & target == "Event 2")) %>%
   #filter(!(framework %in% c("CSF - censoring CEs", "IPW"))) %>%
   ggplot(aes(x = censoring, colour = framework, y = mean_bias, ymin = mean_bias - mcse_bias, ymax = mean_bias + mcse_bias)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
-  facet_grid(cols = vars(description), rows = vars(target)) +
+  facet_grid(cols = vars(scenario), rows = vars(target), scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_minimal() +
   labs(y = "Bias",
-       x = "Scenarios") +
+       x = "Censoring") +
   theme(axis.text.x = element_text(angle = 90))
 ggsave("surv_bias.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 mse_plot <- metrics_summary %>%
-  #filter(framework != "IPW") %>%
+  filter(!(framework == "IPW" & target == "Event 2")) %>%
   #filter(!(framework %in% c("CSF - censoring CEs", "IPW"))) %>%
   ggplot(aes(x = censoring, colour = framework, y = mean_mse, ymin = mean_mse - mcse_mse, ymax = mean_mse + mcse_mse)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
-  facet_grid(cols = vars(description), rows = vars(target), scales = "free_y") +
+  facet_grid(cols = vars(scenario), rows = vars(target), scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_minimal() +
   labs(y = "MSE",
-       x = "Scenarios") +
+       x = "Censoring") +
   theme(axis.text.x = element_text(angle = 90))
 ggsave("surv_mse.png", path = fig_path, width = 21, height = 15, units = "cm")
+
+
+# scratch
+metrics_summary %>%
+  filter(framework == "IPW") %>%
+  #filter(framework %in% c("CSF - censoring CEs", "CSF - subdistribution")) %>%
+  ggplot(aes(x = censoring, colour = framework, y = mean_bias, ymin = mean_bias - mcse_bias, ymax = mean_bias + mcse_bias)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(position = position_dodge(width = 0.5), size = 2) +
+  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
+  facet_grid(cols = vars(scenario), rows = vars(target), scales = "free_y") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(y = "Bias",
+       x = "Censoring") +
+  theme(axis.text.x = element_text(angle = 90))
+
+metrics_summary %>%
+  filter(framework == "IPW") %>%
+  #filter(framework %in% c("CSF - censoring CEs", "CSF - subdistribution")) %>%
+  ggplot(aes(x = censoring, colour = framework, y = mean_mse, ymin = mean_mse - mcse_mse, ymax = mean_mse + mcse_mse)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(position = position_dodge(width = 0.5), size = 2) +
+  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
+  facet_grid(cols = vars(scenario), rows = vars(target), scales = "free_y") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(y = "MSE",
+       x = "Censoring") +
+  theme(axis.text.x = element_text(angle = 90))
