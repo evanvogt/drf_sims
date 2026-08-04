@@ -134,8 +134,9 @@ Three more surfaced along the way:
 - `missing/binary` was a **half-converted fork**: continuous coefficients, a
   continuous power calculation, and truth on the **log-odds** scale while every
   estimator targets a risk difference
-- `binary`'s grid disagreed three ways, so the study silently has **40
-  replicates per cell, not 100**
+- `binary`'s grid was declared three ways and they disagreed. The runs
+  themselves used the intended four-scenario design, so the results are sound;
+  the stale `c(1:10)` in the analysis script was simply out of step
 - `combine_mi()` in `missing/ci_example` read `alpha` as a **free variable** from
   the global environment
 
@@ -147,7 +148,7 @@ Three more surfaced along the way:
 | `missing/ci_example` | unchanged |
 | `crossfitting` | unchanged |
 | `continuous`, `missing/continuous` | re-run for bug F (`dr_superlearner` only) |
-| `binary` | re-run for bug F **and** the grid fix |
+| `binary` | re-run for bug F (`dr_superlearner` only) |
 | `missing/binary` | re-run — the DGM was wrong three ways |
 | `confidence_intervals/binary`, `optimal_sf/bin` | re-run — the DGM was wrong |
 | `competing_risk` | **currently fails to run** — see its README |

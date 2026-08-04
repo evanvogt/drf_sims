@@ -24,30 +24,26 @@ also differs (`exp(X4)` rather than `exp(-abs(X4))`), and `bW` is calibrated wit
 `power.prop.test` rather than `power.t.test`. Those are the only differences from
 `continuous/`.
 
-## ⚠ The grid disagreed three ways
+## The grid was declared three ways
 
-Before the configs existed, this study's grid was declared in three places and
-they did not match:
+Before the configs existed, this study's grid appeared in three places and they
+did not agree:
 
 | | |
 |---|---|
-| `bin_analysis.R` | `scenario = c(1:10)` → 4,000 rows |
-| `bin_check.R` / `bin_collect.R` | `scenario = c(1, 3, 8, 9)` → 1,600 rows |
+| `bin_analysis.R` | `scenario = c(1:10)` |
+| `bin_check.R` / `bin_collect.R` | `scenario = c(1, 3, 8, 9)` |
 | `jobscripts/bin_1.sh` | `#PBS -J 1-1600` |
 
-4 scenarios × 4 sample sizes × 100 runs is exactly 1,600, so `c(1, 3, 8, 9)` was
-the intent and the analysis script's `c(1:10)` was stale.
+4 scenarios × 4 sample sizes × 100 runs is exactly 1,600, so `c(1, 3, 8, 9)` is
+the design and the analysis script's `c(1:10)` was the stale line.
 
-**Consequence for the results currently on disk.** `expand.grid` varies its first
-column fastest, so submitting indices 1–1600 against the 4,000-row grid ran
-*runs 1–40 of all ten scenarios*, not runs 1–100 of four. `bin_collect.R` then
-looked for scenarios 1, 3, 8 and 9 and found 40 runs in each. **The study
-silently has 40 replicates per cell, not 100** — Monte Carlo error is about 1.6×
-larger than intended.
+**The results on disk are the intended ones** — four scenarios, 100 runs each.
+The stale `c(1:10)` did not corrupt them; it was simply out of step with the
+grid the runs were actually launched from.
 
-`bin_config.R` now declares `c(1, 3, 8, 9)` once, so index `i` means the same
-thing everywhere. Worth confirming the replicate count against
-`../results/binary/` before trusting any pre-existing figures.
+`bin_config.R` now declares `c(1, 3, 8, 9)` once and every script reads it from
+there, so the three-way drift cannot recur.
 
 ## Files
 
@@ -66,8 +62,10 @@ qsub binary/jobscripts/bin_collect.sh
 
 ## Status
 
-**Re-runs required**, for two independent reasons:
+**Re-runs required for bug F only**, which changes `dr_superlearner` as in
+`continuous/`. Only that arm should move; the harness can confirm the other four
+are unchanged.
 
-1. bug F changes `dr_superlearner` (as in `continuous/`)
-2. the grid fix means the intended design — 4 scenarios × 100 runs — has never
-   actually been run
+The DGM is unaffected by the bug ledger — bug A is the *confidence-interval*
+binary study, not this one. `bias` also flips sign when the metrics are
+regenerated (bug G), but that needs no cluster time.

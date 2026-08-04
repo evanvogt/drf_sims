@@ -1,8 +1,9 @@
 ##########
 # title: shared low-level helpers
 ##########
-# Sourced by every study. The repo-root utils.R is a shim onto this file so that
-# existing `source(here("utils.R"))` calls keep working unchanged.
+# Sourced by every study, directly. The repo-root utils.R is a shim onto this
+# file, kept only because validation/ sources it by absolute path on the cluster
+# and that folder is outside the restructure.
 
 require(parallel)
 

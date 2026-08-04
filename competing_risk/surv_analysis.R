@@ -15,7 +15,7 @@ path <- here()
 # Functions
 source(here("competing_risk", "surv_dgm.R"))
 source(here("competing_risk", "surv_models.R"))
-source(here("utils.R"))
+source(here("R", "utils.R"))
 source(here("competing_risk/surv_config.R"))
 
 # Simulation parameters

@@ -13,7 +13,7 @@ library(here)
 path <- here()
 
 # functions
-source(here("utils.R"))
+source(here("R", "utils.R"))
 source(here("continuous", "cts_dgms.R"))
 source(here("continuous", "cts_models.R"))
 source(here("continuous/cts_config.R"))

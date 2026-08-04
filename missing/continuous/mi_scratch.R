@@ -4,7 +4,7 @@
 
 path <- here()
 # generate cts scenario data and add the missingness
-source(here("utils.R"))
+source(here("R", "utils.R"))
 source(here("missing/continuous/cts_miss_dgms.R"))
 source(here("missing/continuous/cts_miss_models.R"))
 

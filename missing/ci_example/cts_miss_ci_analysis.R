@@ -11,7 +11,7 @@ path <- here()
 # functions
 source(here("missing", "ci_example", "cts_miss_ci_dgms.R"))
 source(here("missing", "ci_example", "cts_miss_ci_models.R"))
-source(here("utils.R"))
+source(here("R", "utils.R"))
 source(here("missing/ci_example/cts_miss_ci_config.R"))
 
 # simulation parameters

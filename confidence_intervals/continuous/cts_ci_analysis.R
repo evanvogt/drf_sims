@@ -10,7 +10,7 @@ library(dplyr)
 path <- here()
 
 # functions
-source(here("utils.R"))
+source(here("R", "utils.R"))
 source(here("confidence_intervals", "continuous", "cts_ci_dgms.R")) # maybe this can just be the cts folder?
 source(here("confidence_intervals", "continuous", "cts_ci_models.R"))
 source(here("confidence_intervals/continuous/cts_ci_config.R"))

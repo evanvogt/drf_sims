@@ -13,7 +13,7 @@ path <- here()
 source(here("missing/binary/bin_miss_dgms.R"))
 source(here("missing/binary/bin_miss_models.R"))
 source(here("missing/binary/bin_miss_config.R"))
-source(here("utils.R"))
+source(here("R", "utils.R"))
 
 # simulation parameters
 i <- as.numeric(commandArgs(trailingOnly = T))

@@ -15,7 +15,7 @@ path <- here()
 # functions
 source(here("binary", "bin_dgms.R"))
 source(here("binary", "bin_models.R"))
-source(here("utils.R"))
+source(here("R", "utils.R"))
 source(here("binary/bin_config.R"))
 
 # simulation parameters
