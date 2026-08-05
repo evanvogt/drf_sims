@@ -43,6 +43,10 @@ n_folds <- 10L
 n_test <- 2000
 sample_interval <- 1   # seconds between syrup snapshots
 
+# SuperLearner is noisy - keep them all rather than losing everything past the
+# 50th, and stash them in the profile object so they can be inspected later
+options(nwarnings = 500)
+
 prof_params <- expand.grid(
   scenario = c(1, 6),      # fewest / most covariates (7 vs 9 columns)
   run = c(1:3),            # replicate to replicate variability
@@ -99,12 +103,23 @@ plan(sequential)
 # process, so keep only this tree.
 usage <- usage %>%
   filter(pid == parent_pid | ppid == parent_pid) %>%
-  mutate(role = if_else(pid == parent_pid, "parent", "worker"))
+  mutate(role = if_else(pid == parent_pid, "parent", "worker"),
+         # syrup returns rss/vms as bench::bench_bytes so they print as "1.2GB".
+         # that class survives arithmetic, so max(rss)/1024^3 stays a bench_bytes
+         # carrying a nonsense magnitude rather than becoming a number of gb -
+         # coerce here, before anything divides.
+         rss = as.numeric(rss),
+         vms = as.numeric(vms))
 
+# future falls back to sequential when workers == 1 ("if workers == 1, then all
+# processing is done in the current/main R session"), so those cells legitimately
+# have no child process. that fallback is the right baseline for the parallel
+# efficiency ratio - it is what not parallelising actually costs.
 n_procs <- n_distinct(usage$pid)
-if (n_procs != workers + 1) {
-  warning(sprintf("expected %d processes in the tree (1 parent + %d workers) but saw %d",
-                  workers + 1, workers, n_procs))
+expected_procs <- if (workers > 1) workers + 1L else 1L
+if (n_procs != expected_procs) {
+  warning(sprintf("expected %d processes in the tree but saw %d",
+                  expected_procs, n_procs))
 }
 
 # peak memory: the single worst snapshot, summed across the tree. this overcounts
@@ -158,10 +173,12 @@ profile <- list(
   by_snapshot = by_snapshot,
   by_process = by_process,
   n_procs = n_procs,
+  expected_procs = expected_procs,
   peak_rss_gb = peak_rss_gb,
   median_pct_cpu = median_pct_cpu,
   allocated_pct_cpu = allocated_pct_cpu,
   sample_interval = sample_interval,
+  warnings = names(warnings()),
   available_cores = as.integer(parallelly::availableCores()),
   omp_num_threads = Sys.getenv("OMP_NUM_THREADS"),
   r_version = R.version.string,
@@ -171,7 +188,8 @@ profile <- list(
 cat("\n--- profile summary ---\n")
 cat(sprintf("workers=%d grf_threads=%d  elapsed=%.1fs  cpu-seconds=%.1f\n",
             workers, grf_threads, profile$elapsed, profile$cpu_seconds))
-cat(sprintf("processes tracked: %d (expected %d)\n", n_procs, workers + 1))
+cat(sprintf("processes tracked: %d (expected %d%s)\n", n_procs, expected_procs,
+            if (workers == 1) ", future runs sequentially at workers=1" else ""))
 cat(sprintf("peak memory: %.2f gb summed across the tree\n", peak_rss_gb))
 cat(sprintf("cpu while busy: %.0f%% observed against %.0f%% allocated%s\n",
             median_pct_cpu, allocated_pct_cpu,
@@ -182,6 +200,11 @@ cat("\nper process:\n")
 print(as.data.frame(by_process), digits = 3, row.names = FALSE)
 cat("\nslowest arms:\n")
 print(as.data.frame(head(arrange(arm_times, desc(time_total)), 8)), digits = 3, row.names = FALSE)
+
+if (length(profile$warnings) > 0) {
+  cat(sprintf("\n%d distinct warnings, most frequent:\n", length(profile$warnings)))
+  print(head(sort(table(profile$warnings), decreasing = TRUE), 5))
+}
 
 output_dir <- file.path(dirname(path), "results", "crossfitting", "profiling")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)

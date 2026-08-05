@@ -50,7 +50,9 @@ if (nrow(undersized) > 0) {
         row.names = FALSE)
 }
 
-bad_procs <- runs %>% filter(n_procs != workers + 1)
+# future runs sequentially at workers == 1, so those cells have no child process
+bad_procs <- runs %>% mutate(expected = if_else(workers > 1, workers + 1L, 1L)) %>%
+  filter(n_procs != expected)
 if (nrow(bad_procs) > 0) {
   warning("some cells did not track the expected number of processes - ",
           "the memory figures for those may be wrong. indices: ",
@@ -87,14 +89,20 @@ print(as.data.frame(cpu), digits = 3, row.names = FALSE)
 
 # ---- parallel efficiency ----------------------------------------------------
 cat("\n=== parallel efficiency ===\n")
+# the workers == 1 cell is the baseline. if it failed for a thread count, that
+# whole row would subset to numeric(0) and error, so fall back to NA instead
 efficiency <- config %>%
   group_by(grf_threads) %>%
-  mutate(baseline = mean_elapsed[workers == 1],
+  mutate(baseline = if (any(workers == 1)) mean_elapsed[workers == 1][1] else NA_real_,
          speedup = baseline / mean_elapsed,
          efficiency = speedup / workers) %>%
   ungroup() %>%
   select(workers, grf_threads, mean_elapsed, speedup, efficiency) %>%
   arrange(grf_threads, workers)
+if (anyNA(efficiency$speedup)) {
+  warning("no workers == 1 cell for at least one thread count - ",
+          "efficiency is NA there")
+}
 print(as.data.frame(efficiency), digits = 3, row.names = FALSE)
 
 # the array runs throttled at %190, so it is throughput bound: pick the
