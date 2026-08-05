@@ -75,18 +75,18 @@ variant_levels <- c("dcf", "scf_scf", "scf_scf_new", "scf_full", "scf_oob",
 
 variant_labels <- c(
   dcf = "Double CF",
-  scf_scf = "CF + CF (same folds)",
-  scf_scf_new = "CF + CF (fresh split)",
-  scf_full = "CF + whole (in-sample)",
-  scf_oob = "CF + whole (OOB)",
-  scf_oob_t = "CF + whole (OOB, T-learner)",
-  oob_oob = "OOB + OOB",
-  naive = "No crossfitting",
-  cf_dcf = "Double CF nuisances",
-  cf_scf = "CF nuisances, fold-wise",
-  cf_full_oob = "CF nuisances, whole (OOB)",
-  cf_default = "OOB nuisances (grf default)",
-  cf_naive = "CF nuisances, whole (in-sample)"
+  scf_scf = "CF+CF",
+  scf_scf_new = "CF+CF (new)",
+  scf_full = "CF+full",
+  scf_oob = "CF+OOB",
+  scf_oob_t = "CF+OOB (T)",
+  oob_oob = "OOB+OOB",
+  naive = "Naive",
+  cf_dcf = "Double CF nuis.",
+  cf_scf = "CF nuis.",
+  cf_full_oob = "Full+OOB",
+  cf_default = "grf OOB",
+  cf_naive = "Full naive"
 )
 
 family_labels <- c(dr_rf = "DR-learner (RF)",
