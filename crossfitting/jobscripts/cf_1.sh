@@ -1,8 +1,8 @@
 #!/bin/bash
 # PLACEHOLDER resources - run cf_profile.sh then cf_profile_summary.R, which
 # rewrites the two -l lines below from measured timings and memory.
-#PBS -l walltime=04:00:00
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
+#PBS -l walltime=00:30:00
+#PBS -l select=1:ncpus=1:ompthreads=1:mem=2gb
 #PBS -J 1-2000%190
 #PBS -N cf_1
 #PBS -o logs_1/
