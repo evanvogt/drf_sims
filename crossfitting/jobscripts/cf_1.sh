@@ -1,9 +1,9 @@
 #!/bin/bash
-# PLACEHOLDER resources - run cf_profile.sh then cf_profile_summary.R, which
-# rewrites the two -l lines below from measured timings and memory.
+# resources updated after profiling runs, %max chunk updated since only 1 cpu 
+# per run required (limit is 400 and this keeps space to start Rstudio OD)
 #PBS -l walltime=00:30:00
 #PBS -l select=1:ncpus=1:ompthreads=1:mem=2gb
-#PBS -J 1-2000%190
+#PBS -J 1-2000%380
 #PBS -N cf_1
 #PBS -o logs_1/
 #PBS -e logs_1/

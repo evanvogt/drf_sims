@@ -1,9 +1,9 @@
 #!/bin/bash
 # Reruns only the array indices listed in failed_ids.txt by cf_check.R.
 # Set -J to 1-<number of lines in failed_ids.txt> before submitting.
-#PBS -l walltime=04:00:00
+#PBS -l walltime=01:00:00
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
-#PBS -J 1-10
+#PBS -J 1-23
 #PBS -N cf_rerun
 #PBS -o logs_rerun/
 #PBS -e logs_rerun/

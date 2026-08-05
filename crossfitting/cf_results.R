@@ -1,7 +1,7 @@
 ##########
 # title: figures for the crossfitting comparison
 ##########
-
+rm(list = ls())
 # libraries
 library(dplyr)
 library(tidyr)
@@ -218,5 +218,6 @@ headline <- metrics_summary %>%
 
 print(headline, n = Inf)
 saveRDS(headline, file.path(res_path, "cf_headline.RDS"))
+write_csv(headline, file.path(res_path, "cf_headline.csv"))
 
 print("figures written!")
