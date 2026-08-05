@@ -11,6 +11,7 @@ ssh*
 
 # ignore compiled rmd files
 *.html
+*README_files/
 
 # ignore random test bits (scoped to scratch/ - the old repo-wide *test*.* rule
 # silently excluded crossfitting/cf_testing.R, the verification harness that

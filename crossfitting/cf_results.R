@@ -59,6 +59,11 @@ metrics_summary <- metrics %>%
   )
 
 # helper: the house summary plot, points with MCSE error bars
+# facet_wrap (not facet_grid) because variant is family-specific - each family
+# only populates 5-8 of the 13 levels, and facet_grid's free scales only vary
+# per row/column, never per panel, so it would still show every panel all 13
+# categories. facet_wrap frees per panel, dropping the ones absent from that
+# family's arms.
 summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
   df %>%
     mutate(est = .data[[mean_col]],
@@ -68,7 +73,7 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
     geom_hline(yintercept = hline, linetype = "dashed") +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
-    facet_grid(rows = vars(family), cols = vars(scenario), scales = "free_y") +
+    facet_wrap(vars(family, scenario), nrow = n_distinct(df$family), scales = "free") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -79,7 +84,7 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
 mse_plot <- metrics %>%
   ggplot(aes(x = variant, y = mse, colour = set)) +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_grid(rows = vars(family), cols = vars(scenario), scales = "free_y") +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -113,7 +118,7 @@ gap_plot <- gap %>%
   ggplot(aes(x = variant, y = gap, colour = family)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_grid(rows = vars(family), cols = vars(scenario), scales = "free") +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(gap$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
@@ -127,17 +132,19 @@ ggsave("cf_generalisation_gap.png", path = fig_path, width = 21, height = 15, un
 # a whole-sample arm has one model. mean_mse is the ensemble; mean_mse_single
 # scores each fold model separately, which is the like-for-like reading. the two
 # coincide for the whole-sample arms, so any gap is the ensembling effect.
-ensemble_plot <- metrics_summary %>%
+ensemble_df <- metrics_summary %>%
   filter(set == "Test sample") %>%
   select(scenario, family, variant, mean_mse, mean_mse_single) %>%
   pivot_longer(c(mean_mse, mean_mse_single),
                names_to = "scoring", values_to = "mse") %>%
   mutate(scoring = recode(scoring,
                           mean_mse = "Averaged fold models (deployed)",
-                          mean_mse_single = "Single fold model (like-for-like)")) %>%
+                          mean_mse_single = "Single fold model (like-for-like)"))
+
+ensemble_plot <- ensemble_df %>%
   ggplot(aes(x = variant, y = mse, colour = scoring)) +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
-  facet_grid(rows = vars(family), cols = vars(scenario), scales = "free_y") +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(ensemble_df$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -151,7 +158,7 @@ bias_plot <- metrics %>%
   ggplot(aes(x = variant, y = bias, colour = set)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_grid(rows = vars(family), cols = vars(scenario), scales = "free_y") +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -161,11 +168,14 @@ bias_plot <- metrics %>%
 ggsave("cf_bias_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 # --- correlation with the truth --------------------------------------------
-corr_plot <- metrics %>%
-  filter(scenario != "Null") %>%
+corr_df <- filter(metrics, scenario != "Null")
+
+corr_plot <- corr_df %>%
   ggplot(aes(x = variant, y = corr, colour = set)) +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_grid(rows = vars(family), cols = vars(scenario)) +
+  # free_x only: correlation is already on a bounded, comparable -1..1 scale,
+  # so y stays shared - only the sparse variant axis needs freeing per panel
+  facet_wrap(vars(family, scenario), nrow = n_distinct(corr_df$family), scales = "free_x") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
@@ -175,17 +185,19 @@ ggsave("cf_corr_all.png", path = fig_path, width = 21, height = 15, units = "cm"
 
 # --- cost -------------------------------------------------------------------
 # what the extra fold pairs actually buy, in seconds
-time_plot <- metrics_summary %>%
+time_df <- metrics_summary %>%
   filter(set == "Test sample") %>%
   select(scenario, family, variant, mean_time_nuisance, mean_time_stage2) %>%
   pivot_longer(c(mean_time_nuisance, mean_time_stage2),
                names_to = "stage", values_to = "seconds") %>%
   mutate(stage = recode(stage,
                         mean_time_nuisance = "Stage 1 (nuisances)",
-                        mean_time_stage2 = "Stage 2 (final model)")) %>%
+                        mean_time_stage2 = "Stage 2 (final model)"))
+
+time_plot <- time_df %>%
   ggplot(aes(x = variant, y = seconds, fill = stage)) +
   geom_col() +
-  facet_grid(rows = vars(family), cols = vars(scenario), scales = "free_y") +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(time_df$family), scales = "free") +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +

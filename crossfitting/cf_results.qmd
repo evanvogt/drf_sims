@@ -1,0 +1,379 @@
+---
+title: "Crossfitting comparison: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(patchwork)
+library(purrr)
+library(knitr)
+```
+
+## Does double crossfitting earn its cost?
+
+Everywhere else in `drf_sims`, two-stage estimators fit nuisances over all
+`C(V,2)` fold *pairs*: `collate_predictions` (`R/utils.R`) assembles an
+`n x V` pseudo-outcome matrix whose column `k` is untouched by fold `k`, and
+the second stage trains on `po_matrix[, k]` before predicting fold `k`. At
+`V = 10` that is 45 nuisance fits instead of 10 — 4.5x the cost — and it has
+never been benchmarked against cheaper alternatives.
+
+**The hypothesis.** Under ordinary (single) crossfitting, a stage-2 training
+row `i` carries a pseudo-outcome from a nuisance model trained on every fold
+except `i`'s — which *includes* the held-out test fold. Re-randomising the
+stage-2 split cannot remove that dependence. So if double crossfitting
+matters, `scf_scf` and `scf_scf_new` should perform alike, and both should
+differ from `dcf`. If they don't, the cheap procedure is enough and the rest
+of the study can be sped up 4.5x.
+
+### Design
+
+Fixed at **n = 500, V = 10 folds, scenarios Null / Simple / Interaction /
+Non-linear, 500 replicates** (2000 array jobs). All variants within a
+replicate share one fold assignment, so differences are attributable to the
+procedure rather than to the fold draw.
+
+Every arm is scored twice: against the known truth on the **training**
+sample, and on an independent **test** sample of 2000 drawn from the same
+DGP.
+
+**There is no optimism to detect here, and the train-to-test gap isn't an
+overfitting diagnostic.** Optimism is what you see when a model is scored
+against the labels it was fit to. Every arm here is scored against the
+*known true CATE*, while the label the stage-2 model actually saw is a noisy
+pseudo-outcome — so an in-sample prediction is pulled towards the unit's own
+noise and ends up *further* from the truth, not closer. In this setting
+in-sample predictions score **worse** against truth, which is why `naive` is
+expected to lose outright rather than look deceptively good. The test score
+instead measures how well the fitted surface generalises to fresh covariate
+draws — the only like-for-like comparison of the final fitted models across
+procedures (see [Generalisation gap](#generalisation-gap)).
+
+**Two test scores, because crossfit and whole-sample arms predict
+differently.** A crossfit arm ends up with `V` fitted models and averages
+their test predictions — the estimator you'd actually deploy, so `mse` uses
+it — but that averaging is a variance-reducing ensemble stacked on top of the
+honesty effect being studied. `mse_test_single` scores each fold model on the
+test set separately and averages the `V` scores instead, which is the
+like-for-like reading against a whole-sample arm's single model. The two
+coincide for whole-sample arms, so any gap is the ensembling effect alone
+(see [Ensemble vs. single fold model](#ensemble-vs-single-fold-model)).
+
+### Arms compared
+
+**DR-learner, random forest (8 arms)**
+
+| id | stage 1 (nuisances) | stage 2 (final model) |
+|---|---|---|
+| `dcf` | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
+| `scf_scf` | single CF, leave-one-fold-out | crossfit, same folds |
+| `scf_scf_new` | single CF | crossfit, **fresh independent** split |
+| `scf_full` | single CF | whole sample, in-sample predictions |
+| `scf_oob` | single CF | whole sample, **OOB** predictions |
+| `oob_oob` | whole sample, **OOB** | whole sample, **OOB** |
+| `naive` | whole sample, in-sample | whole sample, in-sample |
+| `scf_oob_t` | single CF, T-learner | whole sample, OOB (**control**) |
+
+**DR-learner, SuperLearner (5 arms):** `dcf`, `scf_scf`, `scf_scf_new`,
+`scf_full`, `naive` — no OOB analogue exists for SuperLearner, so the OOB
+arms and the T-learner control are dropped.
+
+**Causal forest (5 arms)**
+
+| id | `Y.hat` / `W.hat` | forest |
+|---|---|---|
+| `cf_dcf` | double-CF matrices, column `k` | fold-wise (**status quo**) |
+| `cf_scf` | single-CF vectors | fold-wise |
+| `cf_full_oob` | single-CF vectors | whole sample, OOB `tau` |
+| `cf_default` | grf's own internal OOB | whole sample, OOB `tau` — plain `causal_forest(X, Y, W)` |
+| `cf_naive` | single-CF vectors | whole sample, in-sample `tau` |
+
+Full design rationale and deviations from the rest of the study are in
+`crossfitting/README.md`.
+
+```{r data}
+# functions and label dictionaries
+source(here("crossfitting", "cf_metrics.R"))
+
+# paths
+path <- here()
+res_path <- file.path(dirname(path), "results", "crossfitting")
+
+metrics <- readRDS(file.path(res_path, "cf_metrics.RDS"))
+
+# tidy up
+metrics <- metrics %>%
+  mutate(
+    scenario = factor(
+      case_when(scenario == 1 ~ "Null",
+                scenario == 4 ~ "Simple",
+                scenario == 6 ~ "Interaction",
+                scenario == 9 ~ "Non-linear"),
+      levels = c("Null", "Simple", "Interaction", "Non-linear")),
+    family = factor(recode(family, !!!family_labels), levels = unname(family_labels)),
+    variant = factor(recode(variant, !!!variant_labels),
+                     levels = unname(variant_labels[variant_levels])),
+    set = factor(set, levels = c("train", "test"), labels = c("Training sample", "Test sample"))
+  ) %>%
+  droplevels()
+
+# per variant summaries
+metrics_summary <- metrics %>%
+  group_by(scenario, family, variant, set) %>%
+  summarise(
+    mean_bias = mean(bias, na.rm = T),
+    mcse_bias = sd(bias, na.rm = T) / sqrt(n()),
+    mean_mse = mean(mse, na.rm = T),
+    mcse_mse = sd(mse, na.rm = T) / sqrt(n()),
+    mean_corr = mean(corr, na.rm = T),
+    mcse_corr = sd(corr, na.rm = T) / sqrt(n()),
+    mean_sign_acc = mean(sign_acc, na.rm = T),
+    mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(n()),
+    mean_mse_single = mean(mse_test_single, na.rm = T),
+    mcse_mse_single = sd(mse_test_single, na.rm = T) / sqrt(n()),
+    mean_time = mean(time_total, na.rm = T),
+    mean_time_nuisance = mean(time_nuisance, na.rm = T),
+    mean_time_stage2 = mean(time_stage2, na.rm = T),
+    .groups = "drop"
+  )
+```
+
+```{r summary-plot-helper, include=FALSE}
+# helper: the house summary plot, points with MCSE error bars.
+# facet_wrap (not facet_grid) because variant is family-specific - each
+# family only populates 5-8 of the 13 levels, and facet_grid's free scales
+# only vary per row/column, never per panel, so it would still show every
+# panel all 13 categories. facet_wrap frees per panel, dropping the ones
+# absent from that family's arms.
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
+  df %>%
+    mutate(est = .data[[mean_col]],
+           lo = .data[[mean_col]] - .data[[mcse_col]],
+           hi = .data[[mean_col]] + .data[[mcse_col]]) %>%
+    ggplot(aes(x = variant, y = est, colour = set, ymin = lo, ymax = hi)) +
+    geom_hline(yintercept = hline, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    facet_wrap(vars(family, scenario), nrow = n_distinct(df$family), scales = "free") +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, y = ylab, x = "Crossfitting procedure", colour = "Scored on")
+}
+```
+
+## MSE of CATE estimates
+
+The headline metric: mean squared error of the estimated CATE against the
+known truth, on both samples, for every arm.
+
+```{r mse-plot, fig.height=16}
+mse_plot <- metrics %>%
+  ggplot(aes(x = variant, y = mse, colour = set)) +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "MSE of CATE estimates by crossfitting procedure",
+       y = "MSE", x = "Crossfitting procedure", colour = "Scored on")
+
+mse_sum_plot <- summary_plot(metrics_summary, "mean_mse", "mcse_mse",
+                             "Mean MSE of CATE estimates", "Mean MSE")
+
+(mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Correlation with the true CATE
+
+Pearson correlation between estimated and true CATEs (undefined, and forced
+to 0, in the Null scenario since there's no heterogeneity to correlate with —
+excluded from these plots).
+
+```{r corr-plot, fig.height=16}
+corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != "Null"),
+                              "mean_corr", "mcse_corr",
+                              "Mean correlation with the true CATE", "Mean correlation")
+
+corr_df <- filter(metrics, scenario != "Null")
+
+corr_plot <- corr_df %>%
+  ggplot(aes(x = variant, y = corr, colour = set)) +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  # free_x only: correlation is already on a bounded, comparable -1..1 scale,
+  # so y stays shared - only the sparse variant axis needs freeing per panel
+  facet_wrap(vars(family, scenario), nrow = n_distinct(corr_df$family), scales = "free_x") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Correlation between estimated and true CATEs",
+       y = "Pearson correlation", x = "Crossfitting procedure", colour = "Scored on")
+
+(corr_sum_plot / corr_plot) + plot_layout(guides = "collect")
+```
+
+## Generalisation gap {#generalisation-gap}
+
+Test MSE minus training MSE, per run. **This is not an optimism measure** —
+every arm is scored against the true CATE rather than the pseudo-outcomes it
+was fit to, so there's no optimism to detect; an in-sample prediction is
+contaminated by the unit's own noisy pseudo-outcome and so scores worse
+against truth, not better. What this plot actually shows is how far each
+fitted surface degrades on fresh covariate draws.
+
+```{r gap-plot}
+gap <- metrics %>%
+  select(scenario, family, variant, run, set, mse) %>%
+  pivot_wider(names_from = set, values_from = mse) %>%
+  mutate(gap = `Test sample` - `Training sample`)
+
+gap_plot <- gap %>%
+  ggplot(aes(x = variant, y = gap, colour = family)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(gap$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  labs(title = "Generalisation gap: test MSE minus training MSE",
+       subtitle = "How far each fitted surface degrades on fresh covariate draws",
+       y = "Test MSE - training MSE", x = "Crossfitting procedure")
+
+gap_plot
+```
+
+## Ensemble vs. single fold model {#ensemble-vs-single-fold-model}
+
+A crossfit arm deploys `V` fold models and averages their test predictions —
+that's `mse`, the estimator you'd actually deploy. `mse_test_single` scores
+each fold model on the test set separately and averages the `V` scores
+instead, the like-for-like reading against a whole-sample arm's single
+model. The two coincide for whole-sample arms, so any gap here is the
+ensembling effect alone, stacked on top of whatever the crossfitting
+procedure itself buys.
+
+```{r ensemble-plot}
+ensemble_df <- metrics_summary %>%
+  filter(set == "Test sample") %>%
+  select(scenario, family, variant, mean_mse, mean_mse_single) %>%
+  pivot_longer(c(mean_mse, mean_mse_single),
+               names_to = "scoring", values_to = "mse") %>%
+  mutate(scoring = recode(scoring,
+                          mean_mse = "Averaged fold models (deployed)",
+                          mean_mse_single = "Single fold model (like-for-like)"))
+
+ensemble_plot <- ensemble_df %>%
+  ggplot(aes(x = variant, y = mse, colour = scoring)) +
+  geom_point(position = position_dodge(width = 0.5), size = 2) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(ensemble_df$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Test MSE: ensemble of fold models against a single fold model",
+       subtitle = "Identical for whole-sample arms; the gap on crossfit arms is the ensembling effect",
+       y = "Mean test MSE", x = "Crossfitting procedure", colour = "Scoring")
+
+ensemble_plot
+```
+
+## Bias
+
+```{r bias-plot, fig.height=10}
+bias_plot <- metrics %>%
+  ggplot(aes(x = variant, y = bias, colour = set)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Bias of CATE estimates by crossfitting procedure",
+       y = "Average bias (estimate - truth)", x = "Crossfitting procedure",
+       colour = "Scored on")
+
+bias_plot
+```
+
+## Runtime
+
+What the extra fold pairs actually buy, in seconds.
+
+```{r time-plot, fig.height=10}
+time_df <- metrics_summary %>%
+  filter(set == "Test sample") %>%
+  select(scenario, family, variant, mean_time_nuisance, mean_time_stage2) %>%
+  pivot_longer(c(mean_time_nuisance, mean_time_stage2),
+               names_to = "stage", values_to = "seconds") %>%
+  mutate(stage = recode(stage,
+                        mean_time_nuisance = "Stage 1 (nuisances)",
+                        mean_time_stage2 = "Stage 2 (final model)"))
+
+time_plot <- time_df %>%
+  ggplot(aes(x = variant, y = seconds, fill = stage)) +
+  geom_col() +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(time_df$family), scales = "free") +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Mean runtime per replicate",
+       y = "Seconds", x = "Crossfitting procedure", fill = "Stage")
+
+time_plot
+```
+
+## Accuracy against cost: the decision plot
+
+Test-sample MSE against runtime, on a log scale — down and to the left is
+better. This is the plot that answers the study's headline question: is
+double crossfitting (`dcf` / `cf_dcf`) actually on the efficient frontier, or
+does a cheaper arm dominate it?
+
+```{r frontier-plot}
+frontier_plot <- metrics_summary %>%
+  filter(set == "Test sample") %>%
+  ggplot(aes(x = mean_time, y = mean_mse, colour = variant, shape = family)) +
+  geom_point(size = 3) +
+  facet_wrap(~scenario, scales = "free") +
+  scale_x_log10() +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(title = "Test-sample MSE against runtime",
+       subtitle = "Down and to the left is better",
+       y = "Mean test MSE", x = "Mean runtime per replicate (s, log scale)",
+       colour = "Procedure", shape = "Estimator")
+
+frontier_plot
+```
+
+## Headline table
+
+Test-sample only, arranged by family, scenario, and mean MSE (best arm
+first within each scenario).
+
+```{r headline-table}
+headline <- metrics_summary %>%
+  filter(set == "Test sample") %>%
+  select(scenario, family, variant, mean_mse, mcse_mse, mean_mse_single,
+         mean_corr, mean_time) %>%
+  arrange(family, scenario, mean_mse)
+
+kable(headline, digits = 4,
+      col.names = c("Scenario", "Family", "Procedure", "Mean MSE", "MCSE (MSE)",
+                    "Mean MSE (single fold)", "Mean correlation", "Mean runtime (s)"))
+```

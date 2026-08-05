@@ -85,7 +85,7 @@ variant_labels <- c(
   cf_dcf = "Double CF nuisances",
   cf_scf = "CF nuisances, fold-wise",
   cf_full_oob = "CF nuisances, whole (OOB)",
-  cf_default = "grf internal nuisances",
+  cf_default = "OOB nuisances (grf default)",
   cf_naive = "CF nuisances, whole (in-sample)"
 )
 
