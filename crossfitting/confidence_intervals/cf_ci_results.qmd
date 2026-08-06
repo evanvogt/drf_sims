@@ -1,0 +1,329 @@
+---
+title: "Crossfitting CI pilot: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(patchwork)
+library(purrr)
+library(knitr)
+```
+
+## Does the pilot's bootstrap deliver nominal coverage?
+
+`crossfitting/` benchmarks its double-crossfitting procedure against cheaper
+alternatives (see `cf_results.qmd`), but says nothing about whether any of
+them, once fitted, produce trustworthy confidence intervals. This pilot adds
+half-sample bootstrap intervals (`R/bootstrap_ci.R`'s `rf_half_boot` /
+`cf_half_boot` — the same machinery `confidence_intervals/` uses elsewhere)
+to the 5 arms whose stage 2 is a genuine per-fold crossfit: `dcf`, `scf_scf`,
+`scf_scf_new` (family DR-learner, RF) and `cf_dcf`, `cf_scf` (family causal
+forest). The other 12 production arms are out of scope — 7 are whole-sample
+or OOB with no per-fold structure for the bootstrap to refit against, and 3
+are SuperLearner-based, not RF-based.
+
+Coverage from this method is already known, from elsewhere in
+`confidence_intervals/`, to run below nominal. That's the actual research
+question here: not *whether* it undershoots, but *how much*, and whether any
+of the 5 crossfit-structured arms does noticeably better than the others for
+its cost.
+
+### Design
+
+Fixed at **n = 500, V = 10 folds, scenarios Null / Interaction / Non-linear,
+50 runs** (150 array jobs) — a pilot, not the full production grid.
+`CI_boot = 200` half-sample bootstrap draws, `CI_sf` (grf's `sample.fraction`)
+fixed at 0.5 rather than swept.
+
+Every arm is scored on the **training** sample only. Unlike the main
+crossfitting comparison, no test-sample score exists here: the half-sample
+bootstrap bands are never computed for `tau_test`, only for the training-
+sample `tau` the arm was actually fit on.
+
+### Arms compared
+
+| id | family | stage 1 (nuisances) | stage 2 / bootstrap structure |
+|---|---|---|---|
+| `dcf` | DR-learner (RF) | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
+| `scf_scf` | DR-learner (RF) | single CF, leave-one-fold-out | crossfit, same folds |
+| `scf_scf_new` | DR-learner (RF) | single CF | crossfit, **fresh independent** split |
+| `cf_dcf` | Causal forest | double-CF matrices, column `k` | fold-wise (**status quo**) |
+| `cf_scf` | Causal forest | single-CF vectors | fold-wise |
+
+Only the final-stage forest is refit per half-sample-per-fold — the
+bootstrap draws matrices themselves are dropped before saving, only the
+resulting bounds (`hb_lb`/`hb_ub`) are kept. Full design rationale is in
+`crossfitting/README.md`'s "Half-sample bootstrap CI pilot" section.
+
+```{r data}
+# functions and label dictionaries - ci_variant_levels/ci_variant_labels here,
+# family_labels transitively via cf_metrics.R
+source(here("crossfitting", "confidence_intervals", "cf_ci_metrics.R"))
+
+# paths - a separate results tree from crossfitting/'s
+path <- here()
+res_path <- file.path(dirname(path), "results", "crossfitting_ci")
+
+metrics <- readRDS(file.path(res_path, "cf_ci_metrics.RDS"))
+
+# tidy up - no `set` column: training-sample tau only
+metrics <- metrics %>%
+  mutate(
+    scenario = factor(
+      case_when(scenario == 1 ~ "Null",
+                scenario == 6 ~ "Interaction",
+                scenario == 9 ~ "Non-linear"),
+      levels = c("Null", "Interaction", "Non-linear")),
+    family = factor(recode(family, !!!family_labels), levels = unname(family_labels)),
+    variant = factor(recode(variant, !!!ci_variant_labels),
+                     levels = unname(ci_variant_labels[ci_variant_levels]))
+  ) %>%
+  droplevels()
+
+# per variant summaries
+metrics_summary <- metrics %>%
+  group_by(scenario, family, variant) %>%
+  summarise(
+    mean_marg_cov = mean(marginal_coverage, na.rm = T),
+    mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(n()),
+    mean_simul_cov = mean(simultaneous_coverage, na.rm = T),
+    mcse_simul_cov = sd(simultaneous_coverage, na.rm = T) / sqrt(n()),
+    mean_ci_len = mean(mean_ci_length, na.rm = T),
+    mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(n()),
+    mean_bias = mean(bias, na.rm = T),
+    mcse_bias = sd(bias, na.rm = T) / sqrt(n()),
+    mean_mse = mean(mse, na.rm = T),
+    mcse_mse = sd(mse, na.rm = T) / sqrt(n()),
+    mean_corr = mean(corr, na.rm = T),
+    mcse_corr = sd(corr, na.rm = T) / sqrt(n()),
+    mean_time_nuisance = mean(time_nuisance, na.rm = T),
+    mean_time_stage2 = mean(time_stage2, na.rm = T),
+    mean_time_boot = mean(time_boot, na.rm = T),
+    mean_time_total = mean(time_nuisance + time_stage2 + time_boot, na.rm = T),
+    .groups = "drop"
+  )
+```
+
+```{r summary-plot-helper, include=FALSE}
+# helper: the house summary plot, points with MCSE error bars. Unlike
+# cf_results.qmd's version there's no `set` (train/test) dimension to dodge
+# on - one sample per arm/run - so colour by variant instead (redundant with
+# x under faceting, so the legend is dropped). hline is optional: not every
+# metric here has a natural 0/0.95 reference.
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+  df <- df %>%
+    mutate(est = .data[[mean_col]],
+           lo = .data[[mean_col]] - .data[[mcse_col]],
+           hi = .data[[mean_col]] + .data[[mcse_col]])
+  p <- ggplot(df, aes(x = variant, y = est, colour = variant, ymin = lo, ymax = hi))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_point(size = 2) +
+    geom_errorbar(linewidth = 0.3, width = 0.3) +
+    facet_wrap(vars(family, scenario), nrow = n_distinct(df$family), scales = "free") +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+    labs(title = title, y = ylab, x = "Crossfitting procedure")
+}
+```
+
+## Marginal coverage
+
+The headline metric: the proportion of units the interval covers, for every
+arm, against the nominal 95% target (dashed line).
+
+```{r marg-cov-plot, fig.height=16}
+marg_cov_plot <- metrics %>%
+  ggplot(aes(x = variant, y = marginal_coverage, colour = variant)) +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  labs(title = "Marginal coverage of the half-sample bootstrap interval",
+       y = "Marginal coverage", x = "Crossfitting procedure")
+
+marg_cov_sum_plot <- summary_plot(metrics_summary, "mean_marg_cov", "mcse_marg_cov",
+                                  "Mean marginal coverage", "Mean marginal coverage",
+                                  hline = 0.95)
+
+(marg_cov_plot / marg_cov_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Simultaneous coverage
+
+Whether the band covers *every* unit at once — the stronger guarantee the
+half-sample bootstrap is constructed to control, and a per-run 0/1 indicator,
+so only the mean-proportion summary is shown (a boxplot of a binary outcome
+is uninformative).
+
+```{r simul-cov-plot}
+simul_cov_sum_plot <- summary_plot(metrics_summary, "mean_simul_cov", "mcse_simul_cov",
+                                   "Mean simultaneous coverage", "Mean simultaneous coverage",
+                                   hline = 0.95)
+
+simul_cov_sum_plot
+```
+
+## CI width
+
+Mean interval length per replicate. There is no natural reference line here
+— width only matters relative to the coverage it buys.
+
+```{r width-plot, fig.height=16}
+width_plot <- metrics %>%
+  ggplot(aes(x = variant, y = mean_ci_length, colour = variant)) +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  labs(title = "Width of the half-sample bootstrap interval",
+       y = "Mean interval length", x = "Crossfitting procedure")
+
+width_sum_plot <- summary_plot(metrics_summary, "mean_ci_len", "mcse_ci_len",
+                               "Mean interval width", "Mean interval length")
+
+(width_plot / width_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Point-estimate accuracy
+
+Not this report's focus, but worth confirming the pilot's 5 arms still track
+the production study's numbers for the same arms (bias and MSE of the CATE
+point estimate against the known truth).
+
+```{r point-plot, fig.height=10}
+bias_plot <- metrics %>%
+  ggplot(aes(x = variant, y = bias, colour = variant)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  labs(title = "Bias of CATE point estimates",
+       y = "Average bias (estimate - truth)", x = "Crossfitting procedure")
+
+mse_plot <- metrics %>%
+  ggplot(aes(x = variant, y = mse, colour = variant)) +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  labs(title = "MSE of CATE point estimates",
+       y = "MSE", x = "Crossfitting procedure")
+
+bias_plot + mse_plot
+```
+
+## Correlation with the true CATE
+
+Pearson correlation between estimated and true CATEs (undefined, and forced
+to 0, in the Null scenario since there's no heterogeneity to correlate with
+— excluded from this plot).
+
+```{r corr-plot, fig.height=10}
+corr_df <- filter(metrics, scenario != "Null")
+
+corr_plot <- corr_df %>%
+  ggplot(aes(x = variant, y = corr, colour = variant)) +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  # free_x only: correlation is already on a bounded, comparable -1..1
+  # scale, so y stays shared - only the sparse variant axis needs freeing
+  facet_wrap(vars(family, scenario), nrow = n_distinct(corr_df$family), scales = "free_x") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  labs(title = "Correlation between estimated and true CATEs",
+       y = "Pearson correlation", x = "Crossfitting procedure")
+
+corr_plot
+```
+
+## Runtime
+
+What nuisances, the final model, and the bootstrap itself each cost.
+
+```{r time-plot, fig.height=10}
+time_df <- metrics_summary %>%
+  select(scenario, family, variant, mean_time_nuisance, mean_time_stage2, mean_time_boot) %>%
+  pivot_longer(c(mean_time_nuisance, mean_time_stage2, mean_time_boot),
+               names_to = "stage", values_to = "seconds") %>%
+  mutate(stage = recode(stage,
+                        mean_time_nuisance = "Stage 1 (nuisances)",
+                        mean_time_stage2 = "Stage 2 (final model)",
+                        mean_time_boot = "Bootstrap CI"))
+
+time_plot <- time_df %>%
+  ggplot(aes(x = variant, y = seconds, fill = stage)) +
+  geom_col() +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(time_df$family), scales = "free") +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Mean runtime per replicate",
+       y = "Seconds", x = "Crossfitting procedure", fill = "Stage")
+
+time_plot
+```
+
+## Coverage against cost: the decision plot
+
+Marginal coverage against runtime, on a log scale — closer to the dashed
+nominal-95% line is better. This is the plot that answers the pilot's
+headline question: does the bootstrap buy closer-to-nominal coverage for any
+arm, and at what cost?
+
+```{r coverage-cost-plot}
+coverage_cost_plot <- metrics_summary %>%
+  ggplot(aes(x = mean_time_total, y = mean_marg_cov, colour = variant, shape = family)) +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
+  geom_point(size = 3) +
+  facet_wrap(~scenario, scales = "free") +
+  scale_x_log10() +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(title = "Marginal coverage against runtime",
+       subtitle = "Closer to the dashed line is better",
+       y = "Mean marginal coverage", x = "Mean runtime per replicate (s, log scale)",
+       colour = "Procedure", shape = "Estimator")
+
+coverage_cost_plot
+```
+
+## Headline table
+
+Arranged by family, scenario, and mean marginal coverage (closest to nominal
+first within each scenario).
+
+```{r headline-table}
+headline <- metrics_summary %>%
+  select(scenario, family, variant, mean_marg_cov, mcse_marg_cov, mean_simul_cov,
+         mean_ci_len, mean_bias, mean_mse, mean_time_total) %>%
+  arrange(family, scenario, desc(mean_marg_cov))
+
+kable(headline, digits = 4,
+      col.names = c("Scenario", "Family", "Procedure", "Mean marginal coverage",
+                    "MCSE (marg. cov.)", "Mean simultaneous coverage",
+                    "Mean CI length", "Mean bias", "Mean MSE", "Mean runtime (s)"))
+```
