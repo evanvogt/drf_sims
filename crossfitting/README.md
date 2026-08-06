@@ -27,12 +27,7 @@ on an independent **test** sample of 2000 drawn from the same DGP.
 **There is no optimism to detect, and the train-to-test gap is not an overfitting
 diagnostic here.** Optimism is what you see when a model is scored against the
 labels it was fit to. Every arm here is scored against the *known true CATE*, while
-the label the stage-2 model saw is a noisy pseudo-outcome. An in-sample prediction
-is a weighted average of neighbouring pseudo-outcomes that includes the unit's own,
-so it is pulled towards that unit's noise and therefore *away* from the truth. In
-this setting in-sample predictions score **worse** against truth, not better — which
-is what `cf_testing.R` observes, and it is why `naive` is expected to lose rather than
-to look deceptively good.
+the label the stage-2 model saw is a noisy pseudo-outcome.
 
 What the two scoring sets are actually for: the **training** score is the estimand
 the study cares about (CATEs for the units you have), and the **test** score
@@ -55,32 +50,38 @@ gap between them is the ensembling effect alone (`cf_ensemble_effect.png`).
 | `dcf` | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
 | `scf_scf` | single CF, leave-one-fold-out | crossfit, same folds |
 | `scf_scf_new` | single CF | crossfit, **fresh independent** split |
-| `scf_full` | single CF | whole sample, in-sample predictions |
 | `scf_oob` | single CF | whole sample, **OOB** predictions |
-| `oob_oob` | whole sample, **OOB** | whole sample, **OOB** |
-| `naive` | whole sample, in-sample | whole sample, in-sample |
+| `oob_oob` | whole sample, **OOB**, **T-learner** | whole sample, **OOB** |
+| `oob_oob_s` | whole sample, **OOB**, S-learner (`X.orig` workaround) | whole sample, **OOB** |
+| `oob_oob_manual` | whole sample, **OOB**, S-learner (manual tree-loop) | whole sample, **OOB** |
 | `scf_oob_t` | single CF, **T-learner** | whole sample, OOB (**control**) |
 
-`scf_full` / `scf_oob` are two views of the same fitted forest, as are
-`cf_full_oob` / `cf_naive`, so those contrasts isolate the prediction type rather
-than also picking up forest-to-forest randomness.
+**Why `oob_oob` uses a T-learner, and what `oob_oob_s`/`oob_oob_manual` add.** The
+nuisance model elsewhere is an S-learner — one forest on `cbind(W, X)`, predicted at
+`W = 0` and `W = 1` (`cts_models.R:70`). grf's public API only returns OOB
+predictions at each unit's *observed* covariate row, so a plain S-learner has no OOB
+counterfactual; `oob_oob` sidesteps that with separate arm forests instead (a
+treated unit's `Y1.hat` is OOB and its `Y0.hat` comes from a forest that never saw
+it, so both arms are honest) — but that confounds "OOB vs crossfit" with "T vs S
+learner", which is what `scf_oob_t` is for.
+`oob_oob_s` and `oob_oob_manual` remove that confound directly, by getting a real
+S-learner OOB counterfactual: `oob_oob_s` uses a maintainer-endorsed but unsupported
+workaround ([grf-labs/grf#307](https://github.com/grf-labs/grf/issues/307)) —
+point the fitted forest's `X.orig` at the perturbed covariates, clear its cached
+`predictions`/`debiased.error`, and call `predict(forest)` so it re-reads `X.orig`
+and returns OOB-for-row-`i` predictions at the perturbed point. `oob_oob_manual`
+gets the same answer through grf's *documented* `get_tree()`/`get_leaf_node()` API
+instead — loop over every tree, and for each of row `i`'s out-of-bag trees, average
+the training `Y` in the leaf the counterfactual point falls into — and exists mainly
+as a check on the shortcut (see `cf_testing.R`'s section 4). Both are kept alongside
+`oob_oob` rather than replacing it.
 
-**Why `oob_oob` uses a T-learner.** The nuisance model elsewhere is an S-learner —
-one forest on `cbind(W, X)`, predicted at `W = 0` and `W = 1` (`cts_models.R:70`).
-grf only returns OOB predictions at each unit's *observed* covariate row, so an
-S-learner has no OOB counterfactual and `oob_oob` cannot be built from one. It uses
-separate arm forests instead: a treated unit's `Y1.hat` is OOB and its `Y0.hat`
-comes from a forest that never saw it, so both arms are honest. That confounds
-"OOB vs crossfit" with "T vs S learner", which is what `scf_oob_t` is for — it
-differs from `scf_oob` only in learner structure and from `oob_oob` only in
-splitting, making both effects identifiable.
+### DR-learner, SuperLearner (3 arms)
 
-### DR-learner, SuperLearner (5 arms)
+`dcf`, `scf_scf`, `scf_scf_new`. No OOB analogue exists for SuperLearner, so the OOB
+arms and the T-learner control are dropped.
 
-`dcf`, `scf_scf`, `scf_scf_new`, `scf_full`, `naive`. No OOB analogue exists for
-SuperLearner, so the OOB arms and the T-learner control are dropped.
-
-### Causal forest (5 arms)
+### Causal forest (4 arms)
 
 | id | `Y.hat` / `W.hat` | forest |
 |---|---|---|
@@ -88,7 +89,6 @@ SuperLearner, so the OOB arms and the T-learner control are dropped.
 | `cf_scf` | single-CF vectors | fold-wise |
 | `cf_full_oob` | single-CF vectors | whole sample, OOB `tau` |
 | `cf_default` | grf's own internal OOB | whole sample, OOB `tau` — plain `causal_forest(X, Y, W)` |
-| `cf_naive` | single-CF vectors | whole sample, in-sample `tau` |
 
 ## Files
 

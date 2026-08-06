@@ -57,13 +57,10 @@ DGP.
 overfitting diagnostic.** Optimism is what you see when a model is scored
 against the labels it was fit to. Every arm here is scored against the
 *known true CATE*, while the label the stage-2 model actually saw is a noisy
-pseudo-outcome — so an in-sample prediction is pulled towards the unit's own
-noise and ends up *further* from the truth, not closer. In this setting
-in-sample predictions score **worse** against truth, which is why `naive` is
-expected to lose outright rather than look deceptively good. The test score
-instead measures how well the fitted surface generalises to fresh covariate
-draws — the only like-for-like comparison of the final fitted models across
-procedures (see [Generalisation gap](#generalisation-gap)).
+pseudo-outcome. The test score measures how well the fitted surface
+generalises to fresh covariate draws — the only like-for-like comparison of
+the final fitted models across procedures (see [Generalisation
+gap](#generalisation-gap)).
 
 **Two test scores, because crossfit and whole-sample arms predict
 differently.** A crossfit arm ends up with `V` fitted models and averages
@@ -84,17 +81,26 @@ coincide for whole-sample arms, so any gap is the ensembling effect alone
 | `dcf` | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
 | `scf_scf` | single CF, leave-one-fold-out | crossfit, same folds |
 | `scf_scf_new` | single CF | crossfit, **fresh independent** split |
-| `scf_full` | single CF | whole sample, in-sample predictions |
 | `scf_oob` | single CF | whole sample, **OOB** predictions |
-| `oob_oob` | whole sample, **OOB** | whole sample, **OOB** |
-| `naive` | whole sample, in-sample | whole sample, in-sample |
+| `oob_oob` | whole sample, **OOB**, T-learner | whole sample, **OOB** |
+| `oob_oob_s` | whole sample, **OOB**, S-learner (`X.orig` workaround) | whole sample, **OOB** |
+| `oob_oob_manual` | whole sample, **OOB**, S-learner (manual tree-loop) | whole sample, **OOB** |
 | `scf_oob_t` | single CF, T-learner | whole sample, OOB (**control**) |
 
-**DR-learner, SuperLearner (5 arms):** `dcf`, `scf_scf`, `scf_scf_new`,
-`scf_full`, `naive` — no OOB analogue exists for SuperLearner, so the OOB
-arms and the T-learner control are dropped.
+`oob_oob_s` and `oob_oob_manual` give an S-learner a genuine OOB counterfactual
+prediction — matching the S-learner structure used by every other nuisance in
+this study, unlike `oob_oob`'s T-learner workaround. `oob_oob_s` uses the
+maintainer-endorsed but unsupported `forest$X.orig` shortcut
+([grf-labs/grf#307](https://github.com/grf-labs/grf/issues/307));
+`oob_oob_manual` gets the same answer through grf's documented
+`get_tree()`/`get_leaf_node()` API and exists mainly to check the shortcut
+against it. See `crossfitting/README.md` for the full explanation.
 
-**Causal forest (5 arms)**
+**DR-learner, SuperLearner (3 arms):** `dcf`, `scf_scf`, `scf_scf_new` — no
+OOB analogue exists for SuperLearner, so the OOB arms and the T-learner
+control are dropped.
+
+**Causal forest (4 arms)**
 
 | id | `Y.hat` / `W.hat` | forest |
 |---|---|---|
@@ -102,7 +108,6 @@ arms and the T-learner control are dropped.
 | `cf_scf` | single-CF vectors | fold-wise |
 | `cf_full_oob` | single-CF vectors | whole sample, OOB `tau` |
 | `cf_default` | grf's own internal OOB | whole sample, OOB `tau` — plain `causal_forest(X, Y, W)` |
-| `cf_naive` | single-CF vectors | whole sample, in-sample `tau` |
 
 Full design rationale and deviations from the rest of the study are in
 `crossfitting/README.md`.

@@ -191,10 +191,14 @@ cat("  direction for a mem= request. cross-check once against qstat -fx on the\n
 cat("  first real subjobs; PBS's cgroup figure should sit below it.\n")
 cat(sprintf("\n#PBS -l walltime=%s\n", walltime_str))
 cat(sprintf("#PBS -l select=1:ncpus=%d:ompthreads=%d:mem=%dgb\n", ncpus, ncpus, mem_gb))
-cat(sprintf("\nand in cf_analysis.R: workers <- %d ; grf_threads <- %d\n\n",
+cat(sprintf("Rscript cf_analysis.R \"$PBS_ARRAY_INDEX\" %d %d\n\n",
             best$workers, best$grf_threads))
 
 # ---- write the directives into cf_1.sh -------------------------------------
+# workers/grf_threads are written as trailing args on the Rscript line, not as a
+# manual edit to cf_analysis.R's defaults, so the PBS resource request and the
+# R-level parallelism config can never drift apart the way cf_analysis.R <-
+# cf_1.sh sync used to (a hand-edit reminder that was easy to skip).
 if (file.exists(jobscript)) {
   lines <- readLines(jobscript)
   lines <- sub("^#PBS -l walltime=.*$",
@@ -202,9 +206,12 @@ if (file.exists(jobscript)) {
   lines <- sub("^#PBS -l select=.*$",
                sprintf("#PBS -l select=1:ncpus=%d:ompthreads=%d:mem=%dgb",
                        ncpus, ncpus, mem_gb), lines)
+  lines <- sub('^Rscript cf_analysis\\.R "\\$PBS_ARRAY_INDEX".*$',
+               sprintf('Rscript cf_analysis.R "$PBS_ARRAY_INDEX" %d %d',
+                       best$workers, best$grf_threads),
+               lines)
   writeLines(lines, jobscript)
-  cat(sprintf("directives written into %s\n", jobscript))
-  cat("check that workers / grf_threads in cf_analysis.R match before submitting.\n")
+  cat(sprintf("directives and workers/grf_threads written into %s\n", jobscript))
 } else {
   warning("cf_1.sh not found - directives printed only")
 }

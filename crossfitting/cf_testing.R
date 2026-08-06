@@ -143,19 +143,17 @@ expected_rf <- c(
   "dcf",
   "scf_scf",
   "scf_scf_new",
-  "scf_full",
   "scf_oob",
   "scf_oob_t",
   "oob_oob",
-  "naive"
+  "oob_oob_s",
+  "oob_oob_manual"
 )
-expected_cf <- c("cf_dcf", "cf_scf", "cf_full_oob", "cf_naive", "cf_default")
+expected_cf <- c("cf_dcf", "cf_scf", "cf_full_oob", "cf_default")
 expected_sl <- c(
   "sl_dcf",
   "sl_scf_scf",
-  "sl_scf_scf_new",
-  "sl_scf_full",
-  "sl_naive"
+  "sl_scf_scf_new"
 )
 expected <- c(expected_rf, expected_cf, if (full) expected_sl)
 
@@ -220,13 +218,12 @@ report(all(single_ok), "single-model test MSE populated for every arm")
 
 # for a whole-sample arm there is only one model, so the two test scores must agree
 whole_arms <- c(
-  "scf_full",
   "scf_oob",
   "scf_oob_t",
   "oob_oob",
-  "naive",
+  "oob_oob_s",
+  "oob_oob_manual",
   "cf_full_oob",
-  "cf_naive",
   "cf_default"
 )
 whole_agree <- vapply(
@@ -293,19 +290,20 @@ report(
 report(all(is.finite(m_null$mse)), "all null-scenario MSEs finite")
 
 # =============================================================================
-cat("\n=== 4. test-set plumbing and the in-sample / OOB contrast ===\n")
+cat("\n=== 4. test-set plumbing and the OOB-counterfactual workaround ===\n")
 #
 # There is no "optimism" to detect in this study, and an earlier version of this
 # check wrongly assumed there was. Optimism is what you see when a model is scored
 # against the labels it was fit to. Here every arm is scored against the KNOWN true
-# CATE, while the label the stage-2 model saw is a noisy pseudo-outcome. An
-# in-sample prediction is a weighted average of neighbouring pseudo-outcomes that
-# includes the unit's own, so it is pulled towards that unit's noise and therefore
-# AWAY from the truth. In-sample predictions score worse against truth, not better,
-# and the train-to-test gap is not an overfitting diagnostic here.
+# CATE, while the label the stage-2 model saw is a noisy pseudo-outcome.
 #
 # What is checked instead: that test predictions are wired to the right truth, and
-# that arms which share a fitted model really do share it.
+# that the grf X.orig OOB-counterfactual shortcut (oob_predict_counterfactual)
+# actually reproduces the documented-API tree-loop it stands in for
+# (oob_predict_counterfactual_manual). Every remaining arm is a distinct forest fit
+# (no two arms share one fitted model any more, now that the in-sample/naive arms -
+# which paired with an OOB view of the same forest - are gone), so there is no
+# same-model test-prediction identity left to check.
 
 m <- run_metrics(
   list(
@@ -324,33 +322,7 @@ mse_tbl <- m %>%
 
 print(as.data.frame(mse_tbl), digits = 3, row.names = FALSE)
 
-# 4a. arms built from one fitted model must share its test predictions exactly,
-# while differing on the training sample (that is the whole point of the pair)
-shared <- list(c("scf_full", "scf_oob"), c("cf_naive", "cf_full_oob"))
-for (s2 in shared) {
-  d_test <- max(abs(res$arms[[s2[1]]]$tau_test - res$arms[[s2[2]]]$tau_test))
-  report(
-    d_test < 1e-12,
-    sprintf(
-      "%s / %s share one fitted model, so their test predictions match (max diff %.1e)",
-      s2[1],
-      s2[2],
-      d_test
-    )
-  )
-  d_train <- max(abs(res$arms[[s2[1]]]$tau - res$arms[[s2[2]]]$tau))
-  report(
-    d_train > 0,
-    sprintf(
-      "%s / %s differ on the training sample (max diff %.4f)",
-      s2[1],
-      s2[2],
-      d_train
-    )
-  )
-}
-
-# 4b. test predictions must track the test truth. scenario 6 has strong
+# 4a. test predictions must track the test truth. scenario 6 has strong
 # heterogeneity, so a misaligned X_test or truth_test shows up as ~0 correlation.
 tracking <- c("dcf", "scf_scf", "scf_oob", "cf_dcf")
 cors <- vapply(
@@ -368,32 +340,38 @@ report(
   )
 )
 
-# 4c. informational: the self-contamination effect, in-sample against OOB on the
-# training sample. same fitted model within each pair, so this isolates the
-# prediction type. expect the in-sample column to be the larger one.
-cat(
-  "\n  training-sample MSE, in-sample prediction vs OOB from the same model:\n"
+# 4b. oob_oob_s (X.orig shortcut) and oob_oob_manual (documented get_tree/
+# get_leaf_node API) are two different implementations of the same OOB-
+# counterfactual idea, each with its own forest fit - so not identical, but should
+# be closely correlated on the training sample if the shortcut is doing what
+# grf-labs/grf#307 claims.
+oob_s_manual_cor <- cor(res$arms$oob_oob_s$tau, res$arms$oob_oob_manual$tau)
+report(
+  oob_s_manual_cor > 0.8,
+  sprintf(
+    "oob_oob_s and oob_oob_manual track each other (cor = %.3f)",
+    oob_s_manual_cor
+  )
 )
-contam <- bind_rows(lapply(
-  list(
-    c(ins = "scf_full", oob = "scf_oob"),
-    c(ins = "cf_naive", oob = "cf_full_oob"),
-    c(ins = "naive", oob = "oob_oob")
-  ), # differs at both stages, not one model
-  function(p) {
-    tr <- setNames(mse_tbl$train, mse_tbl$arm)
-    tibble::tibble(
-      in_sample_arm = p[["ins"]],
-      oob_arm = p[["oob"]],
-      mse_in_sample = tr[[p[["ins"]]]],
-      mse_oob = tr[[p[["oob"]]]],
-      contamination = tr[[p[["ins"]]]] - tr[[p[["oob"]]]]
-    )
-  }
-))
-print(as.data.frame(contam), digits = 3, row.names = FALSE)
-cat(
-  "  (positive contamination = using a unit's own pseudo-outcome hurts, as expected)\n"
+
+# 4c. the tight version of 4b: hold one S-learner forest fixed and compare
+# oob_predict_counterfactual against oob_predict_counterfactual_manual directly, so
+# any difference is attributable only to the prediction method, not to
+# forest-to-forest randomness. Rebuilt from gen1 (the replicate res$arms came from)
+# rather than reusing section 1's X/W, which are a different draw.
+X1 <- as.matrix(gen1$data[, -c(1:2)])
+W1 <- gen1$data$W
+Y1 <- gen1$data$Y
+forest_s <- regression_forest(cbind(W = W1, X1), Y1, num.threads = grf_threads)
+shortcut_pred <- oob_predict_counterfactual(forest_s, cbind(W = 1, X1))
+manual_pred <- oob_predict_counterfactual_manual(forest_s, cbind(W = 1, X1), Y1)
+same_forest_cor <- cor(shortcut_pred, manual_pred)
+report(
+  same_forest_cor > 0.95,
+  sprintf(
+    "on one fixed forest, the X.orig shortcut and the manual tree-loop agree (cor = %.3f)",
+    same_forest_cor
+  )
 )
 
 # =============================================================================

@@ -85,6 +85,56 @@ scatter_folds <- function(reslist, fold_indices, targets) {
   out
 }
 
+# maintainer-endorsed (unsupported) workaround for the fact that grf has no public
+# API for an OOB prediction at a counterfactual covariate row: predict(forest)
+# without newdata re-reads object$X.orig fresh each call and restricts each row to
+# its out-of-bag trees, so pointing X.orig at a perturbed matrix and clearing the
+# cached predictions borrows grf's own OOB routine at that perturbed point.
+# "Hacky," per grf-labs/grf#307 - may break on a future grf version. R's
+# copy-on-modify semantics mean this cannot leak into the caller's forest object;
+# only the local copy inside this function is touched.
+oob_predict_counterfactual <- function(forest, X_counterfactual) {
+  forest$X.orig <- X_counterfactual
+  forest$predictions <- NULL
+  forest$debiased.error <- NULL
+  predict(forest)$predictions
+}
+
+# fully-manual alternative to oob_predict_counterfactual, touching only grf's
+# documented get_tree()/get_leaf_node() API rather than the X.orig monkey-patch - a
+# check on whether the shortcut actually reproduces grf's own OOB routine. For each
+# tree, row i is OOB if excluded from that tree's full in-bag set; the leaf a
+# counterfactual point falls into is found with get_leaf_node, and predicted as the
+# mean training Y over that leaf's samples. OOB status MUST be read from
+# tree$drawn_samples (the tree's complete in-bag draw) rather than a leaf's own
+# $samples, which for an honest forest is only the honesty-estimation subsample
+# (J2) and would misclassify honesty-split-only rows as OOB (grf-labs/grf#258).
+# Slower than oob_predict_counterfactual by construction (R-level loop over
+# num.trees); this is a correctness check, not meant for routine use.
+oob_predict_counterfactual_manual <- function(forest, X_counterfactual, Y) {
+  n <- nrow(forest$X.orig)
+  num_trees <- forest[["_num_trees"]]
+
+  pred_sum <- numeric(n)
+  pred_n <- integer(n)
+
+  for (k in seq_len(num_trees)) {
+    tree <- get_tree(forest, k)
+    in_bag <- unique(tree$drawn_samples)
+    oob_rows <- setdiff(seq_len(n), in_bag)
+    if (length(oob_rows) == 0) next
+
+    leaf_ids <- get_leaf_node(tree, X_counterfactual[oob_rows, , drop = FALSE])
+    for (j in seq_along(oob_rows)) {
+      leaf_samples <- tree$nodes[[leaf_ids[j]]]$samples
+      pred_sum[oob_rows[j]] <- pred_sum[oob_rows[j]] + mean(Y[leaf_samples])
+      pred_n[oob_rows[j]] <- pred_n[oob_rows[j]] + 1
+    }
+  }
+
+  ifelse(pred_n > 0, pred_sum / pred_n, NA_real_)
+}
+
 # ---- stage 1: nuisance estimation (random forest) ---------------------------
 
 # double crossfitting over fold pairs - the status quo (cts_models.R:62)
@@ -207,17 +257,37 @@ nuisance_oob_rf <- function(X, Y, W, num.threads = NULL) {
        Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat)
 }
 
-# no honesty at all: whole-sample fit, in-sample predictions. lower bound.
-nuisance_insample_rf <- function(X, Y, W, num.threads = NULL) {
+# S-learner counterpart to nuisance_oob_rf, using oob_predict_counterfactual instead
+# of a T-learner - matches the S-learner structure used by every other nuisance in
+# this file (nuisance_double_rf, nuisance_single_rf). Kept alongside nuisance_oob_rf
+# rather than replacing it, so the T-learner and the workaround can be compared.
+nuisance_oob_rf_s <- function(X, Y, W, num.threads = NULL) {
+  forest <- regression_forest(cbind(W = W, X), Y, num.threads = num.threads)
 
-  Y.hat.model <- regression_forest(cbind(W = W, X), Y, num.threads = num.threads)
-  Y.hat.cf.model <- regression_forest(X, Y, num.threads = num.threads)
-  W.hat.model <- regression_forest(X, W, num.threads = num.threads)
+  Y0.hat <- oob_predict_counterfactual(forest, cbind(W = 0, X))
+  Y1.hat <- oob_predict_counterfactual(forest, cbind(W = 1, X))
 
-  Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X))$predictions
-  Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X))$predictions
-  Y.hat.cf <- predict(Y.hat.cf.model, newdata = X)$predictions
-  W.hat <- trim_ps(predict(W.hat.model, newdata = X)$predictions)
+  W.hat <- trim_ps(predict(regression_forest(X, W, num.threads = num.threads))$predictions)
+  Y.hat.cf <- predict(regression_forest(X, Y, num.threads = num.threads))$predictions
+
+  list(po = dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat),
+       Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat)
+}
+
+# manual-API counterpart to nuisance_oob_rf_s - identical S-learner forest, but the
+# counterfactual OOB predictions come from oob_predict_counterfactual_manual instead
+# of the X.orig shortcut. Y0.hat/Y1.hat can be NA for rows that are in-bag in every
+# tree (astronomically unlikely at grf's default num.trees, but dr_pseudo will
+# propagate a resulting NA rather than silently drop it, so a run that hits this
+# will fail loudly).
+nuisance_oob_rf_manual <- function(X, Y, W, num.threads = NULL) {
+  forest <- regression_forest(cbind(W = W, X), Y, num.threads = num.threads)
+
+  Y0.hat <- oob_predict_counterfactual_manual(forest, cbind(W = 0, X), Y)
+  Y1.hat <- oob_predict_counterfactual_manual(forest, cbind(W = 1, X), Y)
+
+  W.hat <- trim_ps(predict(regression_forest(X, W, num.threads = num.threads))$predictions)
+  Y.hat.cf <- predict(regression_forest(X, Y, num.threads = num.threads))$predictions
 
   list(po = dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat),
        Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat)
@@ -287,11 +357,6 @@ nuisance_single_sl <- function(X, Y, W, fold_indices, sl_lib) {
   scatter_folds(cross_fits, fold_indices, c("po", "Y0.hat", "W.hat"))
 }
 
-nuisance_insample_sl <- function(X, Y, W, sl_lib) {
-  all_rows <- rep(TRUE, nrow(X))
-  sl_nuisance_fit(X, Y, W, all_rows, all_rows, sl_lib)
-}
-
 # ---- stage 2: final CATE regression -----------------------------------------
 
 # crossfit stage 2: fit on the complement of each fold, predict the held-out fold.
@@ -323,13 +388,10 @@ stage2_crossfit_rf <- function(X, po, X_test, fold_indices, num.threads = NULL) 
   list(tau = tau, tau_test = rowMeans(tau_test_folds), tau_test_folds = tau_test_folds)
 }
 
-# whole-sample stage 2. one forest, three views of it: in-sample, out-of-bag and
-# test-set. fitting once means the in-sample vs OOB contrast isolates the
-# prediction type rather than also picking up forest-to-forest randomness.
+# whole-sample stage 2: one forest, its OOB predictions and its test-set predictions.
 stage2_whole_rf <- function(X, po, X_test, num.threads = NULL) {
   forest <- regression_forest(X, po, num.threads = num.threads)
-  list(tau_insample = predict(forest, newdata = X)$predictions,
-       tau_oob = predict(forest)$predictions,
+  list(tau_oob = predict(forest)$predictions,
        tau_test = predict(forest, newdata = X_test)$predictions)
 }
 
@@ -360,13 +422,6 @@ stage2_crossfit_sl <- function(X, po, X_test, fold_indices, sl_lib) {
   list(tau = tau, tau_test = rowMeans(tau_test_folds), tau_test_folds = tau_test_folds)
 }
 
-stage2_whole_sl <- function(X, po, X_test, sl_lib) {
-  po_lib <- pretest_superlearner(po, X, sl_lib, gaussian())
-  po_model <- SuperLearner(po, X, family = gaussian(), SL.library = po_lib)
-  list(tau_insample = as.numeric(predict(po_model, newdata = X)$pred),
-       tau_test = as.numeric(predict(po_model, newdata = X_test)$pred))
-}
-
 # ---- causal forest ----------------------------------------------------------
 
 # fold-wise causal forest. Y.hat / W.hat are either n x V matrices indexed by fold
@@ -394,12 +449,11 @@ cf_foldwise <- function(X, Y, W, X_test, Y.hat, W.hat, fold_indices, num.threads
   list(tau = tau, tau_test = rowMeans(tau_test_folds), tau_test_folds = tau_test_folds)
 }
 
-# whole-sample causal forest, three views as in stage2_whole_rf. Y.hat / W.hat
-# NULL falls back to grf's own internally cross-fit OOB nuisances.
+# whole-sample causal forest: its OOB predictions and its test-set predictions.
+# Y.hat / W.hat NULL falls back to grf's own internally cross-fit OOB nuisances.
 cf_whole <- function(X, Y, W, X_test, Y.hat = NULL, W.hat = NULL, num.threads = NULL) {
   forest <- causal_forest(X, Y, W, Y.hat = Y.hat, W.hat = W.hat, num.threads = num.threads)
-  list(tau_insample = predict(forest, newdata = X)$predictions,
-       tau_oob = predict(forest)$predictions,
+  list(tau_oob = predict(forest)$predictions,
        tau_test = predict(forest, newdata = X_test)$predictions)
 }
 
@@ -470,8 +524,10 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   nz_single_t <- timed(nuisance_single_rf_t(X, Y, W, fold_indices, num.threads))
   cat("Nuisances: RF out-of-bag...\n")
   nz_oob <- timed(nuisance_oob_rf(X, Y, W, num.threads))
-  cat("Nuisances: RF in-sample...\n")
-  nz_insample <- timed(nuisance_insample_rf(X, Y, W, num.threads))
+  cat("Nuisances: RF out-of-bag (S-learner, X.orig workaround)...\n")
+  nz_oob_s <- timed(nuisance_oob_rf_s(X, Y, W, num.threads))
+  cat("Nuisances: RF out-of-bag (S-learner, manual tree-loop)...\n")
+  nz_oob_manual <- timed(nuisance_oob_rf_manual(X, Y, W, num.threads))
 
   # -- DR learner, random forest ---------------------------------------------
   cat("DR-RF variants...\n")
@@ -488,10 +544,7 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   arms$scf_scf_new <- arm("dr_rf", "scf_scf_new", s$value$tau, s$value$tau_test,
                           nz_single$time, s$time, s$value$tau_test_folds, truth_test)
 
-  # scf_full and scf_oob are two views of one whole-sample forest
   s <- timed(stage2_whole_rf(X, nz_single$value$po, X_test, num.threads))
-  arms$scf_full <- arm("dr_rf", "scf_full", s$value$tau_insample, s$value$tau_test,
-                       nz_single$time, s$time, truth_test = truth_test)
   arms$scf_oob <- arm("dr_rf", "scf_oob", s$value$tau_oob, s$value$tau_test,
                       nz_single$time, s$time, truth_test = truth_test)
 
@@ -503,9 +556,13 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   arms$oob_oob <- arm("dr_rf", "oob_oob", s$value$tau_oob, s$value$tau_test,
                       nz_oob$time, s$time, truth_test = truth_test)
 
-  s <- timed(stage2_whole_rf(X, nz_insample$value$po, X_test, num.threads))
-  arms$naive <- arm("dr_rf", "naive", s$value$tau_insample, s$value$tau_test,
-                    nz_insample$time, s$time, truth_test = truth_test)
+  s <- timed(stage2_whole_rf(X, nz_oob_s$value$po, X_test, num.threads))
+  arms$oob_oob_s <- arm("dr_rf", "oob_oob_s", s$value$tau_oob, s$value$tau_test,
+                        nz_oob_s$time, s$time, truth_test = truth_test)
+
+  s <- timed(stage2_whole_rf(X, nz_oob_manual$value$po, X_test, num.threads))
+  arms$oob_oob_manual <- arm("dr_rf", "oob_oob_manual", s$value$tau_oob, s$value$tau_test,
+                             nz_oob_manual$time, s$time, truth_test = truth_test)
 
   # -- causal forest ---------------------------------------------------------
   cat("Causal forest variants...\n")
@@ -520,13 +577,10 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   arms$cf_scf <- arm("causal_forest", "cf_scf", s$value$tau, s$value$tau_test,
                      nz_single$time, s$time, s$value$tau_test_folds, truth_test)
 
-  # cf_full_oob and cf_naive are two views of one whole-sample causal forest
   s <- timed(cf_whole(X, Y, W, X_test, nz_single$value$Y.hat.cf,
                       nz_single$value$W.hat, num.threads))
   arms$cf_full_oob <- arm("causal_forest", "cf_full_oob", s$value$tau_oob, s$value$tau_test,
                           nz_single$time, s$time, truth_test = truth_test)
-  arms$cf_naive <- arm("causal_forest", "cf_naive", s$value$tau_insample, s$value$tau_test,
-                       nz_single$time, s$time, truth_test = truth_test)
 
   # grf's own internally cross-fit OOB nuisances - no separate nuisance stage
   s <- timed(cf_whole(X, Y, W, X_test, num.threads = num.threads))
@@ -544,8 +598,6 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
     sz_double <- timed(nuisance_double_sl(X_df, Y, W, fold_indices, fold_pairs, sl_lib))
     cat("Nuisances: SL single crossfit...\n")
     sz_single <- timed(nuisance_single_sl(X_df, Y, W, fold_indices, sl_lib))
-    cat("Nuisances: SL in-sample...\n")
-    sz_insample <- timed(nuisance_insample_sl(X_df, Y, W, sl_lib))
 
     cat("DR-SL variants...\n")
 
@@ -560,14 +612,6 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
     s <- timed(stage2_crossfit_sl(X_df, sz_single$value$po, X_test_df, fold_indices_b, sl_lib))
     arms$sl_scf_scf_new <- arm("dr_sl", "scf_scf_new", s$value$tau, s$value$tau_test,
                                sz_single$time, s$time, s$value$tau_test_folds, truth_test)
-
-    s <- timed(stage2_whole_sl(X_df, sz_single$value$po, X_test_df, sl_lib))
-    arms$sl_scf_full <- arm("dr_sl", "scf_full", s$value$tau_insample, s$value$tau_test,
-                            sz_single$time, s$time, truth_test = truth_test)
-
-    s <- timed(stage2_whole_sl(X_df, sz_insample$value$po, X_test_df, sl_lib))
-    arms$sl_naive <- arm("dr_sl", "naive", s$value$tau_insample, s$value$tau_test,
-                         sz_insample$time, s$time, truth_test = truth_test)
   }
 
   list(arms = arms, fold_indices = fold_indices, fold_indices_b = fold_indices_b)

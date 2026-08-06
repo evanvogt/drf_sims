@@ -15,10 +15,14 @@ path <- here()
 source(here("crossfitting", "cf_models.R"))
 
 # simulation parameters
-i <- as.numeric(commandArgs(trailingOnly = T))
-
-workers <- 2
-grf_threads <- 1
+args <- as.numeric(commandArgs(trailingOnly = T))
+i <- args[1]
+# workers/grf_threads default to the pre-profiling values so a bare
+# `Rscript cf_analysis.R 1` still works as a local smoke test; cf_1.sh always
+# supplies both once cf_profile_summary.R has written them in - see
+# cf_profile_summary.R and the note in README.md on sizing the array job.
+workers <- if (length(args) >= 2 && !is.na(args[2])) args[2] else 2
+grf_threads <- if (length(args) >= 3 && !is.na(args[3])) args[3] else 1
 n_test <- 2000
 
 params <- expand.grid(

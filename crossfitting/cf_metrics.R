@@ -69,24 +69,23 @@ run_metrics <- function(sim_res, scenario) {
 }
 
 # display order and labels, used by cf_results.R
-variant_levels <- c("dcf", "scf_scf", "scf_scf_new", "scf_full", "scf_oob",
-                    "scf_oob_t", "oob_oob", "naive",
-                    "cf_dcf", "cf_scf", "cf_full_oob", "cf_default", "cf_naive")
+variant_levels <- c("dcf", "scf_scf", "scf_scf_new", "scf_oob",
+                    "scf_oob_t", "oob_oob", "oob_oob_s", "oob_oob_manual",
+                    "cf_dcf", "cf_scf", "cf_full_oob", "cf_default")
 
 variant_labels <- c(
   dcf = "Double CF",
   scf_scf = "CF+CF",
   scf_scf_new = "CF+CF (new)",
-  scf_full = "CF+full",
   scf_oob = "CF+OOB",
   scf_oob_t = "CF+OOB (T)",
   oob_oob = "OOB+OOB",
-  naive = "Naive",
+  oob_oob_s = "OOB+OOB (S)",
+  oob_oob_manual = "OOB+OOB (S, manual)",
   cf_dcf = "Double CF nuis.",
   cf_scf = "CF nuis.",
   cf_full_oob = "Full+OOB",
-  cf_default = "grf OOB",
-  cf_naive = "Full naive"
+  cf_default = "grf OOB"
 )
 
 family_labels <- c(dr_rf = "DR-learner (RF)",
