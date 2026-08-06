@@ -9,7 +9,7 @@
 # Memory and CPU are measured inside R by syrup, so there is no background
 # qstat sampler here and nothing depends on the scheduler.
 #PBS -l walltime=08:00:00
-#PBS -l select=1:ncpus=8:ompthreads=8:mem=32gb
+#PBS -l select=1:ncpus=8:ompthreads=8:mem=16gb
 #PBS -J 1-48
 #PBS -N cf_ci_profile
 #PBS -o logs_ci_profile/
