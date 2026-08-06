@@ -1,9 +1,9 @@
 ##########
 # title: verification checks for the crossfitting CI pilot
 ##########
-# Run this before submitting crossfitting/jobscripts/cf_ci_1.sh:
+# Run this before submitting crossfitting/confidence_intervals/jobscripts/cf_ci_1.sh:
 #
-#   Rscript crossfitting/cf_ci_testing.R
+#   Rscript crossfitting/confidence_intervals/cf_ci_testing.R
 #
 # Kept separate from cf_testing.R since it exercises different code (the
 # bootstrap machinery and run_crossfit_structured_arms, not the full
@@ -197,4 +197,4 @@ if (length(fail) > 0) {
   for (f in fail) cat("  - ", f, "\n", sep = "")
   quit(status = 1)
 }
-cat("\nall checks passed. next: submit jobscripts/cf_ci_1.sh\n")
+cat("\nall checks passed. next: submit confidence_intervals/jobscripts/cf_ci_1.sh\n")

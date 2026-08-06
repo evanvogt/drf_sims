@@ -103,9 +103,11 @@ arms and the T-learner control are dropped.
 | `cf_metrics.R` | metric definitions (functions only, no side effects) |
 | `cf_collect.R` | streams the per-run files through `cf_metrics.R` into `cf_metrics.RDS` |
 | `cf_results.R` | figures |
-| `cf_ci_analysis.R` | half-sample bootstrap CI pilot — see below |
-| `cf_ci_testing.R` | verification checks for the CI pilot |
-| `cf_ci_check.R` / `cf_ci_metrics.R` / `cf_ci_collect.R` | CI pilot's own check/metrics/collect, parallel to the files above |
+| `confidence_intervals/cf_ci_analysis.R` | half-sample bootstrap CI pilot — see below |
+| `confidence_intervals/cf_ci_testing.R` | verification checks for the CI pilot |
+| `confidence_intervals/cf_ci_check.R` / `cf_ci_metrics.R` / `cf_ci_collect.R` | CI pilot's own check/metrics/collect, parallel to the files above |
+| `confidence_intervals/cf_ci_profile.R` | timing / memory / CPU sweep over `(workers, grf_threads, CI_boot)` for the CI pilot, instrumented with `syrup` |
+| `confidence_intervals/cf_ci_profile_summary.R` | turns the sweep into PBS directives (extrapolating to the pilot's real `CI_boot`) and writes them into `cf_ci_1.sh` |
 
 ## Half-sample bootstrap CI pilot
 
@@ -153,13 +155,44 @@ run below nominal — that's the pilot's actual research question, so
 most units, non-degenerate width) rather than gating on ~95% coverage.
 
 ```bash
-Rscript crossfitting/cf_ci_testing.R              # structure + regression checks
-Rscript crossfitting/cf_ci_analysis.R 1 10 2 1    # local smoke test: index 1, CI_boot=10
+Rscript crossfitting/confidence_intervals/cf_ci_testing.R              # structure + regression checks
+Rscript crossfitting/confidence_intervals/cf_ci_analysis.R 1 10 2 1    # local smoke test: index 1, CI_boot=10
 
-qsub crossfitting/jobscripts/cf_ci_1.sh           # the pilot itself (150 jobs)
-Rscript crossfitting/cf_ci_check.R                # 150/150?
-qsub crossfitting/jobscripts/cf_ci_collect.sh
+Rscript crossfitting/confidence_intervals/cf_ci_profile.R 1            # smoke-test the CI profiler locally
+qsub crossfitting/confidence_intervals/jobscripts/cf_ci_profile.sh     # 48 profiling jobs
+Rscript crossfitting/confidence_intervals/cf_ci_profile_summary.R      # writes measured directives into cf_ci_1.sh
+
+qsub crossfitting/confidence_intervals/jobscripts/cf_ci_1.sh           # the pilot itself (150 jobs)
+Rscript crossfitting/confidence_intervals/cf_ci_check.R                # 150/150?
+qsub crossfitting/confidence_intervals/jobscripts/cf_ci_collect.sh
 ```
+
+### Sizing the CI pilot's array job
+
+`cf_ci_1.sh` shipped with **placeholder** `#PBS -l` lines (a hand-sizing step the
+pilot's original scope deferred rather than skipped). `cf_ci_profile.R` /
+`cf_ci_profile_summary.R` settle it the same way `cf_profile.R` / `cf_profile_summary.R`
+do for `cf_1.sh` — see "Sizing the array job" below for the shared mechanics
+(`syrup`, process-tree filtering, the peak-memory upper bound) — with one addition
+specific to the bootstrap: the sweep profiles `CI_boot` at **20 and 60**, not at the
+pilot's real 200. Each bootstrap draw (`future_map()` in `rf_half_boot`/
+`cf_half_boot`, `R/bootstrap_ci.R`) is an independent refit of `V` forests on a
+half-sample, and the `n x CI_boot` draws matrix is only assembled after
+`future_map()` returns — so elapsed time scales ~linearly in `CI_boot` while peak
+memory (governed by how many draws run concurrently across `workers`, not by
+`CI_boot` itself) stays roughly flat. Profiling directly at `CI_boot = 200` across
+the sweep would cost as much as the production array it exists to size.
+`cf_ci_profile_summary.R` fits `elapsed ~ CI_boot` per `(workers, grf_threads)`,
+pooled over scenario/run so the R² is a real diagnostic, and warns if any
+configuration's fit falls below R² = 0.9 rather than trusting a bad extrapolation
+silently. It also reports a per-arm bootstrap cost breakdown (which of `dcf`,
+`scf_scf`, `scf_scf_new`, `cf_dcf`, `cf_scf` dominates, extrapolated to
+`CI_boot = 200`) — the "why is it slow" answer, alongside the resource sizing.
+
+The `Rscript` line it writes carries `CI_boot`, `workers` and `grf_threads`
+together, fixing the mismatch the placeholder version had (`workers=2` on the
+Rscript line vs. `ncpus=1` in `#PBS -l select` — the same kind of drift
+`cf_profile_summary.R`'s header comment warns about for `cf_1.sh`).
 
 Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
 `collate_predictions`, `continuous/cts_dgms.R` supplies the DGP, and

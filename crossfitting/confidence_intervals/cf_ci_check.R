@@ -11,7 +11,7 @@ library(purrr)
 
 # path
 res_path <- file.path(dirname(here()), "results", "crossfitting_ci")
-failed_file <- here("crossfitting", "jobscripts", "failed_ci_ids.txt")
+failed_file <- here("crossfitting", "confidence_intervals", "jobscripts", "failed_ci_ids.txt")
 
 # parameters - must match cf_ci_analysis.R exactly
 n_sims <- 50
@@ -40,7 +40,7 @@ if (nrow(failed) > 0) {
   failed_idx <- which(interaction(full_params) %in% interaction(failed))
 
   cat(failed_idx, file = failed_file, sep = "\n")
-  print(paste0("failed runs found (", nrow(failed), ") saved to jobscripts folder"))
+  print(paste0("failed runs found (", nrow(failed), ") saved to confidence_intervals/jobscripts folder"))
 } else {
   print("All simulations complete! Go ahead and collect up the results")
 }

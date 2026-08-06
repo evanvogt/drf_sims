@@ -621,7 +621,7 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
 
 #' Point estimates for exactly the 5 crossfit-structured RF arms
 #'
-#' A trimmed sibling of run_all_crossfit_variants for crossfitting/cf_ci_analysis.R
+#' A trimmed sibling of run_all_crossfit_variants for crossfitting/confidence_intervals/cf_ci_analysis.R
 #' (the half-sample bootstrap CI pilot), whose bootstrap refits already dominate
 #' per-replicate cost - run_all_crossfit_variants would spend most of its time on
 #' the 10 OOB/whole-sample/SuperLearner arms that pilot is out of scope for.
@@ -639,7 +639,7 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
 #' would defeat the point of trimming them. dcf/cf_dcf here are a different
 #' (equally valid) draw of the same estimator for the same (scenario, run), not
 #' a reproduction of the production study's saved arms - see
-#' crossfitting/cf_ci_testing.R check 1, which verifies nuisance-level identity
+#' crossfitting/confidence_intervals/cf_ci_testing.R check 1, which verifies nuisance-level identity
 #' and stage-2 estimator-level agreement (high correlation, not exact equality).
 #' run_all_crossfit_variants itself is untouched by this function.
 #'

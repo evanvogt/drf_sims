@@ -13,7 +13,7 @@ library(future)
 library(furrr)
 
 # functions
-source(here("crossfitting", "cf_ci_metrics.R"))
+source(here("crossfitting", "confidence_intervals", "cf_ci_metrics.R"))
 
 # paths
 res_path <- file.path(dirname(here()), "results", "crossfitting_ci")
