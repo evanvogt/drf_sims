@@ -25,4 +25,4 @@ cd "${PBS_O_WORKDIR}/.."
 
 # Run R script with parameters. Trailing args are workers/grf_threads - placeholders
 # here, overwritten by cf_profile_summary.R alongside the #PBS -l lines above.
-Rscript cf_analysis.R "$PBS_ARRAY_INDEX" 2 1
+Rscript cf_analysis.R "$PBS_ARRAY_INDEX" 1 1
