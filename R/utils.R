@@ -2,8 +2,8 @@
 # title: shared low-level helpers
 ##########
 # Sourced by every study, directly. The repo-root utils.R is a shim onto this
-# file, kept only because validation/ sources it by absolute path on the cluster
-# and that folder is outside the restructure.
+# file, kept only because case_study/ relies on whatever drives it to have
+# loaded that shim first - case_study/ is outside the scope of the restructure.
 
 require(parallel)
 

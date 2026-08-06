@@ -1,0 +1,11 @@
+##########
+# title: check for failed simulations - interim-analysis validation study
+##########
+# The grid and the results path come from the study config, so this script and
+# the analysis script cannot disagree about what index i means.
+# Writes array indices of the missing runs to jobscripts/failed_ids.txt.
+
+library(here)
+source(here("validation/cts_val_config.R"))
+
+check_failed(study)
