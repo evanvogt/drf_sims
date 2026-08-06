@@ -103,6 +103,63 @@ arms and the T-learner control are dropped.
 | `cf_metrics.R` | metric definitions (functions only, no side effects) |
 | `cf_collect.R` | streams the per-run files through `cf_metrics.R` into `cf_metrics.RDS` |
 | `cf_results.R` | figures |
+| `cf_ci_analysis.R` | half-sample bootstrap CI pilot — see below |
+| `cf_ci_testing.R` | verification checks for the CI pilot |
+| `cf_ci_check.R` / `cf_ci_metrics.R` / `cf_ci_collect.R` | CI pilot's own check/metrics/collect, parallel to the files above |
+
+## Half-sample bootstrap CI pilot
+
+`cf_ci_analysis.R` adds half-sample bootstrap confidence intervals
+(`R/bootstrap_ci.R`'s `cf_half_boot`/`rf_half_boot`, the same machinery
+`confidence_intervals/` uses) to the 5 arms whose stage 2 is a genuine
+per-fold crossfit: `dcf`, `scf_scf`, `scf_scf_new` (family `dr_rf`) and
+`cf_dcf`, `cf_scf` (family `causal_forest`). Out of scope: the 6 whole-sample
+/ OOB arms (no per-fold structure for the bootstrap to refit against) and the
+3 SuperLearner arms (not RF-based).
+
+It is a **pilot, not the production run**: 3 scenarios (`1, 6, 9`) × 50 runs
+= 150 replicates, `CI_boot = 200`, `CI_sf` fixed at 0.5 (grf's default
+`sample.fraction`, no sweep). Nuisances are computed once per replicate via a
+new trimmed orchestrator, `run_crossfit_structured_arms()` in `cf_models.R`
+(mechanically extracted from `run_all_crossfit_variants`). Its `nz_double`/
+`nz_single` nuisance objects are bit-identical to the production study's
+under the same `setup_rng_stream(run)` seed, since nothing precedes them in
+the RNG stream in either orchestrator — but its `dcf`/`cf_dcf` stage-2
+estimates are **not** bit-identical to the saved production arms: skipping
+the 4 out-of-scope nuisance fits that `run_all_crossfit_variants` performs
+between `nz_single` and its own stage-2 calls shifts every later
+`future_map()` forest fit to a different position in the RNG stream. That's
+by design (replaying the skipped fits just to stay in lockstep would defeat
+the point of trimming them); `dcf`/`cf_dcf` here are a different, equally
+valid draw of the same estimator for the same `(scenario, run)`, not a
+reproduction of the saved production values — see `cf_ci_testing.R` check 1,
+which verifies nuisance-level identity and stage-2 estimator-level agreement
+(high correlation, not exact equality) instead. Only the final-stage forest
+is refit per half-sample-per-fold, matching `R/bootstrap_ci.R`'s existing
+design. `cf_half_boot` was generalized to accept single-crossfit vector
+nuisances (`cf_scf`) alongside its original double-crossfit matrix nuisances
+(`cf_dcf`) — a shape-detection change, backward compatible with its existing
+caller in `R/cate_models.R`.
+
+Results land in `../results/crossfitting_ci/`, a wholly separate tree from
+`../results/crossfitting/` — the production study's 2000 replicates are
+never read or touched. Per-run files drop the bootstrap `draws` matrices
+before saving (only `hb_lb`/`hb_ub` are needed downstream), following this
+folder's existing small-file convention.
+
+Coverage from this method is already known (from `confidence_intervals/`) to
+run below nominal — that's the pilot's actual research question, so
+`cf_ci_testing.R` checks band well-formedness (finite, brackets `tau` for
+most units, non-degenerate width) rather than gating on ~95% coverage.
+
+```bash
+Rscript crossfitting/cf_ci_testing.R              # structure + regression checks
+Rscript crossfitting/cf_ci_analysis.R 1 10 2 1    # local smoke test: index 1, CI_boot=10
+
+qsub crossfitting/jobscripts/cf_ci_1.sh           # the pilot itself (150 jobs)
+Rscript crossfitting/cf_ci_check.R                # 150/150?
+qsub crossfitting/jobscripts/cf_ci_collect.sh
+```
 
 Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
 `collate_predictions`, `continuous/cts_dgms.R` supplies the DGP, and

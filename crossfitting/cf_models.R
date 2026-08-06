@@ -616,3 +616,76 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
 
   list(arms = arms, fold_indices = fold_indices, fold_indices_b = fold_indices_b)
 }
+
+# ---- pilot: crossfit-structured arms only ------------------------------------
+
+#' Point estimates for exactly the 5 crossfit-structured RF arms
+#'
+#' A trimmed sibling of run_all_crossfit_variants for crossfitting/cf_ci_analysis.R
+#' (the half-sample bootstrap CI pilot), whose bootstrap refits already dominate
+#' per-replicate cost - run_all_crossfit_variants would spend most of its time on
+#' the 10 OOB/whole-sample/SuperLearner arms that pilot is out of scope for.
+#'
+#' Draws fold_indices_b and fits nz_double/nz_single in the same order and RNG
+#' position as run_all_crossfit_variants, so those two nuisance objects (po,
+#' Y.hat.cf_matrix/Y.hat.cf, W.hat_matrix/W.hat) ARE bit-identical to what
+#' run_all_crossfit_variants computes under the same setup_rng_stream(run) seed.
+#' The stage-2 arms built from them are NOT bit-identical, though: skipping the
+#' 4 out-of-scope nuisance fits (nuisance_single_rf_t/nuisance_oob_rf*) that
+#' run_all_crossfit_variants performs between nz_single and its own dcf/cf_dcf
+#' stage-2 calls means every future_map()-driven forest fit from this function's
+#' stage 2 onward draws from a different position in the RNG stream - by design,
+#' since replaying those out-of-scope fits just to keep the stream in lockstep
+#' would defeat the point of trimming them. dcf/cf_dcf here are a different
+#' (equally valid) draw of the same estimator for the same (scenario, run), not
+#' a reproduction of the production study's saved arms - see
+#' crossfitting/cf_ci_testing.R check 1, which verifies nuisance-level identity
+#' and stage-2 estimator-level agreement (high correlation, not exact equality).
+#' run_all_crossfit_variants itself is untouched by this function.
+#'
+#' @return list with $arms (dcf, scf_scf, scf_scf_new, cf_dcf, cf_scf arm()
+#'   records), $nz_double, $nz_single (raw nuisance objects, needed by
+#'   rf_half_boot/cf_half_boot), $fold_indices, $fold_indices_b
+run_crossfit_structured_arms <- function(data, X_test, n_folds = 10,
+                                         num.threads = NULL, truth_test = NULL) {
+
+  X <- as.matrix(data[, -c(1:2)])
+  Y <- data$Y
+  W <- data$W
+  n_obs <- nrow(X)
+
+  fold_indices <- sort(seq(n_obs) %% n_folds) + 1
+  fold_list <- unique(fold_indices)
+  fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)
+  fold_indices_b <- sample(fold_indices)
+
+  arms <- list()
+
+  nz_double <- timed(nuisance_double_rf(X, Y, W, fold_indices, fold_pairs, num.threads))
+  nz_single <- timed(nuisance_single_rf(X, Y, W, fold_indices, num.threads))
+
+  s <- timed(stage2_crossfit_rf(X, nz_double$value$po, X_test, fold_indices, num.threads))
+  arms$dcf <- arm("dr_rf", "dcf", s$value$tau, s$value$tau_test, nz_double$time, s$time,
+                  s$value$tau_test_folds, truth_test)
+
+  s <- timed(stage2_crossfit_rf(X, nz_single$value$po, X_test, fold_indices, num.threads))
+  arms$scf_scf <- arm("dr_rf", "scf_scf", s$value$tau, s$value$tau_test, nz_single$time, s$time,
+                      s$value$tau_test_folds, truth_test)
+
+  s <- timed(stage2_crossfit_rf(X, nz_single$value$po, X_test, fold_indices_b, num.threads))
+  arms$scf_scf_new <- arm("dr_rf", "scf_scf_new", s$value$tau, s$value$tau_test,
+                          nz_single$time, s$time, s$value$tau_test_folds, truth_test)
+
+  s <- timed(cf_foldwise(X, Y, W, X_test, nz_double$value$Y.hat.cf_matrix,
+                         nz_double$value$W.hat_matrix, fold_indices, num.threads))
+  arms$cf_dcf <- arm("causal_forest", "cf_dcf", s$value$tau, s$value$tau_test,
+                     nz_double$time, s$time, s$value$tau_test_folds, truth_test)
+
+  s <- timed(cf_foldwise(X, Y, W, X_test, nz_single$value$Y.hat.cf,
+                         nz_single$value$W.hat, fold_indices, num.threads))
+  arms$cf_scf <- arm("causal_forest", "cf_scf", s$value$tau, s$value$tau_test,
+                     nz_single$time, s$time, s$value$tau_test_folds, truth_test)
+
+  list(arms = arms, nz_double = nz_double$value, nz_single = nz_single$value,
+       fold_indices = fold_indices, fold_indices_b = fold_indices_b)
+}

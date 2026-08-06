@@ -45,9 +45,12 @@ simultaneous_band <- function(draws, tau, alpha) {
 
 #' Half-sample bootstrap for the causal forest
 #'
-#' @param nuisances the double-crossfit nuisance object; the fold-indexed
-#'   Y.hat.cf_matrix / W.hat_matrix columns are reused unchanged, so only the
-#'   forest is refit on each half sample
+#' @param nuisances the crossfit nuisance object. Double-crossfit nuisances
+#'   (nuisance_double_rf) carry fold-indexed Y.hat.cf_matrix / W.hat_matrix
+#'   columns, reused unchanged so only the forest is refit on each half
+#'   sample. Single-crossfit nuisances (nuisance_single_rf) carry only the
+#'   un-suffixed vector fields Y.hat.cf / W.hat - detected the same way
+#'   cf_foldwise (crossfitting/cf_models.R) detects its own Y.hat/W.hat shape.
 #' @param tau point estimates from the full sample
 #' @param CI_boot number of bootstrap draws
 #' @param CI_sf sample.fraction handed to the half-sample forests
@@ -58,6 +61,13 @@ cf_half_boot <- function(X, Y, W, nuisances, tau, CI_boot = 200, CI_sf = 0.5,
   fold_membership <- lapply(fold_list, function(fold) which(fold_indices == fold))
   fold_sizes <- lengths(fold_membership)
 
+  # prefer the matrix fields when present (every existing caller has them);
+  # single-crossfit nuisances have only the vector fields
+  Y.hat <- if (!is.null(nuisances$Y.hat.cf_matrix)) nuisances$Y.hat.cf_matrix else nuisances$Y.hat.cf
+  W.hat <- if (!is.null(nuisances$W.hat_matrix)) nuisances$W.hat_matrix else nuisances$W.hat
+  single <- is.vector(Y.hat)
+  stopifnot(is.vector(Y.hat) == is.vector(W.hat))
+
   draws <- future_map(seq_len(CI_boot), function(b) {
     half_samples <- half_sample(fold_list, fold_membership, fold_sizes, n_obs)
 
@@ -65,10 +75,11 @@ cf_half_boot <- function(X, Y, W, nuisances, tau, CI_boot = 200, CI_sf = 0.5,
       in_train <- half_samples & (fold_indices != fold)
       in_fold <- fold_indices == fold
 
+      y_hat <- if (single) Y.hat[in_train] else Y.hat[in_train, fold]
+      w_hat <- if (single) W.hat[in_train] else W.hat[in_train, fold]
+
       half_cf <- causal_forest(X[in_train, ], Y[in_train], W[in_train],
-                               nuisances$Y.hat.cf_matrix[in_train, fold],
-                               nuisances$W.hat_matrix[in_train, fold],
-                               sample.fraction = CI_sf)
+                               y_hat, w_hat, sample.fraction = CI_sf)
       predict(half_cf, newdata = X[in_fold, ])$predictions
     })
 
