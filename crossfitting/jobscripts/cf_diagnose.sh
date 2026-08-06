@@ -1,7 +1,8 @@
 #!/bin/bash
-# Runs cf_diagnose_sampler.R in exactly the environment where cf_profile.sh
-# failed - same modules, same conda env, same working directory, same node type.
-# Single job, under a minute. Read the "=== reading ===" block at the end of
+# Runs cf_diagnose_sampler.R and cf_diagnose_multisession.R in exactly the
+# environment where cf_profile.sh has failed/warned - same modules, same conda
+# env, same working directory, same node type. Single job, under a minute each.
+# Read the "=== reading ===" block at the end of each script's output in
 # logs_diagnose/ for the verdict.
 #
 # ncpus=8:ompthreads=8 matches cf_profile.sh so the contention is comparable.
@@ -23,3 +24,4 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 Rscript cf_diagnose_sampler.R
+Rscript cf_diagnose_multisession.R
