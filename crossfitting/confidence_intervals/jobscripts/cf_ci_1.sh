@@ -8,8 +8,8 @@
 # before submitting the full array, rather than hand-guessing - the bootstrap
 # refits (~200 x V forests per arm x 5 arms) dominate cost here, well beyond
 # what cf_1.sh's point-estimate-only timings would suggest.
-#PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=1:ompthreads=1:mem=4gb
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=5gb
 #PBS -J 1-150
 #PBS -N cf_ci_1
 #PBS -o logs_ci_1/
