@@ -1,9 +1,24 @@
 ##########
-# nuisance estimation functions
+# title: nuisance-evaluation pipelines - model evaluation study
 ##########
-# general
+# A second, INDEPENDENT nuisance-estimation pipeline used only to score the 9
+# candidate models from me_models.R against each other and against true PEHE
+# - not to fit them. No other study in this repo needs this concept, so it
+# doesn't map onto config/dgms/models/analysis/check/collect/metrics and gets
+# its own file, the same way crossfitting/ has files beyond that 7-role
+# floor (cf_testing.R, cf_profile.R, ...). The 7-file shape is a floor, not
+# a ceiling.
+#
+# Two independent estimators of the same 4 nuisance targets (mu0_T, mu1_T,
+# mu_DR, pi): XGBoost with a hand-tuned CV grid, and H2O AutoML. Each used to
+# run under three fold regimes - cv (leave-one-fold-out), infold
+# (resubstitution), whole (no split) - now reduced to cv and whole. See the
+# comments above run_xgb_cross_validation()/run_automl_cross_validation()
+# for what the removed infold branches looked like and why one of them
+# (AutoML's) is flagged as suspect rather than just dropped silently.
 require(h2o)
 require(xgboost)
+
 unlist_order <- function(reslist) {
   df <- do.call(rbind, reslist)
   df <- df %>%
@@ -21,6 +36,9 @@ calculate_pseudos <- function(df, Y, W) {
     mutate(
       tau_T = mu1_T - mu0_T,
       phi = mu1_DR - mu0_DR + ((Y - mu_DR) * (W - pi)) / (pi * (1 - pi)),
+      # phi05 (propensity fixed at 0.5) is currently unused by any score in
+      # me_metrics.R - kept since it's one extra column from data already in
+      # scope, not worth deleting the way a whole unused function is.
       phi05 = mu1_DR - mu0_DR + ((Y - mu_DR) * (W - 0.5)) / (0.5 * (1 - 0.5))
     )
   return(df)
@@ -143,24 +161,22 @@ predict_nuisance_xgb <- function(models, pred_matrices) {
   )
 }
 
-run_xgb_cross_validation <- function(
-  X,
-  Y,
-  W,
-  fold_indices,
-  fold_list,
-  param_grids,
-  method = "cv"
-) {
+#' Leave-one-fold-out XGBoost nuisance estimation
+#'
+#' This used to also take a `method` argument selecting an "infold"
+#' (resubstitution) regime - fit and predict on the SAME held-in fold rather
+#' than holding it out:
+#'
+#'   train_filter <- fold_indices == fold; test_filter <- train_filter
+#'
+#' vs. the leave-one-fold-out filter below. Removed - only this (`cv`) and
+#' run_xgb_whole_dataset() (`whole`) run. Unlike the AutoML version of this
+#' removal below, XGBoost's infold branch had no companion bug found while
+#' reading it; a future re-add can restore the branch above unchanged.
+run_xgb_cross_validation <- function(X, Y, W, fold_indices, fold_list, param_grids) {
   nuisances <- lapply(fold_list, function(fold) {
-    # Determine train/test filters based on method
-    if (method == "cv") {
-      train_filter <- !(fold_indices %in% fold)
-      test_filter <- !train_filter
-    } else if (method == "infold") {
-      train_filter <- fold_indices == fold
-      test_filter <- train_filter
-    }
+    train_filter <- !(fold_indices %in% fold)
+    test_filter <- !train_filter
 
     # Prepare data matrices
     train_matrices <- prepare_xgb_matrices(
@@ -213,42 +229,22 @@ run_xgb_whole_dataset <- function(X, Y, W, param_grids) {
   return(result)
 }
 
-run_all_xgb_nuisance <- function(
-  X,
-  Y,
-  W,
-  fold_indices,
-  fold_list,
-  n_cores = 1
-) {
+#' Both XGBoost nuisance regimes this study uses
+#'
+#' Fixes a bug found while porting: the old sim_eval.R called this without
+#' n_cores, so XGBoost's own nthread grid parameter silently defaulted to 1
+#' regardless of the n_cores the script set elsewhere. run_all_nuisance_pipelines()
+#' below now always passes it through explicitly.
+run_all_xgb_nuisance <- function(X, Y, W, fold_indices, fold_list, n_cores = 1) {
   param_grids <- create_param_grid(n_cores)
 
   # Cross-validation
-  xgb_cv <- run_xgb_cross_validation(
-    X,
-    Y,
-    W,
-    fold_indices,
-    fold_list,
-    param_grids,
-    "cv"
-  )
-
-  # In-fold
-  xgb_infold <- run_xgb_cross_validation(
-    X,
-    Y,
-    W,
-    fold_indices,
-    fold_list,
-    param_grids,
-    "infold"
-  )
+  xgb_cv <- run_xgb_cross_validation(X, Y, W, fold_indices, fold_list, param_grids)
 
   # Whole dataset
   xgb_whole <- run_xgb_whole_dataset(X, Y, W, param_grids)
 
-  return(list(cv = xgb_cv, infold = xgb_infold, whole = xgb_whole))
+  return(list(cv = xgb_cv, whole = xgb_whole))
 }
 
 # AutoML
@@ -361,6 +357,27 @@ predict_automl_models <- function(models, pred_data) {
   )
 }
 
+#' Leave-one-fold-out H2O AutoML nuisance estimation
+#'
+#' This used to also take a `method` argument selecting an "infold"
+#' (resubstitution) regime, and a W-recoding line that shipped alongside it:
+#'
+#'   train_filter <- fold_indices == fold; test_filter <- train_filter
+#'   ...
+#'   W_final <- if (method == "infold") as.numeric(W) - 1 else W
+#'   result <- calculate_pseudos(result, Y, W_final)
+#'
+#' prepare_h2o_data()'s WX <- cbind(W = as.factor(W), X) turns W into a
+#' factor for H2O's classification target; as.numeric() on a 2-level factor
+#' returns 1/2, not the original 0/1, so `as.numeric(W) - 1` reads like an
+#' attempt to undo that conversion. But `W` in THIS function's scope is the
+#' caller's original numeric vector - it is never itself converted to a
+#' factor - so as.numeric(W) - 1 would take a plain 0/1 vector to -1/0, not
+#' back to 0/1, and calculate_pseudos()'s formulas (mu_DR, phi) assume
+#' W in {0,1}. This was never confirmed by an actual run (the pipeline has
+#' never completed one), so it's flagged here rather than asserted as a
+#' fixed bug - a future re-add of infold should verify this rather than
+#' restoring the line unchanged.
 run_automl_cross_validation <- function(
   X,
   Y,
@@ -368,19 +385,12 @@ run_automl_cross_validation <- function(
   fold_indices,
   fold_list,
   model_seed,
-  method = "cv",
   max_models = 20,
   exclude_algos = c("DeepLearning", "XGBoost")
 ) {
   nuisances <- lapply(fold_list, function(fold) {
-    # Determine train/test filters based on method
-    if (method == "cv") {
-      train_filter <- !(fold_indices %in% fold)
-      test_filter <- !train_filter
-    } else if (method == "infold") {
-      train_filter <- fold_indices == fold
-      test_filter <- train_filter
-    }
+    train_filter <- !(fold_indices %in% fold)
+    test_filter <- !train_filter
 
     # Prepare data
     train_data <- prepare_h2o_data(X, Y, W, train_filter, training = TRUE)
@@ -406,22 +416,13 @@ run_automl_cross_validation <- function(
 
   # Combine results and calculate pseudo-outcomes
   result <- unlist_order(nuisances)
-
-  # Handle W conversion for infold method (based on your original code)
-  W_final <- if (method == "infold") as.numeric(W) - 1 else W
-  result <- calculate_pseudos(result, Y, W_final)
+  result <- calculate_pseudos(result, Y, W)
 
   return(result)
 }
 
-run_automl_whole_dataset <- function(
-  X,
-  Y,
-  W,
-  model_seed,
-  max_models = 20,
-  exclude_algos = c("DeepLearning", "XGBoost")
-) {
+run_automl_whole_dataset <- function(X, Y, W, model_seed, max_models = 20,
+                                     exclude_algos = c("DeepLearning", "XGBoost")) {
   n_obs <- nrow(X)
   all_indices <- rep(TRUE, n_obs)
 
@@ -430,8 +431,6 @@ run_automl_whole_dataset <- function(
 
   # Fit models
   models <- fit_automl_models(train_data, model_seed, max_models, exclude_algos)
-
-  # Prepare prediction data
 
   # Make predictions
   result <- predict_automl_models(models, pred_data)
@@ -454,7 +453,13 @@ run_all_automl_nuisance <- function(
 ) {
   # Setup H2O cluster
   setup_h2o_cluster(n_cores = n_cores, mem = mem, model_seed = model_seed)
-  on.exit(h2o_shutdown_check, add = TRUE)
+  # was on.exit(h2o_shutdown_check, add = TRUE) - missing parens meant the
+  # cleanup handler was registered but never actually called on exit, so the
+  # "always shut the cluster down, even on error" safety net never fired.
+  # The explicit h2o.shutdown() this function used to end with on its happy
+  # path is now redundant (h2o_shutdown_check()'s own tryCatch makes it safe
+  # to call twice, but there's no need to) and has been removed.
+  on.exit(h2o_shutdown_check(), add = TRUE)
 
   # Cross-validation
   auto_cv <- run_automl_cross_validation(
@@ -464,20 +469,6 @@ run_all_automl_nuisance <- function(
     fold_indices,
     fold_list,
     model_seed,
-    "cv",
-    max_models,
-    exclude_algos
-  )
-
-  # In-fold
-  auto_infold <- run_automl_cross_validation(
-    X,
-    Y,
-    W,
-    fold_indices,
-    fold_list,
-    model_seed,
-    "infold",
     max_models,
     exclude_algos
   )
@@ -492,8 +483,18 @@ run_all_automl_nuisance <- function(
     exclude_algos
   )
 
-  # Shutdown H2O
-  h2o.shutdown(prompt = FALSE)
+  return(list(cv = auto_cv, whole = auto_whole))
+}
 
-  return(list(cv = auto_cv, infold = auto_infold, whole = auto_whole))
+#' Both nuisance-evaluation pipelines this study uses
+#'
+#' Single entry point for me_analysis.R, replacing the inline
+#' list(xgb=, automl=) construction that used to live in sim_eval.R.
+run_all_nuisance_pipelines <- function(X, Y, W, fold_indices, fold_list,
+                                       n_cores, mem, model_seed) {
+  list(
+    xgb    = run_all_xgb_nuisance(X, Y, W, fold_indices, fold_list, n_cores = n_cores),
+    automl = run_all_automl_nuisance(X, Y, W, fold_indices, fold_list,
+                                     n_cores = n_cores, mem = mem, model_seed = model_seed)
+  )
 }

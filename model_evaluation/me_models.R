@@ -1,13 +1,28 @@
 ##########
-# model fitting functions
+# title: candidate CATE-learner fitting - model evaluation study
 ##########
+# The 9 candidate configurations this study compares: 3 random-forest
+# hyperparameter sets, 3 elastic-net (glmnet) sets, 3 SuperLearner library
+# sets. Each is fit as its own double-crossfit DR-learner - out of scope to
+# change, this is what the study evaluates.
+#
+# This is a *different* estimator family from R/cate_models.R's DR-learner
+# (e.g. fit_glmnet wraps a single learner via create.Learner("SL.glmnet", ...)
+# inside SuperLearner(), a code path R/cate_models.R doesn't have) - not
+# unified into R/ here, since that would be a redesign, not a plumbing port.
+#
+# collate_predictions() is sourced from R/utils.R rather than duplicated
+# locally (the old model_utils.R's copy was logically identical, just
+# %>%-piped instead of nested).
+
 require(future.apply)
 require(ranger)
 require(SuperLearner)
+
 # hyper parameter specifications for CATE learners
 create_rf_hyperparams <- function(
   mtry = NULL,
-  max.depth = NUL,
+  max.depth = NULL,
   sample.fraction = 0.5,
   replace = FALSE
 ) {
@@ -28,26 +43,6 @@ create_SL_hyperparams <- function(method, SL.library) {
 }
 
 # general fitting functions
-collate_predictions <- function(
-  fold_list,
-  fold_pairs,
-  fold_indices,
-  reslist,
-  target
-) {
-  lapply(fold_list, function(fold) {
-    predictions <- rep(NA, length(fold_indices))
-    for (j in seq_along(fold_pairs)) {
-      if (fold %in% fold_pairs[[j]]) {
-        predictions[fold_indices %in% fold_pairs[[j]]] <- reslist[[j]][[target]]
-      }
-    }
-    predictions[fold_indices == fold] <- NA
-    predictions
-  }) %>%
-    simplify2array()
-}
-
 collect_tau <- function(tau_list, fold_list, fold_indices) {
   tau <- rep(NA, length(fold_indices))
   for (fold in fold_list) {
@@ -55,6 +50,7 @@ collect_tau <- function(tau_list, fold_list, fold_indices) {
   }
   return(tau)
 }
+
 # fitting functions for the random forest
 fit_rf <- function(
   Y,
@@ -144,16 +140,12 @@ fit_tau_rf <- function(X, fold_list, fold_indices, po_matrix, hyper_list) {
       hyper_po$formula <- po ~ .
 
       po_model <- do.call(ranger, hyper_po)
-      tau[test_filter] <- predict(po_model, X[test_filter, ])$predictions
+      predict(po_model, X[test_filter, ])$predictions
     },
     future.seed = TRUE
   )
 
-  for (fold in fold_list) {
-    tau[fold_indices == fold] <- tau_list[[fold]]
-  }
-
-  tau
+  collect_tau(tau_list, fold_list, fold_indices)
 }
 
 # fitting functions for GLMnet
@@ -340,10 +332,65 @@ fit_tau_SL <- function(X, fold_list, fold_indices, po_matrix, hyper_list) {
     future.seed = TRUE
   )
 
-  tau <- rep(NA, length(fold_indices))
-  for (fold in fold_list) {
-    tau[fold_indices == fold] <- tau_list[[fold]]
+  collect_tau(tau_list, fold_list, fold_indices)
+}
+
+#' Fit all 9 candidate CATE-learner configurations
+#'
+#' Replaces the old sim_eval.R's list2env()/.GlobalEnv/grep()/assign() dance
+#' with an ordinary named list. Names here must match CANDIDATE_MODELS in
+#' me_config.R exactly - me_metrics.R relies on it via
+#' R/metrics.R::compute_metrics()'s intersect(names(sim_res), models).
+#'
+#' @return named list, one element per candidate, each
+#'   list(tau=, po=, Y0.hat=, Y1.hat=, W.hat=)
+run_all_candidate_models <- function(Y, W, X, fold_indices, fold_list, fold_pairs) {
+  # rf2/rf3's mtry is scaled to ncol(X) rather than fixed at 30/10. Those
+  # fixed values came from the old benchtm-based prototype, which had a much
+  # wider covariate set than R/dgm_scenarios.R produces (7-9 columns across
+  # this study's scenarios) - left as literals they make ranger error out
+  # ("mtry can not be larger than number of variables in data"), which is
+  # how this was actually found (me_testing.R full, check 4). rf2 uses every
+  # covariate each split (the high-mtry extreme, well-defined at any p);
+  # rf3 uses about half, paired with its original shallower max.depth = 3 -
+  # keeping the three RF configs meaningfully separated (~sqrt(p) < p/2 < p)
+  # regardless of how many covariates a given scenario produces.
+  p <- ncol(X)
+
+  hyperparams <- list(
+    rf1 = list(), # ranger defaults (mtry = floor(sqrt(p)))
+    rf2 = create_rf_hyperparams(mtry = p, max.depth = 5),
+    rf3 = create_rf_hyperparams(mtry = max(2, ceiling(p / 2)), max.depth = 3),
+
+    net1 = create_net_hyperparams(alpha = 1), # lasso
+    net2 = create_net_hyperparams(alpha = 0), # ridge
+    net3 = create_net_hyperparams(alpha = 0.5), # elastic net
+
+    SL1 = create_SL_hyperparams(
+      method = "method.CC_LS",
+      SL.library = list("SL.glmnet", "SL.ranger", "SL.earth", "SL.gam", "SL.mean")
+    ),
+    SL2 = create_SL_hyperparams(
+      method = "method.CC_LS",
+      SL.library = list(
+        "SL.glmnet", "SL.xgboost", "SL.cforest", "SL.earth", "SL.gam", "SL.mean"
+      )
+    ),
+    SL3 = create_SL_hyperparams(
+      method = "method.CC_LS",
+      SL.library = list("SL.svm", "SL.nnet", "SL.mean")
+    )
+  )
+
+  fitter_for <- function(nm) {
+    if (grepl("^rf", nm)) fit_rf
+    else if (grepl("^net", nm)) fit_glmnet
+    else fit_SL
   }
 
-  tau
+  out <- lapply(names(hyperparams), function(nm) {
+    fitter_for(nm)(Y, W, X, hyper_list = hyperparams[[nm]], fold_indices, fold_list, fold_pairs)
+  })
+
+  setNames(out, names(hyperparams))
 }
