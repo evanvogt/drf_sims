@@ -11,7 +11,7 @@ library(dplyr)
 library(tidyr)
 library(purrr)
 source(here("R", "figures.R"))
-source(here("validation/cts_val_config.R"))
+source(here("validation/continuous/cts_val_config.R"))
 
 metrics <- readRDS(file.path(study$res_path, "cts_val_metrics.RDS"))
 

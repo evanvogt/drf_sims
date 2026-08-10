@@ -32,7 +32,7 @@ missing/              missing covariates (continuous, binary, CI example)
 confidence_intervals/ interval estimation (continuous, binary, optimal_sf)
 crossfitting/         does double crossfitting earn its 4.5x cost?
 validation/           do CATE subgroups/variance/importance found at an interim
-                      analysis replicate on the rest of the trial?
+                      analysis replicate on the rest of the trial? (continuous)
 results_processing/   thesis figures
 scratch/              unmaintained exploratory code
 ```

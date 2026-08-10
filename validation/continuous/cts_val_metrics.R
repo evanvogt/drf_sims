@@ -18,7 +18,7 @@ library(dplyr)
 library(tidyr)
 library(purrr)
 library(tibble)
-source(here("validation/cts_val_config.R"))
+source(here("validation/continuous/cts_val_config.R"))
 
 all_results_df <- readRDS(file.path(study$res_path, "cts_val_all.RDS"))
 

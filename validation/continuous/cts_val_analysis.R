@@ -14,9 +14,9 @@ library(here)
 
 # functions
 source(here("R", "utils.R"))
-source(here("validation", "cts_val_dgms.R"))
-source(here("validation", "cts_val_models.R"))
-source(here("validation/cts_val_config.R"))
+source(here("validation", "continuous", "cts_val_dgms.R"))
+source(here("validation", "continuous", "cts_val_models.R"))
+source(here("validation/continuous/cts_val_config.R"))
 
 # simulation parameters
 i <- as.numeric(commandArgs(trailingOnly = TRUE))

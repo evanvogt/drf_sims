@@ -8,8 +8,8 @@
 #
 # validation/ used to source this shim by absolute path on the cluster too,
 # but it has since been restructured onto the R/ pattern (see
-# validation/cts_val_analysis.R) and sources R/utils.R directly like every
-# other study now does.
+# validation/continuous/cts_val_analysis.R) and sources R/utils.R directly
+# like every other study now does.
 #
 # (model_evaluation/ does NOT depend on this file - it sources its own
 # sim_utils.R / model_utils.R / nuisance_utils.R / metric_utils.R.)

@@ -10,8 +10,8 @@ library(here)
 source(here("R", "pipeline.R"))
 
 study <- study_config(
-  name     = "cts_val",
-  res_path = file.path(dirname(here()), "results", "cts_val"),
+  name     = "validation/continuous",
+  res_path = file.path(dirname(here()), "results", "validation", "continuous"),
   grid = expand.grid(
     scenario = 3,
     n = 1000,
@@ -21,5 +21,5 @@ study <- study_config(
   ),
   path_cols   = c("scenario", "n", "interim_prop"),
   n_sims      = 100,
-  failed_file = here("validation", "jobscripts", "failed_ids.txt")
+  failed_file = here("validation", "continuous", "jobscripts", "failed_ids.txt")
 )
