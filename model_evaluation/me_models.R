@@ -108,8 +108,8 @@ crossfit_double_RF <- function(fold_pair, Y, W, X, hyper_list, fold_indices) {
   )
 
   test_data <- data.frame(W, X)[test_filter, ]
-  Y0.hat <- predict(Y_model, mutate(test_data, W = 0))$predictions
-  Y1.hat <- predict(Y_model, mutate(test_data, W = 1))$predictions
+  Y0.hat <- predict(Y_model, mutate(test_data, W = 0L))$predictions
+  Y1.hat <- predict(Y_model, mutate(test_data, W = 1L))$predictions
   W.hat <- predict(W_model, X[test_filter, ])$predictions
 
   W_test <- W[test_filter]
@@ -209,8 +209,8 @@ crossfit_double_glmnet <- function(
   W_model <- fit_model(W[train_filter], X[train_filter, ], binomial())
 
   test_data <- data.frame(W, X)[test_filter, ]
-  Y0.hat <- predict(Y_model, mutate(test_data, W = 0))$pred
-  Y1.hat <- predict(Y_model, mutate(test_data, W = 1))$pred
+  Y0.hat <- predict(Y_model, mutate(test_data, W = 0L))$pred
+  Y1.hat <- predict(Y_model, mutate(test_data, W = 1L))$pred
   W.hat <- predict(W_model, X[test_filter, ])$pred
 
   W_test <- W[test_filter]
@@ -299,8 +299,8 @@ crossfit_double_SL <- function(fold_pair, Y, W, X, hyper_list, fold_indices) {
   W_model <- fit_model(W[train_filter], X[train_filter, ], binomial())
 
   test_data <- data.frame(W, X)[test_filter, ]
-  Y0.hat <- predict(Y_model, mutate(test_data, W = 0))$pred
-  Y1.hat <- predict(Y_model, mutate(test_data, W = 1))$pred
+  Y0.hat <- predict(Y_model, mutate(test_data, W = 0L))$pred
+  Y1.hat <- predict(Y_model, mutate(test_data, W = 1L))$pred
   W.hat <- predict(W_model, X[test_filter, ])$pred
 
   W_test <- W[test_filter]
