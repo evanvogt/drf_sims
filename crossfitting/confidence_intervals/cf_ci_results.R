@@ -24,9 +24,9 @@ dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
 
 metrics <- readRDS(file.path(res_path, "cf_ci_metrics.RDS"))
 
-# tidy up - no `set` column here: training-sample tau only, the bootstrap
-# bands are never computed for tau_test (see cf_ci_analysis.R)
-metrics <- metrics %>%
+# tidy up - no `set` column here: training-sample tau only, no interval is
+# computed for tau_test (see cf_ci_analysis.R)
+metrics_all <- metrics %>%
   mutate(
     scenario = factor(
       case_when(scenario == 1 ~ "Null",
@@ -35,9 +35,17 @@ metrics <- metrics %>%
       levels = c("Null", "Interaction", "Non-linear")),
     family = factor(recode(family, !!!family_labels), levels = unname(family_labels)),
     variant = factor(recode(variant, !!!ci_variant_labels),
-                     levels = unname(ci_variant_labels[ci_variant_levels]))
+                     levels = unname(ci_variant_labels[ci_variant_levels])),
+    ci_method = factor(recode(ci_method, !!!ci_method_labels),
+                       levels = unname(ci_method_labels[ci_method_levels]))
   ) %>%
   droplevels()
+
+# every figure below the method comparison is about the half-sample bootstrap,
+# the one interval available for all 12 arms. The other two methods only exist
+# for the 7 whole-sample/OOB arms, so mixing them in would put three rows of a
+# different kind next to nine of one kind on the same axis.
+metrics <- filter(metrics_all, ci_method == ci_method_labels[["half_boot"]])
 
 # per variant summaries
 metrics_summary <- metrics %>%
@@ -129,9 +137,65 @@ width_sum_plot <- summary_plot(metrics_summary, "mean_ci_len", "mcse_ci_len",
 ggsave("cf_ci_width_summary.png", plot = width_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
+# --- interval method comparison (OOB arms only) -----------------------------
+# The one place all three interval methods exist for the SAME arm, and the
+# pilot's sharpest question: does an expensive bootstrap buy anything over the
+# variance grf hands back for free?
+#
+# Read the two panels together, not separately. grf_normal is a POINTWISE
+# interval - it is not built to control simultaneous coverage and is expected to
+# score near zero on it, so a fair reading of it is the marginal panel. The two
+# bootstrap bands are both simultaneous and come off identical refits, differing
+# only in whether in-half units are scored; half_boot_out takes its supremum over
+# ~n/2 rather than n units, so it is expected to run narrower.
+method_df <- metrics_all %>%
+  filter(variant %in% ci_variant_labels[c("scf_oob", "scf_oob_t", "oob_oob", "oob_oob_s",
+                                          "oob_oob_manual", "cf_full_oob", "cf_default")]) %>%
+  droplevels() %>%
+  group_by(scenario, family, variant, ci_method) %>%
+  summarise(mean_marg_cov = mean(marginal_coverage, na.rm = T),
+            mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(n()),
+            mean_ci_len = mean(mean_ci_length, na.rm = T),
+            mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(n()),
+            .groups = "drop")
+
+method_cov_panel <- method_df %>%
+  ggplot(aes(x = variant, y = mean_marg_cov, colour = ci_method,
+             ymin = mean_marg_cov - mcse_marg_cov, ymax = mean_marg_cov + mcse_marg_cov)) +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
+  geom_point(size = 2, position = position_dodge(width = 0.5)) +
+  geom_errorbar(linewidth = 0.3, width = 0.3, position = position_dodge(width = 0.5)) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(method_df$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(y = "Mean marginal coverage", x = NULL, colour = "Interval method")
+
+method_width_panel <- method_df %>%
+  ggplot(aes(x = variant, y = mean_ci_len, colour = ci_method,
+             ymin = mean_ci_len - mcse_ci_len, ymax = mean_ci_len + mcse_ci_len)) +
+  geom_point(size = 2, position = position_dodge(width = 0.5)) +
+  geom_errorbar(linewidth = 0.3, width = 0.3, position = position_dodge(width = 0.5)) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(method_df$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(y = "Mean interval length", x = "Whole-sample / OOB arm", colour = "Interval method")
+
+method_plot <- (method_cov_panel / method_width_panel) +
+  patchwork::plot_layout(guides = "collect") +
+  patchwork::plot_annotation(
+    title = "Three interval methods on the whole-sample / OOB arms",
+    subtitle = "grf's variance is pointwise; both bootstrap bands are simultaneous and share their refits")
+ggsave("cf_ci_method_comparison.png", plot = method_plot, path = fig_path,
+       width = 24, height = 26, units = "cm")
+
 # --- point-estimate accuracy: bias, MSE, correlation ------------------------
-# sanity check that the pilot's 5 arms still track the production study's
-# numbers for the same arms - not this report's focus, but worth confirming
+# these are per-arm, not per-method, so the half_boot filter above just picks one
+# row per arm. Under the same seed these arms are bit-identical to the production
+# study's, so they should reproduce cf_results.R's numbers exactly - not this
+# report's focus, but the cheapest possible check that the pilot is wired to the
+# same estimators
 bias_plot <- metrics %>%
   ggplot(aes(x = variant, y = bias, colour = variant)) +
   geom_hline(yintercept = 0, linetype = "dashed") +

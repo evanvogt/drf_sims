@@ -103,59 +103,125 @@ arms and the T-learner control are dropped.
 | `cf_metrics.R` | metric definitions (functions only, no side effects) |
 | `cf_collect.R` | streams the per-run files through `cf_metrics.R` into `cf_metrics.RDS` |
 | `cf_results.R` | figures |
-| `confidence_intervals/cf_ci_analysis.R` | half-sample bootstrap CI pilot — see below |
-| `confidence_intervals/cf_ci_testing.R` | verification checks for the CI pilot |
+| `confidence_intervals/cf_ci_analysis.R` | confidence-interval pilot, all 12 RF/CF arms — see below |
+| `confidence_intervals/cf_ci_testing.R` | verification checks for the CI pilot (`full` adds the production-parity check) |
 | `confidence_intervals/cf_ci_check.R` / `cf_ci_metrics.R` / `cf_ci_collect.R` | CI pilot's own check/metrics/collect, parallel to the files above |
 | `confidence_intervals/cf_ci_profile.R` | timing / memory / CPU sweep over `(workers, grf_threads, CI_boot)` for the CI pilot, instrumented with `syrup` |
 | `confidence_intervals/cf_ci_profile_summary.R` | turns the sweep into PBS directives (extrapolating to the pilot's real `CI_boot`) and writes them into `cf_ci_1.sh` |
 
 ## Half-sample bootstrap CI pilot
 
-`cf_ci_analysis.R` adds half-sample bootstrap confidence intervals
-(`R/bootstrap_ci.R`'s `cf_half_boot`/`rf_half_boot`, the same machinery
-`confidence_intervals/` uses) to the 5 arms whose stage 2 is a genuine
-per-fold crossfit: `dcf`, `scf_scf`, `scf_scf_new` (family `dr_rf`) and
-`cf_dcf`, `cf_scf` (family `causal_forest`). Out of scope: the 6 whole-sample
-/ OOB arms (no per-fold structure for the bootstrap to refit against) and the
-3 SuperLearner arms (not RF-based).
+`cf_ci_analysis.R` adds confidence intervals to **all 12 non-SuperLearner arms**.
+The 3 SuperLearner arms stay out of scope (not RF-based), which is why the pilot
+calls `run_all_crossfit_variants(sl_lib = NULL)`.
+
+The 12 split by stage-2 structure, and the bootstrap differs between them:
+
+| arms | bootstrap | half sample | `tau_half` |
+|---|---|---|---|
+| `dcf`, `scf_scf`, `scf_scf_new`, `cf_dcf`, `cf_scf` | `rf_half_boot` / `cf_half_boot` | stratified by fold | refit per fold, predict the held-out fold |
+| `scf_oob`, `scf_oob_t`, `oob_oob`, `oob_oob_s`, `oob_oob_manual`, `cf_full_oob`, `cf_default` | `rf_oob_half_boot` / `cf_oob_half_boot` | unstratified `floor(n/2)` | one refit, OOB for in-half rows and `newdata` for the rest |
+
+Nuisances are held fixed and sliced in every case — only the final-stage forest
+is refit, which is `R/bootstrap_ci.R`'s existing design. That includes
+`cf_default`, the one arm with no nuisance stage of its own: `cf_whole` now
+returns the `Y.hat`/`W.hat` grf cross-fit internally so its bootstrap can hold
+them fixed too, rather than letting grf re-cross-fit each half sample and put
+nuisance variability into that arm's band and nobody else's.
+
+### `tau_half` for an OOB arm, and why there are two of them
+
+A whole-sample refit has no held-out fold to predict, so there are two defensible
+ways to score the `n` units. `oob_bands()` produces **both**, off one set of
+forest fits — a paired contrast, since masking costs nothing:
+
+- **`half_boot`** (`hb_lb`/`hb_ub`) — in-half rows take the half forest's own OOB
+  predictions, out-of-half rows take `newdata` predictions. Every unit gets a
+  root in every draw, so `S_star` is a supremum over all `n` units. For in-half
+  rows the functional matches the point estimate exactly: both are OOB
+  predictions, at `n` vs `n/2`. Neither branch is contaminated by the row's own
+  outcome. The one asymmetry is tree count — an OOB prediction averages the
+  `1 - sample.fraction` share of trees (~1000 of 2000 at grf's defaults) while a
+  `newdata` prediction averages all of them, which is second-order Monte Carlo
+  noise beside the statistical variance at `n = 500`.
+- **`half_boot_out`** (`hb_out_lb`/`hb_out_ub`) — only rows the half forest never
+  saw, in-half cells masked to `NA`. Uniform in tree count, but each unit gets
+  ~`B/2` roots and `S_star` becomes a supremum over ~250 rather than 500 units.
+  The sup of `|N(0,1)|` over `m` units grows like `sqrt(2 log m)` — `3.32` vs
+  `3.53` — so the prediction is a band ~6% narrower, a systematic downward bias
+  in the critical value. Whether that survives the correlation between roots at
+  this `n` is a question for the pilot, which is why both are computed rather
+  than one being argued for on paper.
+
+`simultaneous_band()` gained an `na.rm` argument for the masked variant. It
+defaults to `FALSE`, so every pre-existing caller is bit-for-bit unaffected —
+`cf_ci_testing.R` check 5 asserts that directly.
+
+### grf's own variance, for free
+
+The OOB arms carry a **third** interval, `grf_normal`. For a whole-sample forest
+grf returns OOB variance estimates (bootstrap of little bags) alongside the
+predictions at no extra compute, and `R/metrics.R`'s `normal_interval()` — the
+same function `confidence_intervals/binary/` uses for its `causal_forest_inbuilt`
+method — turns those into a CI. `stage2_whole_rf`/`cf_whole` now return
+`var_oob`, and `arm()` carries it; the 5 crossfit arms have none, and downstream
+code keys off exactly that.
+
+This is natural for an OOB arm and awkward for a crossfit one, whose `tau` is
+stitched from `V` fold models predicting quantities grf's variance theory does
+not cover — the exact mirror image of the bootstrap. So the OOB arms are the
+first place in this study where both methods apply to the *same* arm, which
+turns "does the bootstrap extend to OOB arms?" into the sharper "does an
+expensive bootstrap buy anything over a free closed-form interval?"
+
+**`grf_normal` is a pointwise interval; both bootstrap bands are simultaneous.**
+Its near-zero `simultaneous_coverage` is the method working as designed, not a
+defect — compare it on `marginal_coverage`.
+
+Neither method reflects first-stage nuisance uncertainty: the bootstrap holds
+nuisances fixed and grf's variance treats the pseudo-outcomes as known outcomes.
+Whether that is second-order is the Neyman-orthogonality claim this study probes,
+so it is at least apples-to-apples across the three.
+
+### Scale and reproducibility
 
 It is a **pilot, not the production run**: 3 scenarios (`1, 6, 9`) × 50 runs
 = 150 replicates, `CI_boot = 200`, `CI_sf` fixed at 0.5 (grf's default
-`sample.fraction`, no sweep). Nuisances are computed once per replicate via a
-new trimmed orchestrator, `run_crossfit_structured_arms()` in `cf_models.R`
-(mechanically extracted from `run_all_crossfit_variants`). Its `nz_double`/
-`nz_single` nuisance objects are bit-identical to the production study's
-under the same `setup_rng_stream(run)` seed, since nothing precedes them in
-the RNG stream in either orchestrator — but its `dcf`/`cf_dcf` stage-2
-estimates are **not** bit-identical to the saved production arms: skipping
-the 4 out-of-scope nuisance fits that `run_all_crossfit_variants` performs
-between `nz_single` and its own stage-2 calls shifts every later
-`future_map()` forest fit to a different position in the RNG stream. That's
-by design (replaying the skipped fits just to stay in lockstep would defeat
-the point of trimming them); `dcf`/`cf_dcf` here are a different, equally
-valid draw of the same estimator for the same `(scenario, run)`, not a
-reproduction of the saved production values — see `cf_ci_testing.R` check 1,
-which verifies nuisance-level identity and stage-2 estimator-level agreement
-(high correlation, not exact equality) instead. Only the final-stage forest
-is refit per half-sample-per-fold, matching `R/bootstrap_ci.R`'s existing
-design. `cf_half_boot` was generalized to accept single-crossfit vector
-nuisances (`cf_scf`) alongside its original double-crossfit matrix nuisances
-(`cf_dcf`) — a shape-detection change, backward compatible with its existing
-caller in `R/cate_models.R`.
+`sample.fraction`, no sweep).
+
+Because the pilot now makes the same orchestrator call as `cf_analysis.R` minus
+a SuperLearner block that sits strictly *after* every RF/CF arm in the RNG
+stream, its point estimates are **bit-identical** to the production study's for
+the same `(scenario, run)` — `cf_ci_testing.R` check 2 asserts that arm by arm
+(under `full`, since it needs SuperLearner). This replaces the earlier
+`run_crossfit_structured_arms()` orchestrator, which trimmed the out-of-scope
+nuisance fits and consequently produced a *different, equally valid* draw of
+`dcf`/`cf_dcf` that could only be checked by correlation. That function is gone;
+its trimming bought nothing once the OOB arms came into scope, since they need
+the very nuisances it was skipping.
+
+`cf_half_boot` accepts single-crossfit vector nuisances (`cf_scf`) alongside its
+original double-crossfit matrix nuisances (`cf_dcf`) — a shape-detection change,
+backward compatible with its existing caller in `R/cate_models.R`.
 
 Results land in `../results/crossfitting_ci/`, a wholly separate tree from
 `../results/crossfitting/` — the production study's 2000 replicates are
 never read or touched. Per-run files drop the bootstrap `draws` matrices
-before saving (only `hb_lb`/`hb_ub` are needed downstream), following this
-folder's existing small-file convention.
+before saving (only the bounds and `var_oob` are needed downstream), following
+this folder's existing small-file convention.
 
 Coverage from this method is already known (from `confidence_intervals/`) to
 run below nominal — that's the pilot's actual research question, so
 `cf_ci_testing.R` checks band well-formedness (finite, brackets `tau` for
 most units, non-degenerate width) rather than gating on ~95% coverage.
 
+`cf_ci_metrics.R` emits one row per **(arm, `ci_method`)**, so a replicate
+produces `5 + 7 × 3 = 26` rows. That multi-row shape is the convention
+`R/metrics.R`'s `compute_metrics` already documents for the CI studies.
+
 ```bash
 Rscript crossfitting/confidence_intervals/cf_ci_testing.R              # structure + regression checks
+Rscript crossfitting/confidence_intervals/cf_ci_testing.R full         # adds the "identical to production" check (needs SuperLearner)
 Rscript crossfitting/confidence_intervals/cf_ci_analysis.R 1 10 2 1    # local smoke test: index 1, CI_boot=10
 
 Rscript crossfitting/confidence_intervals/cf_ci_profile.R 1            # smoke-test the CI profiler locally
@@ -175,19 +241,38 @@ pilot's original scope deferred rather than skipped). `cf_ci_profile.R` /
 do for `cf_1.sh` — see "Sizing the array job" below for the shared mechanics
 (`syrup`, process-tree filtering, the peak-memory upper bound) — with one addition
 specific to the bootstrap: the sweep profiles `CI_boot` at **20 and 60**, not at the
-pilot's real 200. Each bootstrap draw (`future_map()` in `rf_half_boot`/
-`cf_half_boot`, `R/bootstrap_ci.R`) is an independent refit of `V` forests on a
-half-sample, and the `n x CI_boot` draws matrix is only assembled after
-`future_map()` returns — so elapsed time scales ~linearly in `CI_boot` while peak
-memory (governed by how many draws run concurrently across `workers`, not by
-`CI_boot` itself) stays roughly flat. Profiling directly at `CI_boot = 200` across
-the sweep would cost as much as the production array it exists to size.
-`cf_ci_profile_summary.R` fits `elapsed ~ CI_boot` per `(workers, grf_threads)`,
-pooled over scenario/run so the R² is a real diagnostic, and warns if any
-configuration's fit falls below R² = 0.9 rather than trusting a bad extrapolation
-silently. It also reports a per-arm bootstrap cost breakdown (which of `dcf`,
-`scf_scf`, `scf_scf_new`, `cf_dcf`, `cf_scf` dominates, extrapolated to
-`CI_boot = 200`) — the "why is it slow" answer, alongside the resource sizing.
+pilot's real 200. Each bootstrap draw (`future_map()` in `R/bootstrap_ci.R`) is an
+independent refit — `V` forests on a half-sample for a crossfit arm, one for an OOB
+arm — so elapsed time scales ~linearly in `CI_boot`. Profiling directly at
+`CI_boot = 200` across the sweep would cost as much as the production array it
+exists to size. `cf_ci_profile_summary.R` fits `elapsed ~ CI_boot` per
+`(workers, grf_threads)`, pooled over scenario/run so the R² is a real diagnostic,
+and warns if any configuration's fit falls below R² = 0.9 rather than trusting a bad
+extrapolation silently. It also reports a per-arm bootstrap cost breakdown over all
+12 arms, extrapolated to `CI_boot = 200` — the "why is it slow" answer, alongside
+the resource sizing.
+
+Expect the fixed cost to dominate more than it used to. The 7 OOB arms add only
+~15% to the bootstrap total (`B x 1` refit each against a crossfit arm's `B x V`),
+and `half_boot_out` adds nothing at all since it reuses the same refits — but the
+pilot now pays for the 4 nuisance objects the old trimmed orchestrator skipped, and
+`nuisance_oob_rf_manual` is a pure-R double tree loop over `num.trees x 2`
+counterfactual passes. That is likely the largest single non-bootstrap cost in a
+replicate, and it inflates the intercept of the `elapsed ~ CI_boot` fit, so the
+R² < 0.9 warning is worth reading rather than skimming.
+
+> **Known-wrong, deferred: the memory figure.** `cf_ci_profile_summary.R`
+> extrapolates only *elapsed time* in `CI_boot`; for memory it applies a flat
+> `mem_factor = 1.5` to the peak RSS observed at `CI_boot = 20/60`. The
+> justification for that (still written in `cf_ci_profile.R`'s header) is that peak
+> memory is governed by how many draws run concurrently across `workers` rather
+> than by `CI_boot` itself. **That reasoning does not hold** — `future_map()`
+> accumulates all `CI_boot` result vectors before the draws matrix is assembled, so
+> memory does grow with `CI_boot`, and the `mem=` written into `cf_ci_1.sh` is an
+> underestimate for the real `CI_boot = 200`. Not fixed in the change that added
+> the OOB arms. Until it is, cross-check the request against
+> `qstat -fx <jobid> | grep resources_used` on the first real subjobs rather than
+> trusting the written figure.
 
 The `Rscript` line it writes carries `CI_boot`, `workers` and `grf_threads`
 together, fixing the mismatch the placeholder version had (`workers=2` on the

@@ -1,9 +1,10 @@
 ##########
 # title: resource profiling for the CI pilot's half-sample bootstrap
 ##########
-# Runs one complete cf_ci_analysis.R replicate - the 5 crossfit-structured arms
-# plus their half-sample bootstrap CIs (R/bootstrap_ci.R's rf_half_boot/
-# cf_half_boot) - under a sweep of (workers, grf_threads, CI_boot), and records
+# Runs one complete cf_ci_analysis.R replicate - all 12 RF/CF arms plus their
+# half-sample bootstrap CIs (R/bootstrap_ci.R's {rf,cf}_half_boot for the 5
+# crossfit-structured arms, {rf,cf}_oob_half_boot for the 7 whole-sample/OOB
+# ones) - under a sweep of (workers, grf_threads, CI_boot), and records
 # timings, memory and CPU so cf_ci_1.sh's PBS directives can be measured rather
 # than left at their placeholder values. Parallel to crossfitting/cf_profile.R,
 # which does the same for the point-estimate study's cf_1.sh; see that file's
@@ -21,6 +22,13 @@
 # production run it exists to size; two points let cf_ci_profile_summary.R fit a
 # line, extrapolate to 200, and flag it if that linearity assumption doesn't
 # actually hold.
+#
+# KNOWN WRONG, not fixed here: the "peak memory is roughly flat in CI_boot"
+# claim above. future_map accumulates all CI_boot results before the draws matrix
+# is assembled, so memory does grow with CI_boot - and cf_ci_profile_summary.R
+# extrapolates only elapsed time, applying a flat mem_factor to peak RSS observed
+# at CI_boot = 20/60. The mem= it writes into cf_ci_1.sh is therefore an
+# underestimate of the pilot's real CI_boot = 200. See crossfitting/README.md.
 
 library(dplyr)
 library(furrr)
@@ -36,8 +44,8 @@ if (!requireNamespace("syrup", quietly = TRUE)) {
 path <- here()
 
 # functions
-source(here("crossfitting", "cf_models.R"))   # generate_cf_replicate, run_crossfit_structured_arms, timed
-source(here("R", "bootstrap_ci.R"))           # rf_half_boot, cf_half_boot
+source(here("crossfitting", "cf_models.R"))   # generate_cf_replicate, run_all_crossfit_variants, timed
+source(here("R", "bootstrap_ci.R"))           # {rf,cf}_half_boot, {rf,cf}_oob_half_boot
 
 # profiling parameters
 i <- as.numeric(commandArgs(trailingOnly = T))
@@ -85,13 +93,14 @@ parent_pid <- Sys.getpid()
 # syrup() returns the measurement tibble, not the value of the expression - but it
 # evaluates the expression in this environment, so `total`, `structured` and
 # `boot_times` persist. The block covers the whole replicate cf_ci_analysis.R
-# runs: nuisances + stage 2 for the 5 arms, then their bootstrap CIs in turn.
+# runs: nuisances + stage 2 for the 12 arms, then their bootstrap CIs in turn.
 usage <- syrup::syrup({
   total <- system.time({
-    structured <- run_crossfit_structured_arms(
+    structured <- run_all_crossfit_variants(
       data = gen$data,
       X_test = gen$X_test,
       n_folds = n_folds,
+      sl_lib = NULL,
       num.threads = grf_threads,
       truth_test = gen$truth_test_tau
     )
@@ -99,6 +108,7 @@ usage <- syrup::syrup({
     X <- as.matrix(gen$data[, -c(1:2)])
     Y <- gen$data$Y
     W <- gen$data$W
+    nz <- structured$nuisances
     fold_indices <- structured$fold_indices
     fold_list <- unique(fold_indices)
     fold_indices_b <- structured$fold_indices_b
@@ -106,11 +116,20 @@ usage <- syrup::syrup({
 
     # table-driven bootstrap wiring, identical to cf_ci_analysis.R
     boot_spec <- list(
-      dcf         = list(fn = rf_half_boot, arg = structured$nz_double$po, fi = fold_indices,   fl = fold_list),
-      scf_scf     = list(fn = rf_half_boot, arg = structured$nz_single$po, fi = fold_indices,   fl = fold_list),
-      scf_scf_new = list(fn = rf_half_boot, arg = structured$nz_single$po, fi = fold_indices_b, fl = fold_list_b),
-      cf_dcf      = list(fn = cf_half_boot, arg = structured$nz_double,    fi = fold_indices,   fl = fold_list),
-      cf_scf      = list(fn = cf_half_boot, arg = structured$nz_single,    fi = fold_indices,   fl = fold_list)
+      # per-fold crossfit stage 2
+      dcf            = list(fn = rf_half_boot,     arg = nz$nz_double$po,     fi = fold_indices,   fl = fold_list),
+      scf_scf        = list(fn = rf_half_boot,     arg = nz$nz_single$po,     fi = fold_indices,   fl = fold_list),
+      scf_scf_new    = list(fn = rf_half_boot,     arg = nz$nz_single$po,     fi = fold_indices_b, fl = fold_list_b),
+      cf_dcf         = list(fn = cf_half_boot,     arg = nz$nz_double,        fi = fold_indices,   fl = fold_list),
+      cf_scf         = list(fn = cf_half_boot,     arg = nz$nz_single,        fi = fold_indices,   fl = fold_list),
+      # whole-sample stage 2, OOB predictions
+      scf_oob        = list(fn = rf_oob_half_boot, arg = nz$nz_single$po,     fi = NULL,           fl = NULL),
+      scf_oob_t      = list(fn = rf_oob_half_boot, arg = nz$nz_single_t$po,   fi = NULL,           fl = NULL),
+      oob_oob        = list(fn = rf_oob_half_boot, arg = nz$nz_oob$po,        fi = NULL,           fl = NULL),
+      oob_oob_s      = list(fn = rf_oob_half_boot, arg = nz$nz_oob_s$po,      fi = NULL,           fl = NULL),
+      oob_oob_manual = list(fn = rf_oob_half_boot, arg = nz$nz_oob_manual$po, fi = NULL,           fl = NULL),
+      cf_full_oob    = list(fn = cf_oob_half_boot, arg = nz$nz_single,        fi = NULL,           fl = NULL),
+      cf_default     = list(fn = cf_oob_half_boot, arg = nz$nz_cf_default,    fi = NULL,           fl = NULL)
     )
 
     boot_times <- list()
@@ -161,7 +180,7 @@ allocated_pct_cpu <- workers * grf_threads * 100
 busy <- by_snapshot$total_pct_cpu[by_snapshot$total_pct_cpu > 10]
 median_pct_cpu <- if (length(busy) > 0) median(busy) else NA_real_
 
-# nuisance/stage2 timings for the 5 structured arms - CI_boot-independent
+# nuisance/stage2 timings for all 12 arms - CI_boot-independent
 arm_times <- bind_rows(lapply(names(structured$arms), function(nm) {
   a <- structured$arms[[nm]]
   tibble::tibble(arm = nm, family = a$family, variant = a$variant,
@@ -169,7 +188,7 @@ arm_times <- bind_rows(lapply(names(structured$arms), function(nm) {
                  time_total = a$time_nuisance + a$time_stage2)
 }))
 
-# bootstrap timings for the same 5 arms - this is what scales with CI_boot
+# bootstrap timings for the same 12 arms - this is what scales with CI_boot
 boot_times_tbl <- tibble::tibble(arm = names(boot_times),
                                  time_boot = unlist(boot_times, use.names = FALSE))
 

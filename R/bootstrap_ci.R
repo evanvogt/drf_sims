@@ -9,6 +9,19 @@
 # simultaneous over units: each root is standardised by its own bootstrap SD, the
 # maximum over units is taken within each draw, and the (1 - alpha/2) quantile of
 # that maximum sets a single critical value. That is why S_star is a scalar.
+#
+# No rescaling constant appears anywhere, and that is not an oversight: the half
+# sample is nested in the full sample, so Cov(tau_n, tau_n/2) ~ Var(tau_n) and
+# Var(tau_n - tau_n/2) ~ (2^2g - 1) Var(tau_n) for an estimator converging at
+# rate g. At the parametric g = 1/2 that factor is exactly 1. A forest converging
+# more slowly than that has roots which understate the target variance, which is
+# one mechanism behind the sub-nominal coverage these studies keep measuring.
+#
+# Two families of bootstrap live here:
+#   cf_half_boot / rf_half_boot          - per-fold crossfit stage 2
+#   cf_oob_half_boot / rf_oob_half_boot  - whole-sample stage 2, OOB predictions
+# All four share an argument order and count so a single table-driven loop can
+# drive them (see crossfitting/confidence_intervals/cf_ci_analysis.R).
 
 require(grf)
 require(future)
@@ -32,10 +45,16 @@ half_sample <- function(fold_list, fold_membership, fold_sizes, n_obs) {
 #'
 #' @param draws n x B matrix of (tau - tau_half)
 #' @param tau the point estimates the interval is centred on
-simultaneous_band <- function(draws, tau, alpha) {
-  lambda_hat <- apply(draws, 1, var)
+#' @param na.rm whether to skip NA roots. FALSE (the default) is the behaviour
+#'   every fold-structured caller wants, since those fill every cell. The OOB
+#'   bootstraps' "out-of-half only" band deliberately masks the in-half cells,
+#'   which leaves each unit ~B/2 roots and makes the column max a supremum over
+#'   ~n/2 rather than n units - a smaller sup, so a smaller S_star. That is a
+#'   property of the construction, not of this function.
+simultaneous_band <- function(draws, tau, alpha, na.rm = FALSE) {
+  lambda_hat <- apply(draws, 1, var, na.rm = na.rm)
   draws_norm <- abs(draws) / sqrt(lambda_hat)
-  col_max <- apply(draws_norm, 2, max)
+  col_max <- apply(draws_norm, 2, max, na.rm = na.rm)
   S_star <- quantile(col_max, 1 - (alpha / 2))
 
   margin <- sqrt(lambda_hat) * S_star
@@ -123,6 +142,129 @@ rf_half_boot <- function(X, Y, W, po, tau, CI_boot = 200, CI_sf = 0.5,
   }, .options = furrr_options(seed = TRUE))
 
   simultaneous_band(do.call(cbind, draws), tau, alpha)
+}
+
+# ---- whole-sample (OOB) arms ------------------------------------------------
+#
+# The arms whose stage 2 is one forest over the whole sample, scored by its own
+# out-of-bag predictions, have no per-fold structure for the two bootstraps above
+# to refit against. One forest is refit per draw on an unstratified half sample
+# instead, and tau_half is assembled by oob_half_predict.
+
+#' Draw an unstratified half sample
+#'
+#' The whole-sample/OOB arms have no fold structure to preserve, so the half
+#' sample is a plain floor(n/2) draw without replacement. Kept separate from
+#' half_sample() rather than folded into it behind a NULL fold_list, so the two
+#' resampling schemes stay individually readable.
+oob_half_sample <- function(n_obs) {
+  keep <- rep(FALSE, n_obs)
+  keep[sample(n_obs, floor(n_obs / 2), replace = FALSE)] <- TRUE
+  keep
+}
+
+#' Assemble tau_half for a whole-sample forest
+#'
+#' In-half rows take the half forest's own OOB predictions - the same functional
+#' the point estimate is, since predict() with no newdata restricts each row to
+#' its out-of-bag trees. Out-of-half rows were never seen by the forest at all,
+#' so a plain newdata prediction is already honest for them.
+#'
+#' Neither branch is contaminated by the row's own outcome. The one asymmetry is
+#' tree count: an OOB prediction averages the (1 - sample.fraction) share of
+#' trees while a newdata prediction averages all of them, which at grf's default
+#' num.trees is second-order Monte Carlo noise beside the statistical variance.
+oob_half_predict <- function(forest, X, keep) {
+  tau_half <- numeric(length(keep))
+  tau_half[keep]  <- predict(forest)$predictions
+  tau_half[!keep] <- predict(forest, newdata = X[!keep, , drop = FALSE])$predictions
+  tau_half
+}
+
+#' Both OOB bands from one set of half-sample roots
+#'
+#' There are two defensible ways to score an OOB half-sample refit, and they come
+#' off identical resamples and identical forest fits - so this is a paired
+#' contrast, not two independent bootstraps, and masking costs nothing.
+#'
+#'   hb_*     every unit scored in every draw (oob_half_predict as-is)
+#'   hb_out_* only rows the half forest never saw; in-half cells masked to NA,
+#'            which leaves each unit ~B/2 roots and makes S_star a sup over ~n/2
+#'            rather than n units. sup of |N(0,1)| grows like sqrt(2 log m), so
+#'            at n = 500 that predicts a band roughly 6% narrower. Whether it
+#'            shows up once the roots are correlated is a question for the study,
+#'            not something to assume here.
+#'
+#' @param roots n x B matrix of (tau - tau_half)
+#' @param kept n x B logical, TRUE where the row was in that draw's half sample
+oob_bands <- function(roots, kept, tau, alpha) {
+  roots_out <- roots
+  roots_out[kept] <- NA_real_
+
+  band_all <- simultaneous_band(roots, tau, alpha)
+  band_out <- simultaneous_band(roots_out, tau, alpha, na.rm = TRUE)
+
+  list(hb_lb = band_all$hb_lb, hb_ub = band_all$hb_ub,
+       hb_out_lb = band_out$hb_lb, hb_out_ub = band_out$hb_ub,
+       draws = roots)
+}
+
+#' Half-sample bootstrap for a whole-sample (OOB) DR-learner second stage
+#'
+#' The OOB counterpart of rf_half_boot. Pseudo-outcomes are held fixed and
+#' sliced, exactly as the crossfit bootstraps hold their nuisances fixed - only
+#' the final-stage forest is refit.
+#'
+#' @param po pseudo-outcomes, an n-vector (a whole-sample stage 2 has no fold
+#'   columns to choose between)
+#' @param fold_indices,fold_list accepted and ignored. A whole-sample arm has no
+#'   folds; these are here so all four bootstraps in this file share an argument
+#'   order and count, the same reason rf_half_boot accepts Y and W it never uses.
+rf_oob_half_boot <- function(X, Y, W, po, tau, CI_boot = 200, CI_sf = 0.5,
+                             alpha = 0.05, fold_indices = NULL, fold_list = NULL) {
+
+  n_obs <- nrow(X)
+  stopifnot(is.vector(po), length(po) == n_obs)
+
+  res <- future_map(seq_len(CI_boot), function(b) {
+    keep <- oob_half_sample(n_obs)
+    half_rf <- regression_forest(X[keep, ], po[keep], sample.fraction = CI_sf)
+    list(root = tau - oob_half_predict(half_rf, X, keep), keep = keep)
+  }, .options = furrr_options(seed = TRUE))
+
+  oob_bands(do.call(cbind, lapply(res, `[[`, "root")),
+            do.call(cbind, lapply(res, `[[`, "keep")),
+            tau, alpha)
+}
+
+#' Half-sample bootstrap for a whole-sample (OOB) causal forest
+#'
+#' @param nuisances an object carrying vector Y.hat.cf / W.hat. Both callers
+#'   arrive in that shape: cf_full_oob passes its single-crossfit nuisances, and
+#'   cf_default passes the Y.hat/W.hat grf itself cross-fit on the full sample
+#'   (cf_whole returns them for exactly this purpose). Holding those fixed keeps
+#'   cf_default under the same "only the final-stage forest is refit" contract as
+#'   every other arm - letting grf re-cross-fit on each half sample would put
+#'   nuisance variability into this one arm's band and nobody else's.
+#' @param fold_indices,fold_list accepted and ignored, see rf_oob_half_boot
+cf_oob_half_boot <- function(X, Y, W, nuisances, tau, CI_boot = 200, CI_sf = 0.5,
+                             alpha = 0.05, fold_indices = NULL, fold_list = NULL) {
+
+  n_obs <- nrow(X)
+  Y.hat <- nuisances$Y.hat.cf
+  W.hat <- nuisances$W.hat
+  stopifnot(is.vector(Y.hat), is.vector(W.hat))
+
+  res <- future_map(seq_len(CI_boot), function(b) {
+    keep <- oob_half_sample(n_obs)
+    half_cf <- causal_forest(X[keep, ], Y[keep], W[keep],
+                             Y.hat[keep], W.hat[keep], sample.fraction = CI_sf)
+    list(root = tau - oob_half_predict(half_cf, X, keep), keep = keep)
+  }, .options = furrr_options(seed = TRUE))
+
+  oob_bands(do.call(cbind, lapply(res, `[[`, "root")),
+            do.call(cbind, lapply(res, `[[`, "keep")),
+            tau, alpha)
 }
 
 # ---- pooling bootstrap intervals across multiple imputations ----------------

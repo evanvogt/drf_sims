@@ -389,9 +389,19 @@ stage2_crossfit_rf <- function(X, po, X_test, fold_indices, num.threads = NULL) 
 }
 
 # whole-sample stage 2: one forest, its OOB predictions and its test-set predictions.
+#
+# var_oob is grf's own OOB variance estimate (bootstrap of little bags), free
+# alongside the predictions since regression_forest already defaults to
+# ci.group.size = 2. It gives the OOB arms a second, closed-form interval to
+# score against the half-sample bootstrap band - see R/metrics.R's
+# normal_interval. Note it treats po as a known outcome, so like the bootstrap it
+# carries no first-stage nuisance uncertainty. predict() does not consume R's RNG
+# stream, so asking for the variance leaves every point estimate unchanged.
 stage2_whole_rf <- function(X, po, X_test, num.threads = NULL) {
   forest <- regression_forest(X, po, num.threads = num.threads)
-  list(tau_oob = predict(forest)$predictions,
+  p_oob <- predict(forest, estimate.variance = TRUE)
+  list(tau_oob = p_oob$predictions,
+       var_oob = p_oob$variance.estimates,
        tau_test = predict(forest, newdata = X_test)$predictions)
 }
 
@@ -451,10 +461,18 @@ cf_foldwise <- function(X, Y, W, X_test, Y.hat, W.hat, fold_indices, num.threads
 
 # whole-sample causal forest: its OOB predictions and its test-set predictions.
 # Y.hat / W.hat NULL falls back to grf's own internally cross-fit OOB nuisances.
+#
+# var_oob mirrors stage2_whole_rf's. The fitted hats are returned too, named to
+# the nuisance-object convention: cf_default supplies none of its own, so this is
+# the only way its half-sample bootstrap can hold nuisances fixed the way every
+# other arm's does (R/bootstrap_ci.R's cf_oob_half_boot).
 cf_whole <- function(X, Y, W, X_test, Y.hat = NULL, W.hat = NULL, num.threads = NULL) {
   forest <- causal_forest(X, Y, W, Y.hat = Y.hat, W.hat = W.hat, num.threads = num.threads)
-  list(tau_oob = predict(forest)$predictions,
-       tau_test = predict(forest, newdata = X_test)$predictions)
+  p_oob <- predict(forest, estimate.variance = TRUE)
+  list(tau_oob = p_oob$predictions,
+       var_oob = p_oob$variance.estimates,
+       tau_test = predict(forest, newdata = X_test)$predictions,
+       Y.hat.cf = forest$Y.hat, W.hat = forest$W.hat)
 }
 
 # ---- orchestrator -----------------------------------------------------------
@@ -468,8 +486,15 @@ cf_whole <- function(X, Y, W, X_test, Y.hat = NULL, W.hat = NULL, num.threads = 
 # the honesty effect being studied. mse_test_single scores each fold model on the
 # test set separately and averages the V scores, which is the like-for-like reading
 # against a whole-sample arm's single model. For whole-sample arms the two coincide.
+#
+# variance is grf's own OOB variance estimate, and only the whole-sample/OOB arms
+# have one - a crossfit arm's tau is stitched together from V forests each
+# predicting its own held-out fold, which is not the quantity grf's variance
+# theory covers. NULL for those arms, and downstream code keys off that: see
+# crossfitting/confidence_intervals/cf_ci_metrics.R, which emits a grf_normal
+# interval row exactly where this field is present.
 arm <- function(family, variant, tau, tau_test, time_nuisance, time_stage2,
-                tau_test_folds = NULL, truth_test = NULL) {
+                tau_test_folds = NULL, truth_test = NULL, variance = NULL) {
 
   mse_test_single <- if (is.null(truth_test)) {
     NA_real_
@@ -481,7 +506,7 @@ arm <- function(family, variant, tau, tau_test, time_nuisance, time_stage2,
 
   list(family = family, variant = variant, tau = tau, tau_test = tau_test,
        time_nuisance = time_nuisance, time_stage2 = time_stage2,
-       mse_test_single = mse_test_single)
+       mse_test_single = mse_test_single, var_oob = variance)
 }
 
 #' Run every crossfitting variant on one simulated dataset
@@ -494,7 +519,13 @@ arm <- function(family, variant, tau, tau_test, time_nuisance, time_stage2,
 #' @param truth_test true CATEs on the test sample. Used for scoring only - it is
 #'   never seen by any model - and only to compute the per-arm mse_test_single.
 #'   NULL leaves that field NA.
-#' @return list with $arms (named list of arm records), $fold_indices, $fold_indices_b
+#' @return list with $arms (named list of arm records), $fold_indices,
+#'   $fold_indices_b, and $nuisances (the raw nuisance objects, needed by the
+#'   half-sample bootstraps in R/bootstrap_ci.R - see
+#'   crossfitting/confidence_intervals/cf_ci_analysis.R, which calls this with
+#'   sl_lib = NULL and bootstraps all 12 RF/CF arms). $nuisances is large; every
+#'   caller picks the fields it saves, and cf_analysis.R deliberately saves none
+#'   of them, keeping the production per-run files small.
 run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
                                       num.threads = NULL, truth_test = NULL) {
 
@@ -546,23 +577,28 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
 
   s <- timed(stage2_whole_rf(X, nz_single$value$po, X_test, num.threads))
   arms$scf_oob <- arm("dr_rf", "scf_oob", s$value$tau_oob, s$value$tau_test,
-                      nz_single$time, s$time, truth_test = truth_test)
+                      nz_single$time, s$time, truth_test = truth_test,
+                      variance = s$value$var_oob)
 
   s <- timed(stage2_whole_rf(X, nz_single_t$value$po, X_test, num.threads))
   arms$scf_oob_t <- arm("dr_rf", "scf_oob_t", s$value$tau_oob, s$value$tau_test,
-                        nz_single_t$time, s$time, truth_test = truth_test)
+                        nz_single_t$time, s$time, truth_test = truth_test,
+                        variance = s$value$var_oob)
 
   s <- timed(stage2_whole_rf(X, nz_oob$value$po, X_test, num.threads))
   arms$oob_oob <- arm("dr_rf", "oob_oob", s$value$tau_oob, s$value$tau_test,
-                      nz_oob$time, s$time, truth_test = truth_test)
+                      nz_oob$time, s$time, truth_test = truth_test,
+                      variance = s$value$var_oob)
 
   s <- timed(stage2_whole_rf(X, nz_oob_s$value$po, X_test, num.threads))
   arms$oob_oob_s <- arm("dr_rf", "oob_oob_s", s$value$tau_oob, s$value$tau_test,
-                        nz_oob_s$time, s$time, truth_test = truth_test)
+                        nz_oob_s$time, s$time, truth_test = truth_test,
+                        variance = s$value$var_oob)
 
   s <- timed(stage2_whole_rf(X, nz_oob_manual$value$po, X_test, num.threads))
   arms$oob_oob_manual <- arm("dr_rf", "oob_oob_manual", s$value$tau_oob, s$value$tau_test,
-                             nz_oob_manual$time, s$time, truth_test = truth_test)
+                             nz_oob_manual$time, s$time, truth_test = truth_test,
+                             variance = s$value$var_oob)
 
   # -- causal forest ---------------------------------------------------------
   cat("Causal forest variants...\n")
@@ -580,12 +616,17 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   s <- timed(cf_whole(X, Y, W, X_test, nz_single$value$Y.hat.cf,
                       nz_single$value$W.hat, num.threads))
   arms$cf_full_oob <- arm("causal_forest", "cf_full_oob", s$value$tau_oob, s$value$tau_test,
-                          nz_single$time, s$time, truth_test = truth_test)
+                          nz_single$time, s$time, truth_test = truth_test,
+                          variance = s$value$var_oob)
 
   # grf's own internally cross-fit OOB nuisances - no separate nuisance stage
   s <- timed(cf_whole(X, Y, W, X_test, num.threads = num.threads))
   arms$cf_default <- arm("causal_forest", "cf_default", s$value$tau_oob, s$value$tau_test,
-                         0, s$time, truth_test = truth_test)
+                         0, s$time, truth_test = truth_test,
+                         variance = s$value$var_oob)
+  # the hats grf cross-fit for itself, kept so cf_default's half-sample bootstrap
+  # can hold them fixed like every other arm's (see the return value below)
+  nz_cf_default <- list(Y.hat.cf = s$value$Y.hat.cf, W.hat = s$value$W.hat)
 
   # -- DR learner, SuperLearner ----------------------------------------------
   # no OOB analogue exists for SuperLearner, so the OOB arms and the T-learner
@@ -614,78 +655,9 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
                                sz_single$time, s$time, s$value$tau_test_folds, truth_test)
   }
 
-  list(arms = arms, fold_indices = fold_indices, fold_indices_b = fold_indices_b)
-}
-
-# ---- pilot: crossfit-structured arms only ------------------------------------
-
-#' Point estimates for exactly the 5 crossfit-structured RF arms
-#'
-#' A trimmed sibling of run_all_crossfit_variants for crossfitting/confidence_intervals/cf_ci_analysis.R
-#' (the half-sample bootstrap CI pilot), whose bootstrap refits already dominate
-#' per-replicate cost - run_all_crossfit_variants would spend most of its time on
-#' the 10 OOB/whole-sample/SuperLearner arms that pilot is out of scope for.
-#'
-#' Draws fold_indices_b and fits nz_double/nz_single in the same order and RNG
-#' position as run_all_crossfit_variants, so those two nuisance objects (po,
-#' Y.hat.cf_matrix/Y.hat.cf, W.hat_matrix/W.hat) ARE bit-identical to what
-#' run_all_crossfit_variants computes under the same setup_rng_stream(run) seed.
-#' The stage-2 arms built from them are NOT bit-identical, though: skipping the
-#' 4 out-of-scope nuisance fits (nuisance_single_rf_t/nuisance_oob_rf*) that
-#' run_all_crossfit_variants performs between nz_single and its own dcf/cf_dcf
-#' stage-2 calls means every future_map()-driven forest fit from this function's
-#' stage 2 onward draws from a different position in the RNG stream - by design,
-#' since replaying those out-of-scope fits just to keep the stream in lockstep
-#' would defeat the point of trimming them. dcf/cf_dcf here are a different
-#' (equally valid) draw of the same estimator for the same (scenario, run), not
-#' a reproduction of the production study's saved arms - see
-#' crossfitting/confidence_intervals/cf_ci_testing.R check 1, which verifies nuisance-level identity
-#' and stage-2 estimator-level agreement (high correlation, not exact equality).
-#' run_all_crossfit_variants itself is untouched by this function.
-#'
-#' @return list with $arms (dcf, scf_scf, scf_scf_new, cf_dcf, cf_scf arm()
-#'   records), $nz_double, $nz_single (raw nuisance objects, needed by
-#'   rf_half_boot/cf_half_boot), $fold_indices, $fold_indices_b
-run_crossfit_structured_arms <- function(data, X_test, n_folds = 10,
-                                         num.threads = NULL, truth_test = NULL) {
-
-  X <- as.matrix(data[, -c(1:2)])
-  Y <- data$Y
-  W <- data$W
-  n_obs <- nrow(X)
-
-  fold_indices <- sort(seq(n_obs) %% n_folds) + 1
-  fold_list <- unique(fold_indices)
-  fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)
-  fold_indices_b <- sample(fold_indices)
-
-  arms <- list()
-
-  nz_double <- timed(nuisance_double_rf(X, Y, W, fold_indices, fold_pairs, num.threads))
-  nz_single <- timed(nuisance_single_rf(X, Y, W, fold_indices, num.threads))
-
-  s <- timed(stage2_crossfit_rf(X, nz_double$value$po, X_test, fold_indices, num.threads))
-  arms$dcf <- arm("dr_rf", "dcf", s$value$tau, s$value$tau_test, nz_double$time, s$time,
-                  s$value$tau_test_folds, truth_test)
-
-  s <- timed(stage2_crossfit_rf(X, nz_single$value$po, X_test, fold_indices, num.threads))
-  arms$scf_scf <- arm("dr_rf", "scf_scf", s$value$tau, s$value$tau_test, nz_single$time, s$time,
-                      s$value$tau_test_folds, truth_test)
-
-  s <- timed(stage2_crossfit_rf(X, nz_single$value$po, X_test, fold_indices_b, num.threads))
-  arms$scf_scf_new <- arm("dr_rf", "scf_scf_new", s$value$tau, s$value$tau_test,
-                          nz_single$time, s$time, s$value$tau_test_folds, truth_test)
-
-  s <- timed(cf_foldwise(X, Y, W, X_test, nz_double$value$Y.hat.cf_matrix,
-                         nz_double$value$W.hat_matrix, fold_indices, num.threads))
-  arms$cf_dcf <- arm("causal_forest", "cf_dcf", s$value$tau, s$value$tau_test,
-                     nz_double$time, s$time, s$value$tau_test_folds, truth_test)
-
-  s <- timed(cf_foldwise(X, Y, W, X_test, nz_single$value$Y.hat.cf,
-                         nz_single$value$W.hat, fold_indices, num.threads))
-  arms$cf_scf <- arm("causal_forest", "cf_scf", s$value$tau, s$value$tau_test,
-                     nz_single$time, s$time, s$value$tau_test_folds, truth_test)
-
-  list(arms = arms, nz_double = nz_double$value, nz_single = nz_single$value,
-       fold_indices = fold_indices, fold_indices_b = fold_indices_b)
+  list(arms = arms, fold_indices = fold_indices, fold_indices_b = fold_indices_b,
+       nuisances = list(nz_double = nz_double$value, nz_single = nz_single$value,
+                        nz_single_t = nz_single_t$value, nz_oob = nz_oob$value,
+                        nz_oob_s = nz_oob_s$value, nz_oob_manual = nz_oob_manual$value,
+                        nz_cf_default = nz_cf_default))
 }

@@ -30,19 +30,21 @@ library(knitr)
 `crossfitting/` benchmarks its double-crossfitting procedure against cheaper
 alternatives (see `cf_results.qmd`), but says nothing about whether any of
 them, once fitted, produce trustworthy confidence intervals. This pilot adds
-half-sample bootstrap intervals (`R/bootstrap_ci.R`'s `rf_half_boot` /
-`cf_half_boot` — the same machinery `confidence_intervals/` uses elsewhere)
-to the 5 arms whose stage 2 is a genuine per-fold crossfit: `dcf`, `scf_scf`,
-`scf_scf_new` (family DR-learner, RF) and `cf_dcf`, `cf_scf` (family causal
-forest). The other 12 production arms are out of scope — 7 are whole-sample
-or OOB with no per-fold structure for the bootstrap to refit against, and 3
-are SuperLearner-based, not RF-based.
+half-sample bootstrap intervals (`R/bootstrap_ci.R` — the same machinery
+`confidence_intervals/` uses elsewhere) to **all 12 non-SuperLearner arms**.
+The 3 SuperLearner arms stay out of scope: not RF-based.
+
+The 12 split into two structural families, and the bootstrap differs between
+them. The 5 arms whose stage 2 is a genuine per-fold crossfit use
+`rf_half_boot` / `cf_half_boot`, which refit per fold against a fold-stratified
+half sample. The 7 whole-sample / OOB arms have no fold structure to refit
+against, so `rf_oob_half_boot` / `cf_oob_half_boot` refit one forest per draw
+on an unstratified half sample instead.
 
 Coverage from this method is already known, from elsewhere in
 `confidence_intervals/`, to run below nominal. That's the actual research
 question here: not *whether* it undershoots, but *how much*, and whether any
-of the 5 crossfit-structured arms does noticeably better than the others for
-its cost.
+arm does noticeably better than the others for its cost.
 
 ### Design
 
@@ -52,9 +54,15 @@ Fixed at **n = 500, V = 10 folds, scenarios Null / Interaction / Non-linear,
 fixed at 0.5 rather than swept.
 
 Every arm is scored on the **training** sample only. Unlike the main
-crossfitting comparison, no test-sample score exists here: the half-sample
-bootstrap bands are never computed for `tau_test`, only for the training-
-sample `tau` the arm was actually fit on.
+crossfitting comparison, no test-sample score exists here: no interval is
+computed for `tau_test`, only for the training-sample `tau` the arm was
+actually fit on.
+
+Point estimates come from `run_all_crossfit_variants(sl_lib = NULL)` — the same
+call `cf_analysis.R` makes, minus the SuperLearner family, which sits strictly
+after the RF/CF arms in the RNG stream. Under the same seed these arms are
+therefore **bit-identical** to the production study's, so any point-estimate
+figure below should reproduce `cf_results.qmd`'s exactly.
 
 ### Arms compared
 
@@ -63,13 +71,51 @@ sample `tau` the arm was actually fit on.
 | `dcf` | DR-learner (RF) | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
 | `scf_scf` | DR-learner (RF) | single CF, leave-one-fold-out | crossfit, same folds |
 | `scf_scf_new` | DR-learner (RF) | single CF | crossfit, **fresh independent** split |
+| `scf_oob` | DR-learner (RF) | single CF | whole sample, **OOB** |
+| `scf_oob_t` | DR-learner (RF) | single CF, T-learner | whole sample, **OOB** |
+| `oob_oob` | DR-learner (RF) | whole sample, **OOB**, T-learner | whole sample, **OOB** |
+| `oob_oob_s` | DR-learner (RF) | whole sample, **OOB**, S-learner (`X.orig`) | whole sample, **OOB** |
+| `oob_oob_manual` | DR-learner (RF) | whole sample, **OOB**, S-learner (tree loop) | whole sample, **OOB** |
 | `cf_dcf` | Causal forest | double-CF matrices, column `k` | fold-wise (**status quo**) |
 | `cf_scf` | Causal forest | single-CF vectors | fold-wise |
+| `cf_full_oob` | Causal forest | single-CF vectors | whole sample, **OOB** |
+| `cf_default` | Causal forest | grf's own internal OOB | whole sample, **OOB** |
 
-Only the final-stage forest is refit per half-sample-per-fold — the
-bootstrap draws matrices themselves are dropped before saving, only the
-resulting bounds (`hb_lb`/`hb_ub`) are kept. Full design rationale is in
-`crossfitting/README.md`'s "Half-sample bootstrap CI pilot" section.
+Only the final-stage forest is refit per half-sample — nuisances are held fixed
+and sliced, including `cf_default`'s, whose `Y.hat`/`W.hat` grf cross-fit for
+itself. The bootstrap draws matrices are dropped before saving; only the
+resulting bounds are kept.
+
+### Three interval methods
+
+The OOB arms carry three intervals, not one, and they are nearly free to have:
+
+| `ci_method` | arms | kind | how |
+|---|---|---|---|
+| `half_boot` | all 12 | simultaneous | every unit scored in every draw |
+| `half_boot_out` | the 7 OOB arms | simultaneous | same refits, only out-of-half units scored |
+| `grf_normal` | the 7 OOB arms | **pointwise** | grf's own OOB variance, no bootstrap at all |
+
+`half_boot` and `half_boot_out` come off one set of forest fits — a paired
+contrast, differing only in whether a unit that was *in* the half sample gets
+scored by the half forest's own OOB prediction. `half_boot_out` takes its
+supremum over ~`n/2` rather than `n` units, so it is expected to run narrower.
+
+`grf_normal` is the free comparator: for a whole-sample forest grf returns OOB
+variance estimates (bootstrap of little bags) alongside the predictions, and
+`R/metrics.R`'s `normal_interval` turns those into a CI at no extra compute.
+**It is a pointwise interval** and is expected to score near zero on
+simultaneous coverage — that is the method working as designed, not a defect.
+It is natural for the OOB arms and awkward for the crossfit ones (whose `tau` is
+stitched from `V` fold models), which is exactly the mirror image of the
+bootstrap, and why the OOB arms are the first place both apply to the same arm.
+
+Neither method reflects first-stage nuisance uncertainty: the bootstrap holds
+nuisances fixed, and grf's variance treats the pseudo-outcomes as known. Whether
+that is second-order is the Neyman-orthogonality claim this study probes.
+
+Full design rationale is in `crossfitting/README.md`'s "Half-sample bootstrap CI
+pilot" section.
 
 ```{r data}
 # functions and label dictionaries - ci_variant_levels/ci_variant_labels here,
@@ -83,7 +129,7 @@ res_path <- file.path(dirname(path), "results", "crossfitting_ci")
 metrics <- readRDS(file.path(res_path, "cf_ci_metrics.RDS"))
 
 # tidy up - no `set` column: training-sample tau only
-metrics <- metrics %>%
+metrics_all <- metrics %>%
   mutate(
     scenario = factor(
       case_when(scenario == 1 ~ "Null",
@@ -92,9 +138,15 @@ metrics <- metrics %>%
       levels = c("Null", "Interaction", "Non-linear")),
     family = factor(recode(family, !!!family_labels), levels = unname(family_labels)),
     variant = factor(recode(variant, !!!ci_variant_labels),
-                     levels = unname(ci_variant_labels[ci_variant_levels]))
+                     levels = unname(ci_variant_labels[ci_variant_levels])),
+    ci_method = factor(recode(ci_method, !!!ci_method_labels),
+                       levels = unname(ci_method_labels[ci_method_levels]))
   ) %>%
   droplevels()
+
+# every section below the method comparison is about the half-sample bootstrap,
+# the one interval available for all 12 arms
+metrics <- filter(metrics_all, ci_method == ci_method_labels[["half_boot"]])
 
 # per variant summaries
 metrics_summary <- metrics %>%
@@ -205,11 +257,66 @@ width_sum_plot <- summary_plot(metrics_summary, "mean_ci_len", "mcse_ci_len",
 (width_plot / width_sum_plot) + plot_layout(guides = "collect")
 ```
 
+## Three interval methods on the OOB arms
+
+The one place all three methods exist for the **same** arm, and the sharpest
+question the pilot can answer: does an expensive bootstrap buy anything over the
+variance grf hands back for free?
+
+Read the two panels together, not separately. `grf_normal` is pointwise — it is
+not built to control simultaneous coverage, so the marginal panel is the fair
+reading of it. Both bootstrap bands are simultaneous and come off identical
+refits, differing only in whether in-half units are scored; `half_boot_out`
+takes its supremum over ~`n/2` rather than `n` units, so a narrower band is the
+expected result, not a surprising one.
+
+```{r method-comparison, fig.height=16}
+oob_variants <- ci_variant_labels[c("scf_oob", "scf_oob_t", "oob_oob", "oob_oob_s",
+                                    "oob_oob_manual", "cf_full_oob", "cf_default")]
+
+method_df <- metrics_all %>%
+  filter(variant %in% oob_variants) %>%
+  droplevels() %>%
+  group_by(scenario, family, variant, ci_method) %>%
+  summarise(mean_marg_cov = mean(marginal_coverage, na.rm = T),
+            mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(n()),
+            mean_ci_len = mean(mean_ci_length, na.rm = T),
+            mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(n()),
+            .groups = "drop")
+
+method_cov_panel <- method_df %>%
+  ggplot(aes(x = variant, y = mean_marg_cov, colour = ci_method,
+             ymin = mean_marg_cov - mcse_marg_cov, ymax = mean_marg_cov + mcse_marg_cov)) +
+  geom_hline(yintercept = 0.95, linetype = "dashed") +
+  geom_point(size = 2, position = position_dodge(width = 0.5)) +
+  geom_errorbar(linewidth = 0.3, width = 0.3, position = position_dodge(width = 0.5)) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(method_df$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(y = "Mean marginal coverage", x = NULL, colour = "Interval method")
+
+method_width_panel <- method_df %>%
+  ggplot(aes(x = variant, y = mean_ci_len, colour = ci_method,
+             ymin = mean_ci_len - mcse_ci_len, ymax = mean_ci_len + mcse_ci_len)) +
+  geom_point(size = 2, position = position_dodge(width = 0.5)) +
+  geom_errorbar(linewidth = 0.3, width = 0.3, position = position_dodge(width = 0.5)) +
+  facet_wrap(vars(family, scenario), nrow = n_distinct(method_df$family), scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(y = "Mean interval length", x = "Whole-sample / OOB arm", colour = "Interval method")
+
+(method_cov_panel / method_width_panel) + plot_layout(guides = "collect")
+```
+
 ## Point-estimate accuracy
 
-Not this report's focus, but worth confirming the pilot's 5 arms still track
-the production study's numbers for the same arms (bias and MSE of the CATE
-point estimate against the known truth).
+Not this report's focus, and per-arm rather than per-method. Under the same seed
+these arms are bit-identical to the production study's, so this should reproduce
+`cf_results.qmd`'s numbers exactly — the cheapest possible check that the pilot
+is wired to the same estimators (bias and MSE of the CATE point estimate against
+the known truth).
 
 ```{r point-plot, fig.height=10}
 bias_plot <- metrics %>%
