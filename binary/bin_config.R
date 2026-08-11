@@ -27,7 +27,7 @@ study <- study_config(
   name     = "binary",
   res_path = file.path(dirname(here()), "results", "binary"),
   grid = expand.grid(
-    scenario = c(1, 3, 8, 9),
+    scenario = c(1:10),
     n = c(100, 250, 500, 1000),
     run = c(1:100),
     stringsAsFactors = FALSE
