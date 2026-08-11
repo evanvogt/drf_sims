@@ -31,6 +31,19 @@
 # tests get run, and those disagreements look like drift rather than design. They
 # are reproduced exactly rather than harmonised, because harmonising would change
 # results for studies that are not otherwise re-running. See PROFILES.
+#
+# Crossfitting strategy, per crossfitting/'s comparison of alternatives against
+# the double-crossfitting this file used to do throughout:
+#   dr_random_forest, dr_oracle, dr_semi_oracle  whole-sample OOB, "oob_oob_s":
+#     an S-learner nuisance forest (nuisance_rf) with no sample splitting, OOB
+#     counterfactual predictions via oob_predict_counterfactual, and an OOB
+#     stage-2 regression forest (stage2_whole_rf).
+#   causal_forest   grf's own internal cross-fitting, "cf_default": a plain
+#     causal_forest(X, Y, W) with no externally-supplied nuisances.
+#   dr_superlearner   single leave-one-fold-out crossfit, "scf_scf": nuisance_sl
+#     and stage_2_sl share the same fold_indices, rather than double-crossfit
+#     nuisances feeding a separately-split stage 2.
+# See crossfitting/cf_models.R for the full arm comparison these three replace.
 
 require(coin)
 require(grf)
@@ -61,25 +74,23 @@ PRETEST_STAGE2 <- TRUE
 #  oracle / semi tests     yes      no        yes
 #  SuperLearner arm        yes      no        yes (skipped if X still has NAs)
 #  half-sample bootstrap   no       yes       no
-#  nuisance row means      yes      no        yes
 #
 # NOTE: in the missing-data and CI variants dr_random_forest is built inline as
-# list(tau = stage_2_rf(...)) and so carries no BLP or independence test, while
+# list(tau = stage2_whole_rf(...)$tau) and so carries no BLP or independence test, while
 # the base studies call run_dr_random_forest and get both. The metrics scripts
 # then record BLP_p as NA for that one model in those studies. Nothing marks this
 # as deliberate and it looks like copy-paste drift, but it is preserved here
 # because changing it would move published numbers. Worth a decision.
+#
+# aggregate_nuisances (row-mean summaries of a double-crossfit matrix) used to
+# be a fourth axis here; it was dropped when nuisance_rf/nuisance_sl moved to
+# whole-sample OOB / single-crossfit vectors, which have no matrix to aggregate.
 
 PROFILES <- list(
-  base    = list(cf_variance = FALSE, tests = TRUE,  dr_rf_tests = TRUE,
-                 aggregate_nuisances = TRUE),
-  ci      = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE,
-                 aggregate_nuisances = FALSE),
-  missing = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = FALSE,
-                 aggregate_nuisances = TRUE),
-  # missing/ci_example: as "ci", but it kept the nuisance row means
-  ci_mi   = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE,
-                 aggregate_nuisances = TRUE)
+  base    = list(cf_variance = FALSE, tests = TRUE,  dr_rf_tests = TRUE),
+  ci      = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE),
+  missing = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = FALSE),
+  ci_mi   = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE)
 )
 
 # ---- helpers ----------------------------------------------------------------
@@ -100,7 +111,9 @@ is_binomial <- function(family) identical(family$family, "binomial")
 #' Fit every CATE method on one simulated dataset
 #'
 #' @param data data.frame laid out as the DGMs emit it: Y, W, then covariates
-#' @param n_folds number of crossfitting folds V
+#' @param n_folds number of crossfitting folds V. Only the SuperLearner arm
+#'   still crossfits (see the strategy note above); the others are whole-sample
+#'   OOB and ignore this beyond it feeding fold_indices, which they still return.
 #' @param sl_lib SuperLearner library; NULL skips the SuperLearner arm
 #' @param fmla_info oracle formula + parameters; NULL skips the oracle arm
 #' @param family gaussian() or binomial(); controls the SuperLearner outcome model
@@ -130,37 +143,34 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
 
   fold_indices <- sort(seq(n_obs) %% n_folds) + 1
   fold_list <- unique(fold_indices)
-  fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)
 
   results <- list()
 
   cat("Computing nuisance functions...\n")
-  nuisances_rf <- nuisance_rf(X, Y, W, fold_indices, fold_pairs, ipw,
-                              aggregate = p$aggregate_nuisances)
+  nuisances_rf <- nuisance_rf(X, Y, W, ipw)
 
   cat("Running Causal Forest...\n")
-  results$causal_forest <- run_causal_forest(X, Y, W, nuisances_rf, fold_indices,
-                                             fold_list, ipw,
+  results$causal_forest <- run_causal_forest(X, Y, W, nuisances_rf, ipw,
                                              variance = p$cf_variance,
                                              tests = p$tests)
   if (!is.null(ci)) {
     cat("Running Causal Forest bootstrap... \n")
     results$causal_forest <- c(results$causal_forest,
-      cf_half_boot(X, Y, W, nuisances_rf, results$causal_forest$tau,
-                   ci$boot, ci$sf, ci$alpha, fold_indices, fold_list))
+      cf_oob_half_boot(X, Y, W, results$causal_forest, results$causal_forest$tau,
+                       ci$boot, ci$sf, ci$alpha))
   }
 
   cat("Running DR Random Forest...\n")
   results$dr_random_forest <- if (p$dr_rf_tests) {
-    run_dr_random_forest(X, Y, W, nuisances_rf, fold_indices, fold_list, ipw)
+    run_dr_random_forest(X, Y, W, nuisances_rf, ipw)
   } else {
-    list(tau = stage_2_rf(X, nuisances_rf$po_matrix, fold_indices, fold_list, ipw))
+    list(tau = stage2_whole_rf(X, nuisances_rf$po, ipw)$tau)
   }
   if (!is.null(ci)) {
     cat("Running DR RF bootstrap... \n")
     results$dr_random_forest <- c(results$dr_random_forest,
-      rf_half_boot(X, Y, W, nuisances_rf$po_matrix, results$dr_random_forest$tau,
-                   ci$boot, ci$sf, ci$alpha, fold_indices, fold_list))
+      rf_oob_half_boot(X, Y, W, nuisances_rf$po, results$dr_random_forest$tau,
+                       ci$boot, ci$sf, ci$alpha))
   }
 
   # the missing-data variant skips the arms that need a complete covariate matrix
@@ -168,38 +178,34 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
 
   if (!is.null(fmla_info) && (profile != "missing" || complete_X)) {
     cat("Running DR Oracle...\n")
-    results$dr_oracle <- run_dr_oracle(X, Y, W, fmla_info, fold_indices, fold_list,
-                                       ipw, oracle_link = oracle_link,
-                                       tests = p$tests)
+    results$dr_oracle <- run_dr_oracle(X, Y, W, fmla_info, ipw,
+                                       oracle_link = oracle_link, tests = p$tests)
     if (!is.null(ci)) {
       cat("Runnings Oracle bootstrap...\n")
       results$dr_oracle <- c(results$dr_oracle,
-        rf_half_boot(X, Y, W, results$dr_oracle$po, results$dr_oracle$tau,
-                     ci$boot, ci$sf, ci$alpha, fold_indices, fold_list))
+        rf_oob_half_boot(X, Y, W, results$dr_oracle$po, results$dr_oracle$tau,
+                         ci$boot, ci$sf, ci$alpha))
     }
   }
 
   if (profile != "missing" || complete_X) {
     cat("Running DR Semi-Oracle...\n")
-    results$dr_semi_oracle <- run_dr_semi_oracle(X, Y, W, fold_indices, fold_list,
-                                                 ipw, tests = p$tests)
+    results$dr_semi_oracle <- run_dr_semi_oracle(X, Y, W, ipw, tests = p$tests)
     if (!is.null(ci)) {
       cat("Running Semi-Oracle bootstrap...\n")
       results$dr_semi_oracle <- c(results$dr_semi_oracle,
-        rf_half_boot(X, Y, W, results$dr_semi_oracle$po, results$dr_semi_oracle$tau,
-                     ci$boot, ci$sf, ci$alpha, fold_indices, fold_list))
+        rf_oob_half_boot(X, Y, W, results$dr_semi_oracle$po, results$dr_semi_oracle$tau,
+                         ci$boot, ci$sf, ci$alpha))
     }
   }
 
   if (!is.null(sl_lib) && (profile != "missing" || complete_X)) {
     cat("Running DR SuperLearner...\n")
     X <- as.data.frame(X)
-    nuisances_sl <- nuisance_sl(X, Y, W, fold_indices, fold_pairs, sl_lib, ipw,
-                                family = family)
+    nuisances_sl <- nuisance_sl(X, Y, W, fold_indices, sl_lib, ipw, family = family)
     results$dr_superlearner <- run_dr_superlearner(X, Y, W, nuisances_sl,
                                                    fold_indices, fold_list,
-                                                   fold_pairs, sl_lib, ipw,
-                                                   tests = p$tests)
+                                                   sl_lib, ipw, tests = p$tests)
     results$nuisances_sl <- nuisances_sl
   }
 
@@ -211,78 +217,60 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
 
 # ---- stage 1: nuisance estimation -------------------------------------------
 
-#' Double-crossfit nuisance estimation with regression forests
-#'
-#' Fits over all C(V, 2) fold pairs, so column k of each returned matrix is
-#' untouched by fold k. `aggregate` adds the row-mean summaries the BLP and
-#' independence tests consume; the CI variant never ran those and so never
-#' carried them in its saved output.
-nuisance_rf <- function(X, Y, W, fold_indices, fold_pairs, ipw = NULL,
-                        aggregate = TRUE) {
-
-  cross_fits <- future_map(seq_along(fold_pairs), function(i) {
-    fold_pair <- fold_pairs[[i]]
-    in_train <- !(fold_indices %in% fold_pair)
-    in_test <- !in_train
-
-    Y.hat.model <- regression_forest(cbind(W[in_train], X[in_train, ]), Y[in_train],
-                                     sample.weights = wts(ipw, in_train))
-    Y.hat.cf.model <- regression_forest(X[in_train, ], Y[in_train],
-                                        sample.weights = wts(ipw, in_train))
-    W.hat.model <- regression_forest(X[in_train, ], W[in_train],
-                                     sample.weights = wts(ipw, in_train))
-
-    X_test <- X[in_test, ]
-
-    Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X_test))$predictions
-    Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X_test))$predictions
-    Y.hat.cf <- predict(Y.hat.cf.model, newdata = X_test)$predictions
-    W.hat <- predict(W.hat.model, newdata = X_test)$predictions
-
-    W_test <- W[in_test]
-    Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
-    po <- dr_pseudo(Y[in_test], W_test, Y1.hat, Y0.hat, W.hat)
-
-    list(po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf,
-         W.hat = W.hat, fold_pair = fold_pair)
-  }, .options = furrr_options(seed = TRUE))
-
-  fold_list <- unique(fold_indices)
-  mats <- lapply(c("po", "Y.hat", "Y.hat.cf", "Y0.hat", "W.hat"), function(nm) {
-    collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, nm)
-  })
-  names(mats) <- c("po_matrix", "Y.hat_matrix", "Y.hat.cf_matrix",
-                   "Y0.hat_matrix", "W.hat_matrix")
-
-  if (!aggregate) {
-    # field order as the CI variant emitted it
-    return(mats[c("po_matrix", "Y.hat_matrix", "Y.hat.cf_matrix",
-                  "Y0.hat_matrix", "W.hat_matrix")])
-  }
-
-  list(
-    po_matrix = mats$po_matrix,
-    po = rowMeans(mats$po_matrix, na.rm = TRUE),
-    Y.hat_matrix = mats$Y.hat_matrix,
-    Y.hat = rowMeans(mats$Y.hat_matrix, na.rm = TRUE),
-    Y.hat.cf_matrix = mats$Y.hat.cf_matrix,
-    Y.hat.cf = rowMeans(mats$Y.hat.cf_matrix, na.rm = TRUE),
-    Y0.hat_matrix = mats$Y0.hat_matrix,
-    Y0.hat = rowMeans(mats$Y0.hat_matrix, na.rm = TRUE),
-    W.hat_matrix = mats$W.hat_matrix,
-    W.hat = rowMeans(mats$W.hat_matrix, na.rm = TRUE)
-  )
+# maintainer-endorsed (unsupported) workaround for the fact that grf has no public
+# API for an OOB prediction at a counterfactual covariate row: predict(forest)
+# without newdata re-reads object$X.orig fresh each call and restricts each row to
+# its out-of-bag trees, so pointing X.orig at a perturbed matrix and clearing the
+# cached predictions borrows grf's own OOB routine at that perturbed point.
+# "Hacky," per grf-labs/grf#307 - may break on a future grf version. R's
+# copy-on-modify semantics mean this cannot leak into the caller's forest object;
+# only the local copy inside this function is touched. Ported unchanged from
+# crossfitting/cf_models.R, where it backs the oob_oob_s arm this file now uses
+# as the production default.
+oob_predict_counterfactual <- function(forest, X_counterfactual) {
+  forest$X.orig <- X_counterfactual
+  forest$predictions <- NULL
+  forest$debiased.error <- NULL
+  predict(forest)$predictions
 }
 
-#' Double-crossfit nuisance estimation with SuperLearner
-nuisance_sl <- function(X, Y, W, fold_indices, fold_pairs, sl_lib, ipw = NULL,
+#' Whole-sample OOB nuisance estimation with a regression forest (S-learner)
+#'
+#' No sample splitting: one S-learner forest on cbind(W, X) supplies
+#' Y0.hat/Y1.hat via oob_predict_counterfactual, and two more whole-sample
+#' forests supply W.hat and Y.hat.cf, both taken out-of-bag. This is the
+#' "oob_oob_s" arm validated in crossfitting/cf_models.R against a T-learner
+#' control and a from-scratch manual-API reimplementation
+#' (run_all_crossfit_variants there), ported here as the production default
+#' in place of the double-crossfit this function used to do.
+nuisance_rf <- function(X, Y, W, ipw = NULL) {
+
+  forest <- regression_forest(cbind(W = W, X), Y, sample.weights = ipw)
+  Y0.hat <- oob_predict_counterfactual(forest, cbind(W = 0, X))
+  Y1.hat <- oob_predict_counterfactual(forest, cbind(W = 1, X))
+
+  W.hat <- trim_ps(predict(regression_forest(X, W, sample.weights = ipw))$predictions)
+  Y.hat.cf <- predict(regression_forest(X, Y, sample.weights = ipw))$predictions
+
+  Y.hat <- W * Y1.hat + (1 - W) * Y0.hat
+  po <- dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat)
+
+  list(po = po, Y.hat = Y.hat, Y.hat.cf = Y.hat.cf, Y0.hat = Y0.hat, W.hat = W.hat)
+}
+
+#' Single leave-one-fold-out nuisance estimation with SuperLearner
+#'
+#' One split, shared with the stage-2 regression via the same fold_indices
+#' (see run_dr_superlearner / stage_2_sl) rather than double-crossfit
+#' nuisances feeding a separately-split stage 2 - the "scf_scf" arm validated
+#' in crossfitting/cf_models.R.
+nuisance_sl <- function(X, Y, W, fold_indices, sl_lib, ipw = NULL,
                         family = gaussian()) {
 
   binom <- is_binomial(family)
 
-  cross_fits <- future_map(seq_along(fold_pairs), function(i) {
-    fold_pair <- fold_pairs[[i]]
-    in_train <- !(fold_indices %in% fold_pair)
+  cross_fits <- future_map(unique(fold_indices), function(fold) {
+    in_train <- fold_indices != fold
     in_test <- !in_train
 
     X_train <- X[in_train, ]
@@ -320,36 +308,17 @@ nuisance_sl <- function(X, Y, W, fold_indices, fold_pairs, sl_lib, ipw = NULL,
       W.hat <- rep(mean(W[in_train], na.rm = TRUE), sum(in_test))
     }
 
-    # trim extreme propensities. NOTE: done only on this SuperLearner path, not
-    # in nuisance_rf - an asymmetry inherited from the original code. It is a
-    # no-op while W is randomised 0.5, but it is not obviously intended.
-    W.hat[W.hat < 0.05] <- 0.05
-    W.hat[W.hat > 0.95] <- 0.95
+    # clamp propensities away from 0/1, same as nuisance_rf's W.hat
+    W.hat <- trim_ps(W.hat)
 
     W_test <- W[in_test]
     Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
     po <- dr_pseudo(Y[in_test], W_test, Y1.hat, Y0.hat, W.hat)
 
-    list(po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, W.hat = W.hat,
-         fold_pair = fold_pair)
+    list(fold = fold, po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, W.hat = W.hat)
   }, .options = furrr_options(seed = TRUE))
 
-  fold_list <- unique(fold_indices)
-  po_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "po")
-  Y.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "Y.hat")
-  Y0.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "Y0.hat")
-  W.hat_matrix <- collate_predictions(fold_list, fold_pairs, fold_indices, cross_fits, "W.hat")
-
-  list(
-    po_matrix = po_matrix,
-    po = rowMeans(po_matrix, na.rm = TRUE),
-    Y.hat_matrix = Y.hat_matrix,
-    Y.hat = rowMeans(Y.hat_matrix, na.rm = TRUE),
-    Y0.hat_matrix = Y0.hat_matrix,
-    Y0.hat = rowMeans(Y0.hat_matrix, na.rm = TRUE),
-    W.hat_matrix = W.hat_matrix,
-    W.hat = rowMeans(W.hat_matrix, na.rm = TRUE)
-  )
+  scatter_folds(cross_fits, fold_indices, c("po", "Y.hat", "Y0.hat", "W.hat"))
 }
 
 #' Drop SuperLearner algorithms that error, warn, or return NA on this data
@@ -381,28 +350,19 @@ pretest_superlearner <- function(Y, X, SL.library, family) {
 
 # ---- stage 2: final CATE regression -----------------------------------------
 
-#' Crossfit second stage with a regression forest
+#' Whole-sample OOB second stage: one forest, its OOB predictions
 #'
-#' `po` is either the n x V double-crossfitting matrix (column k valid for fold k)
-#' or a plain n-vector, as produced by the oracle arms.
-stage_2_rf <- function(X, po, fold_indices, fold_list, ipw = NULL) {
-  n_obs <- nrow(X)
-  single <- is.vector(po)
-
-  tau_results <- future_map(seq_along(fold_list), function(i) {
-    fold <- fold_list[i]
-    in_train <- fold_indices != fold
-    in_fold <- !in_train
-
-    y_train <- if (single) po[in_train] else po[in_train, fold]
-    forest <- regression_forest(X[in_train, ], y_train,
-                                sample.weights = wts(ipw, in_train))
-    list(fold = fold, predictions = predict(forest, newdata = X[in_fold, ])$predictions)
-  }, .options = furrr_options(seed = TRUE))
-
-  tau <- rep(NA, n_obs)
-  for (result in tau_results) tau[fold_indices == result$fold] <- result$predictions
-  tau
+#' var_oob is grf's own OOB variance estimate (bootstrap of little bags), free
+#' alongside the predictions since regression_forest already defaults to
+#' ci.group.size = 2. predict() does not consume R's RNG stream, so asking for
+#' the variance leaves the point estimate unchanged. Ported from
+#' crossfitting/cf_models.R::stage2_whole_rf, replacing the leave-one-fold-out
+#' stage_2_rf this function used to be for dr_random_forest, dr_oracle and
+#' dr_semi_oracle alike.
+stage2_whole_rf <- function(X, po, ipw = NULL) {
+  forest <- regression_forest(X, po, sample.weights = ipw)
+  pred <- predict(forest, estimate.variance = TRUE)
+  list(tau = pred$predictions, variance = pred$variance.estimates)
 }
 
 #' Crossfit second stage with SuperLearner
@@ -435,60 +395,48 @@ stage_2_sl <- function(X, po, fold_indices, fold_list, sl_lib, ipw = NULL) {
 
 # ---- the estimators ---------------------------------------------------------
 
-#' Fold-wise causal forest using pre-computed double-crossfit nuisances
-run_causal_forest <- function(X, Y, W, nuisances, fold_indices, fold_list,
-                              ipw = NULL, variance = FALSE, tests = TRUE) {
-  n_obs <- nrow(X)
+#' Causal forest using grf's own internal cross-fitting
+#'
+#' No externally-supplied nuisances: leaving Y.hat/W.hat NULL makes grf
+#' cross-fit them internally, and tau is grf's own out-of-bag prediction. This
+#' is the "cf_default" arm validated in crossfitting/cf_models.R against the
+#' fold-wise external-crossfit alternative this function used to implement.
+#'
+#' `nuisances` is only used for the BLP/independence tests below - it is the
+#' nuisance_rf() object shared with dr_random_forest, not what fits the forest.
+#' The forest's own Y.hat/W.hat are returned (as Y.hat.cf/W.hat, matching the
+#' field-naming convention) so the half-sample bootstrap can hold them fixed.
+run_causal_forest <- function(X, Y, W, nuisances, ipw = NULL, variance = FALSE,
+                              tests = TRUE) {
+  forest <- causal_forest(X, Y, W, sample.weights = ipw)
+  pred <- predict(forest, estimate.variance = variance)
 
-  tau_results <- future_map(seq_along(fold_list), function(i) {
-    fold <- fold_list[i]
-    in_train <- fold_indices != fold
-    in_fold <- !in_train
-
-    forest <- causal_forest(X[in_train, ], Y[in_train], W[in_train],
-                            nuisances$Y.hat.cf_matrix[in_train, fold],
-                            nuisances$W.hat_matrix[in_train, fold],
-                            sample.weights = wts(ipw, in_train))
-
-    pred <- predict(forest, newdata = X[in_fold, ], estimate.variance = variance)
-    list(fold = fold, tau = pred$predictions,
-         variance = if (variance) pred$variance.estimates else NULL)
-  }, .options = furrr_options(seed = TRUE))
-
-  tau <- rep(NA, n_obs)
-  tau_var <- rep(NA, n_obs)
-  for (result in tau_results) {
-    in_fold <- fold_indices == result$fold
-    tau[in_fold] <- result$tau
-    if (variance) tau_var[in_fold] <- result$variance
-  }
-
-  out <- list(tau = tau)
-  if (variance) out$variance <- tau_var
+  out <- list(tau = pred$predictions, Y.hat.cf = forest$Y.hat, W.hat = forest$W.hat)
+  if (variance) out$variance <- pred$variance.estimates
   if (tests) {
-    out$BLP_whole <- run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, tau)
-    out$independence_cate <- run_independence_test_whole(X, tau)
+    out$BLP_whole <- run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, out$tau)
+    out$independence_cate <- run_independence_test_whole(X, out$tau)
     out$independence_po <- run_independence_test_whole(X, nuisances$po)
   }
   out
 }
 
-#' DR-learner with a regression-forest second stage
-run_dr_random_forest <- function(X, Y, W, nuisances, fold_indices, fold_list,
-                                 ipw = NULL, tests = TRUE) {
-  tau <- stage_2_rf(X, nuisances$po_matrix, fold_indices, fold_list, ipw)
+#' DR-learner with a whole-sample OOB regression-forest second stage
+run_dr_random_forest <- function(X, Y, W, nuisances, ipw = NULL, tests = TRUE) {
+  s <- stage2_whole_rf(X, nuisances$po, ipw)
 
-  out <- list(tau = tau)
+  out <- list(tau = s$tau, variance = s$variance)
   if (tests) {
-    out$BLP_whole <- run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, tau)
-    out$independence_cate <- run_independence_test_whole(X, tau)
+    out$BLP_whole <- run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, out$tau)
+    out$independence_cate <- run_independence_test_whole(X, out$tau)
     out$independence_po <- run_independence_test_whole(X, nuisances$po)
   }
   out
 }
 
-#' DR-learner with the true outcome model and a known propensity of 0.5
-run_dr_oracle <- function(X, Y, W, fmla_info, fold_indices, fold_list, ipw = NULL,
+#' DR-learner with the true outcome model, a known propensity of 0.5, and a
+#' whole-sample OOB second stage
+run_dr_oracle <- function(X, Y, W, fmla_info, ipw = NULL,
                           oracle_link = c("identity", "logit"), tests = TRUE) {
   n_obs <- nrow(X)
   # "logit" means the formula is a linear predictor and plogis belongs here;
@@ -511,63 +459,43 @@ run_dr_oracle <- function(X, Y, W, fmla_info, fold_indices, fold_list, ipw = NUL
   X <- as.matrix(X)
 
   po <- (Y1.hat - Y0.hat) + ((Y - Y.hat) * (W - W.hat)) / (W.hat * (1 - W.hat))
-  tau <- stage_2_rf(X, po, fold_indices, fold_list, ipw)
+  s <- stage2_whole_rf(X, po, ipw)
 
-  out <- list(tau = tau, po = po, Y0.hat = Y0.hat)
+  out <- list(tau = s$tau, variance = s$variance, po = po, Y0.hat = Y0.hat)
   if (tests) {
-    out$BLP_whole <- run_blp_whole(Y, W, W.hat, Y0.hat, tau)
-    out$independence_cate <- run_independence_test_whole(X, tau)
+    out$BLP_whole <- run_blp_whole(Y, W, W.hat, Y0.hat, out$tau)
+    out$independence_cate <- run_independence_test_whole(X, out$tau)
     out$independence_po <- run_independence_test_whole(X, po)
   }
   out
 }
 
-#' DR-learner with a known propensity of 0.5 but an estimated outcome model
-run_dr_semi_oracle <- function(X, Y, W, fold_indices, fold_list, ipw = NULL,
-                               tests = TRUE) {
+#' DR-learner with a known propensity of 0.5, a whole-sample OOB outcome
+#' model, and a whole-sample OOB second stage
+run_dr_semi_oracle <- function(X, Y, W, ipw = NULL, tests = TRUE) {
   n_obs <- nrow(X)
   W.hat <- rep(0.5, n_obs)
 
-  cross_fits <- future_map(seq_len(length(fold_list)), function(fold) {
-    in_train <- !(fold_indices == fold)
-    in_test <- which(!in_train)
+  forest <- regression_forest(cbind(W = W, X), Y, sample.weights = ipw)
+  Y0.hat <- oob_predict_counterfactual(forest, cbind(W = 0, X))
+  Y1.hat <- oob_predict_counterfactual(forest, cbind(W = 1, X))
 
-    Y.hat.model <- regression_forest(cbind(W[in_train], X[in_train, ]), Y[in_train],
-                                     sample.weights = wts(ipw, in_train))
+  po <- dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat)
+  s <- stage2_whole_rf(X, po, ipw)
 
-    X_test <- X[in_test, ]
-    Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X_test))$predictions
-    Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X_test))$predictions
-
-    W_test <- W[in_test]
-    po <- dr_pseudo(Y[in_test], W_test, Y1.hat, Y0.hat, W.hat)
-
-    list(po = po, Y0.hat = Y0.hat, fold = fold)
-  }, .options = furrr_options(seed = TRUE))
-
-  po <- rep(NA, n_obs)
-  Y0.hat <- rep(NA, n_obs)
-  for (i in seq_along(cross_fits)) {
-    in_fold <- fold_indices == cross_fits[[i]]$fold
-    po[in_fold] <- cross_fits[[i]]$po
-    Y0.hat[in_fold] <- cross_fits[[i]]$Y0.hat
-  }
-
-  tau <- stage_2_rf(X, po, fold_indices, fold_list, ipw)
-
-  out <- list(tau = tau, po = po, Y0.hat = Y0.hat)
+  out <- list(tau = s$tau, variance = s$variance, po = po, Y0.hat = Y0.hat)
   if (tests) {
-    out$BLP_whole <- run_blp_whole(Y, W, W.hat, Y0.hat, tau)
-    out$independence_cate <- run_independence_test_whole(X, tau)
+    out$BLP_whole <- run_blp_whole(Y, W, W.hat, Y0.hat, out$tau)
+    out$independence_cate <- run_independence_test_whole(X, out$tau)
     out$independence_po <- run_independence_test_whole(X, po)
   }
   out
 }
 
-#' DR-learner with SuperLearner nuisances and second stage
+#' DR-learner with SuperLearner nuisances and second stage, sharing one split
 run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list,
-                                fold_pairs, sl_lib, ipw = NULL, tests = TRUE) {
-  tau <- stage_2_sl(X, nuisances$po_matrix, fold_indices, fold_list, sl_lib, ipw)
+                                sl_lib, ipw = NULL, tests = TRUE) {
+  tau <- stage_2_sl(X, nuisances$po, fold_indices, fold_list, sl_lib, ipw)
 
   out <- list(tau = tau)
   if (tests) {

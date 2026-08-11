@@ -12,6 +12,11 @@
 # observed W plugged back in). That is a deliberate change, not an accident -
 # see validation/README.md's Status section.
 #
+# Both estimators (and the TE-VIM refits below) are whole-sample OOB now, not
+# fold-crossfit - see R/cate_models.R's crossfitting-strategy note. n_folds is
+# kept as a parameter only so the analysis driver's call site doesn't need to
+# change; it is otherwise unused.
+#
 # The TE-VIM (treatment-effect variable importance) computation below is
 # genuinely study-specific - nothing else in the repo uses it yet - so it
 # stays here rather than moving into R/.
@@ -23,28 +28,22 @@ run_all_cate_methods <- function(data, n_folds = 10) {
   X <- as.matrix(data[, -c(1:2)])
   Y <- data$Y
   W <- data$W
-  n_obs <- nrow(X)
-
-  fold_indices <- sort(seq(n_obs) %% n_folds) + 1
-  fold_list <- unique(fold_indices)
-  fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)
 
   cat("Computing nuisance functions...\n")
-  nuisances <- nuisance_rf(X, Y, W, fold_indices, fold_pairs)
+  nuisances <- nuisance_rf(X, Y, W)
 
   results <- list()
 
   cat("Running Causal Forest...\n")
-  results$causal_forest <- run_causal_forest(X, Y, W, nuisances, fold_indices, fold_list)
+  results$causal_forest <- run_causal_forest(X, Y, W, nuisances)
   results$causal_forest$te_vims <- get_te_vims_causal_forest(
-    X, Y, W, nuisances, results$causal_forest$tau, fold_indices, fold_list
+    X, Y, W, nuisances$po, results$causal_forest$tau
   )
 
   cat("Running DR Random Forest...\n")
-  results$dr_random_forest <- run_dr_random_forest(X, Y, W, nuisances, fold_indices, fold_list)
+  results$dr_random_forest <- run_dr_random_forest(X, Y, W, nuisances)
   results$dr_random_forest$te_vims <- get_te_vims(
-    X, nuisances$po, results$dr_random_forest$tau, fold_indices, fold_list,
-    nuisances$po_matrix
+    X, nuisances$po, results$dr_random_forest$tau
   )
 
   results
@@ -53,45 +52,29 @@ run_all_cate_methods <- function(data, n_folds = 10) {
 ###################
 # TE-VIMs (treatment-effect variable importance measures)
 ###################
-# For each covariate, refit the second-stage regression on every fold with
-# that covariate dropped, then compare its out-of-fold prediction error
-# against the full model's - a pathwise-derivative-style importance measure.
+# For each covariate, refit the whole-sample stage-2 model with that
+# covariate dropped and take its OOB predictions, then compare their
+# prediction error against the full model's OOB predictions - a
+# pathwise-derivative-style importance measure. Whole-sample OOB throughout,
+# matching R/cate_models.R's stage2_whole_rf / run_causal_forest - this used
+# to refit per fold instead, before those moved off fold-crossfitting.
 # `get_te_vims` covers estimators whose second stage is a plain regression
 # forest on a pseudo-outcome (DR Random Forest); `get_te_vims_causal_forest`
-# refits a causal_forest instead, since that estimator's second stage takes
-# (X, Y, W, nuisances) rather than (X, pseudo-outcome).
+# refits a causal_forest instead, since that estimator takes (X, Y, W)
+# directly rather than (X, pseudo-outcome).
 
 #' TE-VIMs for a DR-learner style estimator (pseudo-outcome regression)
 #'
 #' @param X covariate matrix
-#' @param po pseudo-outcome vector (row means across folds)
-#' @param tau full-model CATE estimates
-#' @param fold_indices crossfitting fold assignment
-#' @param fold_list unique fold ids
-#' @param po_matrix optional n x V double-crossfit pseudo-outcome matrix;
-#'   if NULL, `po` is used directly in every fold (as for the oracle arms)
-get_te_vims <- function(X, po, tau, fold_indices, fold_list, po_matrix = NULL) {
+#' @param po pseudo-outcome vector
+#' @param tau full-model OOB CATE estimates
+get_te_vims <- function(X, po, tau) {
   n_obs <- nrow(X)
   covariates <- colnames(X)
 
   sub_taus_list <- future_map(seq_along(covariates), function(i) {
     new_X <- as.matrix(X[, -i])
-    covariate_sub_taus <- rep(NA, n_obs)
-
-    for (fold in seq_along(fold_list)) {
-      in_train <- fold_indices != fold
-      in_fold <- !in_train
-
-      DR_sub <- if (is.null(po_matrix)) {
-        regression_forest(new_X[in_train, ], po[in_train])
-      } else {
-        regression_forest(new_X[in_train, ], po_matrix[in_train, fold])
-      }
-
-      covariate_sub_taus[in_fold] <- predict(DR_sub, newdata = new_X[in_fold, ])$predictions
-    }
-
-    covariate_sub_taus
+    predict(regression_forest(new_X, po))$predictions
   }, .options = furrr_options(seed = TRUE))
 
   sub_taus <- do.call(cbind, sub_taus_list)
@@ -110,31 +93,23 @@ get_te_vims <- function(X, po, tau, fold_indices, fold_list, po_matrix = NULL) {
   as.data.frame(te_vims)
 }
 
-#' TE-VIMs for the causal forest, refitting a causal_forest per dropped covariate
+#' TE-VIMs for the causal forest, refitting a whole-sample causal_forest per
+#' dropped covariate
 #'
-#' @param nuisances output of R/cate_models.R::nuisance_rf() - Y.hat.cf_matrix
-#'   and W.hat_matrix are the same nuisances run_causal_forest() itself uses
-get_te_vims_causal_forest <- function(X, Y, W, nuisances, tau, fold_indices, fold_list) {
+#' Each dropped-covariate forest cross-fits its own nuisances internally, same
+#' as the full model (R/cate_models.R::run_causal_forest) - this used to
+#' refit fold-wise against externally-supplied double-crossfit nuisances.
+#'
+#' @param po the po field of nuisance_rf()'s output, used for scoring only -
+#'   the forest itself no longer takes externally-supplied nuisances
+#' @param tau full-model OOB CATE estimates
+get_te_vims_causal_forest <- function(X, Y, W, po, tau) {
   n_obs <- nrow(X)
   covariates <- colnames(X)
-  po <- nuisances$po
 
   sub_taus_list <- future_map(seq_along(covariates), function(i) {
     new_X <- as.matrix(X[, -i])
-    covariate_sub_taus <- rep(NA, n_obs)
-
-    for (fold in seq_along(fold_list)) {
-      in_train <- fold_indices != fold
-      in_fold <- !in_train
-
-      forest <- causal_forest(new_X[in_train, ], Y[in_train], W[in_train],
-                              nuisances$Y.hat.cf_matrix[in_train, fold],
-                              nuisances$W.hat_matrix[in_train, fold])
-
-      covariate_sub_taus[in_fold] <- predict(forest, newdata = new_X[in_fold, ])$predictions
-    }
-
-    covariate_sub_taus
+    predict(causal_forest(new_X, Y, W))$predictions
   }, .options = furrr_options(seed = TRUE))
 
   sub_taus <- do.call(cbind, sub_taus_list)

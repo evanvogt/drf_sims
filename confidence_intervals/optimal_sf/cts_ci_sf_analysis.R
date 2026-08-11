@@ -18,7 +18,6 @@ source(here("confidence_intervals", "optimal_sf", "cts_ci_sf_calibration.R"))
 # simulation parameters
 i <- as.numeric(commandArgs(trailingOnly = T))
 
-n_folds <- 10
 CI_boot <- 200
 alpha   <- 0.1
 workers <- 2
@@ -45,24 +44,22 @@ setup_rng_stream(run)
 gen  <- generate_continuous_scenario_data(scenario, n)
 data <- gen$dataset
 
-X            <- as.matrix(data[, -c(1:2)])
-Y            <- data$Y
-W            <- data$W
-n_obs        <- nrow(X)
-fold_indices <- sort(seq(n_obs) %% n_folds) + 1
-fold_list    <- unique(fold_indices)
-fold_pairs   <- utils::combn(fold_list, 2, simplify = FALSE)
+X     <- as.matrix(data[, -c(1:2)])
+Y     <- data$Y
+W     <- data$W
+n_obs <- nrow(X)
 
 # set up parallelisation
 metaplan <- plan(multisession, workers = workers)
 on.exit(plan(metaplan), add = TRUE)
 
 # step 1: lightweight fit — nuisances + tau.hat only, no bootstrap CIs
+# (whole-sample OOB now, no fold structure - see R/cate_models.R)
 cat("Computing nuisance functions...\n")
-nuisances_rf <- nuisance_rf(X, Y, W, fold_indices, fold_pairs)
+nuisances_rf <- nuisance_rf(X, Y, W)
 
 cat("Estimating tau (DR-RF)...\n")
-tau.hat <- stage_2_rf(X, nuisances_rf$po_matrix, fold_indices, fold_list)
+tau.hat <- stage2_whole_rf(X, nuisances_rf$po)$tau
 
 # step 2: calibrate sample.fraction
 cat("Calibrating sample.fraction...\n")
@@ -72,7 +69,6 @@ cal <- find_optimal_sf(
   W            = W,
   nuisances_rf = nuisances_rf,
   tau.hat      = tau.hat,
-  fold_indices = fold_indices,
   sf_grid      = seq(0.05, 0.5, 0.05),
   n_sim        = 50,
   CI_boot      = 100,
@@ -81,17 +77,15 @@ cal <- find_optimal_sf(
 
 # step 3: final CIs using the calibrated sf
 cat("Running bootstrap CIs with optimal sf =", cal$optimal_sf, "...\n")
-final_ci <- rf_half_boot(
-  X            = X,
-  Y            = Y,
-  W            = W,
-  po           = nuisances_rf$po_matrix,
-  tau          = tau.hat,
-  CI_boot      = CI_boot,
-  CI_sf        = cal$optimal_sf,
-  alpha        = alpha,
-  fold_indices = fold_indices,
-  fold_list    = fold_list
+final_ci <- rf_oob_half_boot(
+  X       = X,
+  Y       = Y,
+  W       = W,
+  po      = nuisances_rf$po,
+  tau     = tau.hat,
+  CI_boot = CI_boot,
+  CI_sf   = cal$optimal_sf,
+  alpha   = alpha
 )
 
 warnings()

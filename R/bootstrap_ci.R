@@ -355,44 +355,40 @@ combine_mi_ci <- function(res_list, model, alpha = 0.05) {
 #' the binary calibration study already sourced it.
 #'
 #' Coverage is measured against `tau.hat` as a plug-in truth: pseudo-outcome
-#' residuals are resampled within each fold column, tau is re-estimated, and the
-#' interval is asked whether it covers the original estimate.
-find_optimal_sf <- function(X, Y, W, nuisances_rf, tau.hat, fold_indices,
+#' residuals are resampled whole-sample (nuisance_rf's po is a single OOB
+#' vector now, not a per-fold matrix - see R/cate_models.R), tau is
+#' re-estimated with stage2_whole_rf, and the interval is asked whether it
+#' covers the original estimate. Calibrates against rf_oob_half_boot, the
+#' whole-sample counterpart of the fold-crossfit rf_half_boot this used to
+#' calibrate.
+#'
+#' @param nuisances_rf output of R/cate_models.R::nuisance_rf() - only $po is used
+find_optimal_sf <- function(X, Y, W, nuisances_rf, tau.hat,
                             sf_grid = seq(0.05, 0.5, 0.05), n_sim = 50,
                             CI_boot = 100, alpha = 0.05, verbose = TRUE) {
 
-  fold_list <- unique(fold_indices)
-  n_obs <- length(fold_indices)
+  n_obs <- length(tau.hat)
   target <- 1 - alpha
 
-  # residuals around tau.hat; the NA structure of po_matrix is preserved
-  po_residuals <- sweep(nuisances_rf$po_matrix, 1, tau.hat, FUN = "-")
+  po_residuals <- nuisances_rf$po - tau.hat
 
   if (verbose) cat("Calibrating sample.fraction across", length(sf_grid),
                    "values,", n_sim, "simulations each...\n")
 
-  # sequential outer loop - stage_2_rf and rf_half_boot already use the workers
+  # sequential outer loop - stage2_whole_rf and rf_oob_half_boot already use the workers
   results_by_sf <- lapply(sf_grid, function(sf) {
 
     if (verbose) cat(" sf =", sf, "\n")
 
     sim_results <- lapply(seq_len(n_sim), function(b) {
 
-      po_sim <- matrix(NA_real_, nrow = n_obs, ncol = length(fold_list))
-      for (j in fold_list) {
-        valid_rows <- which(fold_indices != j)
-        valid_resid <- po_residuals[valid_rows, j]
-        valid_resid <- valid_resid[is.finite(valid_resid)]
-        po_sim[valid_rows, j] <- tau.hat[valid_rows] +
-          sample(valid_resid, size = length(valid_rows), replace = TRUE)
-      }
+      po_sim <- tau.hat + sample(po_residuals, size = n_obs, replace = TRUE)
 
-      tau.hat_sim <- stage_2_rf(X, po_sim, fold_indices, fold_list)
+      tau.hat_sim <- stage2_whole_rf(X, po_sim)$tau
 
-      boot_res <- rf_half_boot(
+      boot_res <- rf_oob_half_boot(
         X = X, Y = Y, W = W, po = po_sim, tau = tau.hat_sim,
-        CI_boot = CI_boot, CI_sf = sf, alpha = alpha,
-        fold_indices = fold_indices, fold_list = fold_list
+        CI_boot = CI_boot, CI_sf = sf, alpha = alpha
       )
 
       list(coverage = mean(tau.hat >= boot_res$hb_lb & tau.hat <= boot_res$hb_ub),

@@ -75,26 +75,31 @@ W_05 <- rep(0.5, nrow(X))
 nuisances_rf <- result$nuisances_rf
 nuisances_sl <- result$nuisances_sl
 
+# NOTE: nuisances_rf$W.hat / Y0.hat / po are whole-sample OOB vectors, not
+# double-crossfit matrices, as of the "oob + oob(s)" strategy change to
+# R/cate_models.R::nuisance_rf - this script only works against result files
+# saved after that change. Older saved RDS files carried *_matrix fields and
+# needed rowMeans(..., na.rm = T) here instead.
 for (model in models_run) {
   if (model == "causal_forest") {
-    result$causal_forest$BLP_whole <- run_blp_whole(Y, W, rowMeans(nuisances_rf$W.hat_matrix, na.rm = T),
-                                                    rowMeans(nuisances_rf$Y0.hat_matrix, na.rm = T), result$causal_forest$tau)
-    
+    result$causal_forest$BLP_whole <- run_blp_whole(Y, W, nuisances_rf$W.hat,
+                                                    nuisances_rf$Y0.hat, result$causal_forest$tau)
+
     result$causal_forest$independence_cate <- run_independence_test_whole(X, result$causal_forest$tau)
-    result$causal_forest$independence_po <- run_independence_test_whole(X, rowMeans(nuisances_rf$po_matrix, na.rm = T))
+    result$causal_forest$independence_po <- run_independence_test_whole(X, nuisances_rf$po)
   }
   if (model == "dr_random_forest") {
-    result$dr_random_forest$BLP_whole <- run_blp_whole(Y, W, rowMeans(nuisances_rf$W.hat_matrix, na.rm = T),
-                                                    rowMeans(nuisances_rf$Y0.hat_matrix, na.rm = T), result$dr_random_forest$tau)
-    
+    result$dr_random_forest$BLP_whole <- run_blp_whole(Y, W, nuisances_rf$W.hat,
+                                                    nuisances_rf$Y0.hat, result$dr_random_forest$tau)
+
     result$dr_random_forest$independence_cate <- run_independence_test_whole(X, result$dr_random_forest$tau)
-    result$dr_random_forest$independence_po <- run_independence_test_whole(X, rowMeans(nuisances_rf$po_matrix, na.rm = T))
+    result$dr_random_forest$independence_po <- run_independence_test_whole(X, nuisances_rf$po)
   }
   if (model == "dr_oracle") {
     result$dr_oracle$BLP_whole <- run_blp_whole(Y, W, W05, result$dr_oracle$Y0.hat, result$dr_oracle$tau)
-    
+
     result$dr_oracle$independence_cate <- run_independence_test_whole(X, result$dr_oracle$tau)
-    result$dr_oracle$independence_po <- run_independence_test_whole(X, rowMeans(nuisances_rf$po_matrix, na.rm = T))
-    
+    result$dr_oracle$independence_po <- run_independence_test_whole(X, nuisances_rf$po)
+
   }
 }
