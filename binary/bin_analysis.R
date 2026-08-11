@@ -19,9 +19,14 @@ source(here("R", "utils.R"))
 source(here("binary/bin_config.R"))
 
 # simulation parameters
-i <- as.numeric(commandArgs(trailingOnly = T))
-
-workers <- 2
+args <- as.numeric(commandArgs(trailingOnly = T))
+i <- args[1]
+# workers/grf_threads default to the pre-profiling values so a bare
+# `Rscript bin_analysis.R 1` still works as a local smoke test; bin_1.sh always
+# supplies both once bin_profile_summary.R has written them in - see
+# binary/bin_profile_summary.R and continuous/README.md's "Sizing the array job".
+workers <- if (length(args) >= 2 && !is.na(args[2])) args[2] else 2
+grf_threads <- if (length(args) >= 3 && !is.na(args[3])) args[3] else 1
 
 # The parameter grid lives in the study config, so this script and the
 # check/collect scripts cannot disagree about what index i means.
@@ -51,6 +56,11 @@ data <- gen$dataset
 fmla_info <- get_binary_oracle_info(scenario, gen$bW)
 
 # Run all CATE methods
+# multisession workers are new R processes and inherit this, so it keeps
+# SL.ranger and the BLAS in step with grf's num.threads rather than each of the
+# workers claiming every allocated core - matches continuous/cts_analysis.R.
+Sys.setenv(OMP_NUM_THREADS = grf_threads)
+
 metaplan <- plan(multisession, workers = workers)
 on.exit(plan(metaplan), add = TRUE)
 
@@ -59,7 +69,8 @@ results <- run_all_cate_methods(
   data = data,
   n_folds = n_folds,
   sl_lib = sl_lib,
-  fmla_info = fmla_info
+  fmla_info = fmla_info,
+  num.threads = grf_threads
 )
 
 results$data <- data
