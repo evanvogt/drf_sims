@@ -304,39 +304,49 @@ all_cate_surv_models <- function(
     sl_library
   )
 
-  message("SuperLearner DR-learner (split pseudo-obs)...")
-  sl_split_nuisances <- nuisance_pseudo_sl_split(
-    X,
-    Y,
-    D,
-    W,
-    horizon,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
-  results$sl_dr_split <- list()
-  results$sl_dr_split$RMTL1 <- stage_2_sl_vec(
-    X,
-    sl_split_nuisances$po_RMTL1,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
-  results$sl_dr_split$RMTL2 <- stage_2_sl_vec(
-    X,
-    sl_split_nuisances$po_RMTL2,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
-  results$sl_dr_split$RMSTc <- stage_2_sl_vec(
-    X,
-    sl_split_nuisances$po_RMSTc,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
+  # SuperLearner DR-learner (split pseudo-obs) - DISABLED for now, see
+  # README.md "Known issues": compute_split_pseudoyl()/compute_split_pseudomean()
+  # (below) hit an unpatched NaN in pseudo::pseudoyl()'s internal ci.omit()
+  # whenever a validation Y exceeds the max Y in that fold's KM set, and
+  # unlike pseudo_crossfit()/pseudo_double_crossfit() there is no NA
+  # fallback here, so the NA reaches stage_2_sl_vec()'s SuperLearner() call
+  # and aborts the run. Diagnosed and reproduced in
+  # surv_dr_split_na_diagnose.R. nuisance_pseudo_sl_split()/stage_2_sl_vec()
+  # are left defined below for that diagnostic script and for the fix.
+  #
+  # message("SuperLearner DR-learner (split pseudo-obs)...")
+  # sl_split_nuisances <- nuisance_pseudo_sl_split(
+  #   X,
+  #   Y,
+  #   D,
+  #   W,
+  #   horizon,
+  #   fold_indices,
+  #   fold_list,
+  #   sl_library
+  # )
+  # results$sl_dr_split <- list()
+  # results$sl_dr_split$RMTL1 <- stage_2_sl_vec(
+  #   X,
+  #   sl_split_nuisances$po_RMTL1,
+  #   fold_indices,
+  #   fold_list,
+  #   sl_library
+  # )
+  # results$sl_dr_split$RMTL2 <- stage_2_sl_vec(
+  #   X,
+  #   sl_split_nuisances$po_RMTL2,
+  #   fold_indices,
+  #   fold_list,
+  #   sl_library
+  # )
+  # results$sl_dr_split$RMSTc <- stage_2_sl_vec(
+  #   X,
+  #   sl_split_nuisances$po_RMSTc,
+  #   fold_indices,
+  #   fold_list,
+  #   sl_library
+  # )
 
   # add extra bits to the results
   results$pseudos <- list()
