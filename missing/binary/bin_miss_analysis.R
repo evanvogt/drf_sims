@@ -16,10 +16,17 @@ source(here("missing/binary/bin_miss_config.R"))
 source(here("R", "utils.R"))
 
 # simulation parameters
-i <- as.numeric(commandArgs(trailingOnly = T))
+args <- as.numeric(commandArgs(trailingOnly = T))
+i <- args[1]
+# workers/grf_threads default to the pre-profiling values so a bare
+# `Rscript bin_miss_analysis.R 1` still works as a local smoke test;
+# bin_miss_1.sh always supplies both once bin_miss_profile_summary.R has
+# written them in - see missing/binary/bin_miss_profile_summary.R and
+# binary/bin_profile_summary.R's "Sizing the array job" pattern.
+workers <- if (length(args) >= 2 && !is.na(args[2])) args[2] else 2
+grf_threads <- if (length(args) >= 3 && !is.na(args[3])) args[3] else 1
 
 n_folds <- 10
-workers <- 2
 
 # The grid lives in bin_miss_config.R and is NEVER filtered here - see the note
 # in missing/continuous/cts_miss_analysis.R. To run one arm:
@@ -46,6 +53,11 @@ if (method == "complete_data") {
   data <- gen$dataset
   fmla_info <- get_binary_oracle_info(scenario, gen$bW)
 
+  # multisession workers are new R processes and inherit this, so setting it
+  # here does control their OpenMP thread pools even though this process's
+  # own libraries have already initialised - matches binary/bin_analysis.R
+  Sys.setenv(OMP_NUM_THREADS = grf_threads)
+
   metaplan <- plan(multisession, workers = workers)
   on.exit(plan(metaplan), add = TRUE)
 
@@ -53,7 +65,8 @@ if (method == "complete_data") {
     data = data,
     n_folds = n_folds,
     sl_lib = sl_lib,
-    fmla_info = fmla_info
+    fmla_info = fmla_info,
+    num.threads = grf_threads
   )
   warnings()
 } else {
@@ -72,6 +85,11 @@ if (method == "complete_data") {
   fmla_info <- get_binary_oracle_info(scenario, gen$bW)
 
   # set up parallelisation
+  # multisession workers are new R processes and inherit this, so setting it
+  # here does control their OpenMP thread pools even though this process's
+  # own libraries have already initialised - matches binary/bin_analysis.R
+  Sys.setenv(OMP_NUM_THREADS = grf_threads)
+
   metaplan <- plan(multisession, workers = workers)
   on.exit(plan(metaplan), add = TRUE)
 
@@ -82,7 +100,8 @@ if (method == "complete_data") {
         data = data,
         n_folds = n_folds,
         sl_lib = NULL,
-        fmla_info = NULL
+        fmla_info = NULL,
+        num.threads = grf_threads
       )
     }, .options = furrr_options(seed = TRUE))
 
@@ -97,7 +116,8 @@ if (method == "complete_data") {
       n_folds = n_folds,
       sl_lib = sl_lib,
       fmla_info = fmla_info,
-      ipw = if (method == "IPW") gen$ipw else NULL
+      ipw = if (method == "IPW") gen$ipw else NULL,
+      num.threads = grf_threads
     )
     warnings()
   }

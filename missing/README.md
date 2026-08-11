@@ -76,6 +76,8 @@ size, and `cts_miss_2.sh`'s `10001-12200` referred to indices that never existed
 `missing/continuous` — re-runs for bug F (`dr_superlearner` only).
 
 `missing/binary` — re-runs entirely; see its own README, it had three further
-defects.
+defects, plus a newly found, not-yet-fixed `pretest_superlearner()` crash
+(empty `SL.library` when every candidate algorithm fails a fold) - see
+"Known issue found while profiling" in `missing/binary/README.md`.
 
 `missing/ci_example` — see its own README.

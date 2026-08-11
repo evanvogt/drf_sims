@@ -114,6 +114,29 @@ cluster, which is useful while the corrected runs are in flight.
 | `PRETEST_STAGE2` | `cate_models.R` | bug F — `stage_2_sl` discarding the pretested SuperLearner library |
 | `BIAS_SIGN` | `metrics.R` | bug G — `bias` as `true - est` |
 
+## Known but unfixed
+
+Not gated by a legacy flag - there's no fixed behaviour to fall back to yet,
+just an open crash.
+
+**`pretest_superlearner()` can return an empty library, and its callers don't
+guard against that.** `pretest_superlearner()` (line 366) drops any candidate
+algorithm that errors, warns, or returns all-`NA` on a 2-fold inner CV; if
+every candidate fails on a given fold it returns `character(0)`.
+`nuisance_sl()` (line 306) and `stage_2_sl()` (line 408) both pass that result
+straight into `SuperLearner(..., SL.library = <possibly empty>)`, which then
+crashes (`arguments imply differing number of rows: 0, 1`, inside
+`future_map`'s per-fold apply). Confirmed reproducing on unmodified
+`missing/binary/bin_miss_analysis.R` at `scenario = 1, mechanism = MAR, run =
+1` for both `complete_cases` (n = 331) and `mean_imputation` (n = 500) - see
+"Known issue found while profiling" in `missing/binary/README.md` for the full
+repro and a walk-through of the root cause. Not yet checked in the other
+studies that call `pretest_superlearner()` (`binary/`, `continuous/`,
+`crossfitting/`, `case_study/`). Distinct from bug F, which is about which
+library variant is used once pretesting leaves at least one survivor, not
+about what happens when it leaves zero - candidate "bug H" once it's fixed
+(bug G is already taken).
+
 **When the corrected results are in and written up, remove:**
 
 1. all four flags and their `if` branches
