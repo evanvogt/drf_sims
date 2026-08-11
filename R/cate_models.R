@@ -122,6 +122,16 @@ is_binomial <- function(family) identical(family$family, "binomial")
 #' @param ipw optional length-n weights for the missing-data IPW arm
 #' @param ci NULL, or list(boot = , sf = , alpha = ) to add half-sample bootstrap CIs
 #' @param profile "base", "ci" or "missing" - see PROFILES
+#' @param num.threads grf thread count, forwarded to every regression_forest()/
+#'   causal_forest() call this function reaches (nuisance_rf, stage2_whole_rf,
+#'   run_causal_forest, run_dr_semi_oracle). NULL (default) is grf's own default
+#'   (all visible cores) - unchanged from this function's behaviour before this
+#'   parameter existed. SuperLearner arms have no equivalent thread knob.
+#' @param verbose_timing if TRUE, time each top-level block below with
+#'   R/utils.R's `timed()` and attach the elapsed seconds as `results$timings`
+#'   (a named list). Default FALSE leaves `results` exactly as before this
+#'   parameter existed - added for continuous/cts_profile.R and friends, not
+#'   meant to change production output.
 #'
 #' Each study's *_models.R is a thin shim defining `run_all_cate_methods` with
 #' that study's historical signature and forwarding to this. The shared function
@@ -129,7 +139,8 @@ is_binomial <- function(family) identical(family$family, "binomial")
 cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
                          family = gaussian(), oracle_link = c("identity", "logit"),
                          ipw = NULL, ci = NULL,
-                         profile = c("base", "ci", "missing", "ci_mi")) {
+                         profile = c("base", "ci", "missing", "ci_mi"),
+                         num.threads = NULL, verbose_timing = FALSE) {
 
   oracle_link <- match.arg(oracle_link)
 
@@ -145,14 +156,29 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
   fold_list <- unique(fold_indices)
 
   results <- list()
+  timings <- list()
+
+  # expr is an R promise, evaluated exactly once on first access whichever
+  # branch runs below - so this never changes what gets computed, only whether
+  # the elapsed time is captured alongside it.
+  time_step <- function(name, expr) {
+    if (verbose_timing) {
+      t <- timed(expr)
+      timings[[name]] <<- t$time
+      t$value
+    } else {
+      expr
+    }
+  }
 
   cat("Computing nuisance functions...\n")
-  nuisances_rf <- nuisance_rf(X, Y, W, ipw)
+  nuisances_rf <- time_step("nuisance_rf", nuisance_rf(X, Y, W, ipw, num.threads = num.threads))
 
   cat("Running Causal Forest...\n")
-  results$causal_forest <- run_causal_forest(X, Y, W, nuisances_rf, ipw,
-                                             variance = p$cf_variance,
-                                             tests = p$tests)
+  results$causal_forest <- time_step("causal_forest",
+    run_causal_forest(X, Y, W, nuisances_rf, ipw,
+                      variance = p$cf_variance,
+                      tests = p$tests, num.threads = num.threads))
   if (!is.null(ci)) {
     cat("Running Causal Forest bootstrap... \n")
     results$causal_forest <- c(results$causal_forest,
@@ -161,11 +187,11 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
   }
 
   cat("Running DR Random Forest...\n")
-  results$dr_random_forest <- if (p$dr_rf_tests) {
-    run_dr_random_forest(X, Y, W, nuisances_rf, ipw)
+  results$dr_random_forest <- time_step("dr_random_forest", if (p$dr_rf_tests) {
+    run_dr_random_forest(X, Y, W, nuisances_rf, ipw, num.threads = num.threads)
   } else {
-    list(tau = stage2_whole_rf(X, nuisances_rf$po, ipw)$tau)
-  }
+    list(tau = stage2_whole_rf(X, nuisances_rf$po, ipw, num.threads = num.threads)$tau)
+  })
   if (!is.null(ci)) {
     cat("Running DR RF bootstrap... \n")
     results$dr_random_forest <- c(results$dr_random_forest,
@@ -178,8 +204,9 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
 
   if (!is.null(fmla_info) && (profile != "missing" || complete_X)) {
     cat("Running DR Oracle...\n")
-    results$dr_oracle <- run_dr_oracle(X, Y, W, fmla_info, ipw,
-                                       oracle_link = oracle_link, tests = p$tests)
+    results$dr_oracle <- time_step("dr_oracle",
+      run_dr_oracle(X, Y, W, fmla_info, ipw,
+                    oracle_link = oracle_link, tests = p$tests, num.threads = num.threads))
     if (!is.null(ci)) {
       cat("Runnings Oracle bootstrap...\n")
       results$dr_oracle <- c(results$dr_oracle,
@@ -190,7 +217,8 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
 
   if (profile != "missing" || complete_X) {
     cat("Running DR Semi-Oracle...\n")
-    results$dr_semi_oracle <- run_dr_semi_oracle(X, Y, W, ipw, tests = p$tests)
+    results$dr_semi_oracle <- time_step("dr_semi_oracle",
+      run_dr_semi_oracle(X, Y, W, ipw, tests = p$tests, num.threads = num.threads))
     if (!is.null(ci)) {
       cat("Running Semi-Oracle bootstrap...\n")
       results$dr_semi_oracle <- c(results$dr_semi_oracle,
@@ -202,15 +230,23 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
   if (!is.null(sl_lib) && (profile != "missing" || complete_X)) {
     cat("Running DR SuperLearner...\n")
     X <- as.data.frame(X)
-    nuisances_sl <- nuisance_sl(X, Y, W, fold_indices, sl_lib, ipw, family = family)
-    results$dr_superlearner <- run_dr_superlearner(X, Y, W, nuisances_sl,
-                                                   fold_indices, fold_list,
-                                                   sl_lib, ipw, tests = p$tests)
-    results$nuisances_sl <- nuisances_sl
+    results$dr_superlearner <- time_step("dr_superlearner", {
+      nuisances_sl <- nuisance_sl(X, Y, W, fold_indices, sl_lib, ipw, family = family)
+      out <- run_dr_superlearner(X, Y, W, nuisances_sl,
+                                 fold_indices, fold_list,
+                                 sl_lib, ipw, tests = p$tests)
+      # this block is a promise forced inside time_step(), but it was created
+      # (and so evaluates) in cate_methods' own frame - plain `<-` reaches
+      # cate_methods' `results` directly; `<<-` here would skip that frame and
+      # write into whatever encloses cate_methods instead.
+      results$nuisances_sl <- nuisances_sl
+      out
+    })
   }
 
   results$nuisances_rf <- nuisances_rf
   results$fold_indices <- fold_indices
+  if (verbose_timing) results$timings <- timings
 
   results
 }
@@ -243,14 +279,17 @@ oob_predict_counterfactual <- function(forest, X_counterfactual) {
 #' control and a from-scratch manual-API reimplementation
 #' (run_all_crossfit_variants there), ported here as the production default
 #' in place of the double-crossfit this function used to do.
-nuisance_rf <- function(X, Y, W, ipw = NULL) {
+nuisance_rf <- function(X, Y, W, ipw = NULL, num.threads = NULL) {
 
-  forest <- regression_forest(cbind(W = W, X), Y, sample.weights = ipw)
+  forest <- regression_forest(cbind(W = W, X), Y, sample.weights = ipw,
+                              num.threads = num.threads)
   Y0.hat <- oob_predict_counterfactual(forest, cbind(W = 0, X))
   Y1.hat <- oob_predict_counterfactual(forest, cbind(W = 1, X))
 
-  W.hat <- trim_ps(predict(regression_forest(X, W, sample.weights = ipw))$predictions)
-  Y.hat.cf <- predict(regression_forest(X, Y, sample.weights = ipw))$predictions
+  W.hat <- trim_ps(predict(regression_forest(X, W, sample.weights = ipw,
+                                             num.threads = num.threads))$predictions)
+  Y.hat.cf <- predict(regression_forest(X, Y, sample.weights = ipw,
+                                        num.threads = num.threads))$predictions
 
   Y.hat <- W * Y1.hat + (1 - W) * Y0.hat
   po <- dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat)
@@ -359,8 +398,8 @@ pretest_superlearner <- function(Y, X, SL.library, family) {
 #' crossfitting/cf_models.R::stage2_whole_rf, replacing the leave-one-fold-out
 #' stage_2_rf this function used to be for dr_random_forest, dr_oracle and
 #' dr_semi_oracle alike.
-stage2_whole_rf <- function(X, po, ipw = NULL) {
-  forest <- regression_forest(X, po, sample.weights = ipw)
+stage2_whole_rf <- function(X, po, ipw = NULL, num.threads = NULL) {
+  forest <- regression_forest(X, po, sample.weights = ipw, num.threads = num.threads)
   pred <- predict(forest, estimate.variance = TRUE)
   list(tau = pred$predictions, variance = pred$variance.estimates)
 }
@@ -407,8 +446,8 @@ stage_2_sl <- function(X, po, fold_indices, fold_list, sl_lib, ipw = NULL) {
 #' The forest's own Y.hat/W.hat are returned (as Y.hat.cf/W.hat, matching the
 #' field-naming convention) so the half-sample bootstrap can hold them fixed.
 run_causal_forest <- function(X, Y, W, nuisances, ipw = NULL, variance = FALSE,
-                              tests = TRUE) {
-  forest <- causal_forest(X, Y, W, sample.weights = ipw)
+                              tests = TRUE, num.threads = NULL) {
+  forest <- causal_forest(X, Y, W, sample.weights = ipw, num.threads = num.threads)
   pred <- predict(forest, estimate.variance = variance)
 
   out <- list(tau = pred$predictions, Y.hat.cf = forest$Y.hat, W.hat = forest$W.hat)
@@ -422,8 +461,9 @@ run_causal_forest <- function(X, Y, W, nuisances, ipw = NULL, variance = FALSE,
 }
 
 #' DR-learner with a whole-sample OOB regression-forest second stage
-run_dr_random_forest <- function(X, Y, W, nuisances, ipw = NULL, tests = TRUE) {
-  s <- stage2_whole_rf(X, nuisances$po, ipw)
+run_dr_random_forest <- function(X, Y, W, nuisances, ipw = NULL, tests = TRUE,
+                                 num.threads = NULL) {
+  s <- stage2_whole_rf(X, nuisances$po, ipw, num.threads = num.threads)
 
   out <- list(tau = s$tau, variance = s$variance)
   if (tests) {
@@ -437,7 +477,8 @@ run_dr_random_forest <- function(X, Y, W, nuisances, ipw = NULL, tests = TRUE) {
 #' DR-learner with the true outcome model, a known propensity of 0.5, and a
 #' whole-sample OOB second stage
 run_dr_oracle <- function(X, Y, W, fmla_info, ipw = NULL,
-                          oracle_link = c("identity", "logit"), tests = TRUE) {
+                          oracle_link = c("identity", "logit"), tests = TRUE,
+                          num.threads = NULL) {
   n_obs <- nrow(X)
   # "logit" means the formula is a linear predictor and plogis belongs here;
   # "identity" means the formula already returns the outcome mean
@@ -459,7 +500,7 @@ run_dr_oracle <- function(X, Y, W, fmla_info, ipw = NULL,
   X <- as.matrix(X)
 
   po <- (Y1.hat - Y0.hat) + ((Y - Y.hat) * (W - W.hat)) / (W.hat * (1 - W.hat))
-  s <- stage2_whole_rf(X, po, ipw)
+  s <- stage2_whole_rf(X, po, ipw, num.threads = num.threads)
 
   out <- list(tau = s$tau, variance = s$variance, po = po, Y0.hat = Y0.hat)
   if (tests) {
@@ -472,16 +513,17 @@ run_dr_oracle <- function(X, Y, W, fmla_info, ipw = NULL,
 
 #' DR-learner with a known propensity of 0.5, a whole-sample OOB outcome
 #' model, and a whole-sample OOB second stage
-run_dr_semi_oracle <- function(X, Y, W, ipw = NULL, tests = TRUE) {
+run_dr_semi_oracle <- function(X, Y, W, ipw = NULL, tests = TRUE, num.threads = NULL) {
   n_obs <- nrow(X)
   W.hat <- rep(0.5, n_obs)
 
-  forest <- regression_forest(cbind(W = W, X), Y, sample.weights = ipw)
+  forest <- regression_forest(cbind(W = W, X), Y, sample.weights = ipw,
+                              num.threads = num.threads)
   Y0.hat <- oob_predict_counterfactual(forest, cbind(W = 0, X))
   Y1.hat <- oob_predict_counterfactual(forest, cbind(W = 1, X))
 
   po <- dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat)
-  s <- stage2_whole_rf(X, po, ipw)
+  s <- stage2_whole_rf(X, po, ipw, num.threads = num.threads)
 
   out <- list(tau = s$tau, variance = s$variance, po = po, Y0.hat = Y0.hat)
   if (tests) {
