@@ -11,7 +11,9 @@
 source(here::here("R", "cate_models.R"))
 
 run_all_cate_methods <- function(data, n_folds = 10, sl_lib = NULL,
-                                 fmla_info = NULL, ipw = NULL) {
+                                 fmla_info = NULL, ipw = NULL,
+                                 num.threads = NULL, verbose_timing = FALSE) {
   cate_methods(data, n_folds = n_folds, sl_lib = sl_lib, fmla_info = fmla_info,
-               family = gaussian(), ipw = ipw, profile = "missing")
+               family = gaussian(), ipw = ipw, profile = "missing",
+               num.threads = num.threads, verbose_timing = verbose_timing)
 }
