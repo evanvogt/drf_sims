@@ -1,7 +1,7 @@
 #!/bin/bash
-#PBS -l walltime=02:00:00  
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
-#PBS -J 1-1600%190
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=1:ompthreads=1:mem=5gb
+#PBS -J 1-4000%380
 #PBS -N bin_1
 #PBS -o logs_1/
 #PBS -e logs_1/
@@ -18,4 +18,4 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script with parameters
-Rscript bin_analysis.R "$PBS_ARRAY_INDEX"
+Rscript bin_analysis.R "$PBS_ARRAY_INDEX" 1 1
