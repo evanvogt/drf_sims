@@ -14,11 +14,18 @@ source(here("missing", "ci_example", "cts_miss_ci_models.R"))
 source(here("R", "utils.R"))
 source(here("missing/ci_example/cts_miss_ci_config.R"))
 
-# simulation parameters
-i <- as.numeric(commandArgs(trailingOnly = T))
+# simulation parameters. Trailing args after the array index are
+# workers[1]/workers[2]/grf_threads - written by cts_miss_ci_profile_summary.R
+# once the profiling sweep (jobscripts/cts_miss_ci_profile.sh, run via
+# cts_miss_ci_profile.R) has run. Defaults reproduce this script's
+# pre-profiling behaviour exactly, so a bare index-only invocation (as
+# cts_miss_ci_rerun.sh still uses) is unaffected.
+args <- commandArgs(trailingOnly = TRUE)
+i <- as.numeric(args[1])
 
 n_folds <- 10
-workers <- c(3, 3)
+workers <- if (length(args) >= 3) as.numeric(args[2:3]) else c(3, 3)
+grf_threads <- if (length(args) >= 4) as.numeric(args[4]) else NULL
 CI_boot <- 200
 CI_sf <- 0.5
 alpha <- 0.05
@@ -53,7 +60,10 @@ data <- gen$dataset
 
 fmla_info <- get_continuous_oracle_info(scenario, gen$bW)
 
-# set up parallelisation
+# set up parallelisation. multisession workers are new R processes and
+# inherit this, so setting it here controls their OpenMP thread pools even
+# though this process's own libraries have already initialised.
+if (!is.null(grf_threads)) Sys.setenv(OMP_NUM_THREADS = grf_threads)
 metaplan <- plan(list(tweak(multisession, workers = workers[1]), tweak(multisession, workers = I(workers[2]))))
 on.exit(plan(metaplan), add = T)
 
@@ -64,7 +74,8 @@ results <- mi_boot(
   fmla_info = fmla_info,
   CI_boot = CI_boot,
   CI_sf = CI_sf,
-  alpha = alpha
+  alpha = alpha,
+  num.threads = grf_threads
 )
 plan(metaplan)
 results$data <- data

@@ -14,10 +14,12 @@
 source(here::here("R", "cate_models.R"))
 
 run_all_cate_methods <- function(data, n_folds = 10, fmla_info = NULL,
-                                 CI_boot = 200, CI_sf = 0.5, alpha = 0.05) {
+                                 CI_boot = 200, CI_sf = 0.5, alpha = 0.05,
+                                 num.threads = NULL, verbose_timing = FALSE) {
   cate_methods(data, n_folds = n_folds, sl_lib = NULL, fmla_info = fmla_info,
                family = gaussian(), profile = "ci_mi",
-               ci = list(boot = CI_boot, sf = CI_sf, alpha = alpha))
+               ci = list(boot = CI_boot, sf = CI_sf, alpha = alpha),
+               num.threads = num.threads, verbose_timing = verbose_timing)
 }
 
 #' Fit every imputed dataset and pool the results
@@ -25,8 +27,14 @@ run_all_cate_methods <- function(data, n_folds = 10, fmla_info = NULL,
 #' @param datalist list of completed datasets from multiple imputation
 #' @param alpha two-sided level; now passed explicitly through to the pooling
 #'   step, which previously read it from the global environment
+#' @param num.threads grf thread count, forwarded to every regression_forest()/
+#'   causal_forest() call inside cate_methods(). NULL preserves the prior
+#'   behaviour (grf's own default). Added for cts_miss_ci_profile.R to be able
+#'   to control it; cts_miss_ci_analysis.R now also forwards it from its own
+#'   trailing commandArgs.
 mi_boot <- function(datalist, n_folds = 10, fmla_info = NULL,
-                    CI_boot = 200, CI_sf = 0.5, alpha = 0.05) {
+                    CI_boot = 200, CI_sf = 0.5, alpha = 0.05,
+                    num.threads = NULL) {
 
   results_list <- future_map(datalist, function(data) {
     run_all_cate_methods(
@@ -35,7 +43,8 @@ mi_boot <- function(datalist, n_folds = 10, fmla_info = NULL,
       fmla_info = fmla_info,
       CI_boot = CI_boot,
       CI_sf = CI_sf,
-      alpha = alpha
+      alpha = alpha,
+      num.threads = num.threads
     )
   }, .options = furrr_options(seed = TRUE))
 
