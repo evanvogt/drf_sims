@@ -54,5 +54,8 @@ printed `"<n_imp> 50 imputed datasets"`. 50 is what ran, and 50 is kept.
 
 ## Status
 
-Unaffected by the bug ledger — no SuperLearner arm, so bug F does not apply, and
-the DGM is the continuous one. No re-run needed.
+**Needs a re-run** — the crossfitting strategy change to `R/cate_models.R`
+(see root README Methods/Status) affects the estimators used here even
+though there's no SuperLearner arm. Unaffected by the *bug ledger* itself:
+bug F does not apply (no SuperLearner arm), and the DGM is the continuous
+one, so neither of those is a separate reason to re-run.

@@ -43,8 +43,12 @@ lives in `R/bootstrap_ci.R` the misleading filename only survives as a shim.
 
 ## Status
 
-The continuous calibration is unaffected.
+**Both variants re-run.** The crossfitting strategy change to
+`R/cate_models.R` (see root README Methods/Status) affects the point
+estimates this calibration treats as plug-in truth, so:
 
-**`bin_ci_sf_analysis.R` re-runs**: it sources
-`confidence_intervals/binary/bin_ci_dgms.R`, which carried bug A, so its results
-were produced under the continuous coefficient table.
+`cts_ci_sf_analysis.R` re-runs for that reason alone.
+
+`bin_ci_sf_analysis.R` **also** re-runs because it sources
+`confidence_intervals/binary/bin_ci_dgms.R`, which carried bug A, so its
+results were produced under the continuous coefficient table.

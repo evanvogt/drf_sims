@@ -57,14 +57,20 @@ opposite convention; see `R/README.md`.)
 ```bash
 qsub binary/jobscripts/bin_1.sh     # 1-1600
 Rscript binary/bin_check.R
-qsub binary/jobscripts/bin_collect.sh
 ```
+
+**TODO:** `bin_collect.sh` and `bin_metrics.sh` don't exist yet in
+`jobscripts/` (only `bin_1.sh` and `bin_profile.sh` do) — create them,
+mirroring `continuous/jobscripts/cts_collect.sh` / `cts_metrics.sh`, before
+the collect/metrics step can run on the cluster.
 
 ## Status
 
-**Re-runs required for bug F only**, which changes `dr_superlearner` as in
-`continuous/`. Only that arm should move; the harness can confirm the other four
-are unchanged.
+**Re-runs required** — for the crossfitting strategy change to
+`R/cate_models.R` (see root README Methods/Status), which moves all five
+estimator arms, and separately for bug F, which changes `dr_superlearner` as
+in `continuous/`. Only the `dr_superlearner` arm moves for bug F specifically;
+the harness can confirm the other four are unchanged there.
 
 The DGM is unaffected by the bug ledger — bug A is the *confidence-interval*
 binary study, not this one. `bias` also flips sign when the metrics are

@@ -57,6 +57,12 @@ the one the method is constructed to control.
 
 ## Status
 
-`continuous/` — unaffected by the bug ledger. No re-run.
+`continuous/` — unaffected by the *bug ledger*, but **needs a re-run** for
+the crossfitting strategy change to `R/cate_models.R` (see root README
+Methods/Status).
 
 `binary/` — **re-runs entirely.** See `binary/README.md`.
+
+`optimal_sf/` — **both variants re-run.** `cts` for the crossfitting change
+alone; `bin` for that plus bug A/the DGM issue. See
+`optimal_sf/README.md`.

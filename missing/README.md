@@ -73,7 +73,8 @@ size, and `cts_miss_2.sh`'s `10001-12200` referred to indices that never existed
 
 ## Status
 
-`missing/continuous` — re-runs for bug F (`dr_superlearner` only).
+`missing/continuous` — re-runs for the crossfitting strategy change (all five
+arms) and separately for bug F (`dr_superlearner` only).
 
 `missing/binary` — re-runs entirely; see its own README, it had three further
 defects, plus a newly found, not-yet-fixed `pretest_superlearner()` crash

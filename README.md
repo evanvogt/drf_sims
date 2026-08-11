@@ -31,6 +31,7 @@ competing_risk/       competing risks - the target setting
 missing/              missing covariates (continuous, binary, CI example)
 confidence_intervals/ interval estimation (continuous, binary, optimal_sf)
 crossfitting/         compared double crossfitting against cheaper alternatives
+model_evaluation/    does cheap proxy scoring pick the right CATE learner?
 validation/           do CATE subgroups/variance/importance found at an interim
                       analysis replicate on the rest of the trial? (continuous)
 results_processing/   thesis figures
@@ -112,11 +113,14 @@ correlation, sign accuracy. `bias` is `estimate - truth` throughout.
 
 ## Running a study
 
+`qsub` submits to Imperial's HPC cluster (PBS) — those lines only work
+there. `Rscript` lines run anywhere, including as a local smoke test.
+
 ```bash
-qsub continuous/jobscripts/cts_1.sh      # the array job
-Rscript continuous/cts_check.R           # any missing runs?
-qsub continuous/jobscripts/cts_collect.sh
-qsub continuous/jobscripts/cts_metrics.sh
+qsub continuous/jobscripts/cts_1.sh         # the array job — cluster only
+Rscript continuous/cts_check.R              # any missing runs? — runs locally too
+qsub continuous/jobscripts/cts_collect.sh   # cluster only
+qsub continuous/jobscripts/cts_metrics.sh   # cluster only
 ```
 
 The array index is a **row number** of `study$grid`. Never filter or reorder the
@@ -158,13 +162,14 @@ Three more surfaced along the way:
 
 | study | |
 |---|---|
-| `continuous`, `binary`, `missing/continuous`, `missing/binary`, `missing/ci_example`, `confidence_intervals/continuous`, `confidence_intervals/binary`, `optimal_sf/cts`, `optimal_sf/bin`, `validation/continuous` | **re-run — crossfitting strategy changed** (see Methods above), on top of any bug-fix re-run already listed below |
+| `continuous`, `binary`, `missing/continuous`, `missing/binary`, `missing/ci_example`, `confidence_intervals/continuous`, `confidence_intervals/binary`, `confidence_intervals/optimal_sf` (cts), `confidence_intervals/optimal_sf` (bin), `validation/continuous` | **re-run — crossfitting strategy changed** (see Methods above), on top of any bug-fix re-run already listed below |
 | `crossfitting` | its own comparison arms are unchanged; only the production consumers of `R/cate_models.R` above moved |
 | `continuous`, `missing/continuous` | also re-run for bug F (`dr_superlearner` only) |
 | `binary` | also re-run for bug F (`dr_superlearner` only) |
 | `missing/binary` | also re-run — the DGM was wrong three ways |
-| `confidence_intervals/binary`, `optimal_sf/bin` | also re-run — the DGM was wrong |
+| `confidence_intervals/binary`, `confidence_intervals/optimal_sf` (bin) | also re-run — the DGM was wrong |
 | `competing_risk` | **currently fails to run** — see its README; untouched by the crossfitting strategy change (independent estimator code) |
+| `model_evaluation` | **first run, not a re-run** — independent estimator/nuisance code (see its README); unaffected by the crossfitting strategy change |
 
 Roughly 32,000 array jobs. Bug G costs no cluster time: it is computed from the
 saved `*_all.RDS` files, so only the metrics scripts and the figures rerun.
@@ -189,12 +194,15 @@ cluster's numbers (R 4.5.3 locally vs 4.3.2 there).
 
 ## Dependencies
 
-Managed with `renv`:
+renv isn't pinned yet — there's an `renv/` folder but no `.Rprofile` or
+committed `renv.lock`, so `renv::restore()` currently has nothing to restore
+from. Until a lockfile exists, install directly:
 
 ```r
-renv::restore()
+install.packages(c("grf", "SuperLearner", "GenericML", "pseudo", "coin",
+  "furrr", "future", "ranger", "glmnet", "gam", "mice", "missForest", "VIM",
+  "dplyr", "here"))
 ```
 
-Key packages: `grf`, `SuperLearner`, `GenericML`, `pseudo`, `coin`, `furrr`,
-`future`, `ranger`, `glmnet`, `gam`, `mice`, `missForest`, `VIM`, `dplyr`,
-`here`.
+**TODO:** once the package set stabilizes, run `renv::snapshot()` and commit
+`renv.lock`, then switch this section back to `renv::restore()`.

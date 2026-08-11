@@ -56,11 +56,14 @@ qsub validation/continuous/jobscripts/cts_val_metrics.sh
 
 ## Status
 
-**Needs a fresh run.** This folder was rebuilt from a pre-restructure fork
-(standalone copies of the DGM and the CATE estimators, grid/index arithmetic
-done by hand in `validation.sh`, hardcoded absolute cluster paths) onto the
-shared `R/` pattern every other study now uses. Three things changed on
-purpose, not by accident:
+**Needs a fresh run** — for two independent reasons. First, the crossfitting
+strategy change to `R/cate_models.R` (see root README Methods/Status) affects
+both estimators used here (`causal_forest`, `dr_random_forest`). Second, this
+folder was rebuilt from a pre-restructure fork (standalone copies of the DGM
+and the CATE estimators, grid/index arithmetic done by hand in
+`validation.sh`, hardcoded absolute cluster paths) onto the shared `R/`
+pattern every other study now uses. Three things changed on purpose, not by
+accident, as part of that rebuild:
 
 - **Causal-forest nuisance.** The old code built the causal forest's outcome
   nuisance from a regression of `Y` on `(W, X)` with the observed `W` plugged

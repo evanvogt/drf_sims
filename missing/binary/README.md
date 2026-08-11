@@ -44,6 +44,15 @@ taken from the binary scenario each reduced scenario corresponds to (1→1, 2→
 not something the original code recorded** — worth a sanity check before
 committing cluster time.
 
+## Running it
+
+```bash
+qsub missing/binary/jobscripts/bin_miss_1.sh        # 1-9900
+Rscript missing/binary/bin_miss_check.R
+qsub missing/binary/jobscripts/bin_miss_collect.sh
+qsub missing/binary/jobscripts/bin_miss_metrics.sh
+```
+
 ## Status
 
 **Everything under `../results/missing/binary/` is superseded.** All three fixes

@@ -58,8 +58,10 @@ To run only the `complete_data` reference arm, take
 
 ## Status
 
-**Re-runs for bug F only** (`dr_superlearner`). The DGM is unaffected by the bug
-ledger. Bugs B and C were collection/metrics problems, so re-running
-`cts_miss_collect.R` and `cts_miss_metrics.R` over the existing per-run files
-recovers the mechanisms that were being missed and populates `rel_efficiency` —
-no cluster time needed for those two.
+**Re-runs required** — for the crossfitting strategy change to
+`R/cate_models.R` (see root README Methods/Status), which moves all five
+estimator arms, and separately for bug F (`dr_superlearner` only). The DGM is
+unaffected by the *bug ledger*. Bugs B and C were collection/metrics
+problems, so re-running `cts_miss_collect.R` and `cts_miss_metrics.R` over
+the existing per-run files recovers the mechanisms that were being missed
+and populates `rel_efficiency` — no cluster time needed for those two.

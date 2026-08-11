@@ -108,10 +108,14 @@ Rscript continuous/cts_profile.R 1      # runs on a laptop as a smoke test
 
 ## Status
 
-**Re-runs required.** Fixing bug F (`PRETEST_STAGE2`) changes `dr_superlearner`:
-the second-stage SuperLearner library was pretested and the result discarded, so
-failing algorithms were never dropped. Only that arm should move — the harness
-can confirm the other four are unchanged.
+**Re-runs required** — for the crossfitting strategy change to
+`R/cate_models.R` (see root README Methods/Status), which moves all five
+estimator arms, and separately for bug F (`PRETEST_STAGE2`), which changes
+`dr_superlearner`: the second-stage SuperLearner library was pretested and
+the result discarded, so failing algorithms were never dropped. Only the
+`dr_superlearner` arm moves for bug F specifically — the harness can confirm
+the other four are unchanged there.
 
-Nothing else in this study was affected by the bug ledger. `bias` also changes
-sign when the metrics are regenerated (bug G), but that needs no cluster time.
+Nothing else in this study was affected by the *bug ledger*. `bias` also
+changes sign when the metrics are regenerated (bug G), but that needs no
+cluster time.
