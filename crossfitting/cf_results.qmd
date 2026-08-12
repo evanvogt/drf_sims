@@ -27,16 +27,16 @@ library(knitr)
 
 ## Does double crossfitting earn its cost?
 
-Everywhere else in `drf_sims`, two-stage estimators fit nuisances over all
-`C(V,2)` fold *pairs*: `collate_predictions` (`R/utils.R`) assembles an
+The simulations in the current project initially set out to use double cross-fitting,
+following implementations seen in Hines' TE-VIMS paper. Two-stage estimators fit
+nuisances over all `C(V,2)` fold *pairs*: `collate_predictions` assembles an
 `n x V` pseudo-outcome matrix whose column `k` is untouched by fold `k`, and
 the second stage trains on `po_matrix[, k]` before predicting fold `k`. At
-`V = 10` that is 45 nuisance fits instead of 10 — 4.5x the cost — and it has
-never been benchmarked against cheaper alternatives.
+`V = 10` that is 45 nuisance fits instead of 10, a 4.5x cost ($\frac{(n)(n-1)}{2n}$).
 
-**The hypothesis.** Under ordinary (single) crossfitting, a stage-2 training
-row `i` carries a pseudo-outcome from a nuisance model trained on every fold
-except `i`'s — which *includes* the held-out test fold. Re-randomising the
+Under ordinary (single) crossfitting, a stage-2 training row `i` carries a
+pseudo-outcome from a nuisance model trained on every fold except `i`'s - 
+which *includes* the held-out test fold. Re-randomising the
 stage-2 split cannot remove that dependence. So if double crossfitting
 matters, `scf_scf` and `scf_scf_new` should perform alike, and both should
 differ from `dcf`. If they don't, the cheap procedure is enough and the rest

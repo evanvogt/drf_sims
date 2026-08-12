@@ -87,6 +87,8 @@ model_labels <- c(
 
 # tidy up
 metrics <- metrics %>%
+  # temporary filter for 4 scenarios in thesis
+  filter(scenario %in% c(1,3,8,9)) %>%
   mutate(
     scenario = factor(scenario, levels = names(scenario_labels) %>% as.integer(),
                       labels = unname(scenario_labels)),

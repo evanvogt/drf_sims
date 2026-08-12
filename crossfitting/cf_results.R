@@ -1,7 +1,7 @@
 ##########
 # title: figures for the crossfitting comparison
 ##########
-rm(list = ls())
+
 # libraries
 library(dplyr)
 library(tidyr)
