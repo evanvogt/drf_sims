@@ -248,6 +248,19 @@ run_all_xgb_nuisance <- function(X, Y, W, fold_indices, fold_list, n_cores = 1) 
 }
 
 # AutoML
+# PBS Pro array jobs give $TMPDIR a path containing the literal
+# "[<array index>]" (e.g. /var/tmp/pbs.<jobid>[<idx>].pbs-7/...) - a plain
+# interactive session's $TMPDIR never has this. ice_root defaults to
+# tempdir() (built from $TMPDIR), and H2O's Java-side path validator
+# rejects "[" / "]" as illegal characters, so h2o.init() fails array-job-only
+# with "Invalid ice_root ... Illegal character in path". Both setup and
+# shutdown derive the same PID-scoped path, kept out of tempdir()/$TMPDIR
+# entirely so it's immune to this (and to any other special characters PBS
+# might put in a scratch path).
+h2o_ice_root <- function() {
+  file.path("/var/tmp", sprintf("h2o_ice_%s_%d", Sys.getenv("USER", "u"), Sys.getpid()))
+}
+
 setup_h2o_cluster <- function(n_cores, mem, model_seed = NULL) {
   # Check if cluster is already running
   tryCatch(
@@ -257,11 +270,14 @@ setup_h2o_cluster <- function(n_cores, mem, model_seed = NULL) {
     },
     error = function(e) {
       # Initialize H2O
+      ice_root <- h2o_ice_root()
+      dir.create(ice_root, recursive = TRUE, showWarnings = FALSE)
       h2o.init(
         port = parallelly::freePort(),
         nthreads = n_cores,
         max_mem_size = mem,
-        min_mem_size = "1G"
+        min_mem_size = "1G",
+        ice_root = ice_root
       )
     }
   )
@@ -279,6 +295,7 @@ h2o_shutdown_check <- function() {
       cat("H2O cluster was already shutdown\n")
     }
   )
+  unlink(h2o_ice_root(), recursive = TRUE, force = TRUE)
 }
 
 prepare_h2o_data <- function(X, Y, W, filter_indices, training = TRUE) {
