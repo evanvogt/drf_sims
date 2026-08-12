@@ -145,7 +145,7 @@ run.
 | `me_models.R` | the 9 candidate CATE-learner configurations and their fitting logic |
 | `me_nuisance.R` | the two independent nuisance-evaluation pipelines — see below for why this exists outside the usual 7-file shape |
 | `me_analysis.R` | array entry point; one row of the grid per index |
-| `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt` |
+| `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `me_collect.R` | gathers per-run files into `me_all.RDS` |
 | `me_metrics.R` | computes `me_metrics.RDS` (reuses `R/metrics.R::compute_metrics()`) |
 | `me_testing.R` | verification checks — run before submitting anything |

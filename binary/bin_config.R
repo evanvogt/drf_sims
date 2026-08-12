@@ -25,6 +25,7 @@ source(here("R", "pipeline.R"))
 
 study <- study_config(
   name     = "binary",
+  prefix   = "bin",
   res_path = file.path(dirname(here()), "results", "binary"),
   grid = expand.grid(
     scenario = c(1:10),

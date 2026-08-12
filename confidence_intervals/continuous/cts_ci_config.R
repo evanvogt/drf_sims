@@ -9,6 +9,7 @@ source(here("R", "pipeline.R"))
 
 study <- study_config(
   name     = "confidence_intervals/continuous",
+  prefix   = "cts_ci",
   res_path = file.path(dirname(here()), "results", "confidence_intervals", "continuous"),
   grid = expand.grid(
     scenario = c(1:10),

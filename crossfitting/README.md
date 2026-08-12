@@ -99,7 +99,7 @@ arms and the T-learner control are dropped.
 | `cf_testing.R` | verification checks — run before submitting anything |
 | `cf_profile.R` | timing / memory / CPU sweep over `(workers, grf_threads)`, instrumented with `syrup` |
 | `cf_profile_summary.R` | turns the sweep into PBS directives and writes them into `cf_1.sh` |
-| `cf_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt` |
+| `cf_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cf_metrics.R` | metric definitions (functions only, no side effects) |
 | `cf_collect.R` | streams the per-run files through `cf_metrics.R` into `cf_metrics.RDS` |
 | `cf_results.R` | figures |

@@ -10,6 +10,7 @@ source(here("R", "pipeline.R"))
 
 study <- study_config(
   name     = "continuous",
+  prefix   = "cts",
   res_path = file.path(dirname(here()), "results", "continuous"),
   grid = expand.grid(
     scenario = c(1:10),

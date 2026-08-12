@@ -10,6 +10,7 @@ source(here("R", "pipeline.R"))
 
 study <- study_config(
   name     = "confidence_intervals/optimal_sf (bin)",
+  prefix   = "bin_ci_sf",
   res_path = file.path(dirname(here()), "results", "confidence_intervals",
                         "binary", "sf_calibration"),
   grid = expand.grid(

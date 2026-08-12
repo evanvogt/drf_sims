@@ -31,6 +31,7 @@ rownames(grid) <- NULL
 
 study <- study_config(
   name     = "missing/binary",
+  prefix   = "bin_miss",
   res_path = file.path(dirname(here()), "results", "missing", "binary"),
   grid        = grid,
   path_cols   = c("scenario", "n", "type", "prop", "mechanism", "method"),

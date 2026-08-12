@@ -23,5 +23,5 @@ echo "rerunning index: $jobid"
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script with parameters. Trailing args kept in sync by hand with
-# cts_miss_ci.sh - not auto-rewritten by cts_miss_ci_profile_summary.R.
+# cts_miss_ci_1.sh - not auto-rewritten by cts_miss_ci_profile_summary.R.
 Rscript cts_miss_ci_analysis.R "$jobid" 3 3 1

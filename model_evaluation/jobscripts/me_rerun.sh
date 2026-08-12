@@ -1,6 +1,6 @@
 #!/bin/bash
 # Reruns only the array indices listed in failed_ids.txt by me_check.R.
-# Set -J to 1-<number of lines in failed_ids.txt> before submitting.
+# -J and the resource request are rewritten by check_failed(); do not hand-edit.
 #PBS -l walltime=00:30:00
 #PBS -l select=1:ncpus=1:ompthreads=1:mem=2gb
 #PBS -J 1-1

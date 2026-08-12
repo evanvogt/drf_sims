@@ -60,7 +60,7 @@ known propensity of 0.5; the semi-oracle knows only the propensity.
 | `cts_dgms.R` | names this study's slice of `R/dgm_scenarios.R` |
 | `cts_models.R` | `family = gaussian()`, `profile = "base"` |
 | `cts_analysis.R` | array entry point; one row of the grid per index |
-| `cts_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt` |
+| `cts_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cts_collect.R` | gathers per-run files into `cts_all.RDS` |
 | `cts_metrics.R` | computes `cts_metrics.RDS` |
 | `results_cts.R`, `cts_results.Rmd` | summaries |

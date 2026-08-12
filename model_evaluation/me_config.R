@@ -15,6 +15,7 @@ source(here("R", "pipeline.R"))
 
 study <- study_config(
   name     = "model_evaluation",
+  prefix   = "me",
   res_path = file.path(dirname(here()), "results", "model_evaluation"),
   grid = expand.grid(
     scenario = c(1, 4, 6, 9),

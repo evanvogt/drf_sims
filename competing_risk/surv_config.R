@@ -9,6 +9,7 @@ source(here("R", "pipeline.R"))
 
 study <- study_config(
   name     = "competing_risk",
+  prefix   = "surv",
   res_path = file.path(dirname(here()), "results", "competing_risk"),
   grid = expand.grid(
     scenario = 1:7,

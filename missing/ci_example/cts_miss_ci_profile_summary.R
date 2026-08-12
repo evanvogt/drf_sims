@@ -1,5 +1,5 @@
 ##########
-# title: turn the ci_example profiling runs into PBS directives for cts_miss_ci.sh
+# title: turn the ci_example profiling runs into PBS directives for cts_miss_ci_1.sh
 ##########
 # Reads the prof_*.RDS files written by cts_miss_ci_profile.R and prints the
 # recommended walltime / mem / (workers1, workers2, grf_threads), the
@@ -37,12 +37,12 @@ library(here)
 # paths
 path <- here()
 prof_path <- file.path(dirname(path), "results", "missing", "ci_example", "profiling")
-jobscript <- here("missing", "ci_example", "jobscripts", "cts_miss_ci.sh")
+jobscript <- here("missing", "ci_example", "jobscripts", "cts_miss_ci_1.sh")
 
 # safety factors
 walltime_factor <- 1.75   # a PBS job killed at the limit saves nothing
 mem_factor <- 1.5
-target_CI_boot <- 200     # cts_miss_ci_analysis.R's / cts_miss_ci.sh's actual production CI_boot
+target_CI_boot <- 200     # cts_miss_ci_analysis.R's / cts_miss_ci_1.sh's actual production CI_boot
 
 # ---- read the profiling runs -----------------------------------------------
 prof_files <- list.files(prof_path, pattern = "^prof_\\d+\\.RDS$", full.names = TRUE)
@@ -190,7 +190,7 @@ cpu <- runs %>%
   arrange(workers1, workers2, grf_threads)
 print(as.data.frame(cpu), digits = 3, row.names = FALSE)
 
-# the array runs throttled (%43, per cts_miss_ci.sh), so it is throughput
+# the array runs throttled (%43, per cts_miss_ci_1.sh), so it is throughput
 # bound: pick the configuration that minimises cpu-seconds charged at the real
 # CI_boot, not raw elapsed time
 best <- config %>% slice_min(mean_cpu_seconds, n = 1)
@@ -333,7 +333,7 @@ if (is.na(mem_gb)) {
 cat(sprintf("Rscript cts_miss_ci_analysis.R \"$PBS_ARRAY_INDEX\" %d %d %d\n\n",
             best$workers1, best$workers2, best$grf_threads))
 
-# ---- write the directives into cts_miss_ci.sh --------------------------------
+# ---- write the directives into cts_miss_ci_1.sh --------------------------------
 # workers1/workers2/grf_threads are written as trailing args on the Rscript
 # line, alongside the #PBS -l lines, not as a manual edit to
 # cts_miss_ci_analysis.R's defaults - so the PBS resource request and the
@@ -357,5 +357,5 @@ if (is.na(mem_gb)) {
   writeLines(lines, jobscript)
   cat(sprintf("directives and workers1/workers2/grf_threads written into %s\n", jobscript))
 } else {
-  warning("cts_miss_ci.sh not found - directives printed only")
+  warning("cts_miss_ci_1.sh not found - directives printed only")
 }

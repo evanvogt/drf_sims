@@ -49,6 +49,7 @@ rownames(grid) <- NULL
 
 study <- study_config(
   name     = "missing/continuous",
+  prefix   = "cts_miss",
   res_path = file.path(dirname(here()), "results", "missing", "continuous"),
   grid        = grid,
   path_cols   = c("scenario", "n", "type", "prop", "mechanism", "method"),

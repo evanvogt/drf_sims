@@ -26,6 +26,7 @@ rownames(grid) <- NULL
 
 study <- study_config(
   name     = "missing/ci_example",
+  prefix   = "cts_miss_ci",
   res_path = file.path(dirname(here()), "results", "missing", "ci_example"),
   grid        = grid,
   path_cols   = c("scenario", "n", "type", "prop", "mechanism", "method"),

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Reruns only the array indices listed in failed_ids.txt by cf_check.R.
-# Set -J to 1-<number of lines in failed_ids.txt> before submitting.
+# -J and the resource request are rewritten by check_failed(); do not hand-edit.
 #PBS -l walltime=01:00:00
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
 #PBS -J 1-48

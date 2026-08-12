@@ -10,6 +10,7 @@ source(here("R", "pipeline.R"))
 
 study <- study_config(
   name     = "confidence_intervals/binary",
+  prefix   = "bin_ci",
   res_path = file.path(dirname(here()), "results", "confidence_intervals", "binary"),
   grid = expand.grid(
     scenario = c(1:10),

@@ -11,6 +11,7 @@ source(here("R", "pipeline.R"))
 
 study <- study_config(
   name     = "validation/continuous",
+  prefix   = "cts_val",
   res_path = file.path(dirname(here()), "results", "validation", "continuous"),
   grid = expand.grid(
     scenario = 3,

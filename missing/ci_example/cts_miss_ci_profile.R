@@ -6,7 +6,7 @@
 # run_all_cate_methods/combine_mi_ci, i.e. mi_boot()'s own logic reimplemented
 # inline - see below for why), under a sweep of (workers1, workers2,
 # grf_threads, CI_boot), and records timings, memory and CPU so
-# jobscripts/cts_miss_ci.sh's PBS directives can be measured rather than
+# jobscripts/cts_miss_ci_1.sh's PBS directives can be measured rather than
 # guessed. Parallel to missing/continuous/cts_miss_profile.R and
 # crossfitting/confidence_intervals/cf_ci_profile.R; see those files' headers
 # for the syrup/multisession rationale, not repeated here.

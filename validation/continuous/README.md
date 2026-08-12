@@ -40,7 +40,7 @@ than moving into `R/`.
 | `cts_val_dgms.R` | names this study's slice of `R/dgm_scenarios.R` |
 | `cts_val_models.R` | wraps `R/cate_models.R`'s causal_forest/DR-RF + the TE-VIM helpers |
 | `cts_val_analysis.R` | array entry point; fits both chunks, computes the three chunk comparisons |
-| `cts_val_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt` |
+| `cts_val_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cts_val_collect.R` | gathers per-run files into `cts_val_all.RDS` |
 | `cts_val_metrics.R` | flattens `validations` into tidy `cts_val_metrics.RDS` |
 | `results_cts_val.R` | summary plots |

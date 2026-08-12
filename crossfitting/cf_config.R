@@ -12,6 +12,7 @@ source(here("R", "pipeline.R"))
 
 study <- study_config(
   name     = "crossfitting",
+  prefix   = "cf",
   res_path = file.path(dirname(here()), "results", "crossfitting"),
   grid = expand.grid(
     scenario = c(1, 4, 6, 9),
