@@ -1,0 +1,292 @@
+---
+title: "Continuous outcome study: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(patchwork)
+library(purrr)
+library(knitr)
+```
+
+## How well do these estimators recover heterogeneous treatment effects?
+
+Ten scenarios vary the structure of the CATE, crossed with four sample sizes
+(100, 250, 500, 1000), 100 runs each. Every dataset also carries five
+deliberately unrelated covariates (`X01`–`X05`), so the estimators have to
+find the signal rather than being handed it. Full design in
+`continuous/README.md`.
+
+| Scenario | CATE structure |
+|---|---|
+| 1: No HTE | $b_0 + b_1 X_1 + b_2 X_2 + W b_W$ |
+| 2: Binary HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_3 X_3)$ |
+| 3: Continuous HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_4 X_4)$ |
+| 4: Two HTE vars | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4)$ |
+| 5: Cts x binary interaction | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{34} X_3 X_4)$ |
+| 6: Two vars + cts x binary | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{34} X_3 X_4)$ |
+| 7: Cts x cts interaction | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{45} X_4 X_5)$ |
+| 8: Two vars + cts x cts | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{45} X_4 X_5)$ |
+| 9: Cosine HTE | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_4 \cos(X_4))$ |
+| 10: Exponential HTE | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 \exp(-\lvert X_4 \rvert))$ |
+
+**Estimators**: `causal_forest`, `dr_random_forest`, `dr_oracle`,
+`dr_semi_oracle`, `dr_superlearner` — all using double crossfitting for the
+nuisances (`R/cate_models.R`). The oracle uses the true outcome model and a
+known propensity of 0.5; the semi-oracle knows only the propensity. The
+SuperLearner library shrinks at `n = 100` (`SL.earth`/`SL.ranger` are
+dropped), so `dr_superlearner` is sometimes filtered out of the smallest-`n`
+figures below.
+
+```{r data}
+# paths
+path <- here()
+res_path <- file.path(dirname(path), "results", "continuous")
+
+metrics <- readRDS(file.path(res_path, "cts_metrics.RDS"))
+
+# display order and labels - continuous has no shared label-dictionary script
+# (unlike crossfitting/cf_metrics.R, which does double duty as pipeline +
+# labels), so these stay inline, matching cts_results.Rmd's precedent
+scenario_labels <- c(
+  `1` = "1: No HTE",
+  `2` = "2: Binary HTE",
+  `3` = "3: Continuous HTE",
+  `4` = "4: Two HTE vars",
+  `5` = "5: Cts x binary interaction",
+  `6` = "6: Two vars + cts x binary",
+  `7` = "7: Cts x cts interaction",
+  `8` = "8: Two vars + cts x cts",
+  `9` = "9: Cosine HTE",
+  `10` = "10: Exponential HTE"
+)
+
+model_labels <- c(
+  causal_forest = "Causal forest",
+  dr_random_forest = "DR-RandomForest",
+  dr_oracle = "DR-oracle",
+  dr_semi_oracle = "DR-semi-oracle",
+  dr_superlearner = "DR-SuperLearner"
+)
+
+# tidy up
+metrics <- metrics %>%
+  mutate(
+    scenario = factor(scenario, levels = names(scenario_labels) %>% as.integer(),
+                      labels = unname(scenario_labels)),
+    n = factor(n, levels = c(100, 250, 500, 1000)),
+    model = factor(recode(model, !!!model_labels), levels = unname(model_labels))
+  ) %>%
+  droplevels()
+
+# per (scenario, model, n) summaries
+metrics_summary <- metrics %>%
+  group_by(scenario, model, n) %>%
+  summarise(
+    mean_bias = mean(bias, na.rm = T),
+    mcse_bias = sd(bias, na.rm = T) / sqrt(n()),
+    mean_mse = mean(mse, na.rm = T),
+    mcse_mse = sd(mse, na.rm = T) / sqrt(n()),
+    mean_corr = mean(corr, na.rm = T),
+    mcse_corr = sd(corr, na.rm = T) / sqrt(n()),
+    mean_BLP = mean(BLP_p, na.rm = T),
+    mcse_BLP = sd(BLP_p, na.rm = T) / sqrt(n()),
+    mean_indep_cate = mean(indep_cate, na.rm = T),
+    mcse_indep_cate = sd(indep_cate, na.rm = T) / sqrt(n()),
+    mean_indep_po = mean(indep_po, na.rm = T),
+    mcse_indep_po = sd(indep_po, na.rm = T) / sqrt(n()),
+    .groups = "drop"
+  )
+```
+
+```{r summary-plot-helper, include=FALSE}
+# helper: the house summary plot, points with MCSE error bars, faceted by
+# scenario - see crossfitting/cf_results.qmd's summary_plot for the pattern
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
+  df %>%
+    mutate(est = .data[[mean_col]],
+           lo = .data[[mean_col]] - .data[[mcse_col]],
+           hi = .data[[mean_col]] + .data[[mcse_col]]) %>%
+    ggplot(aes(x = n, y = est, colour = model, ymin = lo, ymax = hi)) +
+    geom_hline(yintercept = hline, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    facet_wrap(~scenario, scales = "free") +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, y = ylab, x = "Sample size", colour = "Model")
+}
+```
+
+## Bias
+
+Average bias in the estimated CATE (estimate minus truth), per unit and per
+run, against the known truth.
+
+```{r bias-plot, fig.height=16}
+bias_plot <- metrics %>%
+  ggplot(aes(x = n, y = bias, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Bias in CATE estimates", y = "Bias", x = "Sample size", colour = "Model")
+
+bias_sum_plot <- summary_plot(metrics_summary, "mean_bias", "mcse_bias",
+                              "Mean bias in CATE estimates", "Mean bias")
+
+(bias_plot / bias_sum_plot) + plot_layout(guides = "collect")
+```
+
+## MSE of CATE estimates
+
+The headline metric: mean squared error of the estimated CATE against the
+known truth, for every model and sample size.
+
+```{r mse-plot, fig.height=16}
+mse_plot <- metrics %>%
+  ggplot(aes(x = n, y = mse, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "MSE of CATE estimates", y = "MSE", x = "Sample size", colour = "Model")
+
+mse_sum_plot <- summary_plot(metrics_summary, "mean_mse", "mcse_mse",
+                             "Mean MSE of CATE estimates", "Mean MSE")
+
+(mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Correlation with the true CATE
+
+Pearson correlation between estimated and true CATEs (undefined, and forced
+to 0, in scenario 1 since there's no heterogeneity to correlate with —
+excluded from these plots).
+
+```{r corr-plot, fig.height=16}
+corr_df <- filter(metrics, scenario != scenario_labels[["1"]])
+
+corr_plot <- corr_df %>%
+  ggplot(aes(x = n, y = corr, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  # free_y only: sample size is shared across panels, only the correlation
+  # scale needs freeing per scenario
+  facet_wrap(~scenario, scales = "free_y") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Correlation between estimated and true CATEs",
+       y = "Pearson correlation", x = "Sample size", colour = "Model")
+
+corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
+                              "mean_corr", "mcse_corr",
+                              "Mean correlation with the true CATE", "Mean correlation")
+
+(corr_plot / corr_sum_plot) + plot_layout(guides = "collect")
+```
+
+## BLP test p-values
+
+Best linear predictor test of heterogeneity, against the nominal 5%
+significance threshold (dashed line) — where the CATE truly varies, low
+p-values indicate the model detects it; in scenario 1 (no HTE), p-values
+should sit uniform on [0, 1].
+
+```{r blp-plot, fig.height=16}
+BLP_plot <- metrics %>%
+  ggplot(aes(x = n, y = BLP_p, colour = model)) +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free_x") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "BLP test p-values", y = "p-value", x = "Sample size", colour = "Model")
+
+BLP_sum_plot <- summary_plot(metrics_summary, "mean_BLP", "mcse_BLP",
+                             "Mean BLP test p-value", "Mean p-value", hline = 0.05)
+
+(BLP_plot / BLP_sum_plot) + plot_layout(guides = "collect")
+```
+
+## CATE permutation test p-values
+
+```{r indep-cate-plot, fig.height=16}
+indep_cate_plot <- metrics %>%
+  ggplot(aes(x = n, y = indep_cate, colour = model)) +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free_x") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "CATE permutation test p-values", y = "p-value", x = "Sample size",
+       colour = "Model")
+
+indep_cate_sum_plot <- summary_plot(metrics_summary, "mean_indep_cate", "mcse_indep_cate",
+                                    "Mean CATE permutation test p-value", "Mean p-value",
+                                    hline = 0.05)
+
+(indep_cate_plot / indep_cate_sum_plot) + plot_layout(guides = "collect")
+```
+
+## PO permutation test p-values
+
+```{r indep-po-plot, fig.height=16}
+indep_po_plot <- metrics %>%
+  ggplot(aes(x = n, y = indep_po, colour = model)) +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free_x") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "PO permutation test p-values", y = "p-value", x = "Sample size",
+       colour = "Model")
+
+indep_po_sum_plot <- summary_plot(metrics_summary, "mean_indep_po", "mcse_indep_po",
+                                  "Mean PO permutation test p-value", "Mean p-value",
+                                  hline = 0.05)
+
+(indep_po_plot / indep_po_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Headline table
+
+Arranged by scenario, sample size, and mean MSE (best model first within
+each cell).
+
+```{r headline-table}
+headline <- metrics_summary %>%
+  select(scenario, model, n, mean_bias, mean_mse, mean_corr, mean_BLP,
+         mean_indep_cate, mean_indep_po) %>%
+  arrange(scenario, n, mean_mse)
+
+kable(headline, digits = 4,
+      col.names = c("Scenario", "Model", "n", "Mean bias", "Mean MSE",
+                    "Mean correlation", "Mean BLP p-value",
+                    "Mean CATE perm. p-value", "Mean PO perm. p-value"))
+```
