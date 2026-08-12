@@ -10,27 +10,54 @@ library(here)
 source(here("competing_risk/surv_config.R"))
 source(here("R", "metrics.R"))
 
-frameworks <- c("ipw", "csf_cs", "csf_sh", "pseudo_cf", "pseudo_dr")
+# The pseudo-value frameworks come in arms crossing two factors - see
+# surv_models.R and the README:
+#   whole_oob  whole-sample pseudo-values, whole-sample OOB fit (production parity)
+#   whole_scf  whole-sample pseudo-values, single crossfit (the control)
+#   cvps_scf   leave-one-fold-out pseudo-values, single crossfit
+# The SuperLearner arms have no OOB analogue, so they are scf throughout and vary
+# the pseudo-values only (sl_*_whole vs sl_*_cvps).
+#
+# NOTE: frameworks_run below is intersect(names(sim_res), frameworks), so a
+# framework missing from ANY of these three lists is dropped silently rather than
+# erroring. Add to all three together.
+pseudo_arms <- c("whole_oob", "whole_scf", "cvps_scf")
+
+frameworks <- c(
+  "ipw", "csf_cs", "csf_sh",
+  paste0("pseudo_cf_", pseudo_arms),
+  paste0("pseudo_dr_", pseudo_arms),
+  "sl_t_whole", "sl_t_cvps",
+  "sl_dr_whole", "sl_dr_cvps",
+  "sl_t_split"
+)
+
+# every pseudo-value framework shares the same targets and truth columns
+pseudo_frameworks <- setdiff(frameworks, c("ipw", "csf_cs", "csf_sh"))
+pseudo_targets    <- c("RMTL1", "RMTL2", "RMSTc")
+pseudo_truth      <- c(RMTL1 = "tau_RMTL1", RMTL2 = "tau_RMTL2", RMSTc = "tau_RMSTc")
 
 # which targets are valid per framework
-framework_targets <- list(
-  ipw       = c("RMST1", "RMST2", "RMSTc"),
-  csf_cs    = c("RMST1", "RMST2", "RMSTc"),
-  csf_sh    = c("RMST1", "RMST2"),
-  pseudo_cf = c("RMTL1", "RMTL2", "RMSTc"),
-  pseudo_dr = c("RMTL1", "RMTL2", "RMSTc")
+framework_targets <- c(
+  list(
+    ipw    = c("RMST1", "RMST2", "RMSTc"),
+    csf_cs = c("RMST1", "RMST2", "RMSTc"),
+    csf_sh = c("RMST1", "RMST2")
+  ),
+  setNames(rep(list(pseudo_targets), length(pseudo_frameworks)), pseudo_frameworks)
 )
 
 # framework-specific truth column mapping.
 # ipw and csf_cs remove competing events, so they target the cause-specific (net)
 # RMST = integral of S*(t). csf_sh keeps competing events in the risk set
 # (Fine-Gray) so it targets the subdistribution RMST = horizon - RMTL.
-framework_truth_map <- list(
-  ipw       = c(RMST1 = "tau_RMST1_cs", RMST2 = "tau_RMST2_cs", RMSTc = "tau_RMSTc"),
-  csf_cs    = c(RMST1 = "tau_RMST1_cs", RMST2 = "tau_RMST2_cs", RMSTc = "tau_RMSTc"),
-  csf_sh    = c(RMST1 = "tau_RMST1",    RMST2 = "tau_RMST2"),
-  pseudo_cf = c(RMTL1 = "tau_RMTL1",    RMTL2 = "tau_RMTL2",    RMSTc = "tau_RMSTc"),
-  pseudo_dr = c(RMTL1 = "tau_RMTL1",    RMTL2 = "tau_RMTL2",    RMSTc = "tau_RMSTc")
+framework_truth_map <- c(
+  list(
+    ipw    = c(RMST1 = "tau_RMST1_cs", RMST2 = "tau_RMST2_cs", RMSTc = "tau_RMSTc"),
+    csf_cs = c(RMST1 = "tau_RMST1_cs", RMST2 = "tau_RMST2_cs", RMSTc = "tau_RMSTc"),
+    csf_sh = c(RMST1 = "tau_RMST1",    RMST2 = "tau_RMST2")
+  ),
+  setNames(rep(list(pseudo_truth), length(pseudo_frameworks)), pseudo_frameworks)
 )
 
 all_results_df <- readRDS(file.path(study$res_path, "surv_all.RDS"))

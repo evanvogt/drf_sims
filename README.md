@@ -144,7 +144,7 @@ Found during the de-duplication. Each is written up in the relevant folder READM
 | F | `stage_2_sl` discarded the pretested SuperLearner library; the correct branch was dead code | shared | yes — re-run |
 | G | `bias` and `ate_bias` had **opposite signs** | all metrics | yes |
 | H | propensity trimming only on the SuperLearner path | shared | yes — resolved when `nuisance_rf` moved to whole-sample OOB and picked up `trim_ps` too |
-| I | competing risks never validates its SuperLearner library | `competing_risk` | open |
+| I | competing risks never validates its SuperLearner library | `competing_risk` | yes — resolved when it adopted the shared crossfitting strategy and picked up `pretest_superlearner`; the split-pseudo T-learner branch is the one remaining unvalidated call site |
 | J | stale comments and filenames | various | yes |
 | K | `pretest_superlearner()` could return an empty SL library, crashing `nuisance_sl`/`stage_2_sl` | shared | yes |
 | L | `run_blp_whole()` had no `tryCatch`, crashed on a constant/degenerate CATE | shared | yes |
@@ -170,7 +170,7 @@ Three more surfaced along the way:
 | `binary` | also re-run for bug F (`dr_superlearner` only) |
 | `missing/binary` | also re-run — the DGM was wrong three ways |
 | `confidence_intervals/binary`, `confidence_intervals/optimal_sf` (bin) | also re-run — the DGM was wrong |
-| `competing_risk` | **currently fails to run** — see its README; untouched by the crossfitting strategy change (independent estimator code) |
+| `competing_risk` | **first run under the new strategy** — it has now adopted the crossfitting change (it was the last production study still double-crossfitting) and runs clean end-to-end. Its pseudo-value and SuperLearner frameworks each ship in several arms, because it also crosses a second factor — whole-sample vs crossfit pseudo-values. See its README |
 | `model_evaluation` | **first run, not a re-run** — independent estimator/nuisance code (see its README); unaffected by the crossfitting strategy change |
 
 Roughly 32,000 array jobs. Bug G costs no cluster time: it is computed from the

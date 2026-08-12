@@ -282,7 +282,9 @@ Rscript line vs. `ncpus=1` in `#PBS -l select` — the same kind of drift
 Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
 `collate_predictions`, `continuous/cts_dgms.R` supplies the DGP, and
 `R/cate_models.R` supplies `pretest_superlearner` plus the reference
-implementation the regression check in `cf_testing.R` compares against.
+implementation the regression check in `cf_testing.R` compares against — though
+that last one no longer holds, which is what breaks section 1 of `cf_testing.R`
+(see "Known issue" below).
 
 This folder was the model for the repo-wide `R/` refactor: it was already
 sourcing shared code rather than copying it, at a time when the same CATE
@@ -290,10 +292,46 @@ estimators existed in seven files. The reference implementations it compares
 against moved from `continuous/cts_models.R` into `R/cate_models.R`, which is
 now the only copy - `cts_models.R` is a thirteen-line profile shim.
 
+## Known issue: `cf_testing.R` section 1 aborts
+
+**`cf_testing.R` currently fails on its first check** and takes the whole script
+down with it, so none of sections 2–5 run:
+
+```
+=== 1. regression check: dcf against cts_models.R ===
+Error in validate_num_threads(num.threads) :
+  'list' object cannot be coerced to type 'double'
+Calls: nuisance_rf -> regression_forest -> validate_num_threads
+```
+
+This is a **stale test, not a broken estimator**. Section 1 was left behind by
+the repo-wide crossfitting simplification (`b1bcb16`), which changed the shared
+reference implementations out from under it:
+
+| `cf_testing.R` line | calls | problem |
+|---|---|---|
+| 64 | `nuisance_rf(X, Y, W, fold_indices, fold_pairs)` | signature is now `(X, Y, W, ipw, num.threads)`, so `fold_indices` binds to `ipw` and the `fold_pairs` **list** binds to `num.threads` — hence the error |
+| 64 | `nz_old$po_matrix`, `nz_old$W.hat_matrix` | `nuisance_rf` returns vectors now; there are no `*_matrix` fields |
+| 92 | `stage_2_rf(...)` | no longer exists in `R/cate_models.R` — replaced by `stage2_whole_rf` |
+
+The check's premise is also gone: it asserted that this folder's
+`nuisance_double_rf` reproduces the *production* implementation, but production
+is no longer double crossfitting — `dcf` is now only an arm of this study, with
+no shared counterpart to regress against. Fixing it means either pointing
+section 1 at a pinned copy of the old double-crossfit code, or deleting it and
+relying on sections 2–5.
+
+Sections 2–5 (structure checks, the OOB S-learner equivalence check against the
+manual `get_tree()` reimplementation, and the SuperLearner family under `full`)
+are unaffected in principle but currently unreachable, so **this folder has no
+working verification** until section 1 is fixed. Discovered while migrating
+`competing_risk/` onto the shared strategy; confirmed to reproduce on pristine
+`HEAD`, so it predates that work.
+
 ## Running it
 
 ```bash
-Rscript crossfitting/cf_testing.R              # structure + regression checks (fast)
+Rscript crossfitting/cf_testing.R              # structure + regression checks (fast) - SEE ABOVE, currently aborts
 Rscript crossfitting/cf_testing.R full         # adds the SuperLearner family
 
 Rscript crossfitting/cf_profile.R 1         # smoke-test the profiler locally

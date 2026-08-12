@@ -13,9 +13,15 @@ library(here)
 path <- here()
 
 # Functions
+# R/cate_models.R is sourced BEFORE surv_models.R so that this study's own
+# definitions win where they still exist. It supplies the shared crossfitting
+# machinery this study now shares with the rest of the repo:
+# oob_predict_counterfactual, stage2_whole_rf, stage_2_sl, pretest_superlearner
+# and dr_pseudo. trim_ps arrives via R/utils.R, which cate_models.R sources.
+source(here("R", "utils.R"))
+source(here("R", "cate_models.R"))
 source(here("competing_risk", "surv_dgm.R"))
 source(here("competing_risk", "surv_models.R"))
-source(here("R", "utils.R"))
 source(here("competing_risk/surv_config.R"))
 
 # Simulation parameters

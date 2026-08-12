@@ -66,21 +66,24 @@ stage_2_rf <- function(X, po, fold_indices, fold_list) {
   tau
 }
 
+# NOTE: a fourth estimand, `ps_sh_RMST` (subdistribution / Fine-Gray RMST), used
+# to be computed here and in the crossfit variants below. It was the pseudo-value
+# counterpart to the `csf_sh` framework, but no pseudo-value arm on the
+# subdistribution scale was ever built, so across this file's whole history it
+# was computed and stored and consumed by no estimator. Removed here alongside
+# the same removal in competing_risk/surv_models.R; reinstate if such an arm is
+# added.
 pseudo_all <- function(Y, D, horizon) {
   D_int <- as.integer(D)
   Dc <- as.integer(D %in% c(1, 2))
-  Y_sh <- ifelse(D == 2, horizon + 1, Y)
-  D_sh <- as.integer(D == 1)
 
   ps_RMTL <- pseudoyl(Y, D_int, horizon)
   ps_RMSTc <- pseudomean(Y, Dc, horizon)
-  ps_sh_RMST <- pseudomean(Y_sh, D_sh, horizon)
 
   list(
     ps_RMTL1 = ps_RMTL$pseudo$cause1,
     ps_RMTL2 = ps_RMTL$pseudo$cause2,
-    ps_RMSTc = ps_RMSTc,
-    ps_sh_RMST = ps_sh_RMST
+    ps_RMSTc = ps_RMSTc
   )
 }
 
@@ -96,8 +99,6 @@ pseudo_crossfit <- function(
   n_folds <- length(fold_list)
   D_int <- as.integer(D)
   Dc <- as.integer(D %in% c(1, 2))
-  Y_sh <- ifelse(D == 2, horizon + 1, Y)
-  D_sh <- as.integer(D == 1)
 
   pseudos <- future_map(seq_along(fold_list), function(i) {
     fold <- fold_list[i]
@@ -105,7 +106,6 @@ pseudo_crossfit <- function(
 
     ps_RMTL <- pseudoyl(Y[in_train], D_int[in_train], horizon)
     ps_RMSTc <- pseudomean(Y[in_train], Dc[in_train], horizon)
-    ps_sh_RMST <- pseudomean(Y_sh[in_train], D_sh[in_train], horizon)
 
     ps_RMTL$pseudo$cause1 <- ifelse(
       is.na(ps_RMTL$pseudo$cause1),
@@ -122,17 +122,11 @@ pseudo_crossfit <- function(
       pseudo_whole$ps_RMSTc[in_train],
       ps_RMSTc
     )
-    ps_sh_RMST <- ifelse(
-      is.na(ps_sh_RMST),
-      pseudo_whole$ps_sh_RMST[in_train],
-      ps_sh_RMST
-    )
 
     list(
       ps_RMTL1 = ps_RMTL$pseudo$cause1,
       ps_RMTL2 = ps_RMTL$pseudo$cause2,
       ps_RMSTc = ps_RMSTc,
-      ps_sh_RMST = ps_sh_RMST,
       in_train = which(in_train),
       fold = i
     )
@@ -141,7 +135,6 @@ pseudo_crossfit <- function(
   ps_RMTL1_mat <- matrix(NA_real_, nrow = n_obs, ncol = n_folds)
   ps_RMTL2_mat <- matrix(NA_real_, nrow = n_obs, ncol = n_folds)
   ps_RMSTc_mat <- matrix(NA_real_, nrow = n_obs, ncol = n_folds)
-  ps_sh_RMST_mat <- matrix(NA_real_, nrow = n_obs, ncol = n_folds)
 
   for (result in pseudos) {
     i <- result$fold
@@ -149,14 +142,12 @@ pseudo_crossfit <- function(
     ps_RMTL1_mat[idx, i] <- result$ps_RMTL1
     ps_RMTL2_mat[idx, i] <- result$ps_RMTL2
     ps_RMSTc_mat[idx, i] <- result$ps_RMSTc
-    ps_sh_RMST_mat[idx, i] <- result$ps_sh_RMST
   }
 
   list(
     ps_RMTL1 = ps_RMTL1_mat,
     ps_RMTL2 = ps_RMTL2_mat,
-    ps_RMSTc = ps_RMSTc_mat,
-    ps_sh_RMST = ps_sh_RMST_mat
+    ps_RMSTc = ps_RMSTc_mat
   )
 }
 
@@ -171,8 +162,6 @@ pseudo_double_crossfit <- function(
   n_obs <- length(Y)
   D_int <- as.integer(D)
   Dc <- as.integer(D %in% c(1, 2))
-  Y_sh <- ifelse(D == 2, horizon + 1, Y)
-  D_sh <- as.integer(D == 1)
 
   pseudos <- future_map(seq_along(fold_pairs), function(i) {
     fold_pair <- fold_pairs[[i]]
@@ -180,7 +169,6 @@ pseudo_double_crossfit <- function(
 
     ps_RMTL <- pseudoyl(Y[in_train], D_int[in_train], horizon)
     ps_RMSTc <- pseudomean(Y[in_train], Dc[in_train], horizon)
-    ps_sh_RMST <- pseudomean(Y_sh[in_train], D_sh[in_train], horizon)
 
     ps_RMTL$pseudo$cause1 <- ifelse(
       is.na(ps_RMTL$pseudo$cause1),
@@ -197,17 +185,11 @@ pseudo_double_crossfit <- function(
       pseudo_whole$ps_RMSTc[in_train],
       ps_RMSTc
     )
-    ps_sh_RMST <- ifelse(
-      is.na(ps_sh_RMST),
-      pseudo_whole$ps_sh_RMST[in_train],
-      ps_sh_RMST
-    )
 
     list(
       ps_RMTL1 = ps_RMTL$pseudo$cause1,
       ps_RMTL2 = ps_RMTL$pseudo$cause2,
       ps_RMSTc = ps_RMSTc,
-      ps_sh_RMST = ps_sh_RMST,
       fold_pair = fold_pair
     )
   })
@@ -215,21 +197,18 @@ pseudo_double_crossfit <- function(
   ps_RMTL1_mat <- matrix(NA_real_, nrow = n_obs, ncol = length(fold_pairs))
   ps_RMTL2_mat <- matrix(NA_real_, nrow = n_obs, ncol = length(fold_pairs))
   ps_RMSTc_mat <- matrix(NA_real_, nrow = n_obs, ncol = length(fold_pairs))
-  ps_sh_RMST_mat <- matrix(NA_real_, nrow = n_obs, ncol = length(fold_pairs))
 
   for (i in seq_along(fold_pairs)) {
     in_train <- !(fold_indices %in% fold_pairs[[i]])
     ps_RMTL1_mat[in_train, i] <- pseudos[[i]]$ps_RMTL1
     ps_RMTL2_mat[in_train, i] <- pseudos[[i]]$ps_RMTL2
     ps_RMSTc_mat[in_train, i] <- pseudos[[i]]$ps_RMSTc
-    ps_sh_RMST_mat[in_train, i] <- pseudos[[i]]$ps_sh_RMST
   }
 
   list(
     ps_RMTL1 = ps_RMTL1_mat,
     ps_RMTL2 = ps_RMTL2_mat,
-    ps_RMSTc = ps_RMSTc_mat,
-    ps_sh_RMST = ps_sh_RMST_mat
+    ps_RMSTc = ps_RMSTc_mat
   )
 }
 

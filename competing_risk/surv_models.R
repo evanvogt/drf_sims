@@ -25,108 +25,43 @@ all_cate_surv_models <- function(
   W <- data$W
   n_obs <- nrow(X)
 
-  # fold creation for crossfitting
+  # Fold creation. Only the "scf" arms and the split-pseudo T-learner still split;
+  # the whole_oob arms take grf's own OOB predictions and ignore these.
   fold_indices <- sort(seq(n_obs) %% n_folds) + 1
   fold_list <- unique(fold_indices)
-  fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)
 
   # all results container
   results <- list()
 
   message("Causal Forest IPW approaches (RMST1, RMST2, RMSTc)...")
   results$ipw <- list()
-  results$ipw$RMST1 <- cf_ipw(
-    X,
-    Y,
-    D,
-    W,
-    horizon,
-    fold_indices,
-    fold_list,
-    event = 1
-  )
-  results$ipw$RMST2 <- cf_ipw(
-    X,
-    Y,
-    D,
-    W,
-    horizon,
-    fold_indices,
-    fold_list,
-    event = 2
-  )
-  results$ipw$RMSTc <- cf_ipw(
-    X,
-    Y,
-    D,
-    W,
-    horizon,
-    fold_indices,
-    fold_list,
-    event = "composite"
-  )
+  results$ipw$RMST1 <- cf_ipw(X, Y, D, W, horizon, event = 1)
+  results$ipw$RMST2 <- cf_ipw(X, Y, D, W, horizon, event = 2)
+  results$ipw$RMSTc <- cf_ipw(X, Y, D, W, horizon, event = "composite")
 
   message("Causal Survival Forest cs approaches (RMST1, RMST2, RMSTc)...")
   results$csf_cs <- list()
-  results$csf_cs$RMST1 <- csf_cs(
-    X,
-    Y,
-    D,
-    W,
-    horizon,
-    fold_indices,
-    fold_list,
-    event = 1
-  )
-  results$csf_cs$RMST2 <- csf_cs(
-    X,
-    Y,
-    D,
-    W,
-    horizon,
-    fold_indices,
-    fold_list,
-    event = 2
-  )
-  results$csf_cs$RMSTc <- csf_cs(
-    X,
-    Y,
-    D,
-    W,
-    horizon,
-    fold_indices,
-    fold_list,
-    event = "composite"
-  )
+  results$csf_cs$RMST1 <- csf_cs(X, Y, D, W, horizon, event = 1)
+  results$csf_cs$RMST2 <- csf_cs(X, Y, D, W, horizon, event = 2)
+  results$csf_cs$RMSTc <- csf_cs(X, Y, D, W, horizon, event = "composite")
 
   message("Causal Survival Forest sh approaches (RMST1, RMST2)...")
   results$csf_sh <- list()
-  results$csf_sh$RMST1 <- csf_sh(
-    X,
-    Y,
-    D,
-    W,
-    horizon,
-    fold_indices,
-    fold_list,
-    event = 1
-  )
-  results$csf_sh$RMST2 <- csf_sh(
-    X,
-    Y,
-    D,
-    W,
-    horizon,
-    fold_indices,
-    fold_list,
-    event = 2
-  )
+  results$csf_sh$RMST1 <- csf_sh(X, Y, D, W, horizon, event = 1)
+  results$csf_sh$RMST2 <- csf_sh(X, Y, D, W, horizon, event = 2)
+
+  # ---- pseudo-value arms ----------------------------------------------------
+  # Two factors, crossed as far as they can be (see README):
+  #   pseudo-values  "whole" (one AJ/KM fit on all n) vs "cvps" (leave-one-fold-out)
+  #   fitting        "oob" (whole sample, grf-internal) vs "scf" (single crossfit)
+  # cvps + oob is not a cell: the crossfit matrix is NA on each fold's own rows,
+  # so it only exists inside a fold loop. whole_scf is the control that separates
+  # the pseudo-value factor from the fitting factor.
+  estimands <- c("RMTL1", "RMTL2", "RMSTc")
+  by_estimand <- function(f) setNames(lapply(estimands, f), estimands)
 
   message("Pseudo-value approaches...")
   pseudo_whole <- pseudo_all(Y, D, horizon)
-
-  message("Pseudo-value Causal Forest (RMTL1, RMTL2, RMSTc)...")
-  results$pseudo_cf <- list()
   pseudo_cv <- pseudo_crossfit(
     Y,
     D,
@@ -135,111 +70,65 @@ all_cate_surv_models <- function(
     fold_list,
     pseudo_whole
   )
-  results$pseudo_cf$RMTL1 <- pseudo_cf(
-    X,
-    pseudo_cv$ps_RMTL1,
-    W,
-    fold_indices,
-    fold_list
-  )
-  results$pseudo_cf$RMTL2 <- pseudo_cf(
-    X,
-    pseudo_cv$ps_RMTL2,
-    W,
-    fold_indices,
-    fold_list
-  )
-  results$pseudo_cf$RMSTc <- pseudo_cf(
-    X,
-    pseudo_cv$ps_RMSTc,
-    W,
-    fold_indices,
-    fold_list
+  ps_whole <- function(e) pseudo_whole[[paste0("ps_", e)]]
+  ps_cv <- function(e) pseudo_cv[[paste0("ps_", e)]]
+
+  message("Pseudo-value Causal Forest (whole_oob, whole_scf, cvps_scf)...")
+  results$pseudo_cf_whole_oob <- by_estimand(function(e) {
+    pseudo_cf_whole_oob(X, ps_whole(e), W)
+  })
+  results$pseudo_cf_whole_scf <- by_estimand(function(e) {
+    pseudo_cf_scf(X, ps_whole(e), W, fold_indices, fold_list)
+  })
+  results$pseudo_cf_cvps_scf <- by_estimand(function(e) {
+    pseudo_cf_scf(X, ps_cv(e), W, fold_indices, fold_list)
+  })
+
+  message("Pseudo-value DR Learner nuisances (whole_oob, whole_scf, cvps_scf)...")
+  nuis_dr <- list(
+    whole_oob = by_estimand(function(e) {
+      nuisance_pseudo_rf_oob(X, ps_whole(e), W)
+    }),
+    whole_scf = by_estimand(function(e) {
+      nuisance_pseudo_rf_scf(
+        X,
+        ps_whole(e),
+        W,
+        ps_whole(e),
+        fold_indices,
+        fold_list
+      )
+    }),
+    cvps_scf = by_estimand(function(e) {
+      nuisance_pseudo_rf_scf(
+        X,
+        ps_cv(e),
+        W,
+        ps_whole(e),
+        fold_indices,
+        fold_list
+      )
+    })
   )
 
-  message("Pseudo-value DR Learner...")
-  results$pseudo_dr <- list()
-  message("Jack-knife pseudovalues for the DR learner...") # I've written pseudo so much I'm convinced it's not a word anymore
-  pseudo_dr_cv <- pseudo_double_crossfit(
-    Y,
-    D,
-    horizon,
-    fold_indices,
-    fold_pairs,
-    pseudo_whole
-  )
-  message("DR nuisance function estimation (RMTL1, RMTL2, RMSTc)...")
-  nuisance_RMTL1 <- nuisance_pseudo_rf(
-    X,
-    pseudo_dr_cv$ps_RMTL1,
-    W,
-    pseudo_whole$ps_RMTL1,
-    fold_indices,
-    fold_pairs
-  )
-  nuisance_RMTL2 <- nuisance_pseudo_rf(
-    X,
-    pseudo_dr_cv$ps_RMTL2,
-    W,
-    pseudo_whole$ps_RMTL2,
-    fold_indices,
-    fold_pairs
-  )
-  nuisance_RMSTc <- nuisance_pseudo_rf(
-    X,
-    pseudo_dr_cv$ps_RMSTc,
-    W,
-    pseudo_whole$ps_RMSTc,
-    fold_indices,
-    fold_pairs
-  )
+  message("DR second stage regression (RMTL1, RMTL2, RMSTc)...")
+  results$pseudo_dr_whole_oob <- by_estimand(function(e) {
+    stage2_whole_rf(X, nuis_dr$whole_oob[[e]]$po)$tau
+  })
+  results$pseudo_dr_whole_scf <- by_estimand(function(e) {
+    stage_2_rf_scf(X, nuis_dr$whole_scf[[e]]$po, fold_indices, fold_list)
+  })
+  results$pseudo_dr_cvps_scf <- by_estimand(function(e) {
+    stage_2_rf_scf(X, nuis_dr$cvps_scf[[e]]$po, fold_indices, fold_list)
+  })
 
-  message(" DR Second stage regression (RMTL1, RMTL2, RMSTc)...")
-  results$pseudo_dr$RMTL1 <- pseudo_dr_rf(
-    X,
-    nuisance_RMTL1$po_matrix,
-    fold_indices,
-    fold_list
-  )
-  results$pseudo_dr$RMTL2 <- pseudo_dr_rf(
-    X,
-    nuisance_RMTL2$po_matrix,
-    fold_indices,
-    fold_list
-  )
-  results$pseudo_dr$RMSTc <- pseudo_dr_rf(
-    X,
-    nuisance_RMSTc$po_matrix,
-    fold_indices,
-    fold_list
-  )
-
-  message("SuperLearner T-learner (standard pseudo-obs)...")
-  results$sl_t_std <- list()
-  results$sl_t_std$RMTL1 <- pseudo_sl_t_standard(
-    X,
-    pseudo_cv$ps_RMTL1,
-    W,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
-  results$sl_t_std$RMTL2 <- pseudo_sl_t_standard(
-    X,
-    pseudo_cv$ps_RMTL2,
-    W,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
-  results$sl_t_std$RMSTc <- pseudo_sl_t_standard(
-    X,
-    pseudo_cv$ps_RMSTc,
-    W,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
+  message("SuperLearner T-learner (whole and cvps pseudo-obs)...")
+  results$sl_t_whole <- by_estimand(function(e) {
+    pseudo_sl_t_standard(X, ps_whole(e), W, fold_indices, fold_list, sl_library)
+  })
+  results$sl_t_cvps <- by_estimand(function(e) {
+    pseudo_sl_t_standard(X, ps_cv(e), W, fold_indices, fold_list, sl_library)
+  })
 
   message("SuperLearner T-learner (split pseudo-obs)...")
   results$sl_t_split <- pseudo_sl_t_split(
@@ -253,62 +142,43 @@ all_cate_surv_models <- function(
     sl_library
   )
 
-  message("SuperLearner DR-learner (standard pseudo-obs)...")
-  results$sl_dr_std <- list()
-  nuisance_sl_RMTL1 <- nuisance_pseudo_sl(
-    X,
-    pseudo_dr_cv$ps_RMTL1,
-    W,
-    pseudo_whole$ps_RMTL1,
-    fold_indices,
-    fold_pairs,
-    sl_library
+  message("SuperLearner DR-learner (whole and cvps pseudo-obs)...")
+  nuis_sl <- list(
+    whole = by_estimand(function(e) {
+      nuisance_pseudo_sl(
+        X,
+        ps_whole(e),
+        W,
+        ps_whole(e),
+        fold_indices,
+        fold_list,
+        sl_library
+      )
+    }),
+    cvps = by_estimand(function(e) {
+      nuisance_pseudo_sl(
+        X,
+        ps_cv(e),
+        W,
+        ps_whole(e),
+        fold_indices,
+        fold_list,
+        sl_library
+      )
+    })
   )
-  nuisance_sl_RMTL2 <- nuisance_pseudo_sl(
-    X,
-    pseudo_dr_cv$ps_RMTL2,
-    W,
-    pseudo_whole$ps_RMTL2,
-    fold_indices,
-    fold_pairs,
-    sl_library
-  )
-  nuisance_sl_RMSTc <- nuisance_pseudo_sl(
-    X,
-    pseudo_dr_cv$ps_RMSTc,
-    W,
-    pseudo_whole$ps_RMSTc,
-    fold_indices,
-    fold_pairs,
-    sl_library
-  )
-  results$sl_dr_std$RMTL1 <- pseudo_dr_sl(
-    X,
-    nuisance_sl_RMTL1$po_matrix,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
-  results$sl_dr_std$RMTL2 <- pseudo_dr_sl(
-    X,
-    nuisance_sl_RMTL2$po_matrix,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
-  results$sl_dr_std$RMSTc <- pseudo_dr_sl(
-    X,
-    nuisance_sl_RMSTc$po_matrix,
-    fold_indices,
-    fold_list,
-    sl_library
-  )
+  results$sl_dr_whole <- by_estimand(function(e) {
+    pseudo_dr_sl(X, nuis_sl$whole[[e]]$po, fold_indices, fold_list, sl_library)
+  })
+  results$sl_dr_cvps <- by_estimand(function(e) {
+    pseudo_dr_sl(X, nuis_sl$cvps[[e]]$po, fold_indices, fold_list, sl_library)
+  })
 
   # SuperLearner DR-learner (split pseudo-obs) - DISABLED for now, see
   # README.md "Known issues": compute_split_pseudoyl()/compute_split_pseudomean()
   # (below) hit an unpatched NaN in pseudo::pseudoyl()'s internal ci.omit()
   # whenever a validation Y exceeds the max Y in that fold's KM set, and
-  # unlike pseudo_crossfit()/pseudo_double_crossfit() there is no NA
+  # unlike pseudo_crossfit() there is no NA
   # fallback here, so the NA reaches stage_2_sl_vec()'s SuperLearner() call
   # and aborts the run. Diagnosed and reproduced in
   # surv_dr_split_na_diagnose.R. nuisance_pseudo_sl_split()/stage_2_sl_vec()
@@ -350,14 +220,14 @@ all_cate_surv_models <- function(
 
   # add extra bits to the results
   results$pseudos <- list()
-  results$pseudos$dr_cv <- pseudo_dr_cv
   results$pseudos$cf_cv <- pseudo_cv
   results$pseudos$whole <- pseudo_whole
 
-  results$nuisances <- list()
-  results$nuisances$RMTL1 <- nuisance_RMTL1
-  results$nuisances$RMTL2 <- nuisance_RMTL2
-  results$nuisances$RMSTc <- nuisance_RMSTc
+  # Nuisances are now length-n vectors rather than n x C(V,2) matrices, so there
+  # is nothing left to aggregate with rowMeans - the same simplification
+  # R/cate_models.R made when it dropped its aggregate_nuisances axis. Nested by
+  # arm, then estimand.
+  results$nuisances <- list(rf = nuis_dr, sl = nuis_sl)
 
   results$fold_indices <- fold_indices
 
@@ -387,81 +257,61 @@ get_ipw <- function(X, Y, D, W, horizon, censor) {
   list(observed = observed, ipw = ipw)
 }
 # CF using IPW weights for censoring and CEs - see GRF tutorial
-cf_ipw <- function(X, Y, D, W, horizon, fold_indices, fold_list, event = 1) {
+#
+# Whole-sample, grf-internal crossfitting ("cf_default"), matching
+# R/cate_models.R::run_causal_forest. The forest is fit only on `include` -
+# observations not censored and free of the competing event - so OOB predictions
+# exist for those rows only; the excluded rows never entered the forest at all,
+# so a plain newdata prediction for them is honest. Same pattern as
+# crossfitting/cf_models.R::nuisance_oob_rf.
+cf_ipw <- function(X, Y, D, W, horizon, event = 1) {
   n_obs <- nrow(X)
 
-  RMST_result <- future_map(
-    seq_along(fold_list),
-    function(i) {
-      fold <- fold_list[i]
-      in_train <- fold_indices != fold
-      in_fold <- !in_train
+  # get ipw weights. get_ipw()'s predict() call passes no newdata, so the
+  # censoring probabilities are already grf OOB predictions.
+  weights_0 <- get_ipw(X, Y, D, W, horizon, 0) # all 1's when there is no censoring
 
-      # get ipw weights
-      weights_0 <- get_ipw(
-        X[in_train, ],
-        Y[in_train],
-        D[in_train],
-        W[in_train],
-        horizon,
-        0
-      ) # when there is no censoring these are all 1's
+  if (event == "composite") {
+    total_observed <- weights_0$observed
+    sample_weights <- weights_0$ipw[total_observed]
+  } else {
+    # Identify event of interest
+    all_events <- unique(D[D != 0])
+    competing <- setdiff(all_events, event)
 
-      if (event == "composite") {
-        total_observed <- weights_0$observed
-        sample_weights <- weights_0$ipw[total_observed]
-      } else {
-        # Identify event of interest
-        all_events <- unique(D[D != 0])
-        competing <- setdiff(all_events, event)
+    weights_competing <- get_ipw(X, Y, D, W, horizon, competing)
 
-        weights_competing <- get_ipw(
-          X[in_train, ],
-          Y[in_train],
-          D[in_train],
-          W[in_train],
-          horizon,
-          competing
-        ) # weights to account for the competing event
+    total_observed <- weights_0$observed & weights_competing$observed
+    sample_weights <- weights_0$ipw * weights_competing$ipw
+    sample_weights <- sample_weights[total_observed]
+  }
 
-        total_observed <- weights_0$observed & weights_competing$observed
-        sample_weights <- weights_0$ipw * weights_competing$ipw
-        sample_weights <- sample_weights[total_observed]
-      }
+  include <- which(total_observed)
 
-      # keep non censored/CE obs in training folds
-      train_idx <- which(in_train)
-      include <- train_idx[total_observed]
-
-      # causal forest (not survival because we've sorted out weights - see grf tutorial)
-      # Y truncated at horizon so the outcome is min(T1*, horizon), matching the RMST estimand
-      forest <- causal_forest(
-        X[include, ],
-        pmin(Y[include], horizon),
-        W[include],
-        sample.weights = sample_weights
-      )
-
-      pred <- predict(forest, newdata = X[in_fold, ])
-
-      list(fold = fold, tau = pred$predictions)
-    },
-    .options = furrr_options(seed = TRUE)
+  # causal forest (not survival because we've sorted out weights - see grf tutorial)
+  # Y truncated at horizon so the outcome is min(T1*, horizon), matching the RMST estimand
+  forest <- causal_forest(
+    X[include, ],
+    pmin(Y[include], horizon),
+    W[include],
+    sample.weights = sample_weights
   )
 
-  # put predictions into the right order
   tau_RMST <- rep(NA_real_, n_obs)
-  for (result in RMST_result) {
-    in_fold <- fold_indices == result$fold
-    tau_RMST[in_fold] <- result$tau
+  tau_RMST[include] <- predict(forest)$predictions # OOB for the rows it was fit on
+  if (length(include) < n_obs) {
+    tau_RMST[-include] <- predict(
+      forest,
+      newdata = X[-include, , drop = FALSE]
+    )$predictions
   }
 
   return(tau_RMST)
 }
 # CSF - treating CEs as censoring events
-csf_cs <- function(X, Y, D, W, horizon, fold_indices, fold_list, event = 1) {
-  n_obs <- nrow(X)
-
+# Whole sample; causal_survival_forest cross-fits its own nuisances internally
+# and predict() with no newdata returns OOB predictions.
+csf_cs <- function(X, Y, D, W, horizon, event = 1) {
   if (event == "composite") {
     # Modify event to include 1 and 2
     D_event <- as.numeric(D %in% c(1, 2))
@@ -470,118 +320,97 @@ csf_cs <- function(X, Y, D, W, horizon, fold_indices, fold_list, event = 1) {
     D_event <- as.numeric(D == event)
   }
 
-  RMST_result <- future_map(
-    seq_along(fold_list),
-    function(i) {
-      fold <- fold_list[i]
-      in_train <- fold_indices != fold
-      in_fold <- !in_train
-
-      forest <- causal_survival_forest(
-        X[in_train, ],
-        Y[in_train],
-        W[in_train],
-        D_event[in_train],
-        target = "RMST",
-        horizon = horizon
-      )
-
-      pred <- predict(forest, newdata = X[in_fold, ])
-
-      list(fold = fold, tau = pred$predictions)
-    },
-    .options = furrr_options(seed = TRUE)
+  forest <- causal_survival_forest(
+    X,
+    Y,
+    W,
+    D_event,
+    target = "RMST",
+    horizon = horizon
   )
 
-  # put predictions back
-  tau_RMST <- rep(NA, n_obs)
-  for (result in RMST_result) {
-    in_fold <- fold_indices == result$fold
-    tau_RMST[in_fold] <- result$tau
-  }
-
-  return(tau_RMST)
+  return(predict(forest)$predictions)
 }
 # CSF - keep CEs in the risk set
-csf_sh <- function(X, Y, D, W, horizon, fold_indices, fold_list, event = 1) {
+# Whole sample, as csf_cs. When censoring is present the forest is fit on the
+# uncensored subset only, so the excluded rows get a newdata prediction - see
+# cf_ipw above for why that is honest.
+csf_sh <- function(X, Y, D, W, horizon, event = 1) {
   n_obs <- nrow(X)
 
   # move competing events after horizon (keep them in the risk set)
   D_sh <- as.numeric(D == event)
   Y_sh <- ifelse(!(D %in% c(event, 0)), horizon + 1, Y)
 
-  RMST_result <- future_map(
-    seq_along(fold_list),
-    function(i) {
-      fold <- fold_list[i]
-      in_train <- fold_indices != fold
-      in_fold <- !in_train
+  include <- seq_len(n_obs)
+  sample_weights <- NULL
+  # if there is censoring for event horizon, account for this
+  cens <- any(D == 0 & Y < horizon)
+  if (cens) {
+    weights_0 <- get_ipw(X, Y, D, W, horizon, 0)
+    include <- which(weights_0$observed)
+    sample_weights <- weights_0$ipw[weights_0$observed]
+  }
 
-      include <- in_train
-      # if there is censoring for event horizon, account for this
-      cens <- any(D[in_train] == 0 & Y[in_train] < horizon)
-      if (cens) {
-        weights_0 <- get_ipw(
-          X[in_train, ],
-          Y[in_train],
-          D[in_train],
-          W[in_train],
-          horizon,
-          0
-        ) # when there is no censoring these are all 1's
-
-        total_observed <- weights_0$observed
-        sample_weights <- weights_0$ipw[total_observed]
-        train_idx <- which(in_train)
-        include <- train_idx[total_observed]
-      }
-
-      forest <- causal_survival_forest(
-        X[include, ],
-        Y_sh[include],
-        W[include],
-        D_sh[include],
-        target = "RMST",
-        horizon = horizon,
-        sample.weights = if (cens) sample_weights else NULL
-      )
-
-      pred <- predict(forest, newdata = X[in_fold, ])
-
-      list(fold = fold, tau = pred$predictions)
-    },
-    .options = furrr_options(seed = TRUE)
+  forest <- causal_survival_forest(
+    X[include, ],
+    Y_sh[include],
+    W[include],
+    D_sh[include],
+    target = "RMST",
+    horizon = horizon,
+    sample.weights = sample_weights
   )
 
-  # put predictions back
-  tau_RMST <- rep(NA, n_obs)
-  for (result in RMST_result) {
-    in_fold <- fold_indices == result$fold
-    tau_RMST[in_fold] <- result$tau
+  tau_RMST <- rep(NA_real_, n_obs)
+  tau_RMST[include] <- predict(forest)$predictions
+  if (length(include) < n_obs) {
+    tau_RMST[-include] <- predict(
+      forest,
+      newdata = X[-include, , drop = FALSE]
+    )$predictions
   }
 
   return(tau_RMST)
 }
 # pseudovalue aproaches
+#' Jackknife pseudo-values from one Aalen-Johansen / Kaplan-Meier fit on all n rows
+#'
+#' NOTE: a fourth estimand, `ps_sh_RMST` (subdistribution / Fine-Gray RMST, on
+#' `Y_sh = ifelse(D == 2, horizon + 1, Y)` and `D_sh = as.integer(D == 1)`), used
+#' to be computed here and in every crossfit variant below. It was the pseudo-value
+#' counterpart to the `csf_sh` framework, but no pseudo-value arm on the
+#' subdistribution scale was ever built, so across the whole of this file's history
+#' it was computed and stored and consumed by no estimator. Removed rather than
+#' carried; reinstate it here if a subdistribution pseudo-value arm is added.
 pseudo_all <- function(Y, D, horizon) {
   # reformatting for different estimands
   D_int <- as.integer(D)
   Dc <- as.integer(D %in% c(1, 2))
-  Y_sh <- ifelse(D == 2, horizon + 1, Y)
-  D_sh <- as.integer(D == 1)
 
   ps_RMTL <- pseudoyl(Y, D_int, horizon)
   ps_RMSTc <- pseudomean(Y, Dc, horizon)
-  ps_sh_RMST <- pseudomean(Y_sh, D_sh, horizon)
 
   list(
     ps_RMTL1 = ps_RMTL$pseudo$cause1,
     ps_RMTL2 = ps_RMTL$pseudo$cause2,
-    ps_RMSTc = ps_RMSTc,
-    ps_sh_RMST = ps_sh_RMST
+    ps_RMSTc = ps_RMSTc
   )
 }
-# crossfit pseudovalues to use in a causal forest?
+#' Leave-one-fold-out pseudo-values ("cvps")
+#'
+#' Column k holds pseudo-values from an AJ/KM fit that never saw fold k, and is
+#' NA on fold k's own rows - a jackknife pseudo-value for observation j requires
+#' j to be in the sample being decomposed, so there is no honest out-of-fold value
+#' for the held-out rows. That is why the "cvps" arms only exist inside a fold
+#' loop, and why the DR arms keep whole-sample pseudo-values in their correction
+#' term (see the README).
+#'
+#' `n_na_fallback` records how often pseudoyl()/pseudomean() returned NA and the
+#' whole-sample value was substituted. That substitution leaks the held-out fold
+#' into the "cvps" arms, so the count qualifies the whole-vs-crossfit comparison
+#' rather than being a diagnostic to ignore. Per README "Known issues" it fires on
+#' the max-time observation of each fold, so expect it to be O(V).
 pseudo_crossfit <- function(
   Y,
   D,
@@ -596,56 +425,45 @@ pseudo_crossfit <- function(
   # reformatting for different estimands
   D_int <- as.integer(D)
   Dc <- as.integer(D %in% c(1, 2))
-  Y_sh <- ifelse(D == 2, horizon + 1, Y)
-  D_sh <- as.integer(D == 1)
 
   pseudos <- future_map(seq_along(fold_list), function(i) {
     fold <- fold_list[i]
     in_train <- fold_indices != fold
-    in_fold <- !in_train
 
     ps_RMTL <- pseudoyl(Y[in_train], D_int[in_train], horizon)
     ps_RMSTc <- pseudomean(Y[in_train], Dc[in_train], horizon)
-    ps_sh_RMST <- pseudomean(Y_sh[in_train], D_sh[in_train], horizon)
 
-    # check for any failed computations of the values, replace with value from pseudo_whole
-    # this is not a perfect solution - introduces some data leakage ?
-    ps_RMTL$pseudo$cause1 <- ifelse(
-      is.na(ps_RMTL$pseudo$cause1),
+    ps_RMTL1 <- ps_RMTL$pseudo$cause1
+    ps_RMTL2 <- ps_RMTL$pseudo$cause2
+
+    # count before substituting, so the leakage it introduces stays measurable
+    n_na <- c(
+      RMTL1 = sum(is.na(ps_RMTL1)),
+      RMTL2 = sum(is.na(ps_RMTL2)),
+      RMSTc = sum(is.na(ps_RMSTc))
+    )
+
+    ps_RMTL1 <- ifelse(
+      is.na(ps_RMTL1),
       pseudo_whole$ps_RMTL1[in_train],
-      ps_RMTL$pseudo$cause1
+      ps_RMTL1
     )
-    ps_RMTL$pseudo$cause2 <- ifelse(
-      is.na(ps_RMTL$pseudo$cause2),
+    ps_RMTL2 <- ifelse(
+      is.na(ps_RMTL2),
       pseudo_whole$ps_RMTL2[in_train],
-      ps_RMTL$pseudo$cause2
+      ps_RMTL2
     )
     ps_RMSTc <- ifelse(
       is.na(ps_RMSTc),
       pseudo_whole$ps_RMSTc[in_train],
       ps_RMSTc
-    )
-    ps_sh_RMST <- ifelse(
-      is.na(ps_sh_RMST),
-      pseudo_whole$ps_sh_RMST[in_train],
-      ps_sh_RMST
     )
 
-    ps_RMSTc <- ifelse(
-      is.na(ps_RMSTc),
-      pseudo_whole$ps_RMSTc[in_train],
-      ps_RMSTc
-    )
-    ps_sh_RMST <- ifelse(
-      is.na(ps_sh_RMST),
-      pseudo_whole$ps_sh_RMST[in_train],
-      ps_sh_RMST
-    )
     list(
-      ps_RMTL1 = ps_RMTL$pseudo$cause1,
-      ps_RMTL2 = ps_RMTL$pseudo$cause2,
+      ps_RMTL1 = ps_RMTL1,
+      ps_RMTL2 = ps_RMTL2,
       ps_RMSTc = ps_RMSTc,
-      ps_sh_RMST = ps_sh_RMST,
+      n_na = n_na,
       in_train = which(in_train),
       fold = i
     )
@@ -655,7 +473,6 @@ pseudo_crossfit <- function(
   ps_RMTL1_mat <- matrix(NA_real_, nrow = n_obs, ncol = n_folds)
   ps_RMTL2_mat <- matrix(NA_real_, nrow = n_obs, ncol = n_folds)
   ps_RMSTc_mat <- matrix(NA_real_, nrow = n_obs, ncol = n_folds)
-  ps_sh_RMST_mat <- matrix(NA_real_, nrow = n_obs, ncol = n_folds)
 
   # Fill matrices
   for (result in pseudos) {
@@ -664,100 +481,31 @@ pseudo_crossfit <- function(
     ps_RMTL1_mat[idx, i] <- result$ps_RMTL1
     ps_RMTL2_mat[idx, i] <- result$ps_RMTL2
     ps_RMSTc_mat[idx, i] <- result$ps_RMSTc
-    ps_sh_RMST_mat[idx, i] <- result$ps_sh_RMST
   }
   list(
     ps_RMTL1 = ps_RMTL1_mat,
     ps_RMTL2 = ps_RMTL2_mat,
     ps_RMSTc = ps_RMSTc_mat,
-    ps_sh_RMST = ps_sh_RMST_mat
+    n_na_fallback = colSums(do.call(rbind, lapply(pseudos, `[[`, "n_na")))
   )
 }
-# double crossfitting for pseudo outcomes to use in DR learner
-pseudo_double_crossfit <- function(
-  Y,
-  D,
-  horizon,
-  fold_indices,
-  fold_pairs,
-  pseudo_whole
-) {
-  n_obs <- length(Y)
-  n_pairs <- length(fold_pairs)
-  # reformatting for different estimands
-  D_int <- as.integer(D)
-  Dc <- as.integer(D %in% c(1, 2))
-  Y_sh <- ifelse(D == 2, horizon + 1, Y)
-  D_sh <- as.integer(D == 1)
-
-  pseudos <- future_map(seq_along(fold_pairs), function(i) {
-    fold_pair <- fold_pairs[[i]]
-    in_train <- !(fold_indices %in% fold_pair)
-    in_test <- !in_train
-
-    ps_RMTL <- pseudoyl(Y[in_train], D_int[in_train], horizon)
-    ps_RMSTc <- pseudomean(Y[in_train], Dc[in_train], horizon)
-    ps_sh_RMST <- pseudomean(Y_sh[in_train], D_sh[in_train], horizon)
-
-    # check for any failed computations of the values, replace with value from pseudo_whole
-    # this is not a perfect solution - introduces some data leakage ?
-    ps_RMTL$pseudo$cause1 <- ifelse(
-      is.na(ps_RMTL$pseudo$cause1),
-      pseudo_whole$ps_RMTL1[in_train],
-      ps_RMTL$pseudo$cause1
-    )
-    ps_RMTL$pseudo$cause2 <- ifelse(
-      is.na(ps_RMTL$pseudo$cause2),
-      pseudo_whole$ps_RMTL2[in_train],
-      ps_RMTL$pseudo$cause2
-    )
-    ps_RMSTc <- ifelse(
-      is.na(ps_RMSTc),
-      pseudo_whole$ps_RMSTc[in_train],
-      ps_RMSTc
-    )
-    ps_sh_RMST <- ifelse(
-      is.na(ps_sh_RMST),
-      pseudo_whole$ps_sh_RMST[in_train],
-      ps_sh_RMST
-    )
-
-    list(
-      ps_RMTL1 = ps_RMTL$pseudo$cause1,
-      ps_RMTL2 = ps_RMTL$pseudo$cause2,
-      ps_RMSTc = ps_RMSTc,
-      ps_sh_RMST = ps_sh_RMST,
-      fold_pair = fold_pair
-    )
-  })
-
-  # make matrices
-  fold_list <- unique(fold_indices)
-  ps_RMTL1_mat <- matrix(NA_real_, nrow = n_obs, ncol = length(fold_pairs))
-  ps_RMTL2_mat <- matrix(NA_real_, nrow = n_obs, ncol = length(fold_pairs))
-  ps_RMSTc_mat <- matrix(NA_real_, nrow = n_obs, ncol = length(fold_pairs))
-  ps_sh_RMST_mat <- matrix(NA_real_, nrow = n_obs, ncol = length(fold_pairs))
-
-  for (i in seq_along(fold_pairs)) {
-    fold_pair <- fold_pairs[[i]]
-    in_train <- !(fold_indices %in% fold_pair)
-
-    ps_RMTL1_mat[in_train, i] <- pseudos[[i]]$ps_RMTL1
-    ps_RMTL2_mat[in_train, i] <- pseudos[[i]]$ps_RMTL2
-    ps_RMSTc_mat[in_train, i] <- pseudos[[i]]$ps_RMSTc
-    ps_sh_RMST_mat[in_train, i] <- pseudos[[i]]$ps_sh_RMST
-  }
-
-  list(
-    ps_RMTL1 = ps_RMTL1_mat,
-    ps_RMTL2 = ps_RMTL2_mat,
-    ps_RMSTc = ps_RMSTc_mat,
-    ps_sh_RMST = ps_sh_RMST_mat
-  )
+# causal forest using pseudo values - whole sample, grf's own internal
+# crossfitting ("cf_default"), matching R/cate_models.R::run_causal_forest.
+# `pseudo` is the whole-sample pseudo-value vector.
+pseudo_cf_whole_oob <- function(X, pseudo, W) {
+  forest <- causal_forest(X, pseudo, W)
+  predict(forest)$predictions
 }
-# causal forest using pseudo values
-pseudo_cf <- function(X, pseudo, W, fold_indices, fold_list) {
+
+# causal forest using pseudo values - single leave-one-fold-out ("scf").
+#
+# `pseudo` is either the whole-sample vector (the whole_scf control arm) or the
+# n x V crossfit matrix from pseudo_crossfit (the cvps_scf arm). Branching on
+# is.matrix() here is what lets one function serve both arms, so that the two
+# differ in the pseudo-values alone and in nothing else.
+pseudo_cf_scf <- function(X, pseudo, W, fold_indices, fold_list) {
   n_obs <- nrow(X)
+  cvps <- is.matrix(pseudo)
 
   tau_result <- future_map(
     seq_along(fold_list),
@@ -766,9 +514,11 @@ pseudo_cf <- function(X, pseudo, W, fold_indices, fold_list) {
       in_train <- fold_indices != fold
       in_fold <- !in_train
 
+      pseudo_train <- if (cvps) pseudo[in_train, fold] else pseudo[in_train]
+
       forest <- causal_forest(
         X[in_train, ],
-        pseudo[in_train, fold],
+        pseudo_train,
         W[in_train]
       )
 
@@ -787,26 +537,71 @@ pseudo_cf <- function(X, pseudo, W, fold_indices, fold_list) {
   return(tau)
 }
 # DR learner nuisance functions
-nuisance_pseudo_rf <- function(
+#
+# Whole-sample OOB, S-learner ("oob_oob_s") - the pseudo-value counterpart of
+# R/cate_models.R::nuisance_rf, and the production-parity arm. No sample
+# splitting: one S-learner forest on cbind(W, X) supplies both counterfactuals
+# via oob_predict_counterfactual, and two more whole-sample forests supply W.hat
+# and pseudo.hat.cf, all taken out-of-bag.
+#
+# `pseudo` is the whole-sample pseudo-value vector, and it is also the outcome in
+# the DR correction term - there is no separate `pseudo_whole` argument here
+# because with no split the two coincide.
+nuisance_pseudo_rf_oob <- function(X, pseudo, W) {
+  forest <- regression_forest(cbind(W = W, X), pseudo)
+  pseudo0.hat <- oob_predict_counterfactual(forest, cbind(W = 0, X))
+  pseudo1.hat <- oob_predict_counterfactual(forest, cbind(W = 1, X))
+
+  W.hat <- trim_ps(predict(regression_forest(X, W))$predictions)
+  pseudo.hat.cf <- predict(regression_forest(X, pseudo))$predictions
+
+  pseudo.hat <- W * pseudo1.hat + (1 - W) * pseudo0.hat
+  po <- dr_pseudo(pseudo, W, pseudo1.hat, pseudo0.hat, W.hat)
+
+  list(
+    po = po,
+    pseudo.hat = pseudo.hat,
+    pseudo0.hat = pseudo0.hat,
+    pseudo.hat.cf = pseudo.hat.cf,
+    W.hat = W.hat
+  )
+}
+
+# DR learner nuisances - single leave-one-fold-out ("scf").
+#
+# `pseudo` is either the whole-sample vector (whole_scf) or the n x V crossfit
+# matrix (cvps_scf); the is.matrix() branch is the only difference between those
+# two arms.
+#
+# `pseudo_whole` stays the outcome in the correction term for BOTH arms. This is
+# deliberate, not an oversight: pseudo_crossfit has no value for the held-out
+# rows (a jackknife pseudo-value for observation j needs j in the decomposed
+# sample), so the factor these arms vary is the pseudo-values used to TRAIN the
+# nuisance regressions, not the ones entering the DR correction. See the README.
+nuisance_pseudo_rf_scf <- function(
   X,
   pseudo,
   W,
   pseudo_whole,
   fold_indices,
-  fold_pairs
+  fold_list
 ) {
+  cvps <- is.matrix(pseudo)
+
   cross_fits <- future_map(
-    seq_along(fold_pairs),
+    seq_along(fold_list),
     function(i) {
-      fold_pair <- fold_pairs[[i]]
-      in_train <- !(fold_indices %in% fold_pair)
+      fold <- fold_list[i]
+      in_train <- fold_indices != fold
       in_test <- !in_train
+
+      pseudo_train <- if (cvps) pseudo[in_train, fold] else pseudo[in_train]
 
       ps.hat.model <- regression_forest(
         cbind(W[in_train], X[in_train, ]),
-        pseudo[in_train, i]
+        pseudo_train
       )
-      ps.hat.cf.model <- regression_forest(X[in_train, ], pseudo[in_train, i])
+      ps.hat.cf.model <- regression_forest(X[in_train, ], pseudo_train)
       W.hat.model <- regression_forest(X[in_train, ], W[in_train])
 
       X_test <- X[in_test, ]
@@ -820,84 +615,42 @@ nuisance_pseudo_rf <- function(
         newdata = cbind(W = 1, X_test)
       )$predictions
       pseudo.hat.cf <- predict(ps.hat.cf.model, newdata = X_test)$predictions
-      W.hat <- predict(W.hat.model, newdata = X_test)$predictions
+      W.hat <- trim_ps(predict(W.hat.model, newdata = X_test)$predictions)
 
       # DR learner pseudo outcome (not the same as the pseudo values we already have)
       W_test <- W[in_test]
       pseudo.hat <- W_test * pseudo1.hat + (1 - W_test) * pseudo0.hat
-
-      cate <- pseudo1.hat - pseudo0.hat
-
-      # use pseudo values fit on the whole data set as the Y's in the pseudo outcome equation?
-      pseudo_test <- pseudo_whole[in_test]
-      po <- cate +
-        ((pseudo_test - pseudo.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
+      po <- dr_pseudo(
+        pseudo_whole[in_test],
+        W_test,
+        pseudo1.hat,
+        pseudo0.hat,
+        W.hat
+      )
 
       list(
+        fold = fold,
         po = po,
         pseudo.hat = pseudo.hat,
         pseudo0.hat = pseudo0.hat,
         pseudo.hat.cf = pseudo.hat.cf,
-        W.hat = W.hat,
-        fold_pair = fold_pair
+        W.hat = W.hat
       )
     },
     .options = furrr_options(seed = TRUE)
   )
 
-  # matrices of nuisances
-  fold_list <- unique(fold_indices)
-  po_matrix <- collate_predictions(
-    fold_list,
-    fold_pairs,
-    fold_indices,
+  scatter_folds(
     cross_fits,
-    "po"
-  )
-  pseudo.hat_matrix <- collate_predictions(
-    fold_list,
-    fold_pairs,
     fold_indices,
-    cross_fits,
-    "pseudo.hat"
-  )
-  pseudo.hat.cf_matrix <- collate_predictions(
-    fold_list,
-    fold_pairs,
-    fold_indices,
-    cross_fits,
-    "pseudo.hat.cf"
-  )
-  pseudo0.hat_matrix <- collate_predictions(
-    fold_list,
-    fold_pairs,
-    fold_indices,
-    cross_fits,
-    "pseudo0.hat"
-  )
-  W.hat_matrix <- collate_predictions(
-    fold_list,
-    fold_pairs,
-    fold_indices,
-    cross_fits,
-    "W.hat"
-  )
-
-  list(
-    po_matrix = po_matrix,
-    po = rowMeans(po_matrix, na.rm = T),
-    pseudo.hat_matrix = pseudo.hat_matrix,
-    pseudo.hat = rowMeans(pseudo.hat_matrix, na.rm = T),
-    pseudo.hat.cf_matrix = pseudo.hat.cf_matrix,
-    pseudo.hat.cf = rowMeans(pseudo.hat.cf_matrix, na.rm = T),
-    pseudo0.hat_matrix = pseudo0.hat_matrix,
-    pseudo0.hat = rowMeans(pseudo0.hat_matrix, na.rm = T),
-    W.hat_matrix = W.hat_matrix,
-    W.hat = rowMeans(W.hat_matrix, na.rm = T)
+    c("po", "pseudo.hat", "pseudo0.hat", "pseudo.hat.cf", "W.hat")
   )
 }
 
-stage_2_rf <- function(X, po, fold_indices, fold_list) {
+# Leave-one-fold-out second stage on a po VECTOR. R/cate_models.R no longer has a
+# fold-wise RF stage 2 to borrow (it moved to whole-sample OOB, stage2_whole_rf),
+# so the scf arms keep this local one. The whole_oob arm uses stage2_whole_rf.
+stage_2_rf_scf <- function(X, po, fold_indices, fold_list) {
   n_obs <- nrow(X)
 
   tau_results <- future_map(
@@ -907,7 +660,7 @@ stage_2_rf <- function(X, po, fold_indices, fold_list) {
       in_train <- fold_indices != fold
       in_fold <- !in_train
 
-      forest <- regression_forest(X[in_train, ], po[in_train, fold])
+      forest <- regression_forest(X[in_train, ], po[in_train])
 
       tau_pred <- predict(forest, newdata = X[in_fold, ])$predictions
 
@@ -917,18 +670,10 @@ stage_2_rf <- function(X, po, fold_indices, fold_list) {
   )
 
   # Reconstruct tau vector
-  tau <- rep(NA, n_obs)
+  tau <- rep(NA_real_, n_obs)
   for (result in tau_results) {
-    fold <- result$fold
-    in_fold <- fold_indices == fold
-    tau[in_fold] <- result$predictions
+    tau[fold_indices == result$fold] <- result$predictions
   }
-  return(tau)
-}
-
-pseudo_dr_rf <- function(X, po, fold_indices, fold_list) {
-  tau <- stage_2_rf(X, po, fold_indices, fold_list)
-
   return(tau)
 }
 
@@ -974,17 +719,23 @@ compute_split_pseudoyl <- function(Y_km, D_km, Y_val, D_val, horizon) {
   list(cause1 = cause1, cause2 = cause2)
 }
 
-# SuperLearner T-learner: standard cross-fit pseudo-obs
-# pseudo_cv: n x n_folds matrix from pseudo_crossfit (leave-fold-out)
+# SuperLearner T-learner, single leave-one-fold-out ("scf_scf").
+#
+# `pseudo` is either the whole-sample vector (sl_t_whole) or the n x V crossfit
+# matrix from pseudo_crossfit (sl_t_cvps). SuperLearner has no OOB analogue - see
+# crossfitting/README.md, which drops the OOB arms for the SL comparison for the
+# same reason - so both SL arms stay on the same single crossfit and differ in
+# the pseudo-values alone.
 pseudo_sl_t_standard <- function(
   X,
-  pseudo_cv,
+  pseudo,
   W,
   fold_indices,
   fold_list,
   sl_library = DEFAULT_SL_LIBRARY
 ) {
   n_obs <- nrow(X)
+  cvps <- is.matrix(pseudo)
 
   tau_result <- future_map(
     seq_along(fold_list),
@@ -995,19 +746,24 @@ pseudo_sl_t_standard <- function(
 
       X_train <- X[in_train, , drop = FALSE]
       W_train <- W[in_train]
-      pseudo_train <- pseudo_cv[in_train, i]
+      pseudo_train <- if (cvps) pseudo[in_train, fold] else pseudo[in_train]
       X_test <- X[in_fold, , drop = FALSE]
 
+      X0 <- as.data.frame(X_train[W_train == 0, , drop = FALSE])
+      X1 <- as.data.frame(X_train[W_train == 1, , drop = FALSE])
+      Y0 <- pseudo_train[W_train == 0]
+      Y1 <- pseudo_train[W_train == 1]
+
       sl0 <- SuperLearner(
-        Y = pseudo_train[W_train == 0],
-        X = as.data.frame(X_train[W_train == 0, , drop = FALSE]),
-        SL.library = sl_library,
+        Y = Y0,
+        X = X0,
+        SL.library = pretest_superlearner(Y0, X0, sl_library, gaussian()),
         cvControl = list(V = 5)
       )
       sl1 <- SuperLearner(
-        Y = pseudo_train[W_train == 1],
-        X = as.data.frame(X_train[W_train == 1, , drop = FALSE]),
-        SL.library = sl_library,
+        Y = Y1,
+        X = X1,
+        SL.library = pretest_superlearner(Y1, X1, sl_library, gaussian()),
         cvControl = list(V = 5)
       )
 
@@ -1102,45 +858,70 @@ pseudo_sl_t_split <- function(
   list(RMTL1 = tau_RMTL1, RMTL2 = tau_RMTL2, RMSTc = tau_RMSTc)
 }
 
-# SuperLearner DR-learner nuisances: standard cross-fit pseudo-obs
-# Mirrors nuisance_pseudo_rf but replaces regression_forest with SuperLearner
+# SuperLearner DR-learner nuisances, single leave-one-fold-out ("scf_scf").
+#
+# Mirrors nuisance_pseudo_rf_scf but replaces regression_forest with
+# SuperLearner, on the shape of R/cate_models.R::nuisance_sl. `pseudo` is the
+# whole-sample vector (sl_dr_whole) or the n x V crossfit matrix (sl_dr_cvps);
+# `pseudo_whole` remains the correction-term outcome in both, for the reason
+# given on nuisance_pseudo_rf_scf.
 nuisance_pseudo_sl <- function(
   X,
   pseudo,
   W,
   pseudo_whole,
   fold_indices,
-  fold_pairs,
+  fold_list,
   sl_library = DEFAULT_SL_LIBRARY
 ) {
+  cvps <- is.matrix(pseudo)
+
   cross_fits <- future_map(
-    seq_along(fold_pairs),
+    seq_along(fold_list),
     function(i) {
-      fold_pair <- fold_pairs[[i]]
-      in_train <- !(fold_indices %in% fold_pair)
+      fold <- fold_list[i]
+      in_train <- fold_indices != fold
       in_test <- !in_train
 
       X_train <- as.data.frame(X[in_train, , drop = FALSE])
       X_test <- as.data.frame(X[in_test, , drop = FALSE])
       W_train <- W[in_train]
       W_test <- W[in_test]
+      pseudo_train <- if (cvps) pseudo[in_train, fold] else pseudo[in_train]
+
+      X_W_train <- cbind(W = W_train, X_train)
 
       sl_ps <- SuperLearner(
-        Y = pseudo[in_train, i],
-        X = cbind(W = W_train, X_train),
-        SL.library = sl_library,
+        Y = pseudo_train,
+        X = X_W_train,
+        SL.library = pretest_superlearner(
+          pseudo_train,
+          X_W_train,
+          sl_library,
+          gaussian()
+        ),
         cvControl = list(V = 5)
       )
       sl_cf <- SuperLearner(
-        Y = pseudo[in_train, i],
+        Y = pseudo_train,
         X = X_train,
-        SL.library = sl_library,
+        SL.library = pretest_superlearner(
+          pseudo_train,
+          X_train,
+          sl_library,
+          gaussian()
+        ),
         cvControl = list(V = 5)
       )
       sl_W <- SuperLearner(
         Y = W_train,
         X = X_train,
-        SL.library = sl_library,
+        SL.library = pretest_superlearner(
+          W_train,
+          X_train,
+          sl_library,
+          binomial()
+        ),
         cvControl = list(V = 5)
       )
 
@@ -1153,104 +934,63 @@ nuisance_pseudo_sl <- function(
       pseudo.hat.cf <- as.numeric(predict(sl_cf, newdata = X_test)$pred)
       W.hat <- as.numeric(predict(sl_W, newdata = X_test)$pred)
 
+      # failsafes if SuperLearner returns all-zero predictions, as R/cate_models.R
+      if (all(pseudo0.hat == 0) && all(pseudo1.hat == 0)) {
+        warning("SuperLearner failed for pseudo.hat. Using mean(pseudo).")
+        pseudo0.hat <- rep(
+          mean(pseudo_train[W_train == 0], na.rm = TRUE),
+          sum(in_test)
+        )
+        pseudo1.hat <- rep(
+          mean(pseudo_train[W_train == 1], na.rm = TRUE),
+          sum(in_test)
+        )
+      }
+      if (all(W.hat == 0)) {
+        warning("SuperLearner failed for W.hat. Using mean(W).")
+        W.hat <- rep(mean(W_train, na.rm = TRUE), sum(in_test))
+      }
+
+      W.hat <- trim_ps(W.hat)
+
       pseudo.hat <- W_test * pseudo1.hat + (1 - W_test) * pseudo0.hat
-      cate <- pseudo1.hat - pseudo0.hat
-      pseudo_test <- pseudo_whole[in_test]
-      po <- cate +
-        ((pseudo_test - pseudo.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
+      po <- dr_pseudo(
+        pseudo_whole[in_test],
+        W_test,
+        pseudo1.hat,
+        pseudo0.hat,
+        W.hat
+      )
 
       list(
+        fold = fold,
         po = po,
         pseudo.hat = pseudo.hat,
         pseudo0.hat = pseudo0.hat,
         pseudo.hat.cf = pseudo.hat.cf,
-        W.hat = W.hat,
-        fold_pair = fold_pair
+        W.hat = W.hat
       )
     },
     .options = furrr_options(seed = TRUE)
   )
 
-  fold_list <- unique(fold_indices)
-  po_matrix <- collate_predictions(
-    fold_list,
-    fold_pairs,
-    fold_indices,
+  scatter_folds(
     cross_fits,
-    "po"
-  )
-  pseudo.hat_matrix <- collate_predictions(
-    fold_list,
-    fold_pairs,
     fold_indices,
-    cross_fits,
-    "pseudo.hat"
-  )
-  pseudo0.hat_matrix <- collate_predictions(
-    fold_list,
-    fold_pairs,
-    fold_indices,
-    cross_fits,
-    "pseudo0.hat"
-  )
-  W.hat_matrix <- collate_predictions(
-    fold_list,
-    fold_pairs,
-    fold_indices,
-    cross_fits,
-    "W.hat"
-  )
-
-  list(
-    po_matrix = po_matrix,
-    po = rowMeans(po_matrix, na.rm = TRUE),
-    pseudo.hat_matrix = pseudo.hat_matrix,
-    pseudo.hat = rowMeans(pseudo.hat_matrix, na.rm = TRUE),
-    pseudo0.hat_matrix = pseudo0.hat_matrix,
-    pseudo0.hat = rowMeans(pseudo0.hat_matrix, na.rm = TRUE),
-    W.hat_matrix = W.hat_matrix,
-    W.hat = rowMeans(W.hat_matrix, na.rm = TRUE)
+    c("po", "pseudo.hat", "pseudo0.hat", "pseudo.hat.cf", "W.hat")
   )
 }
 
-# SuperLearner stage 2 for DR-learner (po is an n x n_folds matrix)
-stage_2_sl <- function(
-  X,
-  po,
-  fold_indices,
-  fold_list,
-  sl_library = DEFAULT_SL_LIBRARY
-) {
-  n_obs <- nrow(X)
-
-  tau_results <- future_map(
-    seq_along(fold_list),
-    function(i) {
-      fold <- fold_list[i]
-      in_train <- fold_indices != fold
-      in_fold <- !in_train
-
-      sl <- SuperLearner(
-        Y = po[in_train, fold],
-        X = as.data.frame(X[in_train, , drop = FALSE]),
-        SL.library = sl_library,
-        cvControl = list(V = 5)
-      )
-      tau_pred <- as.numeric(
-        predict(sl, newdata = as.data.frame(X[in_fold, , drop = FALSE]))$pred
-      )
-      list(fold = fold, predictions = tau_pred)
-    },
-    .options = furrr_options(seed = TRUE)
-  )
-
-  tau <- rep(NA_real_, n_obs)
-  for (result in tau_results) {
-    tau[fold_indices == result$fold] <- result$predictions
-  }
-  return(tau)
-}
-
+# Stage 2 is R/cate_models.R::stage_2_sl, whose is.vector(po) branch handles the
+# vector `po` these nuisances now return and routes it through
+# pretest_superlearner. The local matrix-branch copy this study used to carry is
+# gone with the double crossfitting that produced the matrix.
+#
+# X is coerced to a data.frame here because stage_2_sl indexes it straight into
+# SuperLearner(), which warns ("X is not a data frame") and can silently drop
+# candidate learners on a matrix. R/cate_models.R does the same coercion at its
+# own SuperLearner call site (cate_methods, `X <- as.data.frame(X)`); this study
+# keeps a matrix X for the grf arms, so the conversion belongs here.
 pseudo_dr_sl <- function(
   X,
   po,
@@ -1258,7 +998,7 @@ pseudo_dr_sl <- function(
   fold_list,
   sl_library = DEFAULT_SL_LIBRARY
 ) {
-  stage_2_sl(X, po, fold_indices, fold_list, sl_library)
+  stage_2_sl(as.data.frame(X), po, fold_indices, fold_list, sl_library)
 }
 
 # SuperLearner DR-learner nuisances: split pseudo-obs
@@ -1365,6 +1105,12 @@ nuisance_pseudo_sl_split <- function(
 }
 
 # SuperLearner stage 2 for split DR-learner (po is an n-vector, not a matrix)
+#
+# Now functionally redundant with R/cate_models.R::stage_2_sl's is.vector(po)
+# branch, which additionally pretests the library. Kept because the disabled
+# sl_dr_split block in all_cate_surv_models() and surv_dr_split_na_diagnose.R
+# both reference it by name, and the split-pseudo arms are out of scope for the
+# crossfitting change. Fold it into stage_2_sl when that NA bug is fixed.
 stage_2_sl_vec <- function(
   X,
   po_vec,
