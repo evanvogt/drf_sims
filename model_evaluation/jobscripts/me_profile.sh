@@ -12,7 +12,7 @@
 # avoid. See me_profile.R for what each cell measures.
 #PBS -l walltime=04:00:00
 #PBS -l select=1:ncpus=8:ompthreads=8:mem=24gb
-#PBS -J 1-16%4
+#PBS -J 1-16%1
 #PBS -N me_profile
 #PBS -o logs_profile/
 #PBS -e logs_profile/

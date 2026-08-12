@@ -1,6 +1,7 @@
 #!/bin/bash
 #PBS -l walltime=02:00:00  
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=5gb
+#PBS -J 1-24
 #PBS -N cts_rerun
 #PBS -o logs_rerun/
 #PBS -e logs_rerun/
@@ -13,8 +14,10 @@ module add R/4.3.2-gfbf-2023a
 eval "$(~/miniforge3/bin/conda shell.bash hook)"
 conda activate sim-env
 
+jobid=$(sed -n "${PBS_ARRAY_INDEX}p" "${PBS_O_WORKDIR}/failed_ids.txt")
+
 # Navigate to script directory
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script with parameters
-Rscript cts_analysis.R "1402"
+Rscript cts_analysis.R "$jobid" 1 1
