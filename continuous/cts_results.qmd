@@ -101,16 +101,28 @@ metrics_summary <- metrics %>%
   summarise(
     mean_bias = mean(bias, na.rm = T),
     mcse_bias = sd(bias, na.rm = T) / sqrt(n()),
+    mean_ate_bias = mean(ate_bias, na.rm = T),
+    mcse_ate_bias = sd(ate_bias, na.rm = T) / sqrt(n()),
     mean_mse = mean(mse, na.rm = T),
     mcse_mse = sd(mse, na.rm = T) / sqrt(n()),
+    mean_rmse = mean(rmse, na.rm = T),
+    mcse_rmse = sd(rmse, na.rm = T) / sqrt(n()),
+    mean_mae = mean(mae, na.rm = T),
+    mcse_mae = sd(mae, na.rm = T) / sqrt(n()),
     mean_corr = mean(corr, na.rm = T),
     mcse_corr = sd(corr, na.rm = T) / sqrt(n()),
+    mean_spearman = mean(spearman, na.rm = T),
+    mcse_spearman = sd(spearman, na.rm = T) / sqrt(n()),
+    mean_sign_acc = mean(sign_acc, na.rm = T),
+    mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(n()),
     mean_BLP = mean(BLP_p, na.rm = T),
     mcse_BLP = sd(BLP_p, na.rm = T) / sqrt(n()),
     mean_indep_cate = mean(indep_cate, na.rm = T),
     mcse_indep_cate = sd(indep_cate, na.rm = T) / sqrt(n()),
     mean_indep_po = mean(indep_po, na.rm = T),
     mcse_indep_po = sd(indep_po, na.rm = T) / sqrt(n()),
+    mean_n_na = mean(n_na, na.rm = T),
+    total_n_na = sum(n_na, na.rm = T),
     .groups = "drop"
   )
 ```
@@ -157,6 +169,30 @@ bias_sum_plot <- summary_plot(metrics_summary, "mean_bias", "mcse_bias",
 (bias_plot / bias_sum_plot) + plot_layout(guides = "collect")
 ```
 
+## ATE bias
+
+Bias of the *average* treatment effect (`mean(est) - mean(true)`), as
+opposed to Bias's per-unit average — the two can differ in sign or magnitude
+when errors don't average out evenly across units.
+
+```{r ate-bias-plot, fig.height=16}
+ate_bias_plot <- metrics %>%
+  ggplot(aes(x = n, y = ate_bias, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Bias in the average treatment effect", y = "ATE bias",
+       x = "Sample size", colour = "Model")
+
+ate_bias_sum_plot <- summary_plot(metrics_summary, "mean_ate_bias", "mcse_ate_bias",
+                                  "Mean ATE bias", "Mean ATE bias")
+
+(ate_bias_plot / ate_bias_sum_plot) + plot_layout(guides = "collect")
+```
+
 ## MSE of CATE estimates
 
 The headline metric: mean squared error of the estimated CATE against the
@@ -177,6 +213,50 @@ mse_sum_plot <- summary_plot(metrics_summary, "mean_mse", "mcse_mse",
                              "Mean MSE of CATE estimates", "Mean MSE")
 
 (mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
+```
+
+## RMSE of CATE estimates
+
+`sqrt(mse)` — the same ranking as MSE, shown on the outcome's own scale
+rather than squared.
+
+```{r rmse-plot, fig.height=16}
+rmse_plot <- metrics %>%
+  ggplot(aes(x = n, y = rmse, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "RMSE of CATE estimates", y = "RMSE", x = "Sample size", colour = "Model")
+
+rmse_sum_plot <- summary_plot(metrics_summary, "mean_rmse", "mcse_rmse",
+                              "Mean RMSE of CATE estimates", "Mean RMSE")
+
+(rmse_plot / rmse_sum_plot) + plot_layout(guides = "collect")
+```
+
+## MAE of CATE estimates
+
+Mean absolute error — a robustness check on MSE, less sensitive to outlying
+runs.
+
+```{r mae-plot, fig.height=16}
+mae_plot <- metrics %>%
+  ggplot(aes(x = n, y = mae, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "MAE of CATE estimates", y = "MAE", x = "Sample size", colour = "Model")
+
+mae_sum_plot <- summary_plot(metrics_summary, "mean_mae", "mcse_mae",
+                             "Mean MAE of CATE estimates", "Mean MAE")
+
+(mae_plot / mae_sum_plot) + plot_layout(guides = "collect")
 ```
 
 ## Correlation with the true CATE
@@ -206,6 +286,57 @@ corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != scenario_label
                               "Mean correlation with the true CATE", "Mean correlation")
 
 (corr_plot / corr_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Spearman rank correlation with the true CATE
+
+Rank correlation alongside the Pearson correlation above — less sensitive to
+outlying CATE estimates and to non-linear-but-monotone miscalibration. Same
+scenario-1-undefined convention, so scenario 1 is excluded here too.
+
+```{r spearman-plot, fig.height=16}
+spearman_plot <- corr_df %>%
+  ggplot(aes(x = n, y = spearman, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free_y") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Spearman rank correlation between estimated and true CATEs",
+       y = "Spearman correlation", x = "Sample size", colour = "Model")
+
+spearman_sum_plot <- summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
+                                  "mean_spearman", "mcse_spearman",
+                                  "Mean Spearman correlation with the true CATE",
+                                  "Mean Spearman correlation")
+
+(spearman_plot / spearman_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Sign accuracy
+
+Proportion of units where the estimated CATE has the correct sign — a
+direction-detection metric, distinct from magnitude accuracy. 0.5 (dashed
+line) is the chance level for a coin-flip on sign.
+
+```{r sign-acc-plot, fig.height=16}
+sign_acc_plot <- metrics %>%
+  ggplot(aes(x = n, y = sign_acc, colour = model)) +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free_x") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Sign accuracy of CATE estimates", y = "Proportion correct sign",
+       x = "Sample size", colour = "Model")
+
+sign_acc_sum_plot <- summary_plot(metrics_summary, "mean_sign_acc", "mcse_sign_acc",
+                                  "Mean sign accuracy", "Mean proportion correct sign",
+                                  hline = 0.5)
+
+(sign_acc_plot / sign_acc_sum_plot) + plot_layout(guides = "collect")
 ```
 
 ## BLP test p-values
@@ -274,6 +405,28 @@ indep_po_sum_plot <- summary_plot(metrics_summary, "mean_indep_po", "mcse_indep_
 (indep_po_plot / indep_po_sum_plot) + plot_layout(guides = "collect")
 ```
 
+## Missing estimates
+
+`n_na` is a data-quality diagnostic, not a performance metric: the count of
+`NA` CATE estimates within a run. Mostly zero, so shown as a table rather
+than a distribution plot; only cells with at least one missing estimate are
+listed.
+
+```{r na-table}
+na_table <- metrics_summary %>%
+  select(scenario, model, n, mean_n_na, total_n_na) %>%
+  filter(total_n_na > 0) %>%
+  arrange(scenario, n, model)
+
+if (nrow(na_table) > 0) {
+  kable(na_table, digits = 3,
+        col.names = c("Scenario", "Model", "n", "Mean NA count per run",
+                      "Total NA count"))
+} else {
+  cat("No missing CATE estimates in any run.")
+}
+```
+
 ## Headline table
 
 Arranged by scenario, sample size, and mean MSE (best model first within
@@ -281,12 +434,13 @@ each cell).
 
 ```{r headline-table}
 headline <- metrics_summary %>%
-  select(scenario, model, n, mean_bias, mean_mse, mean_corr, mean_BLP,
-         mean_indep_cate, mean_indep_po) %>%
+  select(scenario, model, n, mean_bias, mean_mse, mean_rmse, mean_mae,
+         mean_sign_acc, mean_corr, mean_BLP, mean_indep_cate, mean_indep_po) %>%
   arrange(scenario, n, mean_mse)
 
 kable(headline, digits = 4,
       col.names = c("Scenario", "Model", "n", "Mean bias", "Mean MSE",
+                    "Mean RMSE", "Mean MAE", "Mean sign accuracy",
                     "Mean correlation", "Mean BLP p-value",
                     "Mean CATE perm. p-value", "Mean PO perm. p-value"))
 ```
