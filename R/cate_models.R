@@ -400,6 +400,17 @@ pretest_superlearner <- function(Y, X, SL.library, family) {
     cat("Removed libraries due to NA/error:\n")
     print(removed_lib)
   }
+  if (length(working_lib) == 0) {
+    # bug K: every candidate warned/errored on this fold - falling through with
+    # character(0) sends an empty SL.library into the caller's live SuperLearner()
+    # call, which crashes building a 0-column predictions data.frame() ("arguments
+    # imply differing number of rows: 0, 1"). SL.mean is asserted directly, not
+    # re-run through the loop above, so it can't recursively trigger the same
+    # emptying it's meant to prevent.
+    warning("pretest_superlearner: every candidate failed/warned on this fold; ",
+            "falling back to SL.mean.")
+    working_lib <- "SL.mean"
+  }
   working_lib
 }
 
@@ -574,8 +585,27 @@ run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list,
 
 # Best Linear Predictor of the CATE (GenericML). Row 4, column 2 of the returned
 # coefficient block is the p-value the metrics scripts read.
+#
+# bug L: GenericML::BLP() regresses on beta.2 = (W - W.hat) * (tau - mean(tau)).
+# When tau is exactly constant (a degenerate/near-constant CATE fit - seen with
+# scenario 9's low-amplitude cos(X4) effect at small n, especially once
+# pretest_superlearner has whittled a fold's library down to 1-2 survivors),
+# beta.2 becomes identically zero, lm() marks it aliased (coef = NA), and
+# sandwich::vcovHC() drops that coefficient's row/column entirely rather than
+# keeping it as NA - so GenericML's internal indexing by name throws "subscript
+# out of bounds". NULL is a deliberate fallback, not just a safe default:
+# hte_test_metrics() (R/metrics.R) already maps BLP_whole = NULL to BLP_p = NA,
+# and NA is the statistically correct answer here - beta.2 has no fitted
+# coefficient to attach a p-value to when tau has zero variance.
 run_blp_whole <- function(Y, W, W.hat, Y0.hat, tau) {
-  BLP(Y, W, W.hat, Y0.hat, tau)$coefficients[, c(1, 4)]
+  tryCatch(
+    BLP(Y, W, W.hat, Y0.hat, tau)$coefficients[, c(1, 4)],
+    error = function(e) {
+      warning("run_blp_whole: BLP() failed (likely a constant/degenerate tau); ",
+              "returning NULL. ", conditionMessage(e))
+      NULL
+    }
+  )
 }
 
 # Omnibus independence test of the estimated CATEs against the covariates

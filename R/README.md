@@ -114,28 +114,38 @@ cluster, which is useful while the corrected runs are in flight.
 | `PRETEST_STAGE2` | `cate_models.R` | bug F — `stage_2_sl` discarding the pretested SuperLearner library |
 | `BIAS_SIGN` | `metrics.R` | bug G — `bias` as `true - est` |
 
-## Known but unfixed
+## Fixed since the flags above were written
 
-Not gated by a legacy flag - there's no fixed behaviour to fall back to yet,
-just an open crash.
+Not gated by a legacy flag - both were straight crashes with no "fixed
+behaviour to fall back to" (nothing to reproduce), so nothing to flip back.
+See the root `README.md` bug ledger for the full write-up (letters K, L).
 
-**`pretest_superlearner()` can return an empty library, and its callers don't
-guard against that.** `pretest_superlearner()` (line 366) drops any candidate
-algorithm that errors, warns, or returns all-`NA` on a 2-fold inner CV; if
-every candidate fails on a given fold it returns `character(0)`.
-`nuisance_sl()` (line 306) and `stage_2_sl()` (line 408) both pass that result
-straight into `SuperLearner(..., SL.library = <possibly empty>)`, which then
-crashes (`arguments imply differing number of rows: 0, 1`, inside
-`future_map`'s per-fold apply). Confirmed reproducing on unmodified
-`missing/binary/bin_miss_analysis.R` at `scenario = 1, mechanism = MAR, run =
-1` for both `complete_cases` (n = 331) and `mean_imputation` (n = 500) - see
-"Known issue found while profiling" in `missing/binary/README.md` for the full
-repro and a walk-through of the root cause. Not yet checked in the other
-studies that call `pretest_superlearner()` (`binary/`, `continuous/`,
-`crossfitting/`, `case_study/`). Distinct from bug F, which is about which
-library variant is used once pretesting leaves at least one survivor, not
-about what happens when it leaves zero - candidate "bug H" once it's fixed
-(bug G is already taken).
+- **bug K** — `pretest_superlearner()` could return an empty library
+  (`character(0)`) when every candidate warned or errored on a fold; its
+  callers (`nuisance_sl()`, `stage_2_sl()`, and `crossfitting/cf_models.R`'s
+  own `sl_nuisance_fit()`/`stage2_crossfit_sl()`) then passed that straight
+  into a live `SuperLearner(..., SL.library = character(0))`, which crashed
+  building a 0-column predictions `data.frame()`. Fixed by giving
+  `pretest_superlearner()` a floor: falls back to `"SL.mean"` (asserted
+  directly, not re-run through the pretest loop) if nothing else survives.
+  Confirmed via `missing/binary/bin_miss_analysis.R` (see its README) and
+  `continuous/cts_analysis.R` (23 of the 24 array IDs that failed on the
+  cluster for this reason). Distinct from bug F, which is about *which*
+  library variant is used once pretesting leaves at least one survivor, not
+  about what happens when it leaves zero.
+- **bug L** — `run_blp_whole()` called `GenericML::BLP()` with no
+  `tryCatch`, unlike `run_independence_test_whole()` next to it. `BLP()`
+  crashes (`subscript out of bounds`) whenever the fitted CATE (`tau`) is
+  exactly constant: the `beta.2` regressor it builds
+  (`(W - W.hat) * (tau - mean(tau))`) becomes identically zero, `lm()` marks
+  it aliased, and `sandwich::vcovHC()` drops that coefficient's row/column
+  entirely rather than keeping it as `NA`, so `GenericML`'s internal
+  name-based indexing throws. Fixed by wrapping the `BLP()` call in
+  `tryCatch`, returning `NULL` on error — `R/metrics.R`'s
+  `hte_test_metrics()` already maps `BLP_whole = NULL` to `BLP_p = NA`, and
+  `NA` is the statistically correct answer here (there's no fitted
+  coefficient to attach a p-value to when `tau` has zero variance).
+  Confirmed via `continuous/` array id 3529 (scenario 9, n=100, run=89).
 
 **When the corrected results are in and written up, remove:**
 

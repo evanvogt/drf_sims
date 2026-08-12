@@ -146,6 +146,8 @@ Found during the de-duplication. Each is written up in the relevant folder READM
 | H | propensity trimming only on the SuperLearner path | shared | yes — resolved when `nuisance_rf` moved to whole-sample OOB and picked up `trim_ps` too |
 | I | competing risks never validates its SuperLearner library | `competing_risk` | open |
 | J | stale comments and filenames | various | yes |
+| K | `pretest_superlearner()` could return an empty SL library, crashing `nuisance_sl`/`stage_2_sl` | shared | yes |
+| L | `run_blp_whole()` had no `tryCatch`, crashed on a constant/degenerate CATE | shared | yes |
 
 Three more surfaced along the way:
 
