@@ -351,28 +351,73 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
   result <- list(dataset = as.data.frame(dataset_vars), bW = bW)
 
   if (return_truth) {
-    base <- params$b0 + params$b1 * X1 + params$b2 * X2
-
     # the missing-data studies subtract the U contribution so that tau is the
     # marginal treatment effect (U is independent of X, so E[U] = 0)
     reduced <- !is.null(mech)
     # missing/binary reported truth on the linear-predictor scale; see LEGACY_BIN_MISS
     link_truth <- binary && !(set == "binary_missing" && LEGACY_BIN_MISS)
 
-    if (link_truth) {
-      p0 <- plogis(base)
-      p1 <- plogis(base + treatment_effect - if (reduced) U_term else 0)
+    if (!reduced) {
+      # the non-MNAR path is shared with build_query_grid_truth() below, via
+      # truth_at() - kept as one implementation so the query-grid truth cannot
+      # drift from the observed-sample truth
+      truth <- truth_at(params, bW, link_truth, X1, X2, X3, X4, X5)
     } else {
-      p0 <- base
-      p1 <- base + treatment_effect - if (reduced) U_term else 0
+      base <- params$b0 + params$b1 * X1 + params$b2 * X2
+      if (link_truth) {
+        p0 <- plogis(base)
+        p1 <- plogis(base + treatment_effect - U_term)
+      } else {
+        p0 <- base
+        p1 <- base + treatment_effect - U_term
+      }
+      truth <- data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
     }
 
-    truth <- data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
     if (needs_U) truth$U <- U
     result$truth <- truth
   }
 
   result
+}
+
+#' True p0/p1/tau at an arbitrary set of covariate rows
+#'
+#' Factored out of generate_scenario_data()'s non-MNAR (reduced == FALSE)
+#' truth block so that build_query_grid_truth() below cannot silently diverge
+#' from what generate_scenario_data() itself reports as ground truth. The MNAR
+#' branch (mech != NULL, subtracting U_term) is NOT reproduced here - it stays
+#' inline in generate_scenario_data(), since the query grid is only used by
+#' the non-missing CI studies, which never pass mech.
+#'
+#' @param params one-row scenario params, already subset to `scenario` (as
+#'   resolve_set(set) then filtered - see get_oracle_info for the pattern)
+#' @param bW calibrated treatment coefficient
+#' @param link_truth TRUE to report p0/p1 on the plogis scale (binary outcomes,
+#'   modulo the LEGACY_BIN_MISS carve-out - see generate_scenario_data)
+#' @param X1,X2 numeric vectors, same length, the two covariates that always
+#'   exist
+#' @param X3,X4,X5 numeric vectors (same length as X1) or NULL, matching that
+#'   scenario's needs_X3/X4/X5 flags
+truth_at <- function(params, bW, link_truth, X1, X2, X3 = NULL, X4 = NULL, X5 = NULL) {
+  treatment_effect <- eval(
+    parse(text = params$te_expr),
+    envir = list(bW = bW, n = length(X1), X3 = X3, X4 = X4, X5 = X5, U_term = 0,
+                 b3 = params$b3, b4 = params$b4, b5 = params$b5,
+                 b34 = params$b34, b45 = params$b45)
+  )
+
+  base <- params$b0 + params$b1 * X1 + params$b2 * X2
+
+  if (link_truth) {
+    p0 <- plogis(base)
+    p1 <- plogis(base + treatment_effect)
+  } else {
+    p0 <- base
+    p1 <- base + treatment_effect
+  }
+
+  data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
 }
 
 #' Oracle formula and parameter values for a scenario
@@ -389,4 +434,80 @@ get_oracle_info <- function(scenario, bW, set) {
   }
 
   list(fmla = params$oracle_expr, params = param_list)
+}
+
+# ---- covariate query grid (confidence_intervals/{binary,continuous} only) --
+
+# Fixed reference value for covariates the query grid holds constant (X1, X2,
+# any of X3/X4/X5 this scenario doesn't need, and the unrelated X01..X05).
+# Not a neutral choice for binary scenarios: true tau at a grid point is
+# plogis(base + treatment_effect) - plogis(base) where
+# base = b0 + b1*X1 + b2*X2, so this reference shifts every binary grid
+# point's true CATE (through the nonlinear link), even though it has no
+# bearing on how honest the estimators are about hitting whatever that target
+# is. For continuous scenarios truth is exactly treatment_effect, which never
+# involves X1/X2 at all, so the choice is provably inert there.
+GRID_REFERENCE_VALUE <- 0
+
+#' Fixed covariate-grid query points for a scenario's active HTE covariates
+#'
+#' Varies only the covariates that scenario's treatment effect actually
+#' depends on (X3 if needs_X3, X4 if needs_X4, X5 if needs_X5), at fixed
+#' design points rather than data-adaptive ones, since every scenario's
+#' covariate distributions (X1_prob, X3_prob, s2, s4, s5) are constants, not
+#' drawn per replicate - so the same grid is valid, and comparable, across
+#' every run of a given scenario. Everything else - X1, X2, any of X3/X4/X5
+#' this scenario does not need, and the unrelated X01..X05 - is held at
+#' GRID_REFERENCE_VALUE.
+#'
+#' Scenario 1 ("No HTE") needs none of X3/X4/X5, so the grid degenerates to a
+#' single row at the reference point - handled explicitly (expand.grid() over
+#' zero variables returns a 1-row, 0-column data.frame, which is not a useful
+#' thing to cbind against) rather than left to that edge case.
+#'
+#' @param scenario scenario index within `set`
+#' @param set which scenario table, as get_oracle_info (use "binary_ci" for
+#'   the binary CI study, "continuous" for the continuous one)
+#' @param covariate_names names(data)[-(1:2)] from the observed dataset - the
+#'   exact column set/order predict(forest, newdata=...) must be handed,
+#'   since grf matches newdata columns by position, not name
+#' @return data.frame with columns exactly `covariate_names`, in that order
+build_query_grid <- function(scenario, set, covariate_names) {
+  params <- resolve_set(set)
+  params <- params[params$scenario == scenario, ]
+
+  active <- list()
+  if (isTRUE(params$needs_X3)) active$X3 <- c(0, 1)
+  if (isTRUE(params$needs_X4)) active$X4 <- seq(-2, 2, length.out = 5)
+  if (isTRUE(params$needs_X5)) active$X5 <- seq(-2, 2, length.out = 5)
+
+  grid <- if (length(active) > 0) {
+    do.call(expand.grid, c(active, list(stringsAsFactors = FALSE, KEEP.OUT.ATTRS = FALSE)))
+  } else {
+    data.frame(row.names = 1)
+  }
+
+  reference_names <- setdiff(covariate_names, names(grid))
+  for (nm in reference_names) grid[[nm]] <- GRID_REFERENCE_VALUE
+
+  grid[, covariate_names, drop = FALSE]
+}
+
+#' True p0/p1/tau at each row of a query grid
+#'
+#' @param scenario,set,bW as get_oracle_info
+#' @param grid_df output of build_query_grid() - must carry X1, X2 and
+#'   whichever of X3/X4/X5 that scenario needs
+#' @return data.frame(p0, p1, tau), one row per row of grid_df
+build_query_grid_truth <- function(scenario, set, bW, grid_df) {
+  params <- resolve_set(set)
+  params <- params[params$scenario == scenario, ]
+  binary <- is_binary_set(set)
+  link_truth <- binary && !(set == "binary_missing" && LEGACY_BIN_MISS)
+
+  truth_at(params, bW, link_truth,
+           X1 = grid_df$X1, X2 = grid_df$X2,
+           X3 = if (isTRUE(params$needs_X3)) grid_df$X3 else NULL,
+           X4 = if (isTRUE(params$needs_X4)) grid_df$X4 else NULL,
+           X5 = if (isTRUE(params$needs_X5)) grid_df$X5 else NULL)
 }

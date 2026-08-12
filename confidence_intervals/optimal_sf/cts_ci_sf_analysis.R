@@ -49,6 +49,13 @@ Y     <- data$Y
 W     <- data$W
 n_obs <- nrow(X)
 
+# fixed covariate-grid query points, for the grid-based (as opposed to
+# per-unit) band on the final CI below - see R/dgm_scenarios.R::build_query_grid.
+Z_query     <- build_query_grid(scenario, set = "continuous",
+                                covariate_names = names(data)[-c(1, 2)])
+grid_truth  <- build_query_grid_truth(scenario, set = "continuous", gen$bW, Z_query)
+Z_query_mat <- as.matrix(Z_query)
+
 # set up parallelisation
 metaplan <- plan(multisession, workers = workers)
 on.exit(plan(metaplan), add = TRUE)
@@ -59,7 +66,9 @@ cat("Computing nuisance functions...\n")
 nuisances_rf <- nuisance_rf(X, Y, W)
 
 cat("Estimating tau (DR-RF)...\n")
-tau.hat <- stage2_whole_rf(X, nuisances_rf$po)$tau
+s1           <- stage2_whole_rf(X, nuisances_rf$po, Z_query = Z_query_mat)
+tau.hat      <- s1$tau
+tau_grid.hat <- s1$tau_grid
 
 # step 2: calibrate sample.fraction
 cat("Calibrating sample.fraction...\n")
@@ -78,14 +87,16 @@ cal <- find_optimal_sf(
 # step 3: final CIs using the calibrated sf
 cat("Running bootstrap CIs with optimal sf =", cal$optimal_sf, "...\n")
 final_ci <- rf_oob_half_boot(
-  X       = X,
-  Y       = Y,
-  W       = W,
-  po      = nuisances_rf$po,
-  tau     = tau.hat,
-  CI_boot = CI_boot,
-  CI_sf   = cal$optimal_sf,
-  alpha   = alpha
+  X        = X,
+  Y        = Y,
+  W        = W,
+  po       = nuisances_rf$po,
+  tau      = tau.hat,
+  CI_boot  = CI_boot,
+  CI_sf    = cal$optimal_sf,
+  alpha    = alpha,
+  Z_query  = Z_query_mat,
+  tau_grid = tau_grid.hat
 )
 
 warnings()
@@ -98,7 +109,12 @@ results <- list(
   optimal_sf     = cal$optimal_sf,
   coverage_curve = cal$coverage_curve,
   truth          = gen$truth,
-  data           = data
+  data           = data,
+  tau_grid       = tau_grid.hat,
+  grid_lb        = final_ci$grid_lb,
+  grid_ub        = final_ci$grid_ub,
+  Z_query        = Z_query,
+  grid_truth     = grid_truth
 )
 
 output_dir <- file.path(dirname(path), "results/confidence_intervals/continuous/sf_calibration",

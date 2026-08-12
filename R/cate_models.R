@@ -136,11 +136,18 @@ is_binomial <- function(family) identical(family$family, "binomial")
 #' Each study's *_models.R is a thin shim defining `run_all_cate_methods` with
 #' that study's historical signature and forwarding to this. The shared function
 #' is named differently so those shims do not recurse into themselves.
+#' @param Z_query optional data.frame/matrix of covariate rows (same columns,
+#'   same order as data[, -c(1:2)]) to also predict CATE and, when `ci` is set,
+#'   a half-sample bootstrap band at - e.g. R/dgm_scenarios.R's
+#'   build_query_grid(). NULL (default) skips all of it, so every existing
+#'   caller is unaffected. Adds `tau_grid` (and, with `ci`, `grid_lb`/
+#'   `grid_ub`/`grid_draws`) to each arm's result list.
 cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
                          family = gaussian(), oracle_link = c("identity", "logit"),
                          ipw = NULL, ci = NULL,
                          profile = c("base", "ci", "missing", "ci_mi"),
-                         num.threads = NULL, verbose_timing = FALSE) {
+                         num.threads = NULL, verbose_timing = FALSE,
+                         Z_query = NULL) {
 
   oracle_link <- match.arg(oracle_link)
 
@@ -151,6 +158,8 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
   Y <- data$Y
   W <- data$W
   n_obs <- nrow(X)
+
+  Z_query_mat <- if (!is.null(Z_query)) as.matrix(Z_query) else NULL
 
   fold_indices <- sort(seq(n_obs) %% n_folds) + 1
   fold_list <- unique(fold_indices)
@@ -178,25 +187,28 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
   results$causal_forest <- time_step("causal_forest",
     run_causal_forest(X, Y, W, nuisances_rf, ipw,
                       variance = p$cf_variance,
-                      tests = p$tests, num.threads = num.threads))
+                      tests = p$tests, num.threads = num.threads, Z_query = Z_query_mat))
   if (!is.null(ci)) {
     cat("Running Causal Forest bootstrap... \n")
     results$causal_forest <- c(results$causal_forest,
       cf_oob_half_boot(X, Y, W, results$causal_forest, results$causal_forest$tau,
-                       ci$boot, ci$sf, ci$alpha))
+                       ci$boot, ci$sf, ci$alpha,
+                       Z_query = Z_query_mat, tau_grid = results$causal_forest$tau_grid))
   }
 
   cat("Running DR Random Forest...\n")
   results$dr_random_forest <- time_step("dr_random_forest", if (p$dr_rf_tests) {
-    run_dr_random_forest(X, Y, W, nuisances_rf, ipw, num.threads = num.threads)
+    run_dr_random_forest(X, Y, W, nuisances_rf, ipw, num.threads = num.threads, Z_query = Z_query_mat)
   } else {
-    list(tau = stage2_whole_rf(X, nuisances_rf$po, ipw, num.threads = num.threads)$tau)
+    s <- stage2_whole_rf(X, nuisances_rf$po, ipw, num.threads = num.threads, Z_query = Z_query_mat)
+    list(tau = s$tau, tau_grid = s$tau_grid)
   })
   if (!is.null(ci)) {
     cat("Running DR RF bootstrap... \n")
     results$dr_random_forest <- c(results$dr_random_forest,
       rf_oob_half_boot(X, Y, W, nuisances_rf$po, results$dr_random_forest$tau,
-                       ci$boot, ci$sf, ci$alpha))
+                       ci$boot, ci$sf, ci$alpha,
+                       Z_query = Z_query_mat, tau_grid = results$dr_random_forest$tau_grid))
   }
 
   # the missing-data variant skips the arms that need a complete covariate matrix
@@ -206,24 +218,28 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
     cat("Running DR Oracle...\n")
     results$dr_oracle <- time_step("dr_oracle",
       run_dr_oracle(X, Y, W, fmla_info, ipw,
-                    oracle_link = oracle_link, tests = p$tests, num.threads = num.threads))
+                    oracle_link = oracle_link, tests = p$tests, num.threads = num.threads,
+                    Z_query = Z_query_mat))
     if (!is.null(ci)) {
       cat("Runnings Oracle bootstrap...\n")
       results$dr_oracle <- c(results$dr_oracle,
         rf_oob_half_boot(X, Y, W, results$dr_oracle$po, results$dr_oracle$tau,
-                         ci$boot, ci$sf, ci$alpha))
+                         ci$boot, ci$sf, ci$alpha,
+                         Z_query = Z_query_mat, tau_grid = results$dr_oracle$tau_grid))
     }
   }
 
   if (profile != "missing" || complete_X) {
     cat("Running DR Semi-Oracle...\n")
     results$dr_semi_oracle <- time_step("dr_semi_oracle",
-      run_dr_semi_oracle(X, Y, W, ipw, tests = p$tests, num.threads = num.threads))
+      run_dr_semi_oracle(X, Y, W, ipw, tests = p$tests, num.threads = num.threads,
+                        Z_query = Z_query_mat))
     if (!is.null(ci)) {
       cat("Running Semi-Oracle bootstrap...\n")
       results$dr_semi_oracle <- c(results$dr_semi_oracle,
         rf_oob_half_boot(X, Y, W, results$dr_semi_oracle$po, results$dr_semi_oracle$tau,
-                         ci$boot, ci$sf, ci$alpha))
+                         ci$boot, ci$sf, ci$alpha,
+                         Z_query = Z_query_mat, tau_grid = results$dr_semi_oracle$tau_grid))
     }
   }
 
@@ -398,10 +414,14 @@ pretest_superlearner <- function(Y, X, SL.library, family) {
 #' crossfitting/cf_models.R::stage2_whole_rf, replacing the leave-one-fold-out
 #' stage_2_rf this function used to be for dr_random_forest, dr_oracle and
 #' dr_semi_oracle alike.
-stage2_whole_rf <- function(X, po, ipw = NULL, num.threads = NULL) {
+#' @param Z_query optional covariate rows (matrix/data.frame, same columns as
+#'   X) to also predict at, off this same fitted forest, before it goes out of
+#'   scope. NULL (default) adds nothing - see cate_methods' Z_query doc.
+stage2_whole_rf <- function(X, po, ipw = NULL, num.threads = NULL, Z_query = NULL) {
   forest <- regression_forest(X, po, sample.weights = ipw, num.threads = num.threads)
   pred <- predict(forest, estimate.variance = TRUE)
-  list(tau = pred$predictions, variance = pred$variance.estimates)
+  tau_grid <- if (!is.null(Z_query)) predict(forest, newdata = Z_query)$predictions else NULL
+  list(tau = pred$predictions, variance = pred$variance.estimates, tau_grid = tau_grid)
 }
 
 #' Crossfit second stage with SuperLearner
@@ -446,12 +466,13 @@ stage_2_sl <- function(X, po, fold_indices, fold_list, sl_lib, ipw = NULL) {
 #' The forest's own Y.hat/W.hat are returned (as Y.hat.cf/W.hat, matching the
 #' field-naming convention) so the half-sample bootstrap can hold them fixed.
 run_causal_forest <- function(X, Y, W, nuisances, ipw = NULL, variance = FALSE,
-                              tests = TRUE, num.threads = NULL) {
+                              tests = TRUE, num.threads = NULL, Z_query = NULL) {
   forest <- causal_forest(X, Y, W, sample.weights = ipw, num.threads = num.threads)
   pred <- predict(forest, estimate.variance = variance)
 
   out <- list(tau = pred$predictions, Y.hat.cf = forest$Y.hat, W.hat = forest$W.hat)
   if (variance) out$variance <- pred$variance.estimates
+  if (!is.null(Z_query)) out$tau_grid <- predict(forest, newdata = Z_query)$predictions
   if (tests) {
     out$BLP_whole <- run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, out$tau)
     out$independence_cate <- run_independence_test_whole(X, out$tau)
@@ -462,10 +483,10 @@ run_causal_forest <- function(X, Y, W, nuisances, ipw = NULL, variance = FALSE,
 
 #' DR-learner with a whole-sample OOB regression-forest second stage
 run_dr_random_forest <- function(X, Y, W, nuisances, ipw = NULL, tests = TRUE,
-                                 num.threads = NULL) {
-  s <- stage2_whole_rf(X, nuisances$po, ipw, num.threads = num.threads)
+                                 num.threads = NULL, Z_query = NULL) {
+  s <- stage2_whole_rf(X, nuisances$po, ipw, num.threads = num.threads, Z_query = Z_query)
 
-  out <- list(tau = s$tau, variance = s$variance)
+  out <- list(tau = s$tau, variance = s$variance, tau_grid = s$tau_grid)
   if (tests) {
     out$BLP_whole <- run_blp_whole(Y, W, nuisances$W.hat, nuisances$Y0.hat, out$tau)
     out$independence_cate <- run_independence_test_whole(X, out$tau)
@@ -478,7 +499,7 @@ run_dr_random_forest <- function(X, Y, W, nuisances, ipw = NULL, tests = TRUE,
 #' whole-sample OOB second stage
 run_dr_oracle <- function(X, Y, W, fmla_info, ipw = NULL,
                           oracle_link = c("identity", "logit"), tests = TRUE,
-                          num.threads = NULL) {
+                          num.threads = NULL, Z_query = NULL) {
   n_obs <- nrow(X)
   # "logit" means the formula is a linear predictor and plogis belongs here;
   # "identity" means the formula already returns the outcome mean
@@ -500,9 +521,9 @@ run_dr_oracle <- function(X, Y, W, fmla_info, ipw = NULL,
   X <- as.matrix(X)
 
   po <- (Y1.hat - Y0.hat) + ((Y - Y.hat) * (W - W.hat)) / (W.hat * (1 - W.hat))
-  s <- stage2_whole_rf(X, po, ipw, num.threads = num.threads)
+  s <- stage2_whole_rf(X, po, ipw, num.threads = num.threads, Z_query = Z_query)
 
-  out <- list(tau = s$tau, variance = s$variance, po = po, Y0.hat = Y0.hat)
+  out <- list(tau = s$tau, variance = s$variance, tau_grid = s$tau_grid, po = po, Y0.hat = Y0.hat)
   if (tests) {
     out$BLP_whole <- run_blp_whole(Y, W, W.hat, Y0.hat, out$tau)
     out$independence_cate <- run_independence_test_whole(X, out$tau)
@@ -513,7 +534,8 @@ run_dr_oracle <- function(X, Y, W, fmla_info, ipw = NULL,
 
 #' DR-learner with a known propensity of 0.5, a whole-sample OOB outcome
 #' model, and a whole-sample OOB second stage
-run_dr_semi_oracle <- function(X, Y, W, ipw = NULL, tests = TRUE, num.threads = NULL) {
+run_dr_semi_oracle <- function(X, Y, W, ipw = NULL, tests = TRUE, num.threads = NULL,
+                               Z_query = NULL) {
   n_obs <- nrow(X)
   W.hat <- rep(0.5, n_obs)
 
@@ -523,9 +545,9 @@ run_dr_semi_oracle <- function(X, Y, W, ipw = NULL, tests = TRUE, num.threads = 
   Y1.hat <- oob_predict_counterfactual(forest, cbind(W = 1, X))
 
   po <- dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat)
-  s <- stage2_whole_rf(X, po, ipw, num.threads = num.threads)
+  s <- stage2_whole_rf(X, po, ipw, num.threads = num.threads, Z_query = Z_query)
 
-  out <- list(tau = s$tau, variance = s$variance, po = po, Y0.hat = Y0.hat)
+  out <- list(tau = s$tau, variance = s$variance, tau_grid = s$tau_grid, po = po, Y0.hat = Y0.hat)
   if (tests) {
     out$BLP_whole <- run_blp_whole(Y, W, W.hat, Y0.hat, out$tau)
     out$independence_cate <- run_independence_test_whole(X, out$tau)

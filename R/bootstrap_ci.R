@@ -220,21 +220,46 @@ oob_bands <- function(roots, kept, tau, alpha) {
 #' @param fold_indices,fold_list accepted and ignored. A whole-sample arm has no
 #'   folds; these are here so all four bootstraps in this file share an argument
 #'   order and count, the same reason rf_half_boot accepts Y and W it never uses.
+#' @param Z_query,tau_grid optional covariate-grid points and the full-sample
+#'   forest's prediction there (R/cate_models.R's stage2_whole_rf(..., Z_query))
+#'   - when both are supplied, each draw's already-fitted half-sample forest is
+#'   also used to predict at Z_query (every grid point is out-of-sample for
+#'   every half-forest by construction, so there is no OOB/newdata choice to
+#'   make here the way oob_half_predict() has to make for observed rows - one
+#'   predict(newdata=Z_query) call covers every draw), and a second
+#'   simultaneous_band() over grid points is returned as grid_lb/grid_ub/
+#'   grid_draws. NULL (default, for both) adds nothing.
 rf_oob_half_boot <- function(X, Y, W, po, tau, CI_boot = 200, CI_sf = 0.5,
-                             alpha = 0.05, fold_indices = NULL, fold_list = NULL) {
+                             alpha = 0.05, fold_indices = NULL, fold_list = NULL,
+                             Z_query = NULL, tau_grid = NULL) {
 
   n_obs <- nrow(X)
   stopifnot(is.vector(po), length(po) == n_obs)
+  stopifnot(is.null(Z_query) == is.null(tau_grid))
 
   res <- future_map(seq_len(CI_boot), function(b) {
     keep <- oob_half_sample(n_obs)
     half_rf <- regression_forest(X[keep, ], po[keep], sample.fraction = CI_sf)
-    list(root = tau - oob_half_predict(half_rf, X, keep), keep = keep)
+    out <- list(root = tau - oob_half_predict(half_rf, X, keep), keep = keep)
+    if (!is.null(Z_query)) {
+      out$root_grid <- tau_grid - predict(half_rf, newdata = Z_query)$predictions
+    }
+    out
   }, .options = furrr_options(seed = TRUE))
 
-  oob_bands(do.call(cbind, lapply(res, `[[`, "root")),
-            do.call(cbind, lapply(res, `[[`, "keep")),
-            tau, alpha)
+  bands <- oob_bands(do.call(cbind, lapply(res, `[[`, "root")),
+                     do.call(cbind, lapply(res, `[[`, "keep")),
+                     tau, alpha)
+
+  if (!is.null(Z_query)) {
+    grid_band <- simultaneous_band(do.call(cbind, lapply(res, `[[`, "root_grid")),
+                                   tau_grid, alpha)
+    bands$grid_lb <- grid_band$hb_lb
+    bands$grid_ub <- grid_band$hb_ub
+    bands$grid_draws <- grid_band$draws
+  }
+
+  bands
 }
 
 #' Half-sample bootstrap for a whole-sample (OOB) causal forest
@@ -247,24 +272,42 @@ rf_oob_half_boot <- function(X, Y, W, po, tau, CI_boot = 200, CI_sf = 0.5,
 #'   every other arm - letting grf re-cross-fit on each half sample would put
 #'   nuisance variability into this one arm's band and nobody else's.
 #' @param fold_indices,fold_list accepted and ignored, see rf_oob_half_boot
+#' @param Z_query,tau_grid optional covariate-grid points and the full-sample
+#'   causal forest's prediction there, see rf_oob_half_boot
 cf_oob_half_boot <- function(X, Y, W, nuisances, tau, CI_boot = 200, CI_sf = 0.5,
-                             alpha = 0.05, fold_indices = NULL, fold_list = NULL) {
+                             alpha = 0.05, fold_indices = NULL, fold_list = NULL,
+                             Z_query = NULL, tau_grid = NULL) {
 
   n_obs <- nrow(X)
   Y.hat <- nuisances$Y.hat.cf
   W.hat <- nuisances$W.hat
   stopifnot(is.vector(Y.hat), is.vector(W.hat))
+  stopifnot(is.null(Z_query) == is.null(tau_grid))
 
   res <- future_map(seq_len(CI_boot), function(b) {
     keep <- oob_half_sample(n_obs)
     half_cf <- causal_forest(X[keep, ], Y[keep], W[keep],
                              Y.hat[keep], W.hat[keep], sample.fraction = CI_sf)
-    list(root = tau - oob_half_predict(half_cf, X, keep), keep = keep)
+    out <- list(root = tau - oob_half_predict(half_cf, X, keep), keep = keep)
+    if (!is.null(Z_query)) {
+      out$root_grid <- tau_grid - predict(half_cf, newdata = Z_query)$predictions
+    }
+    out
   }, .options = furrr_options(seed = TRUE))
 
-  oob_bands(do.call(cbind, lapply(res, `[[`, "root")),
-            do.call(cbind, lapply(res, `[[`, "keep")),
-            tau, alpha)
+  bands <- oob_bands(do.call(cbind, lapply(res, `[[`, "root")),
+                     do.call(cbind, lapply(res, `[[`, "keep")),
+                     tau, alpha)
+
+  if (!is.null(Z_query)) {
+    grid_band <- simultaneous_band(do.call(cbind, lapply(res, `[[`, "root_grid")),
+                                   tau_grid, alpha)
+    bands$grid_lb <- grid_band$hb_lb
+    bands$grid_ub <- grid_band$hb_ub
+    bands$grid_draws <- grid_band$draws
+  }
+
+  bands
 }
 
 # ---- pooling bootstrap intervals across multiple imputations ----------------
