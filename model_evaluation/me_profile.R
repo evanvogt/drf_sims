@@ -69,7 +69,7 @@ source(here("model_evaluation", "me_config.R"))
 i <- as.numeric(commandArgs(trailingOnly = T))
 
 n <- 250 # smallest grid n
-n_folds <- 5L # matches me_analysis.R's rule at n = 250
+n_folds <- 10L # matches me_analysis.R's rule (single crossfitting, all n)
 h2o_mem <- "10G"
 sample_interval <- 1 # seconds between syrup snapshots
 
@@ -102,6 +102,7 @@ Y <- design$Y
 W <- design$W
 X <- design$X
 kfolds <- split_folds(Y, k = n_folds)
+nuis_folds <- split_folds(Y, k = n_folds)
 
 metaplan <- plan(multisession, workers = workers)
 on.exit(plan(metaplan), add = TRUE)
@@ -114,14 +115,14 @@ parent_pid <- Sys.getpid()
 usage <- syrup::syrup({
   total_models <- system.time({
     model_list <- run_all_candidate_models(
-      Y, W, X, kfolds$fold_indices, kfolds$fold_list, kfolds$fold_pairs
+      Y, W, X, kfolds$fold_indices, kfolds$fold_list
     )
   })
 
   model_seed <- sample.int(2^31 - 1, 1)
   total_nuisances <- system.time({
     nuisances <- run_all_nuisance_pipelines(
-      X, Y, W, kfolds$fold_indices, kfolds$fold_list,
+      X, Y, W, nuis_folds$fold_indices, nuis_folds$fold_list,
       n_cores = n_cores, mem = h2o_mem, model_seed = model_seed
     )
   })

@@ -30,13 +30,15 @@ prepare_design_matrix <- function(data) {
 }
 
 # Function to split folds
+#
+# No longer returns fold_pairs: me_models.R moved off double crossfitting
+# (fold pairs, C(V,2) fits) onto single crossfitting (fold_list, V fits) - see
+# me_models.R's header. fold_pairs was only ever consumed there.
 split_folds <- function(Y, k = 10) {
   fold_indices <- caret::createFolds(y = Y, k = k, list = F)
   fold_list <- sort(unique(fold_indices))
-  fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)
   list(
     fold_indices = fold_indices,
-    fold_list = fold_list,
-    fold_pairs = fold_pairs
+    fold_list = fold_list
   )
 }

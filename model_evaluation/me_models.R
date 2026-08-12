@@ -3,17 +3,37 @@
 ##########
 # The 9 candidate configurations this study compares: 3 random-forest
 # hyperparameter sets, 3 elastic-net (glmnet) sets, 3 SuperLearner library
-# sets. Each is fit as its own double-crossfit DR-learner - out of scope to
-# change, this is what the study evaluates.
+# sets. Each is fit as its own single-crossfit ("scf_scf") DR-learner:
+# leave-one-fold-out nuisances feeding a stage-2 regression crossfit over the
+# SAME folds - not the double-crossfit-over-fold-pairs scheme this file used
+# to implement.
+#
+# Brought in line with crossfitting/'s comparison of alternatives against
+# double crossfitting (fitting nuisances over all C(V,2) fold pairs - 45 fits
+# at V=10 rather than 10), which is why R/cate_models.R's production
+# estimators moved off it: forests to whole-sample OOB, causal forest to
+# grf's own internal cross-fitting, SuperLearner to scf_scf (nuisance_sl /
+# stage_2_sl). See crossfitting/README.md and R/cate_models.R's header.
+#
+# Single crossfitting throughout here, not a per-learner OOB/scf split, even
+# though rf1-3 (ranger) could take OOB predictions natively. net1-3 and SL1-3
+# have no OOB analogue - glmnet has no bagging, and SuperLearner's internal CV
+# selects ensemble weights rather than producing an honest prediction of a
+# training row (crossfitting/README.md's "DR-learner, SuperLearner" section
+# states this directly) - and this study's question ("do cheap proxy losses
+# rank 9 candidate models the way true PEHE would?") needs all 9 candidates on
+# one shared honesty regime, or the ranking confounds learner choice with
+# crossfitting scheme.
 #
 # This is a *different* estimator family from R/cate_models.R's DR-learner
 # (e.g. fit_glmnet wraps a single learner via create.Learner("SL.glmnet", ...)
 # inside SuperLearner(), a code path R/cate_models.R doesn't have) - not
 # unified into R/ here, since that would be a redesign, not a plumbing port.
 #
-# collate_predictions() is sourced from R/utils.R rather than duplicated
-# locally (the old model_utils.R's copy was logically identical, just
-# %>%-piped instead of nested).
+# scatter_folds() is sourced from R/utils.R rather than duplicated locally -
+# it is the single-crossfit reassembly helper R/cate_models.R::nuisance_sl
+# uses, replacing this file's former use of collate_predictions() (the
+# double-crossfit n x V matrix assembler, still used by crossfitting/).
 
 require(future.apply)
 require(ranger)
@@ -58,14 +78,13 @@ fit_rf <- function(
   X,
   hyper_list = list(),
   fold_indices,
-  fold_list,
-  fold_pairs
+  fold_list
 ) {
   hyper_list$write.forest <- TRUE
 
   nuisances <- future_lapply(
-    fold_pairs,
-    crossfit_double_RF,
+    fold_list,
+    crossfit_single_RF,
     Y,
     W,
     X,
@@ -74,12 +93,8 @@ fit_rf <- function(
     future.seed = TRUE
   )
 
-  predictions <- c("po", "Y0.hat", "Y1.hat", "W.hat")
-  matrices <- setNames(
-    lapply(predictions, function(pred) {
-      collate_predictions(fold_list, fold_pairs, fold_indices, nuisances, pred)
-    }),
-    predictions
+  matrices <- scatter_folds(
+    nuisances, fold_indices, c("po", "Y0.hat", "Y1.hat", "W.hat")
   )
 
   tau <- fit_tau_rf(X, fold_list, fold_indices, matrices$po, hyper_list)
@@ -87,8 +102,8 @@ fit_rf <- function(
   c(list(tau = tau), matrices)
 }
 
-crossfit_double_RF <- function(fold_pair, Y, W, X, hyper_list, fold_indices) {
-  train_filter <- !(fold_indices %in% fold_pair)
+crossfit_single_RF <- function(fold, Y, W, X, hyper_list, fold_indices) {
+  train_filter <- fold_indices != fold
   test_filter <- !train_filter
 
   fit_model <- function(formula, data) {
@@ -110,7 +125,7 @@ crossfit_double_RF <- function(fold_pair, Y, W, X, hyper_list, fold_indices) {
   test_data <- data.frame(W, X)[test_filter, ]
   Y0.hat <- predict(Y_model, mutate(test_data, W = 0L))$predictions
   Y1.hat <- predict(Y_model, mutate(test_data, W = 1L))$predictions
-  W.hat <- predict(W_model, X[test_filter, ])$predictions
+  W.hat <- trim_ps(predict(W_model, X[test_filter, ])$predictions)
 
   W_test <- W[test_filter]
   Y_test <- Y[test_filter]
@@ -120,21 +135,19 @@ crossfit_double_RF <- function(fold_pair, Y, W, X, hyper_list, fold_indices) {
     Y0.hat +
     ((Y_test - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
 
-  list(po = po, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat)
+  list(fold = fold, po = po, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat)
 }
 
-fit_tau_rf <- function(X, fold_list, fold_indices, po_matrix, hyper_list) {
-  tau <- rep(NA, length(fold_indices))
-
+fit_tau_rf <- function(X, fold_list, fold_indices, po, hyper_list) {
   tau_list <- future_lapply(
     fold_list,
     function(fold) {
-      train_filter <- !(fold_indices %in% fold)
+      train_filter <- fold_indices != fold
       test_filter <- !train_filter
 
       hyper_po <- hyper_list
       hyper_po$data <- data.frame(
-        po = po_matrix[train_filter, fold],
+        po = po[train_filter],
         X[train_filter, ]
       )
       hyper_po$formula <- po ~ .
@@ -155,12 +168,11 @@ fit_glmnet <- function(
   X,
   hyper_list = list(),
   fold_indices,
-  fold_list,
-  fold_pairs
+  fold_list
 ) {
   nuisances <- future_lapply(
-    fold_pairs,
-    crossfit_double_glmnet,
+    fold_list,
+    crossfit_single_glmnet,
     Y,
     W,
     X,
@@ -169,12 +181,8 @@ fit_glmnet <- function(
     future.seed = TRUE
   )
 
-  predictions <- c("po", "Y0.hat", "Y1.hat", "W.hat")
-  matrices <- setNames(
-    lapply(predictions, function(pred) {
-      collate_predictions(fold_list, fold_pairs, fold_indices, nuisances, pred)
-    }),
-    predictions
+  matrices <- scatter_folds(
+    nuisances, fold_indices, c("po", "Y0.hat", "Y1.hat", "W.hat")
   )
 
   tau <- fit_tau_glmnet(X, fold_list, fold_indices, matrices$po, hyper_list)
@@ -182,8 +190,8 @@ fit_glmnet <- function(
   c(list(tau = tau), matrices)
 }
 
-crossfit_double_glmnet <- function(
-  fold_pair,
+crossfit_single_glmnet <- function(
+  fold,
   Y,
   W,
   X,
@@ -192,7 +200,7 @@ crossfit_double_glmnet <- function(
 ) {
   custom_net <- create.Learner("SL.glmnet", params = hyper_list)
 
-  train_filter <- !(fold_indices %in% fold_pair)
+  train_filter <- fold_indices != fold
   test_filter <- !train_filter
 
   fit_model <- function(y, x, family) {
@@ -209,9 +217,9 @@ crossfit_double_glmnet <- function(
   W_model <- fit_model(W[train_filter], X[train_filter, ], binomial())
 
   test_data <- data.frame(W, X)[test_filter, ]
-  Y0.hat <- predict(Y_model, mutate(test_data, W = 0L))$pred
-  Y1.hat <- predict(Y_model, mutate(test_data, W = 1L))$pred
-  W.hat <- predict(W_model, X[test_filter, ])$pred
+  Y0.hat <- as.numeric(predict(Y_model, mutate(test_data, W = 0L))$pred)
+  Y1.hat <- as.numeric(predict(Y_model, mutate(test_data, W = 1L))$pred)
+  W.hat <- trim_ps(as.numeric(predict(W_model, X[test_filter, ])$pred))
 
   W_test <- W[test_filter]
   Y_test <- Y[test_filter]
@@ -221,20 +229,20 @@ crossfit_double_glmnet <- function(
     Y0.hat +
     ((Y_test - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
 
-  list(po = po, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat)
+  list(fold = fold, po = po, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat)
 }
 
-fit_tau_glmnet <- function(X, fold_list, fold_indices, po_matrix, hyper_list) {
+fit_tau_glmnet <- function(X, fold_list, fold_indices, po, hyper_list) {
   custom_net <- create.Learner("SL.glmnet", params = hyper_list)
 
   tau_list <- future_lapply(
     fold_list,
     function(fold) {
-      train_filter <- !(fold_indices %in% fold)
+      train_filter <- fold_indices != fold
       test_filter <- !train_filter
 
       po_model <- SuperLearner(
-        po_matrix[train_filter, fold],
+        po[train_filter],
         X[train_filter, ],
         family = gaussian(),
         SL.library = custom_net$names,
@@ -256,12 +264,11 @@ fit_SL <- function(
   X,
   hyper_list = list(),
   fold_indices,
-  fold_list,
-  fold_pairs
+  fold_list
 ) {
   nuisances <- future_lapply(
-    fold_pairs,
-    crossfit_double_SL,
+    fold_list,
+    crossfit_single_SL,
     Y,
     W,
     X,
@@ -270,12 +277,8 @@ fit_SL <- function(
     future.seed = TRUE
   )
 
-  predictions <- c("po", "Y0.hat", "Y1.hat", "W.hat")
-  matrices <- setNames(
-    lapply(predictions, function(pred) {
-      collate_predictions(fold_list, fold_pairs, fold_indices, nuisances, pred)
-    }),
-    predictions
+  matrices <- scatter_folds(
+    nuisances, fold_indices, c("po", "Y0.hat", "Y1.hat", "W.hat")
   )
 
   tau <- fit_tau_SL(X, fold_list, fold_indices, matrices$po, hyper_list)
@@ -283,8 +286,8 @@ fit_SL <- function(
   c(list(tau = tau), matrices)
 }
 
-crossfit_double_SL <- function(fold_pair, Y, W, X, hyper_list, fold_indices) {
-  train_filter <- !(fold_indices %in% fold_pair)
+crossfit_single_SL <- function(fold, Y, W, X, hyper_list, fold_indices) {
+  train_filter <- fold_indices != fold
   test_filter <- !train_filter
 
   fit_model <- function(y, x, family) {
@@ -299,9 +302,9 @@ crossfit_double_SL <- function(fold_pair, Y, W, X, hyper_list, fold_indices) {
   W_model <- fit_model(W[train_filter], X[train_filter, ], binomial())
 
   test_data <- data.frame(W, X)[test_filter, ]
-  Y0.hat <- predict(Y_model, mutate(test_data, W = 0L))$pred
-  Y1.hat <- predict(Y_model, mutate(test_data, W = 1L))$pred
-  W.hat <- predict(W_model, X[test_filter, ])$pred
+  Y0.hat <- as.numeric(predict(Y_model, mutate(test_data, W = 0L))$pred)
+  Y1.hat <- as.numeric(predict(Y_model, mutate(test_data, W = 1L))$pred)
+  W.hat <- trim_ps(as.numeric(predict(W_model, X[test_filter, ])$pred))
 
   W_test <- W[test_filter]
   Y_test <- Y[test_filter]
@@ -311,20 +314,20 @@ crossfit_double_SL <- function(fold_pair, Y, W, X, hyper_list, fold_indices) {
     Y0.hat +
     ((Y_test - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
 
-  list(po = po, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat)
+  list(fold = fold, po = po, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat)
 }
 
-fit_tau_SL <- function(X, fold_list, fold_indices, po_matrix, hyper_list) {
+fit_tau_SL <- function(X, fold_list, fold_indices, po, hyper_list) {
   tau_list <- future_lapply(
     fold_list,
     function(fold) {
-      train_filter <- !(fold_indices %in% fold)
+      train_filter <- fold_indices != fold
       test_filter <- !train_filter
 
       hyper_po <- hyper_list
       hyper_po$family <- gaussian()
       hyper_po$X <- X[train_filter, ]
-      hyper_po$Y <- po_matrix[train_filter, fold]
+      hyper_po$Y <- po[train_filter]
 
       po_model <- do.call(SuperLearner, hyper_po)
       predict(po_model, X[test_filter, ])$pred
@@ -344,7 +347,7 @@ fit_tau_SL <- function(X, fold_list, fold_indices, po_matrix, hyper_list) {
 #'
 #' @return named list, one element per candidate, each
 #'   list(tau=, po=, Y0.hat=, Y1.hat=, W.hat=)
-run_all_candidate_models <- function(Y, W, X, fold_indices, fold_list, fold_pairs) {
+run_all_candidate_models <- function(Y, W, X, fold_indices, fold_list) {
   # rf2/rf3's mtry is scaled to ncol(X) rather than fixed at 30/10. Those
   # fixed values came from the old benchtm-based prototype, which had a much
   # wider covariate set than R/dgm_scenarios.R produces (7-9 columns across
@@ -389,7 +392,7 @@ run_all_candidate_models <- function(Y, W, X, fold_indices, fold_list, fold_pair
   }
 
   out <- lapply(names(hyperparams), function(nm) {
-    fitter_for(nm)(Y, W, X, hyper_list = hyperparams[[nm]], fold_indices, fold_list, fold_pairs)
+    fitter_for(nm)(Y, W, X, hyper_list = hyperparams[[nm]], fold_indices, fold_list)
   })
 
   setNames(out, names(hyperparams))

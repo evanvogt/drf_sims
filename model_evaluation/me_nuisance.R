@@ -16,6 +16,14 @@
 # comments above run_xgb_cross_validation()/run_automl_cross_validation()
 # for what the removed infold branches looked like and why one of them
 # (AutoML's) is flagged as suspect rather than just dropped silently.
+#
+# The fold_indices/fold_list passed in here are an INDEPENDENT draw from the
+# one used to fit the 9 candidates in me_models.R - see me_analysis.R's
+# comment above kfolds/nuis_folds. This mattered less back when the
+# candidates double-crossfit; now that they're single-crossfit too, sharing
+# one split would fit a candidate's tau_hat and this pipeline's cv-regime
+# nuisance at the same row on the identical training set, correlating their
+# errors.
 require(h2o)
 require(xgboost)
 

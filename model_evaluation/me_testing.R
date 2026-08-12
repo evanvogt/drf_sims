@@ -143,7 +143,7 @@ cat(sprintf(
 ))
 
 n_test <- 250 # smallest grid n, to keep this check as fast as possible
-n_folds_test <- 5L # matches me_analysis.R's rule at n = 250
+n_folds_test <- 10L # matches me_analysis.R's rule (single crossfitting, all n)
 
 setup_rng_stream(1)
 gen4 <- generate_me_scenario_data(scenario = 4, n = n_test)
@@ -152,13 +152,62 @@ Y4 <- design4$Y
 W4 <- design4$W
 X4 <- design4$X
 kfolds4 <- split_folds(Y4, k = n_folds_test)
+nuis_folds4 <- split_folds(Y4, k = n_folds_test)
 
 t0 <- Sys.time()
 model_list <- run_all_candidate_models(
-  Y4, W4, X4, kfolds4$fold_indices, kfolds4$fold_list, kfolds4$fold_pairs
+  Y4, W4, X4, kfolds4$fold_indices, kfolds4$fold_list
 )
 elapsed_models <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
 cat(sprintf("  candidate-model fitting took %.1fs\n", elapsed_models))
+
+report(
+  !identical(kfolds4$fold_indices, nuis_folds4$fold_indices),
+  "candidate and scoring-pipeline fold draws are independent"
+)
+
+report(
+  is.null(kfolds4$fold_pairs),
+  "split_folds() no longer returns fold_pairs (single crossfitting, not double)"
+)
+
+matrix_targets <- c("po", "Y0.hat", "Y1.hat", "W.hat")
+vectors_ok <- vapply(model_list, function(m) {
+  all(vapply(matrix_targets, function(nm) is.vector(m[[nm]]) && !is.matrix(m[[nm]]), logical(1)))
+}, logical(1))
+report(
+  all(vectors_ok),
+  paste0(
+    "po/Y0.hat/Y1.hat/W.hat are length-n vectors, not double-crossfit matrices",
+    if (!all(vectors_ok)) {
+      paste0(" [bad: ", paste(names(which(!vectors_ok)), collapse = ", "), "]")
+    }
+  )
+)
+
+no_na_nuis <- vapply(model_list, function(m) {
+  all(vapply(matrix_targets, function(nm) sum(is.na(m[[nm]])) == 0, logical(1)))
+}, logical(1))
+report(
+  all(no_na_nuis),
+  paste0(
+    "no NA in any candidate's po/Y0.hat/Y1.hat/W.hat",
+    if (!all(no_na_nuis)) {
+      paste0(" [bad: ", paste(names(which(!no_na_nuis)), collapse = ", "), "]")
+    }
+  )
+)
+
+what_trimmed <- vapply(model_list, function(m) all(m$W.hat >= 0.05 & m$W.hat <= 0.95), logical(1))
+report(
+  all(what_trimmed),
+  paste0(
+    "every candidate's W.hat is trimmed to [0.05, 0.95]",
+    if (!all(what_trimmed)) {
+      paste0(" [bad: ", paste(names(which(!what_trimmed)), collapse = ", "), "]")
+    }
+  )
+)
 
 report(
   setequal(names(model_list), CANDIDATE_MODELS),
@@ -194,7 +243,7 @@ if (full) {
   model_seed <- sample.int(2^31 - 1, 1)
   t0 <- Sys.time()
   nuisances4 <- run_all_nuisance_pipelines(
-    X4, Y4, W4, kfolds4$fold_indices, kfolds4$fold_list,
+    X4, Y4, W4, nuis_folds4$fold_indices, nuis_folds4$fold_list,
     n_cores = 2, mem = "4G", model_seed = model_seed
   )
   elapsed_nuis <- as.numeric(difftime(Sys.time(), t0, units = "secs"))

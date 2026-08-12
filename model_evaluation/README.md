@@ -25,7 +25,7 @@ sizes, 30 runs each — **360 array jobs**.
 | scenarios | 1, 4, 6, 9 (see `R/dgm_scenarios.R`, `DESC_10`) |
 | n | 250, 500, 1000 |
 | runs | 30 |
-| folds | 5 at n=250, else 10 |
+| folds | 10 (all n — see "Crossfitting strategy" below) |
 | results | `../results/model_evaluation/scenario_<k>/<n>/res_sim_<run>.RDS` |
 
 **Why only 4 of the 10 scenarios, not all of them like `continuous/`.** This
@@ -35,16 +35,49 @@ answer. `crossfitting/cf_analysis.R` made the same call for the same reason
 (`scenario = c(1, 4, 6, 9)`); this study reuses its exact subset.
 
 **Why 30 runs, not `continuous/`'s 100.** Each replicate here is far more
-expensive than a `continuous/` replicate: 9 double-crossfit candidate-model
+expensive than a `continuous/` replicate: 9 single-crossfit candidate-model
 fits, *plus* two independent nuisance-evaluation pipelines (XGBoost with a
 36-combination CV grid search, and H2O AutoML with up to 20 auto-tuned
 models), each across 2 fold regimes and 4 nuisance targets. See "Sizing the
 array job" below — the real per-replicate cost has never been measured, so
 even 30 is provisional.
 
+## Crossfitting strategy
+
+All 9 candidates use a single leave-one-fold-out crossfit ("`scf_scf`" in
+`crossfitting/`'s naming): nuisances trained on `V-1` folds and predicted on
+the held-out fold, with the stage-2 regression trained on the *same* folds —
+not the double-crossfit-over-fold-pairs scheme (`C(V,2)` nuisance fits at
+`V=10`) this study originally ported with. Brought in line with
+`crossfitting/`'s comparison of alternatives, the same comparison that moved
+`R/cate_models.R`'s production estimators off double crossfitting (forests to
+whole-sample OOB, causal forest to `grf`'s internal cross-fitting,
+SuperLearner to `scf_scf`) — see `crossfitting/README.md` and
+`R/cate_models.R`'s header.
+
+Single crossfitting applies to all 9 candidates uniformly, not a per-learner
+OOB/crossfit split, even though `rf1-3` (`ranger`) could take whole-sample OOB
+predictions natively. `net1-3` and `SL1-3` have no OOB analogue — `glmnet` has
+no bagging, and `SuperLearner`'s internal CV selects ensemble weights rather
+than producing an honest prediction of a training row
+(`crossfitting/README.md`'s "DR-learner, SuperLearner" section). Since this
+study's question is whether cheap proxy losses rank the 9 candidates the way
+true PEHE would, they need one shared honesty regime — mixing OOB forests with
+crossfit everything-else would confound learner choice with crossfitting
+scheme in the ranking. All `n` now use `V=10`: single crossfitting trains each
+fold's stage-2 model on `(V-1)/V` of the data (vs. double crossfitting's
+`(V-2)/V`), so unlike `continuous/` there's no need to shrink `V` at `n=250`.
+
+`me_analysis.R` draws two *independent* fold assignments per replicate — one
+for the 9 candidates, one for `me_nuisance.R`'s scoring pipelines. They could
+safely share one draw under the old double-crossfit candidates; under single
+crossfitting, sharing would fit a candidate's `tau_hat` and the scoring
+pipeline's `cv`-regime nuisance at the same row on the identical training set,
+correlating their errors and biasing the proxy score.
+
 ## Candidate models
 
-9 configurations, each fit as its own double-crossfit DR-learner
+9 configurations, each fit as its own single-crossfit DR-learner
 (`me_models.R`, `run_all_candidate_models()`):
 
 | id | family | hyperparameters |
@@ -165,7 +198,7 @@ README for the shared mechanics) — with two differences specific to this
 study:
 
 - **Two knobs, two sequential phases.** `workers` (the `future` multisession
-  backend, controlling the 9 candidate models' double-crossfit fold-pair
+  backend, controlling the 9 candidate models' single-crossfit fold-wise
   fitting) and `n_cores` (XGBoost's `nthread` / H2O's `nthreads`, controlling
   the nuisance-evaluation pipelines) parallelise two *sequential* phases of
   one replicate, not one combined computation — `me_profile.R` times them
@@ -243,6 +276,12 @@ calibrated to `benchtm`'s wider covariate set and crash `ranger` against this
 DGM's smaller one (7-9 columns) — see the candidate-models table above for
 the scaled replacement. Every other candidate model's and both nuisance
 pipelines' modeling choices are unchanged.
+
+The 9 candidates' crossfitting scheme *also* changed after the port, from
+double crossfitting to single crossfitting — see "Crossfitting strategy"
+above. The first 16 `res_sim_*.RDS` files this study produced predate that
+change and are not comparable to anything produced after it; they need
+deleting before the study is re-run.
 
 H2O AutoML has no `max_runtime_secs` cap in the current code — a real
 walltime-uncertainty risk (see "Sizing the array job" above), left alone

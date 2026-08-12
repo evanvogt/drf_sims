@@ -85,7 +85,7 @@ study_registry <- data.frame(
     "crossfitting strategy change; also bug F (dr_superlearner)",
     "crossfitting strategy change; also the DGM was wrong three ways",
     "crossfitting strategy change",
-    "first run, not a re-run - independent estimator/nuisance code, unaffected by the crossfitting strategy change",
+    "first run, not a re-run - but its own 9 candidates moved off double crossfitting (me_models.R), so its first 16 res_sim_*.RDS predate that and need deleting before continuing",
     "crossfitting strategy change"
   ),
   blocked = c(

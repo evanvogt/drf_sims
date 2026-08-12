@@ -15,7 +15,7 @@ Last updated: 2026-08-12 16:13 BST
 | missing/ci_example | crossfit_rerun |   500 |    0 |   500 |   0.0 | not_started | crossfitting strategy change |
 | missing/continuous | crossfit_rerun |  9900 | 8395 |  1505 |  84.8 | in_progress | crossfitting strategy change; also bug F (dr_superlearner) |
 | validation/continuous | crossfit_rerun |   300 |    0 |   300 |   0.0 | not_started | crossfitting strategy change |
-| model_evaluation | first_run |   360 |   16 |   344 |   4.4 | in_progress | first run, not a re-run - independent estimator/nuisance code, unaffected by the crossfitting strategy change |
+| model_evaluation | first_run |   360 |   16 |   344 |   4.4 | in_progress | first run, not a re-run - but its own 9 candidates moved off double crossfitting (me_models.R), so its first 16 res_sim_*.RDS predate that and need deleting before continuing |
 | crossfitting | no_rerun |  2000 |    0 |  2000 |   0.0 | not_started | own comparison arms unchanged; only the production consumers of R/cate_models.R moved |
 | crossfitting/confidence_intervals | no_rerun |   150 |    0 |   150 |   0.0 | not_started | own comparison arms unchanged; pilot study, not part of the production rerun |
 
