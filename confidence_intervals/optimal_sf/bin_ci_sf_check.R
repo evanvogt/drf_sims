@@ -1,0 +1,11 @@
+##########
+# title: check for failed simulations - optimal sample.fraction (binary)
+##########
+# The grid and the results path come from the study config, so this script and
+# the analysis script cannot disagree about what index i means.
+# Writes array indices of the missing runs to jobscripts/failed_bin_ids.txt.
+
+library(here)
+source(here("confidence_intervals/optimal_sf/bin_ci_sf_config.R"))
+
+check_failed(study)

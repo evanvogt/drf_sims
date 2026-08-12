@@ -176,6 +176,26 @@ Three more surfaced along the way:
 Roughly 32,000 array jobs. Bug G costs no cluster time: it is computed from the
 saved `*_all.RDS` files, so only the metrics scripts and the figures rerun.
 
+### Tracking the rerun
+
+Each study still resubmits its own failures the usual way:
+`Rscript <study>/<prefix>_check.R` writes `jobscripts/failed_ids.txt`, then
+`qsub jobscripts/<prefix>_rerun.sh` resubmits them. For a bird's-eye view
+across every study at once - how many jobs are expected, found and missing,
+and why each study is being rerun - run:
+
+```bash
+Rscript check_all.R
+```
+
+on the HPC login node (results only exist there - too large to sync back).
+It's read-only (never writes `failed_ids.txt`, never calls `qsub`), so it's
+safe to run as often as useful during the campaign. It writes
+`check_all_studies.csv`/`.md` next to itself; those two files are committed,
+so `git push` on the HPC + `git pull` locally is how progress gets checked
+from off the cluster. The registry of studies it scans lives in
+`R/study_registry.R` - add a row there for any new study.
+
 ## Verifying a change
 
 ```bash
