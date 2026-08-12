@@ -14,9 +14,9 @@
 # concurrent task starts its own H2O JVM cluster (mem="10G" heap), which
 # rules out anything resembling continuous's %190 or crossfitting's %380.
 # See README.md.
-#PBS -l walltime=00:30:00
-#PBS -l select=1:ncpus=1:ompthreads=1:mem=2gb
-#PBS -J 1-360%20
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
+#PBS -J 1-360%4
 #PBS -N me_1
 #PBS -o logs_1/
 #PBS -e logs_1/
@@ -35,4 +35,4 @@ cd "${PBS_O_WORKDIR}/.."
 # Run R script with parameters. Trailing args are workers/n_cores -
 # placeholders here, overwritten by me_profile_summary.R alongside the
 # #PBS -l lines above.
-Rscript me_analysis.R "$PBS_ARRAY_INDEX" 1 1
+Rscript me_analysis.R "$PBS_ARRAY_INDEX" 2 2

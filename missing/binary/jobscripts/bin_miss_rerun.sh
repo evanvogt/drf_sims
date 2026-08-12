@@ -1,7 +1,7 @@
 #!/bin/bash
-#PBS -l walltime=04:00:00  
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=20gb
-#PBS -J 1-48
+#PBS -l walltime=02:00:00  
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=4gb
+#PBS -J 1-771%190
 #PBS -N bin_miss_rerun
 #PBS -o logs_rerun/
 #PBS -e logs_rerun/
@@ -23,4 +23,4 @@ echo "rerunning index: ${jobid}"
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script with parameters
-Rscript bin_miss_analysis.R "$jobid"
+Rscript bin_miss_analysis.R "$jobid" 1 1

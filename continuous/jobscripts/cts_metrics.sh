@@ -1,5 +1,5 @@
 #PBS -l walltime=01:00:00  
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=15gb
+#PBS -l select=1:ncpus=1:ompthreads=1:mem=10gb
 #PBS -N cts_metrics
 
 
