@@ -82,10 +82,12 @@ The oracle uses the true outcome model and a known propensity of 0.5; the
 semi-oracle knows only the propensity. The SuperLearner arm is skipped whenever
 the covariate matrix still carries `NA`s.
 
-`dr_random_forest` currently carries no BLP or independence test under
-`profile = "missing"`, so its p-values are `NA` in the three test sections
-below. That is a known gap awaiting a patch (see `missing/binary/README.md`),
-not a property of the estimator.
+`dr_random_forest` used to carry no BLP or independence test under
+`profile = "missing"`, so its p-values were `NA` in the three test sections
+below. That is fixed: the flag is now `dr_rf_tests = TRUE`, and the finished
+results were back-filled in place rather than re-run (see
+`missing/binary/README.md`). If this model is still `NA` below, the patch job
+has not been run over these results yet.
 
 ```{r data}
 # paths
@@ -280,8 +282,9 @@ Best linear predictor test of heterogeneity, against the nominal 5% significance
 threshold (dashed line) — where the CATE truly varies, low p-values indicate the
 model detects it; in the Null scenario, p-values should sit uniform on [0, 1].
 
-`dr_random_forest` is absent from these panels: it carries no BLP test under
-`profile = "missing"`.
+`dr_random_forest` appears in these panels only once the HTE back-fill has been
+run over the results (`R/patch_hte_tests.R`); before that it carries no BLP test
+under `profile = "missing"`.
 
 ```{r blp-plot, fig.height=16}
 BLP_plot <- miss_box_plot(metrics, "BLP_p", "p-value", hline = 0.05,

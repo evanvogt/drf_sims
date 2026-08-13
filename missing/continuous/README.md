@@ -18,9 +18,9 @@ here).
 | `cts_miss_dgms.R` | names the `continuous_missing` scenario set + the missingness machinery |
 | `cts_miss_models.R` | `family = gaussian()`, `profile = "missing"`, `ipw` threaded through |
 | `cts_miss_analysis.R` | array entry point |
+| `cts_miss_patch.R` | one-off: back-fills the `dr_random_forest` HTE tests into finished results (`R/patch_hte_tests.R`). Array entry point for `jobscripts/cts_miss_patch.sh` |
 | `cts_miss_results.R` / `.qmd` | every metric, to `results/all_figures/` — the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts.R` |
 | `mi_scratch.R` | exploratory, unmaintained |
-| `cts_miss_tests.R` | exploratory, unmaintained — sourced by nothing (see the HTE-test note in `missing/binary/README.md`) |
 | `results_cts_miss.{R,Rmd,html}` | **superseded** by `cts_miss_results.R`/`.qmd` — kept for reference, renamed to the repo's legacy convention (cf. `continuous/results_cts.R`). Points at the old HPC path `/rds/general/...` and at `results/new_format/metrics_cts_miss_df.RDS`, neither of which exists any more; scenarios are `"scenario_5"` strings, and only bias and MSE are plotted. It was called `cts_miss_results.*`, so its `.html` was being clobbered by the new `.qmd`'s render output. |
 
 The `ipw` argument is the only thing separating this study's estimators from
@@ -40,12 +40,24 @@ script fits each and Rubin-combines with `combine_mi()`; only
 `IPW` return `retained_indices`, and `generate_and_process_data()` subsets
 `truth` to match — otherwise estimates and truth would be misaligned.
 
-**`dr_random_forest` carries no BLP or independence test in this study**, unlike
-`continuous/`, so `BLP_p` is `NA` for that one model. This is copy-paste drift
-rather than a decision, and the decision has now been taken: every model should
-carry the tests where possible. The fix is one field in `PROFILES`
-(`R/cate_models.R`) and needs a re-run — written up once, in
-`missing/binary/README.md`, since `profile = "missing"` covers both studies.
+**`dr_random_forest` used to carry no BLP or independence test in this study**,
+unlike `continuous/`, so `BLP_p` was `NA` for that one model. Copy-paste drift
+rather than a decision, and the decision has been taken: every model carries the
+tests where possible. `PROFILES$missing` (`R/cate_models.R`) now sets
+`dr_rf_tests = TRUE`, and the finished results were back-filled in place by
+`R/patch_hte_tests.R` rather than re-run — the tests are deterministic and every
+input survives in the saved files. Written up once, in
+`missing/binary/README.md`, since `profile = "missing"` covers both studies;
+that write-up also covers the one field the patch cannot recover
+(`dr_random_forest$variance`, which nothing reads).
+
+Patch this study only after `cts_miss_rerun.sh` has cleared the outstanding runs
+and `cts_miss_check.R` reports 9,900/9,900, so it is one clean pass:
+
+```bash
+Rscript cts_miss_patch.R dry                       # report only, writes nothing
+qsub    jobscripts/cts_miss_patch.sh               # 1-99, one combination each
+```
 
 ## Running it
 
@@ -53,9 +65,16 @@ carry the tests where possible. The fix is one field in `PROFILES`
 qsub missing/continuous/jobscripts/cts_miss_1.sh   # 1-5000
 qsub missing/continuous/jobscripts/cts_miss_2.sh   # 5001-9900
 Rscript missing/continuous/cts_miss_check.R
+qsub missing/continuous/jobscripts/cts_miss_patch.sh    # 1-99, the HTE back-fill
 qsub missing/continuous/jobscripts/cts_miss_collect.sh
 qsub missing/continuous/jobscripts/cts_miss_metrics.sh
 ```
+
+The patch step goes **before** collect: collect reads the per-run files into
+`cts_miss_all.RDS`, so patching afterwards would leave the collected copy
+carrying the old, testless `dr_random_forest`. It is a one-off — once these
+results are patched and `PROFILES$missing` is set, future runs need only the
+usual steps.
 
 Then, for the figures:
 

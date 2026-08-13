@@ -63,6 +63,29 @@ handle it), plus `complete_data` — a reference arm with **no missingness
 introduced at all**, so the others can be scored against complete-data
 performance via `rel_efficiency`.
 
+## Open gap: the `multiple_imputation` arm has no HTE tests, for any model
+
+Not a defect in one estimator — a hole in the arm. `multiple_imputation` runs
+fit each of the 50 imputed datasets and Rubin-combine with `combine_mi()`
+(`R/cate_models.R`), which returns only `tau` and `variance`. The analysis
+scripts then build `results` from those combined objects alone, so
+`nuisances_rf` is never saved. Consequently `BLP_p`, `indep_cate` and
+`indep_po` are `NA` for **every** model on all 1,100 MI runs per study.
+
+Unlike the `dr_random_forest` gap, this one **cannot** be patched: there is
+nothing on disk to recompute a BLP from. Closing it needs two things:
+
+1. **A methodological decision.** What is "the" heterogeneity test across 50
+   imputations? Rubin-combine the BLP coefficients and their standard errors,
+   combine the per-imputation p-values (Fisher, Stouffer), or something else.
+   Each answers a slightly different question and none is the obvious default.
+2. **A re-run** of the MI arm — 1,100 runs per study, the most expensive method
+   in the grid.
+
+Until then the `NA`s are honest and should be read as "not computed", not as
+"the test failed". `R/patch_hte_tests.R` detects these runs and refuses them,
+which is why `check_all.R` reports `patchable_jobs` of 8,800 rather than 9,900.
+
 ## Bugs fixed here
 
 **Bug B — `cts_miss_collect.R` looked for directories that could not exist.** It
@@ -96,5 +119,11 @@ arms) and separately for bug F (`dr_superlearner` only).
 defects, plus a newly found, not-yet-fixed `pretest_superlearner()` crash
 (empty `SL.library` when every candidate algorithm fails a fold) - see
 "Known issue found while profiling" in `missing/binary/README.md`.
+
+**Both** additionally owe the `dr_random_forest` HTE back-fill — a one-off
+in-place repair of finished results, not a re-run. Track it in
+`check_all_studies.md`'s `patch_status` column; a study reads `complete` on the
+run counts while still owing this, which is exactly why that column exists. See
+"Patched: every model now carries the HTE tests" in `missing/binary/README.md`.
 
 `missing/ci_example` — see its own README.

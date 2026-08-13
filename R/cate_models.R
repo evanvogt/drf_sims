@@ -70,17 +70,29 @@ PRETEST_STAGE2 <- TRUE
 #                        base      ci        missing
 #  causal forest variance  no       yes       yes
 #  causal forest tests     yes      no        yes
-#  dr_random_forest tests  yes      no        no      <- divergence, see NOTE
+#  dr_random_forest tests  yes      no        yes     <- was "no", see NOTE
 #  oracle / semi tests     yes      no        yes
 #  SuperLearner arm        yes      no        yes (skipped if X still has NAs)
 #  half-sample bootstrap   no       yes       no
 #
-# NOTE: in the missing-data and CI variants dr_random_forest is built inline as
-# list(tau = stage2_whole_rf(...)$tau) and so carries no BLP or independence test, while
-# the base studies call run_dr_random_forest and get both. The metrics scripts
-# then record BLP_p as NA for that one model in those studies. Nothing marks this
-# as deliberate and it looks like copy-paste drift, but it is preserved here
-# because changing it would move published numbers. Worth a decision.
+# NOTE: the missing profile used to set dr_rf_tests = FALSE, so that arm alone
+# was built inline as list(tau = stage2_whole_rf(...)$tau) and carried no BLP or
+# independence test while every other arm did - copy-paste drift from the file
+# missing/ was forked from, not a decision. The decision was then taken that
+# every model should carry the tests where possible, and this is it.
+#
+# The existing ../results/missing/{binary,continuous} files were NOT re-run for
+# it. Both tests are deterministic (GenericML::BLP is an OLS with a sandwich
+# vcov; coin::independence_test is asymptotic under teststat = "quadratic"), and
+# the saved results retain nuisances_rf, data and tau, so the three fields were
+# recomputed exactly in place by R/patch_hte_tests.R. One asymmetry follows and
+# is deliberate: run_dr_random_forest also returns `variance`, which the inline
+# branch dropped and which cannot be recovered post hoc, so patched files have
+# no dr_random_forest$variance while newly-run ones do. Nothing in those studies
+# reads it - their metrics call only cate_metrics() and hte_test_metrics().
+#
+# The CI profiles keep tests off; that one IS deliberate (see
+# confidence_intervals/README.md).
 #
 # aggregate_nuisances (row-mean summaries of a double-crossfit matrix) used to
 # be a fourth axis here; it was dropped when nuisance_rf/nuisance_sl moved to
@@ -89,7 +101,7 @@ PRETEST_STAGE2 <- TRUE
 PROFILES <- list(
   base    = list(cf_variance = FALSE, tests = TRUE,  dr_rf_tests = TRUE),
   ci      = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE),
-  missing = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = FALSE),
+  missing = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = TRUE),
   ci_mi   = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE)
 )
 

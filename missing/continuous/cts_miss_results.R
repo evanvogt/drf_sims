@@ -170,9 +170,12 @@ sign_acc_sum_plot <- point_range_plot(metrics_summary, "sign_acc",
 save_fig("cts_miss_sign_acc_summary.png", fig_path)
 
 # --- BLP test p-values ------------------------------------------------------
-# dr_random_forest carries no BLP or independence test under profile = "missing"
-# (PROFILES in R/cate_models.R), so its p-values are NA throughout. A known gap
-# to be patched - see missing/binary/README.md - not a property of the estimator.
+# dr_random_forest used to carry no BLP or independence test under
+# profile = "missing" (PROFILES in R/cate_models.R), so its p-values were NA
+# throughout. Fixed: the flag is now dr_rf_tests = TRUE, and the finished
+# results were back-filled in place by R/patch_hte_tests.R rather than re-run.
+# If this model is still NA here, the patch job has not been run over these
+# results yet - check patch_status in check_all_studies.md.
 BLP_plot <- miss_box_plot(metrics, "BLP_p", "p-value", hline = 0.05,
                           facet_scales = "free_x")
 save_fig("cts_miss_blp_all.png", fig_path)

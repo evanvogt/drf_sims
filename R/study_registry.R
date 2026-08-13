@@ -21,6 +21,15 @@
 # current config uses "study", but the column exists so a future config that
 # doesn't can still be added without changing check_all.R.
 #
+# patch_manifest names a one-off repair a study owes on top of being run, as the
+# directory (relative to the study's res_path) that the repair writes its
+# manifest into; NA for a study that owes none. It exists because "run" and
+# "correct" are not the same state: missing/binary is 9,900/9,900 complete and
+# was still owed the dr_random_forest HTE back-fill (R/patch_hte_tests.R), which
+# the file counts alone report as "complete" and so hide. check_all.R reads the
+# manifest rather than the result files - counting by opening 9,900 RDS objects
+# would take half an hour a study and make the tracker too slow to run casually.
+#
 # To add a new study: add one row. To retire a study: delete its row.
 
 study_registry <- data.frame(
@@ -83,11 +92,18 @@ study_registry <- data.frame(
     "crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README)",
     "own comparison arms unchanged; only the production consumers of R/cate_models.R moved",
     "own comparison arms unchanged; pilot study, not part of the production rerun",
-    "crossfitting strategy change; also bug F (dr_superlearner)",
-    "crossfitting strategy change; also the DGM was wrong three ways",
+    "crossfitting strategy change; also bug F (dr_superlearner); plus the dr_random_forest HTE back-fill, patched in place - no re-run",
+    "crossfitting strategy change; also the DGM was wrong three ways; plus the dr_random_forest HTE back-fill, patched in place - no re-run",
     "crossfitting strategy change",
     "first run, not a re-run - its own 9 candidates moved off double crossfitting (me_models.R); the 16 pre-change res_sim_*.RDS have been deleted, so the count restarts from zero",
     "crossfitting strategy change"
+  ),
+  # Only the two studies that ran under PROFILES$missing's old dr_rf_tests =
+  # FALSE owe a patch. missing/ci_example is profile = "ci_mi" (tests off by
+  # design) and has not started, so it will be born correct.
+  patch_manifest = c(
+    NA, NA, NA, NA, NA, NA, NA,
+    NA, NA, "cts_miss_hte_patch", "bin_miss_hte_patch", NA, NA, NA
   ),
   blocked = c(
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,

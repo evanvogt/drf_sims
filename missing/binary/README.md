@@ -45,41 +45,94 @@ taken from the binary scenario each reduced scenario corresponds to (1→1, 2→
 not something the original code recorded** — worth a sanity check before
 committing cluster time.
 
-## To patch: every model should carry the HTE tests
+## Patched: every model now carries the HTE tests
 
-`dr_random_forest` currently records no BLP or independence test, so `BLP_p`,
-`indep_cate` and `indep_po` are `NA` for that one model. The cause is a single
+**Applies to `missing/continuous` too** — the cause was one field in
+`profile = "missing"`, which both studies share. Written up once, here.
+
+`dr_random_forest` used to record no BLP or independence test, so `BLP_p`,
+`indep_cate` and `indep_po` were `NA` for that one model. The cause was a single
 field in `PROFILES` (`R/cate_models.R`):
 
 ```r
 missing = list(cf_variance = TRUE, tests = TRUE, dr_rf_tests = FALSE)
 ```
 
-Under `profile = "missing"` the arm is built inline as
-`list(tau = stage2_whole_rf(...)$tau)` and never reaches the test block, while
-the base studies call `run_dr_random_forest()` and get both tests. Nothing marks
-this as deliberate — it is copy-paste drift from the file this study was forked
-from.
+Under `profile = "missing"` the arm was built inline as
+`list(tau = stage2_whole_rf(...)$tau)` and never reached the test block, while
+the base studies called `run_dr_random_forest()` and got both tests. Nothing
+marked this as deliberate — it was copy-paste drift from the file this study was
+forked from.
 
 **Decision: all models should carry the HTE tests in this study where possible.**
-The fix is `dr_rf_tests = TRUE` in `PROFILES$missing`. It affects `profile =
-"missing"`, so it changes **both** `missing/binary` and `missing/continuous`, and
-it changes what the simulations produce — so it needs a re-run to take effect,
-which is why it is recorded here rather than applied.
+`PROFILES$missing` now sets `dr_rf_tests = TRUE`, so anything run from here on
+produces them natively.
 
-Note that `missing/continuous/cts_miss_tests.R` is *not* this fix: it is an
-unmaintained exploratory script (old `AUX` mechanism spelling, its own in-script
-`expand.grid`) that bolts `run_blp_whole()` on after the fact and is sourced by
-nothing in the pipeline.
+### The finished results did not need re-running
+
+The obvious reading is that 19,800 completed runs are now wrong and owe ~10,000
+CPU-hours of re-runs. They are not, and they do not. Both tests are
+deterministic — `GenericML::BLP` is an OLS with a sandwich vcov, and
+`coin::independence_test` under `teststat = "quadratic"` uses the asymptotic
+null — and every input survives in the saved file (`nuisances_rf$W.hat`,
+`$Y0.hat`, `$po`, `data`, and the arm's own `tau`). So the three fields were
+recomputed exactly, in place, by `R/patch_hte_tests.R`:
+
+```bash
+Rscript missing/binary/bin_miss_patch.R dry     # report only, writes nothing
+qsub    missing/binary/jobscripts/bin_miss_patch.sh
+```
+
+The array index is a row of `combos(study)` — one parameter combination and its
+100 files, 99 of them — not a row of `study$grid`. The job is idempotent
+(already-patched files are skipped) and each write is `saveRDS` to `.tmp`
+followed by a rename, so it can be re-run and cannot leave a truncated result.
+It writes a manifest to `../results/missing/binary/bin_miss_hte_patch/`, which
+is what `check_all.R` reads for its `patch_status` column.
+
+`missing/patch_hte_verify.R` is the evidence. It runs one grid row twice from
+the same seed, with `dr_rf_tests` off and on, and checks that (1) **every** arm's
+`tau` is byte-identical — so the added tests draw no random numbers and cannot
+perturb `dr_oracle` / `dr_semi_oracle` / `dr_superlearner`, which are fitted
+afterwards; (2) the patch reproduces the re-run's three fields exactly; and
+(3) `dr_random_forest$independence_po` equals `causal_forest$independence_po`,
+which catches a mis-rebuilt `X`. Run it before trusting the patch:
+
+```bash
+cd missing
+Rscript patch_hte_verify.R binary 2      # complete_cases, all five arms
+```
+
+### Two things the patch does not do
+
+**`dr_random_forest$variance` is gone from patched files.**
+`run_dr_random_forest()` also returns `variance` from the stage-2 forest, which
+the old inline branch discarded and which cannot be recovered without refitting.
+Patched files therefore lack it while newly run ones have it. Nothing in this
+study reads it — `bin_miss_metrics.R` calls only `cate_metrics()` and
+`hte_test_metrics()`, and there are no interval metrics here — so the asymmetry
+is recorded rather than hidden.
+
+**The `multiple_imputation` arm still has no HTE tests, for any model.** That is
+a separate and larger gap; see the multiple-imputation note in
+`missing/README.md`. The patch detects those runs and refuses them, which is why
+`check_all.R`'s `patchable_jobs` is 8,800 rather than 9,900.
 
 ## Running it
 
 ```bash
 qsub missing/binary/jobscripts/bin_miss_1.sh        # 1-9900
 Rscript missing/binary/bin_miss_check.R
+qsub missing/binary/jobscripts/bin_miss_patch.sh    # 1-99, the HTE back-fill
 qsub missing/binary/jobscripts/bin_miss_collect.sh
 qsub missing/binary/jobscripts/bin_miss_metrics.sh
 ```
+
+The patch step goes **before** collect: collect reads the per-run files into
+`bin_miss_all.RDS`, so patching afterwards would leave the collected copy
+carrying the old, testless `dr_random_forest`. It is a one-off — once these
+results are patched and `PROFILES$missing` is set, future runs need only the
+usual four steps.
 
 Then, for the figures:
 
