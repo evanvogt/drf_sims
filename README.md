@@ -171,7 +171,7 @@ Three more surfaced along the way:
 | `missing/binary` | also re-run — the DGM was wrong three ways |
 | `confidence_intervals/binary`, `confidence_intervals/optimal_sf` (bin) | also re-run — the DGM was wrong |
 | `competing_risk` | **first run under the new strategy** — it has now adopted the crossfitting change (it was the last production study still double-crossfitting) and runs clean end-to-end. Its pseudo-value and SuperLearner frameworks each ship in several arms, because it also crosses a second factor — whole-sample vs crossfit pseudo-values. See its README |
-| `model_evaluation` | **first run, not a re-run** — independent estimator/nuisance code (see its README); unaffected by the crossfitting strategy change |
+| `model_evaluation` | **first run, not a re-run** — independent estimator/nuisance code (see its README). Its own 9 candidates did move off double crossfitting onto the shared single-crossfit strategy; the 16 res_sim_*.RDS produced before that change have been deleted, so the count restarts from zero |
 
 Roughly 32,000 array jobs. Bug G costs no cluster time: it is computed from the
 saved `*_all.RDS` files, so only the metrics scripts and the figures rerun.

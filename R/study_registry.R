@@ -13,7 +13,8 @@
 #   first_run       - never successfully run before; not a rerun
 #   no_rerun        - already fine as-is; own arms/results are unaffected
 #   broken          - currently fails to run; excluded from the filesystem
-#                     scan (blocked = TRUE)
+#                     scan (blocked = TRUE). No study is in this state right
+#                     now - it's a mechanism kept for the next one that is.
 #
 # config_path is relative to the repo root (resolved with here::here()).
 # config_var is the name study_config() is assigned to in that file - every
@@ -59,7 +60,7 @@ study_registry <- data.frame(
   category = c(
     "crossfit_rerun",
     "crossfit_rerun",
-    "broken",
+    "crossfit_rerun",
     "crossfit_rerun",
     "crossfit_rerun",
     "crossfit_rerun",
@@ -75,7 +76,7 @@ study_registry <- data.frame(
   reason = c(
     "crossfitting strategy change; also bug F (dr_superlearner)",
     "crossfitting strategy change; also bug F (dr_superlearner)",
-    "currently fails to run - independent estimator code, untouched by the crossfitting strategy change",
+    "crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy",
     "crossfitting strategy change",
     "crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale)",
     "crossfitting strategy change",
@@ -85,11 +86,11 @@ study_registry <- data.frame(
     "crossfitting strategy change; also bug F (dr_superlearner)",
     "crossfitting strategy change; also the DGM was wrong three ways",
     "crossfitting strategy change",
-    "first run, not a re-run - but its own 9 candidates moved off double crossfitting (me_models.R), so its first 16 res_sim_*.RDS predate that and need deleting before continuing",
+    "first run, not a re-run - its own 9 candidates moved off double crossfitting (me_models.R); the 16 pre-change res_sim_*.RDS have been deleted, so the count restarts from zero",
     "crossfitting strategy change"
   ),
   blocked = c(
-    FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE,
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
   ),
   stringsAsFactors = FALSE
