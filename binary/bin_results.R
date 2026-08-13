@@ -1,5 +1,5 @@
 ##########
-# title: figures for the continuous outcome study
+# title: figures for the binary outcome study
 ##########
 rm(list = ls())
 # libraries
@@ -14,19 +14,19 @@ library(purrr)
 
 # paths
 path <- here()
-res_path <- file.path(dirname(path), "results", "continuous")
-fig_path <- file.path(dirname(path), "results", "all_figures", "continuous")
+res_path <- file.path(dirname(path), "results", "binary")
+fig_path <- file.path(dirname(path), "results", "all_figures", "binary")
 dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
 
-metrics <- readRDS(file.path(res_path, "cts_metrics.RDS"))
+metrics <- readRDS(file.path(res_path, "bin_metrics.RDS"))
 
-# display order and labels - continuous has no shared label-dictionary script
+# display order and labels - binary has no shared label-dictionary script
 # (unlike crossfitting/cf_metrics.R, which does double duty as pipeline +
-# labels), so these stay inline, matching cts_results.Rmd's precedent
+# labels), so these stay inline, matching bin_results.Rmd's precedent
 scenario_labels <- c(
   `1` = "1: No HTE",
   `2` = "2: Binary HTE",
-  `3` = "3: Continuous HTE",
+  `3` = "3: binary HTE",
   `4` = "4: Two HTE vars",
   `5` = "5: Cts x binary interaction",
   `6` = "6: Two vars + cts x binary",
@@ -115,11 +115,11 @@ bias_plot <- metrics %>%
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Bias in CATE estimates", y = "Bias", x = "Sample size", colour = "Model")
-ggsave("cts_bias_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_bias_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 bias_sum_plot <- summary_plot(metrics_summary, "mean_bias", "mcse_bias",
                               "Mean bias in CATE estimates", "Mean bias")
-ggsave("cts_bias_summary.png", plot = bias_sum_plot, path = fig_path,
+ggsave("bin_bias_summary.png", plot = bias_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- ATE bias --------------------------------------------------------------
@@ -136,11 +136,11 @@ ate_bias_plot <- metrics %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Bias in the average treatment effect", y = "ATE bias",
        x = "Sample size", colour = "Model")
-ggsave("cts_ate_bias_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_ate_bias_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 ate_bias_sum_plot <- summary_plot(metrics_summary, "mean_ate_bias", "mcse_ate_bias",
                                   "Mean ATE bias", "Mean ATE bias")
-ggsave("cts_ate_bias_summary.png", plot = ate_bias_sum_plot, path = fig_path,
+ggsave("bin_ate_bias_summary.png", plot = ate_bias_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- MSE -----------------------------------------------------------------
@@ -153,11 +153,11 @@ mse_plot <- metrics %>%
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "MSE of CATE estimates", y = "MSE", x = "Sample size", colour = "Model")
-ggsave("cts_mse_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_mse_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 mse_sum_plot <- summary_plot(metrics_summary, "mean_mse", "mcse_mse",
                              "Mean MSE of CATE estimates", "Mean MSE")
-ggsave("cts_mse_summary.png", plot = mse_sum_plot, path = fig_path,
+ggsave("bin_mse_summary.png", plot = mse_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- RMSE ------------------------------------------------------------------
@@ -171,11 +171,11 @@ rmse_plot <- metrics %>%
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "RMSE of CATE estimates", y = "RMSE", x = "Sample size", colour = "Model")
-ggsave("cts_rmse_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_rmse_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 rmse_sum_plot <- summary_plot(metrics_summary, "mean_rmse", "mcse_rmse",
                               "Mean RMSE of CATE estimates", "Mean RMSE")
-ggsave("cts_rmse_summary.png", plot = rmse_sum_plot, path = fig_path,
+ggsave("bin_rmse_summary.png", plot = rmse_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- MAE -------------------------------------------------------------------
@@ -189,11 +189,11 @@ mae_plot <- metrics %>%
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "MAE of CATE estimates", y = "MAE", x = "Sample size", colour = "Model")
-ggsave("cts_mae_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_mae_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 mae_sum_plot <- summary_plot(metrics_summary, "mean_mae", "mcse_mae",
                              "Mean MAE of CATE estimates", "Mean MAE")
-ggsave("cts_mae_summary.png", plot = mae_sum_plot, path = fig_path,
+ggsave("bin_mae_summary.png", plot = mae_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- correlation with the truth ---------------------------------------------
@@ -211,12 +211,12 @@ corr_plot <- corr_df %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Correlation between estimated and true CATEs",
        y = "Pearson correlation", x = "Sample size", colour = "Model")
-ggsave("cts_corr_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_corr_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
                               "mean_corr", "mcse_corr",
                               "Mean correlation with the true CATE", "Mean correlation")
-ggsave("cts_corr_summary.png", plot = corr_sum_plot, path = fig_path,
+ggsave("bin_corr_summary.png", plot = corr_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- Spearman rank correlation with the truth -------------------------------
@@ -231,13 +231,13 @@ spearman_plot <- corr_df %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Spearman rank correlation between estimated and true CATEs",
        y = "Spearman correlation", x = "Sample size", colour = "Model")
-ggsave("cts_spearman_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_spearman_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 spearman_sum_plot <- summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
                                   "mean_spearman", "mcse_spearman",
                                   "Mean Spearman correlation with the true CATE",
                                   "Mean Spearman correlation")
-ggsave("cts_spearman_summary.png", plot = spearman_sum_plot, path = fig_path,
+ggsave("bin_spearman_summary.png", plot = spearman_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- sign accuracy -----------------------------------------------------------
@@ -253,12 +253,12 @@ sign_acc_plot <- metrics %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "Sign accuracy of CATE estimates", y = "Proportion correct sign",
        x = "Sample size", colour = "Model")
-ggsave("cts_sign_acc_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_sign_acc_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 sign_acc_sum_plot <- summary_plot(metrics_summary, "mean_sign_acc", "mcse_sign_acc",
                                   "Mean sign accuracy", "Mean proportion correct sign",
                                   hline = 0.5)
-ggsave("cts_sign_acc_summary.png", plot = sign_acc_sum_plot, path = fig_path,
+ggsave("bin_sign_acc_summary.png", plot = sign_acc_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- BLP test p-values --------------------------------------------------
@@ -271,11 +271,11 @@ BLP_plot <- metrics %>%
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "BLP test p-values", y = "p-value", x = "Sample size", colour = "Model")
-ggsave("cts_blp_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_blp_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 BLP_sum_plot <- summary_plot(metrics_summary, "mean_BLP", "mcse_BLP",
                              "Mean BLP test p-value", "Mean p-value", hline = 0.05)
-ggsave("cts_blp_summary.png", plot = BLP_sum_plot, path = fig_path,
+ggsave("bin_blp_summary.png", plot = BLP_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- CATE permutation test p-values --------------------------------------
@@ -289,12 +289,12 @@ indep_cate_plot <- metrics %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "CATE permutation test p-values", y = "p-value", x = "Sample size",
        colour = "Model")
-ggsave("cts_indep_cate_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_indep_cate_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 indep_cate_sum_plot <- summary_plot(metrics_summary, "mean_indep_cate", "mcse_indep_cate",
                                     "Mean CATE permutation test p-value", "Mean p-value",
                                     hline = 0.05)
-ggsave("cts_indep_cate_summary.png", plot = indep_cate_sum_plot, path = fig_path,
+ggsave("bin_indep_cate_summary.png", plot = indep_cate_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- PO permutation test p-values ----------------------------------------
@@ -308,12 +308,12 @@ indep_po_plot <- metrics %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   labs(title = "PO permutation test p-values", y = "p-value", x = "Sample size",
        colour = "Model")
-ggsave("cts_indep_po_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+ggsave("bin_indep_po_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 indep_po_sum_plot <- summary_plot(metrics_summary, "mean_indep_po", "mcse_indep_po",
                                   "Mean PO permutation test p-value", "Mean p-value",
                                   hline = 0.05)
-ggsave("cts_indep_po_summary.png", plot = indep_po_sum_plot, path = fig_path,
+ggsave("bin_indep_po_summary.png", plot = indep_po_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- missing estimates (n_na) diagnostic ------------------------------------
@@ -338,7 +338,7 @@ headline <- metrics_summary %>%
   arrange(scenario, n, mean_mse)
 
 print(headline, n = Inf)
-saveRDS(headline, file.path(res_path, "cts_headline.RDS"))
-write_csv(headline, file.path(res_path, "cts_headline.csv"))
+saveRDS(headline, file.path(res_path, "bin_headline.RDS"))
+write_csv(headline, file.path(res_path, "bin_headline.csv"))
 
 print("figures written!")
