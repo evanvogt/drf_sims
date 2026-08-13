@@ -1,21 +1,21 @@
 # Rerun campaign status
 
-Last updated: 2026-08-12 16:13 BST
+Last updated: 2026-08-13 08:35 BST
 
 | study_name | category | expected_jobs | found_jobs | missing_jobs | pct_complete | status | reason |
 |---|---|---|---|---|---|---|---|
-| competing_risk | broken | NA | NA | NA | NA | blocked | currently fails to run - independent estimator code, untouched by the crossfitting strategy change |
-| binary | crossfit_rerun |  4000 | 3732 |   268 |  93.3 | in_progress | crossfitting strategy change; also bug F (dr_superlearner) |
-| confidence_intervals/binary | crossfit_rerun | 20000 |  861 | 19139 |   4.3 | in_progress | crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale) |
-| confidence_intervals/continuous | crossfit_rerun | 20000 |  122 | 19878 |   0.6 | in_progress | crossfitting strategy change |
+| binary | crossfit_rerun |  4000 | 4000 |     0 | 100.0 | complete | crossfitting strategy change; also bug F (dr_superlearner) |
+| competing_risk | crossfit_rerun |  1400 |    0 |  1400 |   0.0 | not_started | crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy |
+| confidence_intervals/binary | crossfit_rerun | 20000 | 7359 | 12641 |  36.8 | in_progress | crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale) |
+| confidence_intervals/continuous | crossfit_rerun | 20000 | 4147 | 15853 |  20.7 | in_progress | crossfitting strategy change |
 | confidence_intervals/optimal_sf (bin) | crossfit_rerun |  2000 |    0 |  2000 |   0.0 | not_started | crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README) |
 | confidence_intervals/optimal_sf (cts) | crossfit_rerun |  2000 |    0 |  2000 |   0.0 | not_started | crossfitting strategy change |
 | continuous | crossfit_rerun |  4000 | 4000 |     0 | 100.0 | complete | crossfitting strategy change; also bug F (dr_superlearner) |
-| missing/binary | crossfit_rerun |  9900 | 9129 |   771 |  92.2 | in_progress | crossfitting strategy change; also the DGM was wrong three ways |
+| missing/binary | crossfit_rerun |  9900 | 9900 |     0 | 100.0 | complete | crossfitting strategy change; also the DGM was wrong three ways |
 | missing/ci_example | crossfit_rerun |   500 |    0 |   500 |   0.0 | not_started | crossfitting strategy change |
-| missing/continuous | crossfit_rerun |  9900 | 8395 |  1505 |  84.8 | in_progress | crossfitting strategy change; also bug F (dr_superlearner) |
+| missing/continuous | crossfit_rerun |  9900 | 9863 |    37 |  99.6 | in_progress | crossfitting strategy change; also bug F (dr_superlearner) |
 | validation/continuous | crossfit_rerun |   300 |    0 |   300 |   0.0 | not_started | crossfitting strategy change |
-| model_evaluation | first_run |   360 |   16 |   344 |   4.4 | in_progress | first run, not a re-run - but its own 9 candidates moved off double crossfitting (me_models.R), so its first 16 res_sim_*.RDS predate that and need deleting before continuing |
+| model_evaluation | first_run |   360 |   28 |   332 |   7.8 | in_progress | first run, not a re-run - its own 9 candidates moved off double crossfitting (me_models.R); the 16 pre-change res_sim_*.RDS have been deleted, so the count restarts from zero |
 | crossfitting | no_rerun |  2000 |    0 |  2000 |   0.0 | not_started | own comparison arms unchanged; only the production consumers of R/cate_models.R moved |
 | crossfitting/confidence_intervals | no_rerun |   150 |    0 |   150 |   0.0 | not_started | own comparison arms unchanged; pilot study, not part of the production rerun |
 
