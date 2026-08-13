@@ -18,21 +18,18 @@ dir.create(fig_path, showWarnings = F, recursive = T)
 
 metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS"))
 
-# tidy up
-MISS_SCENARIO_LABELS <- c(`1` = "Null", `2` = "Simple", `4` = "Complex",
-                          `5` = "Non-linear")
-
+# tidy up. MISS_SCENARIO_LABELS and the pooling-strategy labels now come from
+# R/figures.R; `strategy` is what cts_miss_ci_metrics.R actually writes (this
+# script used to name it CI_method, a column the metrics file never had).
 metrics <- metrics %>%
   filter(scenario %in% c(1, 2, 4, 5)) %>%
   apply_labels(MISS_SCENARIO_LABELS) %>%
-  mutate(
-    n = factor(n, levels = c(100, 250, 500, 1000)),
-    CI_method = factor(CI_method, levels = c("pooled", "MI boot", "hybrid")))
+  mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
 
 
 # per scenario summaries
 metrics_summary <- metrics %>%
-  group_by(scenario, n, type, prop, mechanism, method, model, CI_method) %>%
+  group_by(scenario, n, type, prop, mechanism, method, model, strategy) %>%
   summarise(
     mean_bias = mean(bias, na.rm = T),
     mcse_bias = sd(bias, na.rm = T)/sqrt(n()),
@@ -52,7 +49,7 @@ metrics_summary <- metrics %>%
 
 # marginal coverage
 mar_cov_plot <- metrics %>%
-  ggplot(aes(x=CI_method, y = marginal_coverage, colour = model)) +
+  ggplot(aes(x=strategy, y = marginal_coverage, colour = model)) +
   geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario) +
@@ -63,7 +60,7 @@ mar_cov_plot <- metrics %>%
 
 # summary
 mar_cov_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = CI_method, y = mean_mar_cov, colour = model, ymin = mean_mar_cov - mcse_mar_cov, ymax = mean_mar_cov + mcse_mar_cov)) +
+  ggplot(aes(x = strategy, y = mean_mar_cov, colour = model, ymin = mean_mar_cov - mcse_mar_cov, ymax = mean_mar_cov + mcse_mar_cov)) +
   geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
@@ -75,7 +72,7 @@ mar_cov_sum_plot <- metrics_summary %>%
 
 # simultaneous coverage
 sim_cov_plot <- metrics %>%
-  ggplot(aes(x=CI_method, y = simultaneous_coverage, colour = model)) +
+  ggplot(aes(x=strategy, y = simultaneous_coverage, colour = model)) +
   geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario) +
@@ -87,7 +84,7 @@ sim_cov_plot <- metrics %>%
 
 # summary
 sim_cov_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = CI_method, y = mean_sim_cov, colour = model, ymin = mean_sim_cov - mcse_sim_cov, ymax = mean_sim_cov + mcse_sim_cov)) +
+  ggplot(aes(x = strategy, y = mean_sim_cov, colour = model, ymin = mean_sim_cov - mcse_sim_cov, ymax = mean_sim_cov + mcse_sim_cov)) +
   geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
@@ -99,7 +96,7 @@ sim_cov_sum_plot <- metrics_summary %>%
 
 # CI length
 ci_len_plot <- metrics %>%
-  ggplot(aes(x=CI_method, y = mean_ci_length, colour = model)) +
+  ggplot(aes(x=strategy, y = mean_ci_length, colour = model)) +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
@@ -109,7 +106,7 @@ ci_len_plot <- metrics %>%
 
 # summary
 ci_len_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = CI_method, y = mean_ci_len, colour = model, ymin = mean_ci_len - mcse_ci_len, ymax = mean_ci_len + mcse_ci_len)) +
+  ggplot(aes(x = strategy, y = mean_ci_len, colour = model, ymin = mean_ci_len - mcse_ci_len, ymax = mean_ci_len + mcse_ci_len)) +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
   facet_wrap(~scenario) +

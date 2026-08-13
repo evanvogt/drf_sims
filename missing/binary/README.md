@@ -7,6 +7,7 @@ mechanisms, handling methods and the shared bug fixes.
 |---|---|
 | array | **9,900 jobs** |
 | results | `../results/missing/binary/scenario_<k>/<n>/<type>/<prop>/<mechanism>/<method>/` |
+| figures | `bin_miss_results.R` / `.qmd` — every metric, to `results/all_figures/`; the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_bin.R` |
 
 ## ⚠ This file was a half-converted fork
 
@@ -44,6 +45,33 @@ taken from the binary scenario each reduced scenario corresponds to (1→1, 2→
 not something the original code recorded** — worth a sanity check before
 committing cluster time.
 
+## To patch: every model should carry the HTE tests
+
+`dr_random_forest` currently records no BLP or independence test, so `BLP_p`,
+`indep_cate` and `indep_po` are `NA` for that one model. The cause is a single
+field in `PROFILES` (`R/cate_models.R`):
+
+```r
+missing = list(cf_variance = TRUE, tests = TRUE, dr_rf_tests = FALSE)
+```
+
+Under `profile = "missing"` the arm is built inline as
+`list(tau = stage2_whole_rf(...)$tau)` and never reaches the test block, while
+the base studies call `run_dr_random_forest()` and get both tests. Nothing marks
+this as deliberate — it is copy-paste drift from the file this study was forked
+from.
+
+**Decision: all models should carry the HTE tests in this study where possible.**
+The fix is `dr_rf_tests = TRUE` in `PROFILES$missing`. It affects `profile =
+"missing"`, so it changes **both** `missing/binary` and `missing/continuous`, and
+it changes what the simulations produce — so it needs a re-run to take effect,
+which is why it is recorded here rather than applied.
+
+Note that `missing/continuous/cts_miss_tests.R` is *not* this fix: it is an
+unmaintained exploratory script (old `AUX` mechanism spelling, its own in-script
+`expand.grid`) that bolts `run_blp_whole()` on after the fact and is sourced by
+nothing in the pipeline.
+
 ## Running it
 
 ```bash
@@ -51,6 +79,13 @@ qsub missing/binary/jobscripts/bin_miss_1.sh        # 1-9900
 Rscript missing/binary/bin_miss_check.R
 qsub missing/binary/jobscripts/bin_miss_collect.sh
 qsub missing/binary/jobscripts/bin_miss_metrics.sh
+```
+
+Then, for the figures:
+
+```bash
+Rscript missing/binary/bin_miss_results.R           # every metric, to results/all_figures/
+quarto render missing/binary/bin_miss_results.qmd   # the same, as a browsable report
 ```
 
 ## Status

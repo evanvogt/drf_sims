@@ -18,7 +18,10 @@ here).
 | `cts_miss_dgms.R` | names the `continuous_missing` scenario set + the missingness machinery |
 | `cts_miss_models.R` | `family = gaussian()`, `profile = "missing"`, `ipw` threaded through |
 | `cts_miss_analysis.R` | array entry point |
+| `cts_miss_results.R` / `.qmd` | every metric, to `results/all_figures/` — the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts.R` |
 | `mi_scratch.R` | exploratory, unmaintained |
+| `cts_miss_tests.R` | exploratory, unmaintained — sourced by nothing (see the HTE-test note in `missing/binary/README.md`) |
+| `results_cts_miss.{R,Rmd,html}` | **superseded** by `cts_miss_results.R`/`.qmd` — kept for reference, renamed to the repo's legacy convention (cf. `continuous/results_cts.R`). Points at the old HPC path `/rds/general/...` and at `results/new_format/metrics_cts_miss_df.RDS`, neither of which exists any more; scenarios are `"scenario_5"` strings, and only bias and MSE are plotted. It was called `cts_miss_results.*`, so its `.html` was being clobbered by the new `.qmd`'s render output. |
 
 The `ipw` argument is the only thing separating this study's estimators from
 `continuous/`: it becomes grf `sample.weights` and SuperLearner `obsWeights`.
@@ -38,9 +41,11 @@ script fits each and Rubin-combines with `combine_mi()`; only
 `truth` to match — otherwise estimates and truth would be misaligned.
 
 **`dr_random_forest` carries no BLP or independence test in this study**, unlike
-`continuous/`, so `BLP_p` is `NA` for that one model. This looks like copy-paste
-drift rather than a decision; it is preserved (see the profile table in
-`R/README.md`) but is worth revisiting.
+`continuous/`, so `BLP_p` is `NA` for that one model. This is copy-paste drift
+rather than a decision, and the decision has now been taken: every model should
+carry the tests where possible. The fix is one field in `PROFILES`
+(`R/cate_models.R`) and needs a re-run — written up once, in
+`missing/binary/README.md`, since `profile = "missing"` covers both studies.
 
 ## Running it
 
@@ -50,6 +55,13 @@ qsub missing/continuous/jobscripts/cts_miss_2.sh   # 5001-9900
 Rscript missing/continuous/cts_miss_check.R
 qsub missing/continuous/jobscripts/cts_miss_collect.sh
 qsub missing/continuous/jobscripts/cts_miss_metrics.sh
+```
+
+Then, for the figures:
+
+```bash
+Rscript missing/continuous/cts_miss_results.R           # every metric, to results/all_figures/
+quarto render missing/continuous/cts_miss_results.qmd   # the same, as a browsable report
 ```
 
 To run only the `complete_data` reference arm, take

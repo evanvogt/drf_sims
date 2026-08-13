@@ -1,0 +1,321 @@
+---
+title: "Confidence intervals after multiple imputation: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(here)
+library(patchwork)
+library(purrr)
+library(knitr)
+source(here("R", "figures.R"))
+```
+
+## Once the covariates are imputed, how should the intervals be combined?
+
+A single cell of the missing-data design, asking a narrower question than
+`missing/continuous`. Every arm here uses the same mechanism and the same
+handling method; what varies is the **pooling strategy**.
+
+| | |
+|---|---|
+| scenarios | 1–5 (the reduced set — all five, unlike the other two studies) |
+| n | 500 |
+| type | `both` |
+| prop | 0.3 |
+| mechanism | MAR only |
+| method | `multiple_imputation` only |
+| runs | 100 |
+
+Each of 50 imputed datasets gets its own half-sample bootstrap — 200 replicates
+at a sample fraction of 0.5 — and `combine_mi_ci()` in `R/bootstrap_ci.R` then
+pools them three ways so they can be compared:
+
+| strategy | how |
+|---|---|
+| Pooled quantiles | empirical quantiles of the bootstrap replicates stacked across imputations |
+| MI bootstrap (Rubin) | Rubin's rules — within + between variance, critical value averaged over the per-imputation maxima |
+| Hybrid | one variance and one critical value from the stacked draws |
+
+**Estimators**: `causal_forest`, `dr_random_forest`, `dr_semi_oracle`,
+`dr_oracle` (`CI_MODELS` — this study has no SuperLearner arm).
+
+Scenario numbering is the missing-data set's, not the main study's. Scenario 3
+("Two HTE vars") appears here but not in `missing/continuous` or
+`missing/binary`, whose grids run 1, 2, 4, 5 only.
+
+### Two things to know before reading the figures
+
+**The hybrid margin looks like a typo.** It computes
+`sqrt(lambda_hat * S_star)` where the other two strategies and
+`simultaneous_band()` use `sqrt(lambda_hat) * S_star` — i.e. it takes the square
+root of the critical value. Preserved as written; if the hybrid intervals look
+oddly narrow below, this is why.
+
+**This study spells the mechanisms `AUX` / `AUX-Y`** where the others say
+`MNAR` / `MNAR-Y`. Both are normalised in `R/missingness.R`, and
+`MECHANISM_LABELS` maps both spellings to the same display label. Its grid only
+ever runs MAR, so the unobserved-`U` branches never fire here.
+
+```{r data}
+# paths
+path <- here()
+res_path <- file.path(dirname(path), "results", "missing", "ci_example")
+
+metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS"))
+
+# unlike the chapter script this keeps all five scenarios - this study's grid
+# runs 1:5
+metrics <- metrics %>%
+  apply_labels(MISS_SCENARIO_LABELS) %>%
+  mutate(n = factor(n), prop = factor(prop)) %>%
+  droplevels()
+
+metrics_summary <- summarise_metrics(
+  metrics,
+  c("scenario", "n", "type", "prop", "mechanism", "method", "model", "strategy"),
+  cols = c(bias = "bias", ate_bias = "ate_bias", mse = "mse", rmse = "rmse",
+           mae = "mae", corr = "corr", spearman = "spearman",
+           sign_acc = "sign_acc", mar_cov = "marginal_coverage",
+           sim_cov = "simultaneous_coverage", ci_len = "mean_ci_length")
+)
+```
+
+```{r plot-helpers, include=FALSE}
+# per-run distribution: strategy on x, one colour per estimator. Only one
+# mechanism here, so facet on scenario alone.
+ci_box_plot <- function(metrics, metric, y_lab, hline = NULL,
+                        facet_scales = "free_y") {
+  p <- ggplot(metrics, aes(x = strategy, y = .data[[metric]], colour = model)) +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    facet_grid(cols = vars(scenario), scales = facet_scales) +
+    drf_scale() +
+    drf_theme(rotate_x = TRUE) +
+    labs(y = y_lab, x = "Pooling strategy", colour = "Model")
+  if (!is.null(hline)) {
+    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  }
+  p
+}
+
+# the summary counterpart. point_range_plot()'s faceting is hardcoded to
+# mechanism x scenario, degenerate here, so it is overridden at the call site.
+ci_sum_plot <- function(summary, metric, y_lab, hline = NULL,
+                        facet_scales = "free_y") {
+  p <- point_range_plot(summary, metric, y_lab, x = "strategy",
+                        colour = "model", facet_scales = facet_scales) +
+    facet_grid(cols = vars(scenario), scales = facet_scales) +
+    labs(x = "Pooling strategy", colour = "Model")
+  if (!is.null(hline)) {
+    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  }
+  p
+}
+```
+
+Every section below pairs the per-run distribution (top) with the mean ± Monte
+Carlo standard error across runs (bottom). Columns are the scenario, x the
+pooling strategy, colour the estimator.
+
+## Marginal coverage
+
+The proportion of units their own interval covers, against the nominal 95%
+(dashed line).
+
+```{r mar-cov-plot, fig.height=14}
+mar_cov_plot <- ci_box_plot(metrics, "marginal_coverage", "Marginal coverage",
+                            hline = 0.95)
+mar_cov_sum_plot <- ci_sum_plot(metrics_summary, "mar_cov", "Marginal coverage",
+                                hline = 0.95)
+
+(mar_cov_plot / mar_cov_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Simultaneous coverage
+
+Whether the band covers every unit at once — what the half-sample bootstrap is
+constructed to control, and a much stricter target than marginal coverage.
+
+Coverage here is evaluated **per-unit, on the sample's own covariates**. The
+`confidence_intervals/` studies now also report a grid-based simultaneous
+coverage over fixed query points (`build_query_grid()` in `R/dgm_scenarios.R`);
+this study does not yet have that, so the two are not directly comparable. See
+this study's README.
+
+```{r sim-cov-plot, fig.height=14}
+sim_cov_plot <- ci_box_plot(metrics, "simultaneous_coverage",
+                            "Simultaneous coverage", hline = 0.95)
+sim_cov_sum_plot <- ci_sum_plot(metrics_summary, "sim_cov",
+                                "Simultaneous coverage", hline = 0.95)
+
+(sim_cov_plot / sim_cov_sum_plot) + plot_layout(guides = "collect")
+```
+
+## CI length
+
+The width that coverage is bought with. No reference line — there is no target
+width, only the trade-off against the two coverage panels above.
+
+```{r ci-len-plot, fig.height=14}
+ci_len_plot <- ci_box_plot(metrics, "mean_ci_length", "CI length")
+ci_len_sum_plot <- ci_sum_plot(metrics_summary, "ci_len", "CI length")
+
+(ci_len_plot / ci_len_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Point metrics
+
+The sections below are the same point metrics the other missing-data results
+files report. **They are identical across the three strategies within a model**:
+all three pool the *intervals* around one shared `model_res$tau`, so the
+triplicate points are the same number three times, not three disagreeing
+estimates. Only the interval metrics above distinguish the pooling rules.
+
+### Bias
+
+Average bias in the estimated CATE (estimate minus truth), per unit and per run.
+
+```{r bias-plot, fig.height=14}
+bias_plot <- ci_box_plot(metrics, "bias", "Bias", hline = 0)
+bias_sum_plot <- ci_sum_plot(metrics_summary, "bias", "Bias", hline = 0)
+
+(bias_plot / bias_sum_plot) + plot_layout(guides = "collect")
+```
+
+### ATE bias
+
+Bias of the *average* treatment effect (`mean(est) - mean(true)`).
+
+```{r ate-bias-plot, fig.height=14}
+ate_bias_plot <- ci_box_plot(metrics, "ate_bias", "ATE bias", hline = 0)
+ate_bias_sum_plot <- ci_sum_plot(metrics_summary, "ate_bias", "ATE bias",
+                                 hline = 0)
+
+(ate_bias_plot / ate_bias_sum_plot) + plot_layout(guides = "collect")
+```
+
+### MSE
+
+```{r mse-plot, fig.height=14}
+mse_plot <- ci_box_plot(metrics, "mse", "MSE", hline = 0)
+mse_sum_plot <- ci_sum_plot(metrics_summary, "mse", "MSE", hline = 0)
+
+(mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
+```
+
+### RMSE
+
+`sqrt(mse)` — the same ranking as MSE, on the outcome's own scale.
+
+```{r rmse-plot, fig.height=14}
+rmse_plot <- ci_box_plot(metrics, "rmse", "RMSE", hline = 0)
+rmse_sum_plot <- ci_sum_plot(metrics_summary, "rmse", "RMSE", hline = 0)
+
+(rmse_plot / rmse_sum_plot) + plot_layout(guides = "collect")
+```
+
+### MAE
+
+Mean absolute error — a robustness check on MSE, less sensitive to outlying runs.
+
+```{r mae-plot, fig.height=14}
+mae_plot <- ci_box_plot(metrics, "mae", "MAE", hline = 0)
+mae_sum_plot <- ci_sum_plot(metrics_summary, "mae", "MAE", hline = 0)
+
+(mae_plot / mae_sum_plot) + plot_layout(guides = "collect")
+```
+
+### Correlation with the true CATE
+
+Pearson correlation between estimated and true CATEs. Undefined, and reported as
+0, in the Null scenario — so that scenario is excluded here.
+
+```{r corr-plot, fig.height=14}
+corr_metrics <- filter(metrics, scenario != "Null")
+corr_summary <- filter(metrics_summary, scenario != "Null")
+
+corr_plot <- ci_box_plot(corr_metrics, "corr", "Pearson correlation")
+corr_sum_plot <- ci_sum_plot(corr_summary, "corr", "Pearson correlation")
+
+(corr_plot / corr_sum_plot) + plot_layout(guides = "collect")
+```
+
+### Spearman rank correlation with the true CATE
+
+Less sensitive to outlying CATE estimates and to non-linear-but-monotone
+miscalibration. Same Null exclusion.
+
+```{r spearman-plot, fig.height=14}
+spearman_plot <- ci_box_plot(corr_metrics, "spearman", "Spearman correlation")
+spearman_sum_plot <- ci_sum_plot(corr_summary, "spearman",
+                                 "Spearman correlation")
+
+(spearman_plot / spearman_sum_plot) + plot_layout(guides = "collect")
+```
+
+### Sign accuracy
+
+Proportion of units where the estimated CATE has the correct sign. 0.5 (dashed
+line) is the chance level for a coin-flip on sign.
+
+```{r sign-acc-plot, fig.height=14}
+sign_acc_plot <- ci_box_plot(metrics, "sign_acc", "Proportion correct sign",
+                             hline = 0.5)
+sign_acc_sum_plot <- ci_sum_plot(metrics_summary, "sign_acc",
+                                 "Proportion correct sign", hline = 0.5)
+
+(sign_acc_plot / sign_acc_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Missing estimates
+
+`n_na` is a data-quality diagnostic, not a performance metric: the count of `NA`
+CATE estimates within a run. Only cells with at least one missing estimate are
+listed.
+
+```{r na-table}
+na_table <- metrics %>%
+  group_by(scenario, model, strategy) %>%
+  summarise(mean_n_na = mean(n_na, na.rm = TRUE),
+            total_n_na = sum(n_na, na.rm = TRUE),
+            .groups = "drop") %>%
+  filter(total_n_na > 0) %>%
+  arrange(scenario, model, strategy)
+
+if (nrow(na_table) > 0) {
+  kable(na_table, digits = 3,
+        col.names = c("Scenario", "Model", "Strategy",
+                      "Mean NA count per run", "Total NA count"))
+} else {
+  cat("No missing CATE estimates in any run.")
+}
+```
+
+## Headline table
+
+Coverage and width first — those are what this study is for — then the shared
+point metrics.
+
+```{r headline-table}
+headline <- metrics_summary %>%
+  select(scenario, model, strategy, mean_mar_cov, mean_sim_cov, mean_ci_len,
+         mean_bias, mean_mse, mean_rmse, mean_mae, mean_sign_acc, mean_corr) %>%
+  arrange(scenario, model, strategy)
+
+kable(headline, digits = 4,
+      col.names = c("Scenario", "Model", "Strategy", "Mean marginal coverage",
+                    "Mean simultaneous coverage", "Mean CI length", "Mean bias",
+                    "Mean MSE", "Mean RMSE", "Mean MAE", "Mean sign accuracy",
+                    "Mean correlation"))
+```

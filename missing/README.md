@@ -28,6 +28,22 @@ Scenario numbering here is **not** the main study's. Scenario `k` corresponds to
 main-study scenario 1, 2, 4, 8, 9 respectively — so "scenario 4" means something
 different in this folder than in `continuous/`.
 
+## Results files
+
+Each study has a `*_results.R` / `*_results.qmd` pair showing **every** metric
+its `*_metrics.R` computes — bias, ATE bias, MSE, RMSE, MAE, relative
+efficiency, correlation, Spearman, sign accuracy, the three HTE-test p-values,
+and the `n_na` diagnostic. Figures go to `results/all_figures/missing/<study>/`.
+
+These are the diagnostic view. `results_processing/thesis_figures/miss_*.R` is
+the chapter view: the two or three panels that get printed, written to
+`results/thesis_figures/`. The two never overwrite each other.
+
+Labels, palette, the mean ± MCSE summary and the point-range panel are shared
+via `R/figures.R` — `MISS_SCENARIO_LABELS`, `METHOD_LABELS`,
+`MECHANISM_LABELS`, `STRATEGY_LABELS` and `point_range_plot()` in particular.
+Rename an estimator or a handling method there and every figure follows.
+
 ### Mechanisms
 
 - **MAR** — missingness depends on the observed covariates

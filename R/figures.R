@@ -56,6 +56,19 @@ MECHANISM_LABELS <- c(
 SS_SCENARIO_LABELS <- c(`1` = "Null", `3` = "Simple", `8` = "Complex",
                         `9` = "Non-linear")
 
+# the missing-data studies' renumbered five-scenario set. Was copy-pasted
+# verbatim into all three thesis_figures/miss_*.R scripts, minus scenario 3.
+# continuous/ and binary/ never run 3 (their grid is 1, 2, 4, 5), so it drops out
+# of those by droplevels(); ci_example runs all five and keeps it.
+MISS_SCENARIO_LABELS <- c(`1` = "Null", `2` = "Simple", `3` = "Two HTE vars",
+                          `4` = "Complex", `5` = "Non-linear")
+
+# the three ways combine_mi_ci() (R/bootstrap_ci.R) pools per-imputation
+# bootstrap intervals. These are the values cts_miss_ci_metrics.R writes to the
+# `strategy` column.
+STRATEGY_LABELS <- c(pooled = "Pooled quantiles", mib = "MI bootstrap (Rubin)",
+                     hybrid = "Hybrid")
+
 #' Recode a column to its display labels and make it an ordered factor
 #'
 #' Levels follow the order of `labels`, so the legend order is controlled in one
@@ -69,9 +82,9 @@ label_factor <- function(x, labels) {
 
 #' Apply the standard label recoding to a metrics tibble
 #'
-#' Only touches the columns that are present, so it works for both the
-#' sample-size studies (scenario, n, model) and the missing-data ones (which add
-#' mechanism and method).
+#' Only touches the columns that are present, so it works for the sample-size
+#' studies (scenario, n, model), the missing-data ones (which add mechanism and
+#' method) and the MI confidence-interval one (which adds strategy).
 apply_labels <- function(metrics, scenario_labels = NULL) {
   if ("model" %in% names(metrics)) {
     metrics$model <- label_factor(metrics$model, MODEL_LABELS)
@@ -81,6 +94,9 @@ apply_labels <- function(metrics, scenario_labels = NULL) {
   }
   if ("mechanism" %in% names(metrics)) {
     metrics$mechanism <- label_factor(metrics$mechanism, MECHANISM_LABELS)
+  }
+  if ("strategy" %in% names(metrics)) {
+    metrics$strategy <- label_factor(metrics$strategy, STRATEGY_LABELS)
   }
   if (!is.null(scenario_labels) && "scenario" %in% names(metrics)) {
     metrics$scenario <- label_factor(metrics$scenario, scenario_labels)

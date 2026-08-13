@@ -1,0 +1,362 @@
+---
+title: "Missing covariates, continuous outcome: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(here)
+library(patchwork)
+library(purrr)
+library(knitr)
+source(here("R", "figures.R"))
+```
+
+## What does missingness cost, and which handling method costs least?
+
+Covariates are amputated from a dataset the estimators would otherwise have seen
+in full, then handed to nine different handling methods. Every arm is scored
+against the *same* known true CATE, so the comparison is like-for-like.
+
+Unlike the sample-size studies in `continuous/` and `binary/`, this design holds
+the sample size fixed and varies the missingness instead. There is therefore no
+sample-size axis in any figure below:
+
+| | |
+|---|---|
+| scenarios | 1, 2, 4, 5 — a **renumbered** set, not a subset of the main ten |
+| n | 500 |
+| type | `both` (prognostic and predictive covariates amputated) |
+| prop | 0.3 |
+| mechanism | MAR, MNAR, MNAR-Y |
+| method | 8 handling methods + `complete_data` reference |
+| runs | 100 |
+
+**Scenario numbering here is not the main study's.** Scenario *k* corresponds to
+main-study scenario 1, 2, 4, 8, 9 respectively — so "Complex" here means
+something different from scenario 4 in `continuous/`. Full design in
+`missing/README.md`.
+
+### Mechanisms
+
+| mechanism | missingness depends on |
+|---|---|
+| MAR | the observed covariates |
+| MNAR | an unobserved `U` |
+| MNAR-Y | `U`, which also enters the treatment effect |
+
+MNAR-Y is not defined for scenario 1 (Null): there is no treatment effect
+heterogeneity for `U` to enter. **That facet is empty by design, not by
+failure.**
+
+### Handling methods
+
+| method | what it does |
+|---|---|
+| Complete case | delete every row with any `NA` |
+| Single mean imputation | replace `NA` with the column mean |
+| Single forest-based imputation | `missForest` |
+| Single model-based imputation | predict the missing values by regression |
+| Missing indicators | add binary missing flags, then mean-impute |
+| IPW | inverse-probability weighting of the complete cases |
+| Multiple imputation (rf) | MICE, 50 imputations, Rubin-combined |
+| Inbuilt missingness handling | hand the `NA`s straight to the estimator |
+| Complete data (reference) | no missingness introduced at all |
+
+`complete_cases` and `IPW` drop rows from the truth as well as the data, so
+estimates and truth stay aligned.
+
+**Estimators**: `causal_forest`, `dr_random_forest`, `dr_oracle`,
+`dr_semi_oracle`, `dr_superlearner` (`R/cate_models.R`, `profile = "missing"`).
+The oracle uses the true outcome model and a known propensity of 0.5; the
+semi-oracle knows only the propensity. The SuperLearner arm is skipped whenever
+the covariate matrix still carries `NA`s.
+
+`dr_random_forest` currently carries no BLP or independence test under
+`profile = "missing"`, so its p-values are `NA` in the three test sections
+below. That is a known gap awaiting a patch (see `missing/binary/README.md`),
+not a property of the estimator.
+
+```{r data}
+# paths
+path <- here()
+res_path <- file.path(dirname(path), "results", "missing", "continuous")
+
+metrics <- readRDS(file.path(res_path, "cts_miss_metrics.RDS"))
+
+# n / type / prop are single-valued in this design, so nothing facets on them -
+# but they stay in the grouping so this survives a grid that gains a level
+metrics <- metrics %>%
+  apply_labels(MISS_SCENARIO_LABELS) %>%
+  mutate(n = factor(n), prop = factor(prop)) %>%
+  droplevels()
+
+metrics_summary <- summarise_metrics(
+  metrics,
+  c("scenario", "n", "type", "prop", "mechanism", "method", "model"),
+  cols = c(bias = "bias", ate_bias = "ate_bias", mse = "mse", rmse = "rmse",
+           mae = "mae", corr = "corr", spearman = "spearman",
+           sign_acc = "sign_acc", BLP = "BLP_p", indep_cate = "indep_cate",
+           indep_po = "indep_po", rel_eff = "rel_efficiency")
+)
+```
+
+```{r box-plot-helper, include=FALSE}
+# the per-run distribution behind each summary panel. distribution_plot() in
+# R/figures.R is the sample-size studies' shape (x = n, facet_wrap(~scenario));
+# this study has n fixed and two extra factors, so it needs its own. Faceting
+# matches point_range_plot() so the two stack cleanly.
+miss_box_plot <- function(metrics, metric, y_lab, hline = 0,
+                          facet_scales = "free") {
+  p <- ggplot(metrics, aes(x = model, y = .data[[metric]], colour = method)) +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    facet_grid(rows = vars(mechanism), cols = vars(scenario),
+               scales = facet_scales) +
+    drf_scale() +
+    drf_theme(rotate_x = TRUE) +
+    labs(y = y_lab, x = "Model", colour = "Method")
+  if (!is.null(hline)) {
+    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  }
+  p
+}
+```
+
+Every section below pairs the per-run distribution (top) with the mean ± Monte
+Carlo standard error across runs (bottom). Rows are the missingness mechanism,
+columns the scenario, colour the handling method.
+
+## Bias
+
+Average bias in the estimated CATE (estimate minus truth), per unit and per run,
+against the known truth.
+
+```{r bias-plot, fig.height=16}
+bias_plot <- miss_box_plot(metrics, "bias", "Bias")
+bias_sum_plot <- point_range_plot(metrics_summary, "bias", "Bias")
+
+(bias_plot / bias_sum_plot) + plot_layout(guides = "collect")
+```
+
+## ATE bias
+
+Bias of the *average* treatment effect (`mean(est) - mean(true)`), as opposed to
+Bias's per-unit average — the two can differ in sign or magnitude when errors
+don't average out evenly across units.
+
+```{r ate-bias-plot, fig.height=16}
+ate_bias_plot <- miss_box_plot(metrics, "ate_bias", "ATE bias")
+ate_bias_sum_plot <- point_range_plot(metrics_summary, "ate_bias", "ATE bias")
+
+(ate_bias_plot / ate_bias_sum_plot) + plot_layout(guides = "collect")
+```
+
+## MSE of CATE estimates
+
+The headline metric: mean squared error of the estimated CATE against the known
+truth.
+
+```{r mse-plot, fig.height=16}
+mse_plot <- miss_box_plot(metrics, "mse", "MSE", facet_scales = "free_y")
+mse_sum_plot <- point_range_plot(metrics_summary, "mse", "MSE",
+                                 facet_scales = "free_y")
+
+(mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
+```
+
+## RMSE of CATE estimates
+
+`sqrt(mse)` — the same ranking as MSE, shown on the outcome's own scale rather
+than squared.
+
+```{r rmse-plot, fig.height=16}
+rmse_plot <- miss_box_plot(metrics, "rmse", "RMSE", facet_scales = "free_y")
+rmse_sum_plot <- point_range_plot(metrics_summary, "rmse", "RMSE",
+                                  facet_scales = "free_y")
+
+(rmse_plot / rmse_sum_plot) + plot_layout(guides = "collect")
+```
+
+## MAE of CATE estimates
+
+Mean absolute error — a robustness check on MSE, less sensitive to outlying runs.
+
+```{r mae-plot, fig.height=16}
+mae_plot <- miss_box_plot(metrics, "mae", "MAE", facet_scales = "free_y")
+mae_sum_plot <- point_range_plot(metrics_summary, "mae", "MAE",
+                                 facet_scales = "free_y")
+
+(mae_plot / mae_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Relative efficiency
+
+`mse` divided by the MSE of the same scenario, mechanism, run and model under
+`complete_data`. The reference arm sits at exactly 1 by construction (dashed
+line); anything above 1 is the price of the missingness plus the handling
+method. This is the metric specific to the missing-data studies — nothing in
+`binary/` or `continuous/` has it.
+
+```{r rel-eff-plot, fig.height=16}
+if ("rel_efficiency" %in% names(metrics)) {
+  rel_eff_plot <- miss_box_plot(metrics, "rel_efficiency",
+                                "Relative efficiency", hline = 1,
+                                facet_scales = "free_y")
+  rel_eff_sum_plot <- point_range_plot(metrics_summary, "rel_eff",
+                                       "Relative efficiency",
+                                       facet_scales = "free_y") +
+    geom_hline(yintercept = 1, linetype = "dashed")
+
+  (rel_eff_plot / rel_eff_sum_plot) + plot_layout(guides = "collect")
+} else {
+  cat("rel_efficiency is not present in this metrics file.")
+}
+```
+
+## Correlation with the true CATE
+
+Pearson correlation between estimated and true CATEs. Undefined, and reported as
+0, in the Null scenario since there is no heterogeneity to correlate with — so
+that scenario is excluded here.
+
+```{r corr-plot, fig.height=16}
+corr_metrics <- filter(metrics, scenario != "Null")
+corr_summary <- filter(metrics_summary, scenario != "Null")
+
+corr_plot <- miss_box_plot(corr_metrics, "corr", "Pearson correlation",
+                           hline = NULL, facet_scales = "free_y")
+corr_sum_plot <- point_range_plot(corr_summary, "corr", "Pearson correlation",
+                                  facet_scales = "free_y")
+
+(corr_plot / corr_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Spearman rank correlation with the true CATE
+
+Rank correlation alongside the Pearson correlation above — less sensitive to
+outlying CATE estimates and to non-linear-but-monotone miscalibration. Same
+Null-undefined convention, so that scenario is excluded here too.
+
+```{r spearman-plot, fig.height=16}
+spearman_plot <- miss_box_plot(corr_metrics, "spearman", "Spearman correlation",
+                               hline = NULL, facet_scales = "free_y")
+spearman_sum_plot <- point_range_plot(corr_summary, "spearman",
+                                      "Spearman correlation",
+                                      facet_scales = "free_y")
+
+(spearman_plot / spearman_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Sign accuracy
+
+Proportion of units where the estimated CATE has the correct sign — a
+direction-detection metric, distinct from magnitude accuracy. 0.5 (dashed line)
+is the chance level for a coin-flip on sign.
+
+```{r sign-acc-plot, fig.height=16}
+sign_acc_plot <- miss_box_plot(metrics, "sign_acc", "Proportion correct sign",
+                               hline = 0.5, facet_scales = "free_x")
+sign_acc_sum_plot <- point_range_plot(metrics_summary, "sign_acc",
+                                      "Proportion correct sign",
+                                      facet_scales = "free_x") +
+  geom_hline(yintercept = 0.5, linetype = "dashed")
+
+(sign_acc_plot / sign_acc_sum_plot) + plot_layout(guides = "collect")
+```
+
+## BLP test p-values
+
+Best linear predictor test of heterogeneity, against the nominal 5% significance
+threshold (dashed line) — where the CATE truly varies, low p-values indicate the
+model detects it; in the Null scenario, p-values should sit uniform on [0, 1].
+
+`dr_random_forest` is absent from these panels: it carries no BLP test under
+`profile = "missing"`.
+
+```{r blp-plot, fig.height=16}
+BLP_plot <- miss_box_plot(metrics, "BLP_p", "p-value", hline = 0.05,
+                          facet_scales = "free_x")
+BLP_sum_plot <- point_range_plot(metrics_summary, "BLP", "p-value",
+                                 facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed")
+
+(BLP_plot / BLP_sum_plot) + plot_layout(guides = "collect")
+```
+
+## CATE permutation test p-values
+
+Omnibus independence test of the estimated CATEs against the covariates.
+
+```{r indep-cate-plot, fig.height=16}
+indep_cate_plot <- miss_box_plot(metrics, "indep_cate", "p-value", hline = 0.05,
+                                 facet_scales = "free_x")
+indep_cate_sum_plot <- point_range_plot(metrics_summary, "indep_cate", "p-value",
+                                        facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed")
+
+(indep_cate_plot / indep_cate_sum_plot) + plot_layout(guides = "collect")
+```
+
+## PO permutation test p-values
+
+The same test applied to the potential-outcome pseudo-outcomes rather than the
+fitted CATEs.
+
+```{r indep-po-plot, fig.height=16}
+indep_po_plot <- miss_box_plot(metrics, "indep_po", "p-value", hline = 0.05,
+                               facet_scales = "free_x")
+indep_po_sum_plot <- point_range_plot(metrics_summary, "indep_po", "p-value",
+                                      facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed")
+
+(indep_po_plot / indep_po_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Missing estimates
+
+`n_na` is a data-quality diagnostic, not a performance metric: the count of `NA`
+CATE estimates within a run. Mostly zero, so shown as a table rather than a
+distribution plot; only cells with at least one missing estimate are listed.
+
+```{r na-table}
+na_table <- metrics %>%
+  group_by(scenario, mechanism, method, model) %>%
+  summarise(mean_n_na = mean(n_na, na.rm = TRUE),
+            total_n_na = sum(n_na, na.rm = TRUE),
+            .groups = "drop") %>%
+  filter(total_n_na > 0) %>%
+  arrange(scenario, mechanism, method, model)
+
+if (nrow(na_table) > 0) {
+  kable(na_table, digits = 3,
+        col.names = c("Scenario", "Mechanism", "Method", "Model",
+                      "Mean NA count per run", "Total NA count"))
+} else {
+  cat("No missing CATE estimates in any run.")
+}
+```
+
+## Headline table
+
+Arranged by scenario, mechanism, method, and mean MSE (best model first within
+each cell).
+
+```{r headline-table}
+headline <- metrics_summary %>%
+  select(scenario, mechanism, method, model, mean_bias, mean_mse, mean_rmse,
+         mean_mae, mean_sign_acc, mean_corr, any_of("mean_rel_eff"),
+         mean_BLP, mean_indep_cate, mean_indep_po) %>%
+  arrange(scenario, mechanism, method, mean_mse)
+
+kable(headline, digits = 4)
+```
