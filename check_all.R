@@ -121,12 +121,28 @@ md_table <- function(df) {
   paste(c(header, sep, rows), collapse = "\n")
 }
 
+# Markdown-only ordering: group by status (not_started -> in_progress ->
+# complete) so studies still needing work are visually grouped when scanning
+# check_all_studies.md, rather than scattered alphabetically by category.
+# blocked and the dynamic "ERROR: <msg>" status (unmatched by status_order)
+# both sort ahead of everything else, ERROR: first, as the more actionable
+# failures. category/study_name stay as the secondary/tertiary sort within
+# each status group. Console print() and the CSV keep the original
+# category/study_name order (more diff-friendly for git-tracked history).
+status_order <- c("blocked", "not_started", "in_progress", "complete")
+status_rank <- function(s) {
+  rank <- match(s, status_order)
+  ifelse(is.na(rank), 0L, rank)
+}
+results_by_status <- results %>%
+  arrange(status_rank(status), category, study_name)
+
 md_lines <- c(
   "# Rerun campaign status",
   "",
   paste0("Last updated: ", format(Sys.time(), "%Y-%m-%d %H:%M %Z")),
   "",
-  md_table(results),
+  md_table(results_by_status),
   "",
   "## Legend",
   "",
