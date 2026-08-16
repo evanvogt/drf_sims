@@ -8,8 +8,8 @@
 # matrices are gone) but peak memory during fitting was never measured, so
 # trimming it would be a guess.
 #PBS -l walltime=01:00:00
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
-#PBS -J 1-1400%190
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=2gb
+#PBS -J 1-1400%100
 #PBS -N surv_1
 #PBS -o logs_1/
 #PBS -e logs_1/

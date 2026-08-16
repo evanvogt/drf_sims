@@ -1,29 +1,41 @@
 # Rerun campaign status
 
-Last updated: 2026-08-13 08:35 BST
+Last updated: 2026-08-16 14:19 BST
 
-| study_name | category | expected_jobs | found_jobs | missing_jobs | pct_complete | status | reason |
-|---|---|---|---|---|---|---|---|
-| binary | crossfit_rerun |  4000 | 4000 |     0 | 100.0 | complete | crossfitting strategy change; also bug F (dr_superlearner) |
-| competing_risk | crossfit_rerun |  1400 |    0 |  1400 |   0.0 | not_started | crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy |
-| confidence_intervals/binary | crossfit_rerun | 20000 | 7359 | 12641 |  36.8 | in_progress | crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale) |
-| confidence_intervals/continuous | crossfit_rerun | 20000 | 4147 | 15853 |  20.7 | in_progress | crossfitting strategy change |
-| confidence_intervals/optimal_sf (bin) | crossfit_rerun |  2000 |    0 |  2000 |   0.0 | not_started | crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README) |
-| confidence_intervals/optimal_sf (cts) | crossfit_rerun |  2000 |    0 |  2000 |   0.0 | not_started | crossfitting strategy change |
-| continuous | crossfit_rerun |  4000 | 4000 |     0 | 100.0 | complete | crossfitting strategy change; also bug F (dr_superlearner) |
-| missing/binary | crossfit_rerun |  9900 | 9900 |     0 | 100.0 | complete | crossfitting strategy change; also the DGM was wrong three ways |
-| missing/ci_example | crossfit_rerun |   500 |    0 |   500 |   0.0 | not_started | crossfitting strategy change |
-| missing/continuous | crossfit_rerun |  9900 | 9863 |    37 |  99.6 | in_progress | crossfitting strategy change; also bug F (dr_superlearner) |
-| validation/continuous | crossfit_rerun |   300 |    0 |   300 |   0.0 | not_started | crossfitting strategy change |
-| model_evaluation | first_run |   360 |   28 |   332 |   7.8 | in_progress | first run, not a re-run - its own 9 candidates moved off double crossfitting (me_models.R); the 16 pre-change res_sim_*.RDS have been deleted, so the count restarts from zero |
-| crossfitting | no_rerun |  2000 |    0 |  2000 |   0.0 | not_started | own comparison arms unchanged; only the production consumers of R/cate_models.R moved |
-| crossfitting/confidence_intervals | no_rerun |   150 |    0 |   150 |   0.0 | not_started | own comparison arms unchanged; pilot study, not part of the production rerun |
+| study_name | category | expected_jobs | found_jobs | missing_jobs | pct_complete | status | patchable_jobs | patched_jobs | patch_status | reason |
+|---|---|---|---|---|---|---|---|---|---|---|
+| missing/ci_example | crossfit_rerun |   500 |     0 |  500 |   0.0 | not_started | NA | NA | not_applicable | crossfitting strategy change |
+| validation/continuous | crossfit_rerun |   300 |     0 |  300 |   0.0 | not_started | NA | NA | not_applicable | crossfitting strategy change |
+| crossfitting | no_rerun |  2000 |     0 | 2000 |   0.0 | not_started | NA | NA | not_applicable | own comparison arms unchanged; only the production consumers of R/cate_models.R moved |
+| crossfitting/confidence_intervals | no_rerun |   150 |     0 |  150 |   0.0 | not_started | NA | NA | not_applicable | own comparison arms unchanged; pilot study, not part of the production rerun |
+| competing_risk | crossfit_rerun |  1400 |  1145 |  255 |  81.8 | in_progress | NA | NA | not_applicable | crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy |
+| confidence_intervals/binary | crossfit_rerun | 20000 | 19917 |   83 |  99.6 | in_progress | NA | NA | not_applicable | crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale) |
+| confidence_intervals/continuous | crossfit_rerun | 20000 | 19956 |   44 |  99.8 | in_progress | NA | NA | not_applicable | crossfitting strategy change |
+| confidence_intervals/optimal_sf (bin) | crossfit_rerun |  2000 |   464 | 1536 |  23.2 | in_progress | NA | NA | not_applicable | crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README) |
+| confidence_intervals/optimal_sf (cts) | crossfit_rerun |  2000 |   319 | 1681 |  15.9 | in_progress | NA | NA | not_applicable | crossfitting strategy change |
+| model_evaluation | first_run |   360 |   357 |    3 |  99.2 | in_progress | NA | NA | not_applicable | first run, not a re-run - its own 9 candidates moved off double crossfitting (me_models.R); the 16 pre-change res_sim_*.RDS have been deleted, so the count restarts from zero |
+| binary | crossfit_rerun |  4000 |  4000 |    0 | 100.0 | complete | NA | NA | not_applicable | crossfitting strategy change; also bug F (dr_superlearner) |
+| continuous | crossfit_rerun |  4000 |  4000 |    0 | 100.0 | complete | NA | NA | not_applicable | crossfitting strategy change; also bug F (dr_superlearner) |
+| missing/binary | crossfit_rerun |  9900 |  9900 |    0 | 100.0 | complete | 8800 | 7800 | in_progress | crossfitting strategy change; also the DGM was wrong three ways; plus the dr_random_forest HTE back-fill, patched in place - no re-run |
+| missing/continuous | crossfit_rerun |  9900 |  9900 |    0 | 100.0 | complete | 8800 | 8800 | complete | crossfitting strategy change; also bug F (dr_superlearner); plus the dr_random_forest HTE back-fill, patched in place - no re-run |
 
 ## Legend
 
 - **expected_jobs**: n_sims x number of parameter combinations in the study's grid
 - **found_jobs**: res_sim_*.RDS files actually present under the study's results directory
 - **status**: not_started (0 found), in_progress (0 < found < expected), complete (all found), blocked (currently fails to run, not scanned)
+- **patchable_jobs / patched_jobs / patch_status**: progress of a one-off
+  repair the study owes on top of being run, counted from the manifest the
+  repair writes. `not_applicable` means the study owes none. Right now the
+  only repair is the dr_random_forest HTE back-fill (`R/patch_hte_tests.R`),
+  owed by the two missing-covariate studies. **A study can be `complete` and
+  its patch `not_started`** - that is exactly the state these columns exist
+  to make visible.
+- **patchable_jobs excludes the `multiple_imputation` runs** (1,100 per
+  study). Those keep no nuisances, so there is nothing to recompute a BLP
+  from and the patch refuses them by design; counting them would peg a fully
+  repaired study at 88.9%. See the multiple-imputation note in
+  `missing/README.md`.
 
 Generated by `Rscript check_all.R`. For resubmitting a specific study's
 missing runs, use its own `<prefix>_check.R` -> `jobscripts/failed_ids.txt`

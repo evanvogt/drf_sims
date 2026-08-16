@@ -1,11 +1,10 @@
 #!/bin/bash
 #PBS -l walltime=02:00:00  
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=5gb
-#PBS -J 10001-20000%190
+#PBS -J 10001-20000%100
 #PBS -N ci_bin_2
 #PBS -o logs_2/
 #PBS -e logs_2/
-#PBS -W depend=afterany:1626671[]
 
 module purge
 module add tools/prod

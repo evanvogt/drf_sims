@@ -1,10 +1,10 @@
 #!/bin/bash
-#PBS -l walltime=24:00:00  
-#PBS -l select=1:ncpus=10:ompthreads=10:mem=20gb
-#PBS -J 1-500%43
+#PBS -l walltime=04:30:00
+#PBS -l select=1:ncpus=1:ompthreads=1:mem=3gb
+#PBS -J 1-500%20
 #PBS -N cts_miss_ci
-#PBS -o logs/
-#PBS -e logs/
+#PBS -o logs_1/
+#PBS -e logs_1/
 
 module purge
 module add tools/prod
@@ -23,4 +23,4 @@ cd "${PBS_O_WORKDIR}/.."
 # still the pre-profiling placeholder (workers unchanged at 3/3; grf_threads=1
 # is a guess - today's true behaviour is unset/grf-default, which isn't
 # expressible as a CLI arg).
-Rscript cts_miss_ci_analysis.R "$PBS_ARRAY_INDEX" 3 3 1
+Rscript cts_miss_ci_analysis.R "$PBS_ARRAY_INDEX" 1 1 1
