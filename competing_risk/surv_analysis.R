@@ -2,6 +2,33 @@
 # Title: Competing risks CATEs
 ##########
 
+# Report failures on STDOUT, not stderr.
+#
+# The cluster is currently keeping only the PBS `.o` files, and R sends errors -
+# and every message() in all_cate_surv_models() - to stderr, so when 225 array
+# indices died there was nothing in the logs to say why and it took a local
+# reproduction to find out (see surv_failed_diagnose.R). This handler puts the
+# condition message and the call stack where PBS will keep them. It still exits
+# non-zero, so a failed job is still a failed job as far as the scheduler and
+# check_failed() are concerned.
+#
+# It is armed before the library()/source() calls, and uses only base functions,
+# so a missing package or an unparseable source file is reported the same way.
+options(error = function() {
+  calls <- sys.calls()
+  calls <- calls[-length(calls)] # drop this handler's own frame
+  cat("\n=== SIMULATION FAILED ===\n")
+  cat("args:", paste(commandArgs(trailingOnly = TRUE), collapse = " "), "\n")
+  cat("error:", trimws(geterrmessage()), "\n")
+  cat("call stack (outermost first):\n")
+  for (k in seq_along(calls)) {
+    cat(sprintf("  %2d: %s\n", k, deparse(calls[[k]])[1]))
+  }
+  cat("=========================\n")
+  flush(stdout())
+  quit(status = 1, save = "no")
+})
+
 library(dplyr)
 library(furrr)
 library(grf)

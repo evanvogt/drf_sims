@@ -131,6 +131,10 @@ all_cate_surv_models <- function(
   })
 
   message("SuperLearner T-learner (split pseudo-obs)...")
+  # pseudo_whole is passed for its NA fallback only - see pseudo_sl_t_split. It
+  # does NOT make this a "whole pseudo-values" arm: the training pseudo-values
+  # are still computed on the training folds, and results$sl_t_split$n_na_fallback
+  # counts how many rows had to borrow from the whole-sample vector.
   results$sl_t_split <- pseudo_sl_t_split(
     X,
     Y,
@@ -139,7 +143,8 @@ all_cate_surv_models <- function(
     horizon,
     fold_indices,
     fold_list,
-    sl_library
+    sl_library,
+    pseudo_whole = pseudo_whole
   )
 
   message("SuperLearner DR-learner (whole and cvps pseudo-obs)...")
@@ -785,6 +790,38 @@ pseudo_sl_t_standard <- function(
 # SuperLearner T-learner: split pseudo-obs (Algorithm 2, Cwiling et al. 2025)
 # 3-way split: training (V-2 folds), KM set (fold k+1 mod n_folds), validation (fold k)
 # Training pseudo-obs: leave-one-out on training set; validation pseudo-obs: computed via KM set
+#
+# This function used to take down the whole run, and was the ONLY arm that did:
+# 225 of the 1400 array indices never produced a res_sim_*.RDS, and
+# surv_failed_diagnose.R traced every reproducible one of them to here, by two
+# routes. It was the only SuperLearner call site in this study that both passed
+# `sl_library` unvalidated AND computed its pseudo-values with an unguarded
+# pseudoyl(), so it was missing both of the guards the rest of the file has:
+#
+#   * NA pseudo-values (195 of the 225). pseudoyl()/pseudomean() return NA for
+#     whoever holds the maximum observed time in the sample being decomposed -
+#     the pseudo::ci.omit bug written up in README "Known issues". The NA went
+#     straight into SuperLearner(), which refuses it:
+#       "missing data is currently not supported. Check Y, X, and newX"
+#     Now guarded with the same is.na() -> pseudo_whole substitution
+#     pseudo_crossfit() has used all along, and counted the same way - see
+#     n_na_fallback below.
+#
+#   * a degenerate library (25 of the 225). Where the treatment effect on the
+#     event of interest is strong (bW_1 = -0.7, scenarios 1/3/4/6/7), nearly
+#     every treated subject has the cause-1 event before the horizon, so the
+#     treated arm's RMTL2 pseudo-values collapse onto a handful of distinct
+#     values - 3 across 195 rows on array index 67. SL.glmnet then dies inside
+#     SuperLearner's own CV ("y is constant; gaussian glmnet fails at
+#     standardization step"), leaving NULL in $fitLibrary, and predict()'s
+#     default onlySL = FALSE predicted from that NULL fit:
+#       "no applicable method for 'predict' applied to an object of class NULL"
+#     Now pretested, exactly as pseudo_sl_t_standard() already was.
+#
+# @param pseudo_whole whole-sample pseudo-values from pseudo_all(), used only to
+#   fill NAs. Passed in rather than recomputed: all_cate_surv_models() already
+#   has it. Optional so the function still stands alone for diagnostics; without
+#   it the NA rows are dropped from the fold's fit instead.
 pseudo_sl_t_split <- function(
   X,
   Y,
@@ -793,7 +830,8 @@ pseudo_sl_t_split <- function(
   horizon,
   fold_indices,
   fold_list,
-  sl_library = DEFAULT_SL_LIBRARY
+  sl_library = DEFAULT_SL_LIBRARY,
+  pseudo_whole = NULL
 ) {
   n_obs <- nrow(X)
   n_folds <- length(fold_list)
@@ -812,7 +850,7 @@ pseudo_sl_t_split <- function(
 
       X_train <- X[in_train, , drop = FALSE]
       W_train <- W[in_train]
-      X_test <- X[in_val, , drop = FALSE]
+      X_test <- as.data.frame(X[in_val, , drop = FALSE])
 
       # Training pseudo-obs: standard leave-one-out on training set
       ps_RMTL_train <- pseudoyl(Y[in_train], D_int[in_train], horizon)
@@ -820,26 +858,76 @@ pseudo_sl_t_split <- function(
       ps_RMTL1_train <- ps_RMTL_train$pseudo$cause1
       ps_RMTL2_train <- ps_RMTL_train$pseudo$cause2
 
+      # Count before substituting, so the leakage the substitution introduces
+      # stays measurable - the same contract pseudo_crossfit() keeps. A
+      # whole-sample pseudo-value has seen the validation and KM folds, so a
+      # non-zero count qualifies this arm's independence claim.
+      n_na <- c(
+        RMTL1 = sum(is.na(ps_RMTL1_train)),
+        RMTL2 = sum(is.na(ps_RMTL2_train)),
+        RMSTc = sum(is.na(ps_RMSTc_train))
+      )
+
+      fill_na <- function(ps, whole_name) {
+        if (!anyNA(ps)) return(ps)
+        if (is.null(pseudo_whole)) return(ps) # fit_arm's `keep` drops them
+        ifelse(is.na(ps), pseudo_whole[[whole_name]][in_train], ps)
+      }
+      ps_RMTL1_train <- fill_na(ps_RMTL1_train, "ps_RMTL1")
+      ps_RMTL2_train <- fill_na(ps_RMTL2_train, "ps_RMTL2")
+      ps_RMSTc_train <- fill_na(ps_RMSTc_train, "ps_RMSTc")
+
+      # One treatment arm's fit. `keep` is the backstop for the two cases
+      # fill_na cannot cover: no pseudo_whole passed at all, and the rare one
+      # where the whole-sample vector is itself NA on that row (pseudoyl fails
+      # on the GLOBAL max-time observation too). Either way no NA reaches
+      # SuperLearner, which is what aborted 195 of the 225 runs.
+      fit_arm <- function(pseudo_train, w) {
+        in_arm <- W_train == w
+        y <- pseudo_train[in_arm]
+        x <- as.data.frame(X_train[in_arm, , drop = FALSE])
+        keep <- !is.na(y)
+
+        lib <- pretest_superlearner(y[keep], x[keep, , drop = FALSE],
+                                    sl_library, gaussian())
+        fit <- SuperLearner(
+          Y = y[keep],
+          X = x[keep, , drop = FALSE],
+          SL.library = lib,
+          cvControl = list(V = 5)
+        )
+        # onlySL = TRUE predicts from the weighted learners only, so a candidate
+        # that survives pretest's 2-fold CV and then fails in the live 5-fold one
+        # cannot reintroduce the NULL-fit crash above.
+        pred <- as.numeric(predict(fit, newdata = X_test, onlySL = TRUE)$pred)
+
+        # Same failsafe as R/cate_models.R::nuisance_sl: when every learner ends
+        # up with zero weight SuperLearner returns all-zero predictions, which
+        # are not an estimate of anything. Testing for EXACT zeros is safe even
+        # for RMTL2, where the treated arm's pseudo-values genuinely sit near
+        # zero - a real fit does not return floating-point 0 on every row.
+        # anyNA is folded in so a stray NA falls back rather than propagating
+        # into tau, which is the failure this whole function was fixed for.
+        if (anyNA(pred) || isTRUE(all(pred == 0))) {
+          warning("pseudo_sl_t_split: SuperLearner gave no usable predictions ",
+                  "for W = ", w, " on fold ", fold, ". Using mean(pseudo).")
+          pred <- rep(mean(y[keep], na.rm = TRUE), nrow(X_test))
+        }
+        pred
+      }
+
+      # Control arm first, as before the fix - these consume the RNG stream, so
+      # keeping the order avoids a gratuitous change to the numbers on top of
+      # the one pretest_superlearner already makes.
       make_t_cate <- function(pseudo_train) {
-        sl0 <- SuperLearner(
-          Y = pseudo_train[W_train == 0],
-          X = as.data.frame(X_train[W_train == 0, , drop = FALSE]),
-          SL.library = sl_library,
-          cvControl = list(V = 5)
-        )
-        sl1 <- SuperLearner(
-          Y = pseudo_train[W_train == 1],
-          X = as.data.frame(X_train[W_train == 1, , drop = FALSE]),
-          SL.library = sl_library,
-          cvControl = list(V = 5)
-        )
-        p0 <- predict(sl0, newdata = as.data.frame(X_test))$pred
-        p1 <- predict(sl1, newdata = as.data.frame(X_test))$pred
-        as.numeric(p1 - p0)
+        p0 <- fit_arm(pseudo_train, 0)
+        p1 <- fit_arm(pseudo_train, 1)
+        p1 - p0
       }
 
       list(
         fold = fold,
+        n_na = n_na,
         tau_RMTL1 = make_t_cate(ps_RMTL1_train),
         tau_RMTL2 = make_t_cate(ps_RMTL2_train),
         tau_RMSTc = make_t_cate(ps_RMSTc_train)
@@ -855,7 +943,12 @@ pseudo_sl_t_split <- function(
     tau_RMTL2[idx] <- result$tau_RMTL2
     tau_RMSTc[idx] <- result$tau_RMSTc
   }
-  list(RMTL1 = tau_RMTL1, RMTL2 = tau_RMTL2, RMSTc = tau_RMSTc)
+  list(
+    RMTL1 = tau_RMTL1,
+    RMTL2 = tau_RMTL2,
+    RMSTc = tau_RMSTc,
+    n_na_fallback = colSums(do.call(rbind, lapply(tau_result, `[[`, "n_na")))
+  )
 }
 
 # SuperLearner DR-learner nuisances, single leave-one-fold-out ("scf_scf").

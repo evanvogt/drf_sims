@@ -189,16 +189,18 @@ STUDIES <- list(
     }
   ),
 
-  # DEFERRED - excluded from the default sweep, run explicitly with
-  #   Rscript R/regression_check.R baseline competing_risk
-  # all_cate_surv_models currently aborts with "missing data is currently not
-  # supported" from SuperLearner, i.e. an NA reaches a stage-2 fit. Because this
-  # folder never calls pretest_superlearner (unlike the cts/bin studies), one bad
-  # algorithm takes the whole run down instead of being dropped. Being chased
-  # separately; until then there is no baseline to compare against.
+  # Was DEFERRED because all_cate_surv_models aborted with "missing data is
+  # currently not supported" from SuperLearner, so there was nothing to capture.
+  # That is fixed: the NA came from the unguarded pseudoyl() in
+  # pseudo_sl_t_split, which was also the one call site here that never called
+  # pretest_superlearner. Both are now guarded (see the header comment on that
+  # function), so this study joins the default sweep.
+  # R/cate_models.R is in the list, and before the study's own files, because
+  # that is the order surv_analysis.R uses. Without it nuisance_pseudo_rf_oob
+  # cannot find oob_predict_counterfactual and the capture dies partway - a
+  # second reason this entry had never been captured, hidden behind the abort.
   competing_risk = list(
-    deferred = TRUE,
-    sources = c("utils.R", "competing_risk/surv_dgm.R",
+    sources = c("utils.R", "R/cate_models.R", "competing_risk/surv_dgm.R",
                 "competing_risk/surv_models.R"),
     run = function() {
       # n = 400 not 120: at the smaller size grf's causal_survival_forest rejects
