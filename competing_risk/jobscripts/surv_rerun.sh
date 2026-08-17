@@ -4,9 +4,9 @@
 # are what it computes from surv_1.sh, so the first check leaves them alone.
 # Needs logs_rerun/ to exist on the cluster - PBS aborts a job whose output
 # directory is missing, and *logs*/ is gitignored so it is never checked out.
-#PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=3:ompthreads=2:mem=12gb
-#PBS -J 1-595%100
+#PBS -l walltime=04:00:00
+#PBS -l select=1:ncpus=3:ompthreads=2:mem=20gb
+#PBS -J 1-225%100
 #PBS -N surv_rerun
 #PBS -o logs_rerun/
 #PBS -e logs_rerun/

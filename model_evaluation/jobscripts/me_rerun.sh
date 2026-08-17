@@ -3,7 +3,7 @@
 # -J and the resource request are rewritten by check_failed(); do not hand-edit.
 #PBS -l walltime=02:00:00
 #PBS -l select=1:ncpus=3:ompthreads=2:mem=12gb
-#PBS -J 1-3%2
+#PBS -J 1-2%1
 #PBS -N me_rerun
 #PBS -o logs_rerun/
 #PBS -e logs_rerun/
