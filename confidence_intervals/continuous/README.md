@@ -17,7 +17,7 @@ bootstrap and what the metrics mean.
 | `cts_ci_dgms.R` | names the `continuous` scenario set — the same one `continuous/` uses |
 | `cts_ci_models.R` | `profile = "ci"`, bootstrap on, SuperLearner and HTE tests off |
 | `cts_ci_analysis.R` | array entry point |
-| `cts_ci_results.R`, `cts_ci_results.Rmd` | summaries |
+| `cts_ci_results.R`, `cts_ci_results.Rmd`, `cts_ci_results.qmd` | summaries |
 
 `cts_ci_dgms.R` used to carry the note *"just a straight copy of the cts dgm for
 now"*, and it was — byte for byte. It now names the shared scenario set instead,

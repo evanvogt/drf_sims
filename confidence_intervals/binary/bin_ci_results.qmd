@@ -1,0 +1,401 @@
+---
+title: "Binary CI study: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(patchwork)
+library(purrr)
+library(knitr)
+```
+
+## How should the half-sample bootstrap's subsampling ratio be set?
+
+**This study's underlying data is superseded (Bug A).** `bin_ci_dgms.R` ran on
+the *continuous* outcome's coefficient table (`b0 = c(0.4, 0.2, ...)`,
+`b1 = -0.05`, `b2 = c(2, 2, ...)`) fed through `plogis`, instead of the binary
+table the main `binary/` study uses. With `b2 = 2` on a logit scale the outcome
+model saturates — most of the covariate range sits in the flat tails of
+`plogis` — so the true CATEs are compressed toward zero and coverage below is
+measured against a target the design never intended. `../results/confidence_intervals/binary/`
+needs a full re-run under the fixed DGM before these numbers are comparable to
+the main binary study; see `confidence_intervals/binary/README.md` for the fix
+and status. Read everything below as a caveat pending that re-run, not as a
+finished result.
+
+`CI_sf` is the `sample.fraction` passed to the half-sample forests, and it is
+the one tuning choice the bootstrap procedure forces on us. Ritzwoller, who
+wrote the bootstrap paper with Syrgkanis, reports that the intervals perform
+well at a ratio of 0.05. The GRF papers also note that a lower ratio improves
+confidence intervals, yet grf's own default is 0.5. That is a wide disagreement
+over a parameter that is not knowable a priori — too small and the half-sample
+forests are noisy, too large and the half samples stop being independent
+enough — so this study sweeps it: 0.05, 0.10, ..., 0.50.
+
+Ten scenarios vary the structure of the CATE, crossed with two sample sizes and
+the ten-point `CI_sf` sweep, 100 runs each. Full design in
+`confidence_intervals/README.md`; the grid itself is defined once, in
+`bin_ci_config.R`.
+
+| | |
+|---|---|
+| scenarios | 1–10 |
+| n | 500, 1000 |
+| `CI_sf` | 0.05 to 0.50 in steps of 0.05 |
+| runs | 100 |
+| array | **20,000 jobs**, split across two jobscripts |
+
+| Scenario | CATE structure |
+|---|---|
+| 1: No HTE | $b_0 + b_1 X_1 + b_2 X_2 + W b_W$ |
+| 2: Binary HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_3 X_3)$ |
+| 3: Continuous HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_4 X_4)$ |
+| 4: Two HTE vars | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4)$ |
+| 5: Cts x binary interaction | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{34} X_3 X_4)$ |
+| 6: Two vars + cts x binary | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{34} X_3 X_4)$ |
+| 7: Cts x cts interaction | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{45} X_4 X_5)$ |
+| 8: Two vars + cts x cts | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{45} X_4 X_5)$ |
+| 9: Cosine HTE | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_4 \cos(X_4))$ |
+| 10: Exponential HTE | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 \exp(-\lvert X_4 \rvert))$ |
+
+The linear predictor above enters `plogis()` to give the binary outcome's
+success probability — the same scenario formulas as `continuous/`, on the
+logit scale instead of the identity scale.
+
+**Estimators**: `causal_forest`, `dr_random_forest`, `dr_oracle`,
+`dr_semi_oracle` — `CI_MODELS` in `R/metrics.R`, fit with `family = binomial()`
+and `oracle_link = "logit"` (`bin_ci_models.R`). There is no SuperLearner arm
+and no BLP or independence test: this study runs `profile = "ci"`, because the
+question is interval coverage rather than heterogeneity detection, and the
+bootstrap already dominates the runtime.
+
+### Performance measures
+
+* **Marginal coverage** — the proportion of units their own interval covers.
+  Shown both per run and as the mean across runs.
+* **Simultaneous coverage** — 0/1 per run: did the band cover *every* unit at
+  once. This is the guarantee the half-sample bootstrap is constructed to
+  control, and the much stricter target.
+* **CI length** — mean interval length within a run. Shown per run and as the
+  mean across runs.
+
+Nominal is 0.95 for both coverages.
+
+### Three interval kinds
+
+`bin_ci_metrics.R` scores three intervals, not one, and writes them as separate
+rows of the same `model` column. They are split back apart below into an
+estimator and an interval kind, so that the comparison between them is on its own
+axis rather than mixed into the estimator legend.
+
+| kind | arms | how |
+|---|---|---|
+| Half-sample bootstrap (per unit) | all 4 | the study's headline interval — simultaneous band over the sample's own units |
+| Causal forest variance (pointwise) | `causal_forest` only | grf's own variance estimates turned into a normal-approximation interval by `normal_interval()`, at no extra compute. Written as `causal_forest_inbuilt` |
+| Half-sample bootstrap (query grid) | all 4 | the same band evaluated over the fixed covariate-grid query points from `build_query_grid()` rather than the sample's units. Written as `<model>_grid` |
+
+Everything below the interval-kind comparison uses the per-unit bootstrap, the
+one interval every arm has.
+
+```{r data}
+# paths
+path <- here()
+res_path <- file.path(dirname(path), "results", "confidence_intervals", "binary")
+
+metrics <- readRDS(file.path(res_path, "ci_bin_metrics.RDS"))
+
+# display order and labels - the CI studies have no shared label-dictionary
+# script, so these stay inline, matching bin_results.qmd's precedent
+scenario_labels <- c(
+  `1` = "1: No HTE",
+  `2` = "2: Binary HTE",
+  `3` = "3: Continuous HTE",
+  `4` = "4: Two HTE vars",
+  `5` = "5: Cts x binary interaction",
+  `6` = "6: Two vars + cts x binary",
+  `7` = "7: Cts x cts interaction",
+  `8` = "8: Two vars + cts x cts",
+  `9` = "9: Cosine HTE",
+  `10` = "10: Exponential HTE"
+)
+
+# CI_MODELS - no SuperLearner arm in this study
+model_labels <- c(
+  causal_forest = "Causal forest",
+  dr_random_forest = "DR-RandomForest",
+  dr_oracle = "DR-oracle",
+  dr_semi_oracle = "DR-semi-oracle"
+)
+
+interval_labels <- c(
+  half_boot      = "Half-sample bootstrap (per unit)",
+  grf_normal     = "Causal forest variance (pointwise)",
+  half_boot_grid = "Half-sample bootstrap (query grid)"
+)
+
+# tidy up. bin_ci_metrics.R writes the alternative intervals as extra *rows* of
+# `model` - "causal_forest_inbuilt" and "<model>_grid" - so split that one
+# column into the estimator and the interval kind. Without this the _grid rows
+# recode to NA and disappear silently, which is what bin_ci_results.Rmd did.
+metrics <- metrics %>%
+  mutate(
+    interval = case_when(
+      model == "causal_forest_inbuilt" ~ "grf_normal",
+      grepl("_grid$", model)           ~ "half_boot_grid",
+      TRUE                             ~ "half_boot"
+    ),
+    model = sub("_inbuilt$|_grid$", "", model)
+  ) %>%
+  mutate(
+    scenario = factor(scenario, levels = names(scenario_labels) %>% as.integer(),
+                      labels = unname(scenario_labels)),
+    n = factor(n, levels = c(500, 1000)),
+    # the same seq() the study config uses, so the doubles match exactly
+    CI_sf = factor(CI_sf, levels = seq(0.05, 0.5, 0.05)),
+    model = factor(recode(model, !!!model_labels), levels = unname(model_labels)),
+    interval = factor(recode(interval, !!!interval_labels),
+                      levels = unname(interval_labels))
+  ) %>%
+  droplevels()
+
+# per (scenario, n, CI_sf, model, interval) summaries. Computed over every
+# interval kind so the comparison section can reuse them; `summary_hb` is the
+# bootstrap-only view every other section uses.
+metrics_summary <- metrics %>%
+  group_by(scenario, n, CI_sf, model, interval) %>%
+  summarise(
+    mean_marg_cov = mean(marginal_coverage, na.rm = T),
+    mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(n()),
+    mean_simul_cov = mean(simultaneous_coverage, na.rm = T),
+    mcse_simul_cov = sd(simultaneous_coverage, na.rm = T) / sqrt(n()),
+    mean_ci_len = mean(mean_ci_length, na.rm = T),
+    mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# everything below the interval-kind comparison is about the per-unit bootstrap
+metrics_hb <- filter(metrics, interval == interval_labels[["half_boot"]])
+summary_hb <- filter(metrics_summary, interval == interval_labels[["half_boot"]])
+```
+
+```{r plot-helpers, include=FALSE}
+# helpers: the house pair of plots, per-run distribution and mean with MCSE
+# error bars - see cts_results.qmd's summary_plot for the pattern. The sweep
+# goes on x and the design on the facets, so scenario x n is a facet_grid
+# rather than cts_results.qmd's facet_wrap(~scenario).
+#
+# hline is optional rather than defaulting to 0 (as in cf_ci_results.qmd): the
+# coverages have a nominal 0.95 to sit against, CI width has no target at all.
+box_plot <- function(df, metric, title, ylab, hline = NULL) {
+  p <- ggplot(df, aes(x = CI_sf, y = .data[[metric]], colour = model))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, y = ylab, x = "Subsampling ratio", colour = "Model")
+}
+
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+  df <- df %>%
+    mutate(est = .data[[mean_col]],
+           lo = .data[[mean_col]] - .data[[mcse_col]],
+           hi = .data[[mean_col]] + .data[[mcse_col]])
+  p <- ggplot(df, aes(x = CI_sf, y = est, colour = model, ymin = lo, ymax = hi))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, y = ylab, x = "Subsampling ratio", colour = "Model")
+}
+
+# the interval-kind comparison needs a different assignment of aesthetics: the
+# kind takes the colour, so the estimator moves onto the facet columns and n
+# onto the point shape.
+interval_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+  df <- df %>%
+    mutate(est = .data[[mean_col]],
+           lo = .data[[mean_col]] - .data[[mcse_col]],
+           hi = .data[[mean_col]] + .data[[mcse_col]])
+  p <- ggplot(df, aes(x = CI_sf, y = est, colour = interval, shape = n,
+                      ymin = lo, ymax = hi))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_point(position = position_dodge(width = 0.6), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.6), linewidth = 0.3, width = 0.3) +
+    facet_grid(rows = vars(scenario), cols = vars(model), scales = "free_y") +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, y = ylab, x = "Subsampling ratio",
+         colour = "Interval kind", shape = "Sample size")
+}
+```
+
+## Marginal coverage
+
+The proportion of units their own interval covers, against the nominal 95%
+(dashed line), across the sweep.
+
+```{r marg-cov-plot, fig.height=22}
+marg_cov_plot <- box_plot(metrics_hb, "marginal_coverage",
+                          "Marginal coverage", "Marginal coverage", hline = 0.95)
+
+marg_cov_sum_plot <- summary_plot(summary_hb, "mean_marg_cov", "mcse_marg_cov",
+                                  "Mean marginal coverage", "Marginal coverage",
+                                  hline = 0.95)
+
+(marg_cov_plot / marg_cov_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Simultaneous coverage
+
+Whether the band covers every unit at once — what the half-sample bootstrap is
+actually constructed to control. This is a per-run 0/1 indicator, so only the
+mean-proportion summary is shown: a boxplot of a binary outcome carries no
+information.
+
+```{r simul-cov-plot, fig.height=18}
+simul_cov_sum_plot <- summary_plot(summary_hb, "mean_simul_cov", "mcse_simul_cov",
+                                   "Mean simultaneous coverage",
+                                   "Simultaneous coverage", hline = 0.95)
+
+simul_cov_sum_plot
+```
+
+## CI length
+
+The width that coverage is bought with. No reference line — there is no target
+width, only the trade-off against the two coverage sections above. A ratio that
+reaches nominal coverage by producing enormous bands has not solved anything.
+
+```{r ci-len-plot, fig.height=22}
+ci_len_plot <- box_plot(metrics_hb, "mean_ci_length", "CI length across runs",
+                        "CI length")
+
+ci_len_sum_plot <- summary_plot(summary_hb, "mean_ci_len", "mcse_ci_len",
+                                "Mean CI length", "Mean CI length")
+
+(ci_len_plot / ci_len_sum_plot) + plot_layout(guides = "collect")
+```
+
+## The three interval kinds
+
+The sweep is the same in all three panels below; what changes is which interval
+is being scored. Two things to hold on to when reading them:
+
+**The pointwise interval is not competing on simultaneous coverage.** grf's
+variance estimates give a per-unit interval, so it should score near zero on the
+simultaneous panel — that is the method working as designed, not a defect. The
+marginal panel is the fair reading of it, and there it is the free comparator:
+does an expensive bootstrap buy anything over the variance grf hands back for
+nothing? Note also that it does not depend on `CI_sf` at all — no half-sample
+forests are involved — so a flat line across the sweep is expected, and any
+visible slope is Monte Carlo noise.
+
+**The query-grid band is a different target, not a harder version of the same
+one.** It takes its supremum over the fixed covariate grid from
+`build_query_grid()` rather than over the sample's own units, so it is generally
+the easier of the two and the numbers are not directly comparable to the per-unit
+band.
+
+```{r interval-marg-cov, fig.height=22}
+interval_plot(metrics_summary, "mean_marg_cov", "mcse_marg_cov",
+              "Mean marginal coverage by interval kind", "Marginal coverage",
+              hline = 0.95)
+```
+
+```{r interval-simul-cov, fig.height=22}
+interval_plot(metrics_summary, "mean_simul_cov", "mcse_simul_cov",
+              "Mean simultaneous coverage by interval kind",
+              "Simultaneous coverage", hline = 0.95)
+```
+
+```{r interval-ci-len, fig.height=22}
+interval_plot(metrics_summary, "mean_ci_len", "mcse_ci_len",
+              "Mean CI length by interval kind", "Mean CI length")
+```
+
+## Choosing `CI_sf`
+
+The point of the sweep. `optimal_sf/` consumes it to pick a single value, so the
+question here is which ratio gets simultaneous coverage closest to nominal —
+simultaneous rather than marginal, because that is the guarantee the method
+claims.
+
+The plot is the distance from nominal, `|mean simultaneous coverage - 0.95|`, so
+**lower is better and zero is the target**. The table underneath picks out the
+arg-min per scenario, sample size and estimator, and reports the width that
+choice costs.
+
+```{r sf-distance-plot, fig.height=18}
+sf_dist <- summary_hb %>%
+  mutate(dist = abs(mean_simul_cov - 0.95))
+
+sf_dist %>%
+  ggplot(aes(x = CI_sf, y = dist, colour = model, group = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(size = 2) +
+  geom_line(linewidth = 0.3) +
+  facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Distance from nominal simultaneous coverage",
+       subtitle = "Lower is better; zero is exactly nominal",
+       y = "|mean simultaneous coverage - 0.95|", x = "Subsampling ratio",
+       colour = "Model")
+```
+
+```{r sf-best-table}
+best_sf <- sf_dist %>%
+  group_by(scenario, n, model) %>%
+  slice_min(dist, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  select(scenario, n, model, CI_sf, mean_simul_cov, mean_marg_cov, mean_ci_len) %>%
+  arrange(scenario, n, model)
+
+kable(best_sf, digits = 4,
+      col.names = c("Scenario", "n", "Model", "Best CI_sf",
+                    "Mean simultaneous coverage", "Mean marginal coverage",
+                    "Mean CI length"))
+```
+
+## Headline table
+
+Every cell of the sweep for the per-unit bootstrap, arranged by scenario, sample
+size, estimator and subsampling ratio.
+
+```{r headline-table}
+headline <- summary_hb %>%
+  select(scenario, n, model, CI_sf, mean_marg_cov, mcse_marg_cov,
+         mean_simul_cov, mcse_simul_cov, mean_ci_len, mcse_ci_len) %>%
+  arrange(scenario, n, model, CI_sf)
+
+kable(headline, digits = 4,
+      col.names = c("Scenario", "n", "Model", "CI_sf", "Mean marginal coverage",
+                    "MCSE (marg. cov.)", "Mean simultaneous coverage",
+                    "MCSE (simul. cov.)", "Mean CI length", "MCSE (CI length)"))
+```
