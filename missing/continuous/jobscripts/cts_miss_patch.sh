@@ -17,6 +17,8 @@
 #PBS -l select=1:ncpus=1:ompthreads=1:mem=4gb
 #PBS -J 1-99
 #PBS -N cts_miss_patch
+#PBS -o logs_patch/
+#PBS -e logs_patch/
 
 module purge
 module add tools/prod

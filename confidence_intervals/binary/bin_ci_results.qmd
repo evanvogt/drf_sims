@@ -154,6 +154,8 @@ interval_labels <- c(
 # column into the estimator and the interval kind. Without this the _grid rows
 # recode to NA and disappear silently, which is what bin_ci_results.Rmd did.
 metrics <- metrics %>%
+  # filter to 4 interesting scenarios to see figures clearer
+  filter(scenario %in% c(1,3,8,9)) %>%
   mutate(
     interval = case_when(
       model == "causal_forest_inbuilt" ~ "grf_normal",

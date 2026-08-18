@@ -6,7 +6,7 @@
 # heavier per file, but this study has far fewer files (360 vs. 4000), so
 # the aggregate is comparable order of magnitude. See README.md.
 #PBS -l walltime=01:00:00
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=20gb
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=100gb
 #PBS -N me_collect
 
 
