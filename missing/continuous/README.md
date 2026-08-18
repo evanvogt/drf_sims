@@ -19,6 +19,7 @@ here).
 | `cts_miss_models.R` | `family = gaussian()`, `profile = "missing"`, `ipw` threaded through |
 | `cts_miss_analysis.R` | array entry point |
 | `cts_miss_patch.R` | one-off: back-fills the `dr_random_forest` HTE tests into finished results (`R/patch_hte_tests.R`). Array entry point for `jobscripts/cts_miss_patch.sh` |
+| `cts_miss_patch_check.R` | audits that back-fill — which combinations it failed on and why. See `missing/binary/README.md`, where the failure it was written for happened; this study's patch is complete, so a run here should report nothing to re-run |
 | `cts_miss_results.R` / `.qmd` | every metric, to `results/all_figures/` — the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts.R` |
 | `mi_scratch.R` | exploratory, unmaintained |
 | `results_cts_miss.{R,Rmd,html}` | **superseded** by `cts_miss_results.R`/`.qmd` — kept for reference, renamed to the repo's legacy convention (cf. `continuous/results_cts.R`). Points at the old HPC path `/rds/general/...` and at `results/new_format/metrics_cts_miss_df.RDS`, neither of which exists any more; scenarios are `"scenario_5"` strings, and only bias and MSE are plotted. It was called `cts_miss_results.*`, so its `.html` was being clobbered by the new `.qmd`'s render output. |
@@ -57,7 +58,13 @@ and `cts_miss_check.R` reports 9,900/9,900, so it is one clean pass:
 ```bash
 Rscript cts_miss_patch.R dry                       # report only, writes nothing
 qsub    jobscripts/cts_miss_patch.sh               # 1-99, one combination each
+Rscript cts_miss_patch_check.R                     # did every element land?
 ```
+
+That last step is not ceremony: the binary study's patch job lost ten of its 99
+array elements silently, because a manifest is only written once a combination
+finishes and `check_all.R` counts manifest rows. See "Checking the back-fill
+landed" in `missing/binary/README.md`.
 
 ## Running it
 

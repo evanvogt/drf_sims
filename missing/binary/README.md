@@ -124,6 +124,7 @@ a separate and larger gap; see the multiple-imputation note in
 qsub missing/binary/jobscripts/bin_miss_1.sh        # 1-9900
 Rscript missing/binary/bin_miss_check.R
 qsub missing/binary/jobscripts/bin_miss_patch.sh    # 1-99, the HTE back-fill
+Rscript missing/binary/bin_miss_patch_check.R       # did the back-fill land?
 qsub missing/binary/jobscripts/bin_miss_collect.sh
 qsub missing/binary/jobscripts/bin_miss_metrics.sh
 ```
@@ -133,6 +134,44 @@ The patch step goes **before** collect: collect reads the per-run files into
 carrying the old, testless `dr_random_forest`. It is a one-off — once these
 results are patched and `PROFILES$missing` is set, future runs need only the
 usual four steps.
+
+### Checking the back-fill landed
+
+`bin_miss_patch_check.R` is to the repair what `bin_miss_check.R` is to the
+simulation, and it exists because the first submission of `bin_miss_patch.sh`
+lost ten of its 99 array elements without leaving a trace. `check_all.R` showed
+the study at **patchable 8,800 / patched 7,800** — it counts manifest *rows*, and
+combos 21, 22, 28, 29, 30, 32, 40, 44, 45 and 48 had written no manifest at all,
+which from there is indistinguishable from never having been submitted. Neither
+end of the job could say more: the HPC was returning no `.e` files and that run's
+`.o` files were gone.
+
+So the audit reconstructs the diagnosis from the result files, which do survive.
+`patch_status_of()` says whether a file was patched; mtimes say *when*, so the
+first and last patched file bracket how long the element ran before it stopped;
+and an orphan `res_sim_<n>.RDS.tmp` names the file it was writing when it died.
+Comparing the failed elements' runtimes against the ones that finished, and
+against the job's own walltime, is what turns that into a cause.
+
+```bash
+Rscript missing/binary/bin_miss_patch_check.R     # writes failed_patch_ids.txt
+qsub    missing/binary/jobscripts/bin_miss_patch_rerun.sh
+Rscript missing/binary/bin_miss_patch_check.R     # confirm, then check_all.R
+```
+
+The re-run is safe over combinations that are already correct — the patch is
+idempotent, so an element that only lost its manifest simply rewrites it. The
+audit writes `bin_miss_patch_check.{csv,md}`, which are committed, so `git push`
+from the HPC is how the answer leaves the cluster.
+
+Three things changed so this cannot recur silently. `patch_hte_tests()` now
+flushes each combination's manifest every `MANIFEST_FLUSH_EVERY` files instead
+of only at the end, and prints one line per file to stdout, so a killed element
+leaves both a short manifest and a log saying where it stopped. `bin_miss_patch.sh`
+gained `-j oe`, merging stderr into the `.o` file that the HPC does return, and a
+`%20` throttle on its array — it was the only job in this study without one, and
+99 elements each doing 100 `readRDS` + 100 `saveRDS` against the shared
+filesystem at once is the leading explanation for the original kills.
 
 Then, for the figures:
 

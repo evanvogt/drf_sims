@@ -15,10 +15,11 @@
 # Dry run first - `Rscript cts_miss_patch.R dry` on the login node is cheap.
 #PBS -l walltime=00:20:00
 #PBS -l select=1:ncpus=1:ompthreads=1:mem=4gb
-#PBS -J 1-99
+#PBS -J 1-99%20
 #PBS -N cts_miss_patch
 #PBS -o logs_patch/
 #PBS -e logs_patch/
+#PBS -j oe
 
 module purge
 module add tools/prod
