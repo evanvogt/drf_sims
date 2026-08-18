@@ -1,0 +1,664 @@
+---
+title: "Model evaluation: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(patchwork)
+library(purrr)
+library(knitr)
+```
+
+## Can a cheap proxy loss pick the right CATE learner?
+
+True PEHE — the mean squared error of an estimated CATE against the truth —
+is the quantity you would select a CATE learner on if you could. You can't:
+outside a simulation the true CATE is never observed. The practical fallback
+is a *proxy* loss built from a second, independent set of nuisance estimates,
+which is observable. This study asks whether that substitution survives:
+**given 9 candidate CATE-learner configurations, do the cheap proxy losses
+rank them the way the unobservable true PEHE would?**
+
+That makes this a model-*selection* study, not another "does estimator X
+recover the true CATE" study. The unit of analysis throughout is **the ranking
+of the 9 candidates within a single (scenario, n, run)** — not any one
+candidate's own accuracy. A proxy is useful if, run by run, its argmin is the
+same candidate true PEHE's argmin is; and if when it differs, it doesn't
+differ expensively.
+
+### Design
+
+Four scenarios crossed with three sample sizes, 30 replicates each — **360
+array jobs**. Scenarios are indices into `R/dgm_scenarios.R`'s
+`set = "continuous"`; the subset 1 / 4 / 6 / 9 and its display labels are the
+same ones `crossfitting/cf_results.qmd` uses, so the two reports are directly
+comparable.
+
+| | |
+|---|---|
+| scenarios | 1 (Null), 4 (Simple), 6 (Interaction), 9 (Non-linear) |
+| n | 250, 500, 1000 |
+| runs | 30 |
+| folds | V = 10, single crossfitting (`scf_scf`), all n |
+
+All 9 candidates share one honesty regime — leave-one-fold-out nuisances with
+the stage-2 model trained on the same folds. That is deliberate: mixing OOB
+forests with crossfit everything-else would confound learner choice with
+crossfitting scheme in the ranking, which is the thing being measured. See
+`model_evaluation/README.md`.
+
+### The 9 candidates
+
+Each is fit as its own single-crossfit DR-learner (`me_models.R`). `p` is the
+number of covariates, 7–9 across these scenarios.
+
+| id | family | hyperparameters |
+|---|---|---|
+| `rf1` | random forest | ranger defaults (`mtry = floor(sqrt(p))`) |
+| `rf2` | random forest | `mtry = p, max.depth = 5` |
+| `rf3` | random forest | `mtry = ceiling(p/2), max.depth = 3` |
+| `net1` | elastic net | `alpha = 1` (lasso) |
+| `net2` | elastic net | `alpha = 0` (ridge) |
+| `net3` | elastic net | `alpha = 0.5` |
+| `SL1` | SuperLearner | `glmnet, ranger, earth, gam, mean` |
+| `SL2` | SuperLearner | `glmnet, xgboost, cforest, earth, gam, mean` |
+| `SL3` | SuperLearner | `svm, nnet, mean` |
+
+### The 8 proxy scores
+
+A second, *independent* nuisance pipeline estimates `mu0_T`, `mu1_T`, `mu_DR`
+and `pi`, and is used only to score the candidates — never to fit them. Two
+pipelines, two fold regimes, two score types:
+
+| axis | levels |
+|---|---|
+| pipeline | **XGBoost** (36-combination CV grid) / **H2O AutoML** (up to 20 auto-tuned models) |
+| fold regime | **cv** (leave-one-fold-out) / **whole** (no split) |
+| score type | **infl** — influence-corrected PEHE proxy (`calc_infl_score`) / **dr** — DR risk, MSE against the AIPW pseudo-outcome `phi` (`calc_dr_risk`) |
+
+All eight, and `true_pehe` itself, are **losses: lower is better**.
+
+**`whole` is resubstitution.** It fits and predicts the scoring nuisances on
+the entire sample, so they see the same rows the candidate's `tau_hat` was fit
+on. `cv` is the honest regime. Any advantage `whole` shows here is the effect
+this study exists to detect, not a free win — read it as a warning, not a
+recommendation.
+
+**Scenario 1 (Null) is not degenerate here.** `R/metrics.R::cate_metrics()`
+forces its `corr` to 0 in scenario 1 because the true CATE is constant *across
+units*, so a unit-level correlation is undefined. This report's correlations
+are across the *9 candidates* within a run, and `true_pehe` still varies from
+candidate to candidate even when the truth is a constant — so no scenario-1
+guard is needed, and none is applied.
+
+```{r data}
+# paths
+path <- here()
+res_path <- file.path(dirname(path), "results", "model_evaluation")
+
+metrics <- readRDS(file.path(res_path, "me_metrics.RDS"))
+
+# the proxy columns are whatever me_metrics.R produced that isn't a key or the
+# truth - derived rather than hardcoded so that re-adding a fold regime (the
+# `infold` one me_nuisance.R removed) needs no edit here
+key_cols <- c("scenario", "n", "run", "model")
+score_cols <- setdiff(names(metrics), c(key_cols, "true_pehe"))
+
+# labels. Scenario labels match crossfitting/cf_results.qmd, which reports the
+# same 1/4/6/9 subset.
+scenario_labels <- c(`1` = "Null", `4` = "Simple", `6` = "Interaction",
+                     `9` = "Non-linear")
+
+model_levels <- c("rf1", "rf2", "rf3", "net1", "net2", "net3",
+                  "SL1", "SL2", "SL3")
+
+family_labels <- c(rf = "Random forest", net = "Elastic net",
+                   SL = "SuperLearner")
+
+# proxy display labels, ordered score type first so the infl/dr split reads
+# straight off the x axis
+proxy_labels <- c(
+  infl_cv_xgb       = "Infl / CV / XGB",
+  infl_cv_automl    = "Infl / CV / AutoML",
+  infl_whole_xgb    = "Infl / whole / XGB",
+  infl_whole_automl = "Infl / whole / AutoML",
+  dr_cv_xgb         = "DR / CV / XGB",
+  dr_cv_automl      = "DR / CV / AutoML",
+  dr_whole_xgb      = "DR / whole / XGB",
+  dr_whole_automl   = "DR / whole / AutoML"
+)
+
+axis_labels <- c(score_type = "Score type", fold_type = "Fold regime",
+                 pipeline = "Nuisance pipeline")
+
+level_labels <- c(infl = "Influence", dr = "DR risk", cv = "CV",
+                  whole = "Whole", xgb = "XGBoost", automl = "AutoML")
+
+metrics <- metrics %>%
+  mutate(
+    scenario = factor(scenario_labels[as.character(scenario)],
+                      levels = unname(scenario_labels)),
+    n = factor(n, levels = sort(unique(n))),
+    model = factor(model, levels = model_levels),
+    family = factor(family_labels[sub("[0-9]+$", "", as.character(model))],
+                    levels = unname(family_labels))
+  )
+```
+
+```{r long-form}
+# one row per (scenario, n, run, model, proxy). The three design axes are
+# recovered from the column name, which me_metrics.R builds as
+# <score_type>_<fold_type>_<pipeline>.
+long <- metrics %>%
+  pivot_longer(all_of(score_cols), names_to = "proxy_id", values_to = "score") %>%
+  mutate(
+    score_type = sub("_.*$", "", proxy_id),
+    fold_type  = sub("^[^_]+_([^_]+)_.*$", "\\1", proxy_id),
+    pipeline   = sub("^.*_", "", proxy_id),
+    proxy = factor(proxy_labels[proxy_id], levels = unname(proxy_labels))
+  )
+
+# a candidate only enters a ranking if both its score and its truth are there
+long_ok <- filter(long, !is.na(score), !is.na(true_pehe))
+```
+
+```{r selection}
+# The core derivation: one row per (scenario, n, run, proxy), summarising how
+# that proxy ranked the 9 candidates against how true PEHE ranked them.
+#
+# `regret` is measured against the best candidate the proxy could actually have
+# picked (the minimum over the candidates present in that run), not against a
+# hypothetical complete set - so a run with a dropped candidate is scored
+# honestly rather than penalised for the gap.
+selection <- long_ok %>%
+  group_by(scenario, n, run, proxy, proxy_id, score_type, fold_type, pipeline) %>%
+  filter(n() >= 2) %>%
+  summarise(
+    n_candidates = n(),
+    rho          = cor(score, true_pehe, method = "spearman"),
+    kendall      = cor(score, true_pehe, method = "kendall"),
+    pick         = model[which.min(score)],
+    best         = model[which.min(true_pehe)],
+    hit          = as.numeric(pick == best),
+    pick_rank    = rank(true_pehe, ties.method = "min")[which.min(score)],
+    regret       = true_pehe[which.min(score)] - min(true_pehe),
+    rel_regret   = regret / min(true_pehe),
+    spread       = max(true_pehe) - min(true_pehe),
+    # expected cost of ignoring the scores and picking one of the candidates
+    # uniformly at random - the floor any useful proxy has to beat
+    random_regret = mean(true_pehe) - min(true_pehe),
+    .groups = "drop"
+  )
+
+# per (scenario, n, proxy) summaries, mean +/- Monte Carlo SE over the runs
+selection_summary <- selection %>%
+  group_by(scenario, n, proxy, score_type, fold_type, pipeline) %>%
+  summarise(
+    runs = n(),
+    mean_rho = mean(rho, na.rm = T),
+    mcse_rho = sd(rho, na.rm = T) / sqrt(n()),
+    mean_kendall = mean(kendall, na.rm = T),
+    mcse_kendall = sd(kendall, na.rm = T) / sqrt(n()),
+    mean_hit = mean(hit, na.rm = T),
+    mcse_hit = sd(hit, na.rm = T) / sqrt(n()),
+    mean_rank = mean(pick_rank, na.rm = T),
+    mcse_rank = sd(pick_rank, na.rm = T) / sqrt(n()),
+    mean_regret = mean(regret, na.rm = T),
+    mcse_regret = sd(regret, na.rm = T) / sqrt(n()),
+    mean_rel_regret = mean(rel_regret, na.rm = T),
+    mcse_rel_regret = sd(rel_regret, na.rm = T) / sqrt(n()),
+    .groups = "drop"
+  )
+```
+
+```{r baselines}
+# Two reference points, both on the regret scale, both per (scenario, n).
+#
+# random pick: the expected regret of ignoring the scores entirely.
+random_baseline <- selection %>%
+  distinct(scenario, n, run, random_regret) %>%
+  group_by(scenario, n) %>%
+  summarise(random_regret = mean(random_regret, na.rm = T), .groups = "drop")
+
+# best fixed choice: commit to one candidate a priori and always use it. Note
+# this is picked WITH hindsight - the best of the nine is chosen using the
+# truth - so it is an optimistic upper bound on what a fixed rule could really
+# achieve. A proxy that cannot beat it has not earned its cost.
+oracle_by_run <- metrics %>%
+  filter(!is.na(true_pehe)) %>%
+  group_by(scenario, n, run) %>%
+  summarise(oracle_pehe = min(true_pehe), .groups = "drop")
+
+fixed_choice <- metrics %>%
+  filter(!is.na(true_pehe)) %>%
+  left_join(oracle_by_run, by = c("scenario", "n", "run")) %>%
+  mutate(fixed_regret = true_pehe - oracle_pehe) %>%
+  group_by(scenario, n, model) %>%
+  summarise(mean_regret = mean(fixed_regret, na.rm = T),
+            mcse_regret = sd(fixed_regret, na.rm = T) / sqrt(n()),
+            .groups = "drop")
+
+best_fixed <- fixed_choice %>%
+  group_by(scenario, n) %>%
+  slice_min(mean_regret, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  rename(best_fixed_model = model, best_fixed_regret = mean_regret)
+```
+
+```{r plot-helpers, include=FALSE}
+# The house pair of plots - per-run distribution and mean with MCSE error bars.
+# The sweep (the 8 proxies) goes on x and the design on the facets, following
+# confidence_intervals/continuous/cts_ci_results.qmd rather than
+# cts_results.qmd's facet_wrap(~scenario).
+
+box_plot <- function(df, metric, title, ylab, hline = NULL) {
+  p <- ggplot(df, aes(x = proxy, y = .data[[metric]], colour = score_type))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
+    scale_colour_paletteer_d("rcartocolor::Safe",
+                             labels = c(dr = "DR risk", infl = "Influence")) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, y = ylab, x = "Proxy score", colour = "Score type")
+}
+
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+  df <- df %>%
+    mutate(est = .data[[mean_col]],
+           lo = .data[[mean_col]] - .data[[mcse_col]],
+           hi = .data[[mean_col]] + .data[[mcse_col]])
+  p <- ggplot(df, aes(x = proxy, y = est, colour = score_type, ymin = lo, ymax = hi))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
+    scale_colour_paletteer_d("rcartocolor::Safe",
+                             labels = c(dr = "DR risk", infl = "Influence")) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, y = ylab, x = "Proxy score", colour = "Score type")
+}
+```
+
+## Data completeness
+
+The study was still `in_progress` at the last campaign check, and the H2O
+AutoML pipeline is the one component that has never completed a full run — so
+this is not boilerplate. Missing runs shrink the number of rankings each cell
+is averaged over; missing *scores* within a present run shrink the number of
+candidates a proxy ranked.
+
+```{r completeness-runs}
+runs_present <- metrics %>%
+  distinct(scenario, n, run) %>%
+  count(scenario, n, name = "runs") %>%
+  pivot_wider(names_from = n, values_from = runs, names_prefix = "n = ")
+
+kable(runs_present, caption = "Replicates present per cell (30 expected)")
+```
+
+```{r completeness-na}
+na_counts <- metrics %>%
+  summarise(across(all_of(c("true_pehe", score_cols)), ~ sum(is.na(.x)))) %>%
+  pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
+  mutate(pct = 100 * n_missing / nrow(metrics))
+
+kable(na_counts, digits = 2,
+      col.names = c("Score column", "Missing values", "% of rows"),
+      caption = "Missing scores across all (scenario, n, run, candidate) rows")
+```
+
+```{r completeness-candidates}
+short_rankings <- selection %>%
+  filter(n_candidates < length(model_levels)) %>%
+  count(scenario, n, proxy, n_candidates, name = "rankings")
+
+if (nrow(short_rankings) == 0) {
+  cat("Every ranking scored all", length(model_levels), "candidates.\n")
+} else {
+  kable(short_rankings,
+        col.names = c("Scenario", "n", "Proxy", "Candidates ranked", "Rankings"),
+        caption = "Rankings built from fewer than the full candidate set")
+}
+```
+
+## What is there to get right?
+
+Before asking whether a proxy ranks the candidates correctly, it is worth
+knowing whether the ranking matters. If all 9 candidates achieve near-identical
+true PEHE then picking the wrong one costs nothing and a high error rate is
+harmless; if they are far apart, selection is where the accuracy comes from.
+
+```{r true-pehe-plot, fig.height=13}
+pehe_plot <- metrics %>%
+  ggplot(aes(x = model, y = true_pehe, colour = family)) +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
+  scale_y_log10() +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "True PEHE of each candidate",
+       subtitle = "The quantity a proxy is trying to reproduce the ordering of; log scale",
+       y = "True PEHE (log scale)", x = "Candidate", colour = "Family")
+
+pehe_plot
+```
+
+```{r winner-plot, fig.height=9}
+# how often each candidate is genuinely the best one in its run
+winners <- metrics %>%
+  filter(!is.na(true_pehe)) %>%
+  group_by(scenario, n, run) %>%
+  slice_min(true_pehe, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  count(scenario, n, model, name = "wins", .drop = FALSE) %>%
+  group_by(scenario, n) %>%
+  mutate(prop = wins / sum(wins)) %>%
+  ungroup()
+
+winner_plot <- winners %>%
+  ggplot(aes(x = model, y = prop, fill = model)) +
+  geom_col() +
+  facet_grid(rows = vars(scenario), cols = vars(n)) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none") +
+  labs(title = "How often each candidate is the true best",
+       subtitle = "Proportion of runs in which this candidate has the lowest true PEHE",
+       y = "Proportion of runs", x = "Candidate")
+
+winner_plot
+```
+
+```{r spread-table}
+spread_tab <- selection %>%
+  distinct(scenario, n, run, spread, random_regret) %>%
+  group_by(scenario, n) %>%
+  summarise(mean_spread = mean(spread, na.rm = T),
+            mean_random_regret = mean(random_regret, na.rm = T),
+            .groups = "drop") %>%
+  left_join(select(best_fixed, scenario, n, best_fixed_model, best_fixed_regret),
+            by = c("scenario", "n"))
+
+kable(spread_tab, digits = 4,
+      col.names = c("Scenario", "n", "Worst - best true PEHE",
+                    "Regret of a random pick", "Best fixed choice",
+                    "Its regret"),
+      caption = "How much selection is worth, per cell")
+```
+
+`Worst - best true PEHE` is the full range on the table; `regret of a random
+pick` is what ignoring the scores altogether costs on average. Any proxy has
+to beat the latter to be doing anything at all. The `best fixed choice` column
+is the strongest a-priori rule available — always use that one candidate — and
+it is chosen *with* knowledge of the truth, so it is an optimistic bound. A
+proxy that cannot beat it has not earned the two extra nuisance pipelines it
+costs.
+
+## Rank agreement
+
+Spearman and Kendall correlation between each proxy score and true PEHE,
+computed across the 9 candidates within a run. Kendall is the better-behaved
+of the two on 9 items and is the one to trust where they disagree. A proxy
+that is useful for selection sits well above 0.
+
+```{r rho-plot, fig.height=16}
+rho_box <- box_plot(selection, "rho",
+                    "Spearman correlation with true PEHE",
+                    "Spearman correlation", hline = 0)
+
+rho_sum <- summary_plot(selection_summary, "mean_rho", "mcse_rho",
+                        "Mean Spearman correlation with true PEHE",
+                        "Mean Spearman correlation", hline = 0)
+
+(rho_box / rho_sum) + plot_layout(guides = "collect")
+```
+
+```{r kendall-plot, fig.height=9}
+summary_plot(selection_summary, "mean_kendall", "mcse_kendall",
+             "Mean Kendall correlation with true PEHE",
+             "Mean Kendall tau", hline = 0)
+```
+
+## Top-1 selection accuracy
+
+The decision a proxy is actually used to make: take its argmin and deploy that
+candidate. `hit` is the proportion of runs where that is the same candidate
+true PEHE's argmin is. The dashed line is chance — 1/9, what you would get by
+picking at random.
+
+```{r hit-plot, fig.height=9}
+summary_plot(selection_summary, "mean_hit", "mcse_hit",
+             "Top-1 selection accuracy",
+             "Proportion of runs the proxy picks the true best",
+             hline = 1 / length(model_levels))
+```
+
+Top-1 accuracy alone is harsh: a proxy that reliably lands on the
+second-best candidate is doing a good job, and one that lands on the worst is
+doing real damage, but both count as a miss. The rank of the selected
+candidate, in the true-PEHE ordering, separates them.
+
+```{r rank-dist-plot, fig.height=12}
+rank_dist <- selection %>%
+  count(scenario, n, proxy, pick_rank, name = "runs") %>%
+  group_by(scenario, n, proxy) %>%
+  mutate(prop = runs / sum(runs)) %>%
+  ungroup()
+
+# viridis rather than the house qualitative palette: pick_rank is ordinal, and
+# rcartocolor::Safe would give 9 unordered hues to an ordered scale
+rank_plot <- rank_dist %>%
+  ggplot(aes(x = proxy, y = prop, fill = factor(pick_rank))) +
+  geom_col() +
+  facet_grid(rows = vars(scenario), cols = vars(n)) +
+  scale_fill_viridis_d(direction = -1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Where the selected candidate really ranked",
+       subtitle = "1 = the proxy picked the true best, 9 = it picked the true worst",
+       y = "Proportion of runs", x = "Proxy score",
+       fill = "True rank of pick")
+
+rank_plot
+```
+
+```{r mean-rank-plot, fig.height=9}
+summary_plot(selection_summary, "mean_rank", "mcse_rank",
+             "Mean true rank of the selected candidate",
+             "Mean rank (1 = best of 9)",
+             hline = (1 + length(model_levels)) / 2)
+```
+
+The dashed line is the mean rank you would get by picking at random.
+
+## Regret: what does using the proxy cost?
+
+Regret is the excess true PEHE incurred by deploying the proxy's pick instead
+of the true best candidate. It is the only one of these quantities on the
+scale of the thing you care about — an error the ranking metrics count as a
+miss is free if the two candidates were equally good.
+
+The solid reference line in each panel is the regret of picking at random; the
+dashed line is the best fixed choice. A proxy is worth its cost only below the
+dashed line.
+
+```{r regret-plot, fig.height=16}
+regret_box <- box_plot(selection, "regret",
+                       "Regret: excess true PEHE from following the proxy",
+                       "Regret") +
+  geom_hline(data = random_baseline, aes(yintercept = random_regret),
+             linetype = "solid", colour = "grey40") +
+  geom_hline(data = best_fixed, aes(yintercept = best_fixed_regret),
+             linetype = "dashed", colour = "grey20")
+
+regret_sum <- summary_plot(selection_summary, "mean_regret", "mcse_regret",
+                           "Mean regret", "Mean regret") +
+  geom_hline(data = random_baseline, aes(yintercept = random_regret),
+             linetype = "solid", colour = "grey40") +
+  geom_hline(data = best_fixed, aes(yintercept = best_fixed_regret),
+             linetype = "dashed", colour = "grey20")
+
+(regret_box / regret_sum) + plot_layout(guides = "collect")
+```
+
+Relative regret puts the same quantity on a scale that is comparable across
+scenarios and sample sizes: excess PEHE as a fraction of the best achievable
+PEHE.
+
+```{r rel-regret-plot, fig.height=9}
+summary_plot(selection_summary, "mean_rel_regret", "mcse_rel_regret",
+             "Mean relative regret",
+             "Excess PEHE as a fraction of the best achievable", hline = 0)
+```
+
+## Which axis matters?
+
+The 8 proxies are a 2 x 2 x 2 design. Reading a winner off an 8-level axis
+conflates the three questions it actually answers — influence-corrected versus
+DR risk, honest crossfitting versus resubstitution, XGBoost versus AutoML — so
+here each is marginalised over the other two.
+
+```{r axis-marginals}
+axis_long <- selection %>%
+  mutate(across(c(score_type, fold_type, pipeline), as.character)) %>%
+  pivot_longer(c(score_type, fold_type, pipeline),
+               names_to = "axis", values_to = "level") %>%
+  mutate(axis = factor(axis_labels[axis], levels = unname(axis_labels)),
+         level = factor(level_labels[level], levels = unname(level_labels)))
+
+axis_summary <- axis_long %>%
+  group_by(scenario, n, axis, level) %>%
+  summarise(
+    mean_hit = mean(hit, na.rm = T),
+    mcse_hit = sd(hit, na.rm = T) / sqrt(n()),
+    mean_kendall = mean(kendall, na.rm = T),
+    mcse_kendall = sd(kendall, na.rm = T) / sqrt(n()),
+    mean_regret = mean(regret, na.rm = T),
+    mcse_regret = sd(regret, na.rm = T) / sqrt(n()),
+    .groups = "drop"
+  )
+
+axis_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+  df <- df %>%
+    mutate(est = .data[[mean_col]],
+           lo = .data[[mean_col]] - .data[[mcse_col]],
+           hi = .data[[mean_col]] + .data[[mcse_col]])
+  p <- ggplot(df, aes(x = level, y = est, colour = n, ymin = lo, ymax = hi))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    facet_grid(rows = vars(scenario), cols = vars(axis), scales = "free_x") +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, y = ylab, x = NULL, colour = "n")
+}
+```
+
+```{r axis-accuracy-plot, fig.height=16}
+hit_axis <- axis_plot(axis_summary, "mean_hit", "mcse_hit",
+                      "Top-1 accuracy by design axis",
+                      "Mean top-1 accuracy", hline = 1 / length(model_levels))
+
+kendall_axis <- axis_plot(axis_summary, "mean_kendall", "mcse_kendall",
+                          "Rank agreement by design axis",
+                          "Mean Kendall tau", hline = 0)
+
+(hit_axis / kendall_axis) + plot_layout(guides = "collect")
+```
+
+```{r axis-regret-plot, fig.height=9}
+axis_plot(axis_summary, "mean_regret", "mcse_regret",
+          "Regret by design axis", "Mean regret")
+```
+
+## Do the proxies track PEHE in level, not just rank?
+
+Ranking is all selection needs, but a proxy that tracks PEHE in *level* would
+also tell you how good the winner is. The scores cannot be compared to PEHE
+raw: `calc_infl_score` and `calc_dr_risk` estimate PEHE only up to a
+**run-specific additive constant** — the DR risk carries the irreducible
+variance of the pseudo-outcome `phi` about `tau`, and the influence score
+carries `E[tau^2]` terms that depend on the realised sample, not on the
+candidate being scored. Pooling raw scores across runs would produce a
+correlation driven entirely by that offset and would say nothing about the
+candidates.
+
+So both axes below are **centred within (scenario, n, run)**. What is left is
+the only comparable part: how each candidate deviates from its run's average,
+in the proxy and in the truth.
+
+```{r calibration-plot, fig.height=11}
+centred <- long_ok %>%
+  group_by(scenario, n, run, proxy) %>%
+  mutate(score_c = score - mean(score),
+         pehe_c = true_pehe - mean(true_pehe)) %>%
+  ungroup()
+
+calibration_plot <- centred %>%
+  ggplot(aes(x = pehe_c, y = score_c, colour = scenario)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_point(size = 0.5, alpha = 0.15) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 0.6) +
+  facet_wrap(~proxy, ncol = 4, scales = "free_y") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_minimal() +
+  labs(title = "Proxy score against true PEHE, both centred within run",
+       subtitle = "Centring is required: the proxies estimate PEHE only up to a run-specific constant",
+       y = "Centred proxy score", x = "Centred true PEHE", colour = "Scenario")
+
+calibration_plot
+```
+
+## Headline table
+
+Per (scenario, n, proxy), arranged so the lowest-regret proxy comes first
+within each cell.
+
+```{r headline-table}
+headline <- selection_summary %>%
+  select(scenario, n, proxy, runs, mean_kendall, mean_rho, mean_hit,
+         mean_rank, mean_regret, mean_rel_regret) %>%
+  arrange(scenario, n, mean_regret)
+
+kable(headline, digits = 4,
+      col.names = c("Scenario", "n", "Proxy", "Runs", "Mean Kendall tau",
+                    "Mean Spearman", "Top-1 accuracy", "Mean rank of pick",
+                    "Mean regret", "Mean relative regret"))
+```
+
+For reference, the two baselines the regret columns should be read against:
+
+```{r baseline-table}
+baseline_tab <- random_baseline %>%
+  left_join(select(best_fixed, scenario, n, best_fixed_model, best_fixed_regret),
+            by = c("scenario", "n"))
+
+kable(baseline_tab, digits = 4,
+      col.names = c("Scenario", "n", "Regret of a random pick",
+                    "Best fixed choice", "Its regret"))
+```

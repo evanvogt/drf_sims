@@ -148,6 +148,7 @@ run.
 | `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `me_collect.R` | gathers per-run files into `me_all.RDS` |
 | `me_metrics.R` | computes `me_metrics.RDS` (reuses `R/metrics.R::compute_metrics()`) |
+| `me_results.qmd` | the results report — see below for why it derives its own quantities |
 | `me_testing.R` | verification checks — run before submitting anything |
 | `me_profile.R` | timing / memory / CPU sweep over `(workers, n_cores)`, instrumented with `syrup` |
 | `me_profile_summary.R` | turns the sweep into PBS directives and writes them into `me_1.sh` |
@@ -160,6 +161,17 @@ roles. `crossfitting/` is the precedent for a study needing files beyond that
 floor (`cf_testing.R`, `cf_profile.R`, `cf_profile_summary.R`,
 `cf_diagnose_*.R`, `cf_results.R`/`.qmd`); the 7-file shape is a floor, not a
 ceiling.
+
+**Why `me_results.qmd` derives its own quantities**: every other study's
+report summarises a per-model metric straight out of its `*_metrics.RDS`
+(mean bias, mean MSE, coverage). This one can't — the object of interest is
+the *ranking* of the 9 candidates within a single (scenario, n, run), so the
+report first has to reduce each run's 9x9 score matrix to per-run rank
+agreement, top-1 selection accuracy and regret before anything can be
+averaged. That derivation lives inline in the `.qmd`, as
+`continuous/cts_results.qmd` and `binary/bin_results.qmd` keep theirs; it is
+not in `R/figures.R`, whose `summarise_metrics()` is built for the
+bias/MSE/correlation columns this study doesn't have.
 
 **Note on `me_metrics.R`**: `R/metrics.R::compute_metrics()` always does
 `true_tau <- sim_res$truth$tau` — there's no equivalent of the ported
@@ -182,10 +194,14 @@ qsub model_evaluation/jobscripts/me_1.sh            # the study itself - 1-360
 Rscript model_evaluation/me_check.R                 # writes failed_ids.txt if any are missing
 qsub model_evaluation/jobscripts/me_collect.sh
 qsub model_evaluation/jobscripts/me_metrics.sh
+
+quarto render model_evaluation/me_results.qmd   # the report - needs me_metrics.RDS
 ```
 
 Results land in `../results/model_evaluation/` (a sibling of the repo, as
-elsewhere).
+elsewhere). `me_results.qmd` reads `me_metrics.RDS` from there, so it renders
+wherever the results are — not on a machine that only has the repo. The
+rendered `.html` is gitignored, as every other study's report is.
 
 ## Sizing the array job
 
