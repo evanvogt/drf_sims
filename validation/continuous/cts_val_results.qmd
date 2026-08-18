@@ -1,0 +1,338 @@
+---
+title: "Interim-analysis validation: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(patchwork)
+library(purrr)
+library(knitr)
+source(here("R", "figures.R"))
+source(here("validation/continuous/cts_val_config.R"))
+```
+
+## Does an interim finding survive the rest of the trial?
+
+If a subgroup, a CATE ranking of covariates, or the spread of estimated
+treatment effects looks real partway through a trial, does it still look real
+once more data has accrued? This study fits two CATE estimators on the first
+`interim_prop` of a simulated trial and checks whether what they find there —
+top responder subgroups, the variance of the estimated CATEs, and the ranking
+of covariates by treatment-effect variable importance (TE-VIM) — replicates
+on the remaining chunk. It is a robustness check for CATE-based subgroup
+discovery, not an estimator comparison.
+
+### Design
+
+| | |
+|---|---|
+| scenario | 3, continuous set (see below) |
+| n | 1000, split into chunks of `n * interim_prop` and `n * (1 - interim_prop)` |
+| `interim_prop` | 0.25, 0.5, 0.75 |
+| runs | 100 — **300 array jobs** |
+| folds | 5 below n=250 per chunk, else 10 |
+
+**Estimators**: only `causal_forest` and `dr_random_forest`
+(`R/cate_models.R`). The question is whether one estimator's own findings
+persist across chunks, not which estimator is most accurate, so the
+oracle/semi-oracle/SuperLearner arms this repo's other studies carry are not
+run here.
+
+### What the truth is
+
+Scenario 3 of the continuous set is `TE_10[3]`: `tau = bW + b4 * X4`, with
+`b4 = -1` and `X4 ~ N(0, 1)`. `X3` is not generated for this scenario
+(`needs_X3 = FALSE`) — the study README's "continuous x binary interaction
+(X3*X4)" description names scenario 5, not 3.
+
+Two consequences used as reference lines below:
+
+- **`Var(tau) = b4^2 * Var(X4) = 1`**, in both chunks and at every
+  `interim_prop`. `bW` is recalibrated per chunk size, but it is an additive
+  constant and does not enter the variance.
+- **X4 is the only true HTE driver.** The other seven covariates in the
+  fitted model (X1, X2, X01, X02, X03, X04, X05) are noise as far as the CATE
+  is concerned, and X4 should rank as the single most important one in both
+  chunks.
+
+```{r data}
+res_path <- study$res_path
+
+metrics <- readRDS(file.path(res_path, "cts_val_metrics.RDS"))
+
+subgroups <- metrics$subgroups %>% select(-scenario) %>% apply_labels()
+variances <- metrics$variances %>% select(-scenario) %>% apply_labels()
+var_imps  <- metrics$var_imps  %>% select(-scenario) %>% apply_labels()
+
+interim_labels <- c(`0.25` = "Interim at 25% (250 -> 750)",
+                    `0.5`  = "Interim at 50% (500 -> 500)",
+                    `0.75` = "Interim at 75% (750 -> 250)")
+
+subgroups <- subgroups %>%
+  mutate(interim_prop = label_factor(interim_prop, interim_labels))
+variances <- variances %>%
+  mutate(interim_prop = label_factor(interim_prop, interim_labels))
+var_imps <- var_imps %>%
+  mutate(interim_prop = label_factor(interim_prop, interim_labels))
+
+n_runs_expected <- study$n_sims
+n_covariates <- length(unique(var_imps$variables))
+```
+
+## Data completeness
+
+```{r completeness}
+runs_present <- subgroups %>%
+  distinct(interim_prop, model, run) %>%
+  count(interim_prop, model, name = "runs") %>%
+  pivot_wider(names_from = model, values_from = runs)
+
+kable(runs_present,
+      caption = paste0("Replicates present per cell (", n_runs_expected,
+                       " expected)"))
+
+na_counts <- bind_rows(
+  subgroups %>% summarise(across(c(top_pval, bottom_pval), ~ sum(is.na(.x)))) %>%
+    pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
+    mutate(table = "subgroups"),
+  variances %>% summarise(across(c(vt1, vt2), ~ sum(is.na(.x)))) %>%
+    pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
+    mutate(table = "variances"),
+  var_imps %>% summarise(across(c(vi1, vi2), ~ sum(is.na(.x)))) %>%
+    pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
+    mutate(table = "var_imps")
+) %>% select(table, column, n_missing)
+
+kable(na_counts, caption = "Missing values across all rows")
+```
+
+## Subgroup persistence
+
+`cts_val_analysis.R` fits a tree on chunk 1's top/bottom-10%-CATE responder
+groups, predicts them into chunk 2, and tests `Y ~ W * subgroup` there.
+**`bottom_pval` is not usable**: the analysis script pulls the `top10`
+column's interaction p-value correctly (`pvals_top[4]`) but pulls the
+*intercept* p-value for `bottom_pval` (`pvals_bottom[1]`), not a subgroup
+test at all. It is excluded below pending a fix to `cts_val_analysis.R` and a
+re-run. Only `top_pval` — does the top-10% responder subgroup found in chunk
+1 still show a treatment effect in chunk 2 — is reported.
+
+```{r subgroup-hist}
+ggplot(subgroups, aes(x = top_pval, fill = model)) +
+  geom_histogram(bins = 30, alpha = 0.6, position = "identity") +
+  geom_vline(xintercept = 0.05, linetype = "dashed") +
+  facet_wrap(~interim_prop) +
+  drf_scale() +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  drf_theme() +
+  labs(title = "Distribution of top-10% subgroup p-values in chunk 2",
+       x = "p-value (top-10% subgroup, W x subgroup interaction)",
+       y = "Count", fill = "Model")
+```
+
+```{r subgroup-prop}
+subgroup_prop <- subgroups %>%
+  mutate(is_sig = top_pval < 0.05) %>%
+  group_by(model, interim_prop) %>%
+  summarise(runs = sum(!is.na(is_sig)),
+            prop_sig = mean(is_sig, na.rm = TRUE),
+            mcse = sqrt(prop_sig * (1 - prop_sig) / runs),
+            .groups = "drop")
+
+ggplot(subgroup_prop, aes(x = interim_prop, y = prop_sig, colour = model,
+                          ymin = prop_sig - mcse, ymax = prop_sig + mcse)) +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  geom_point(position = position_dodge(width = 0.3), size = 2) +
+  geom_errorbar(position = position_dodge(width = 0.3), linewidth = 0.3, width = 0.2) +
+  drf_scale() +
+  drf_theme(rotate_x = TRUE) +
+  labs(title = "Proportion of runs where the top-10% subgroup validates",
+       subtitle = "Dashed line: nominal 5% false-positive rate. Scenario 3 has genuine HTE, so higher is better.",
+       x = "Interim point", y = "Proportion with p < 0.05", colour = "Model")
+```
+
+## CATE variance stability
+
+Does the spread of estimated treatment effects in chunk 1 (`vt1`) match the
+spread in chunk 2 (`vt2`)? The dashed line is the true `Var(tau) = 1`.
+
+```{r variance-box, fig.height=9}
+tidy_variances <- variances %>%
+  rename(stage1 = vt1, stage2 = vt2) %>%
+  pivot_longer(cols = c(stage1, stage2), names_to = "stage", values_to = "variance")
+
+ggplot(tidy_variances, aes(x = stage, y = variance, fill = model, colour = model)) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  facet_grid(rows = vars(model), cols = vars(interim_prop)) +
+  drf_scale() +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  drf_theme() +
+  labs(title = "CATE variance in early vs. late chunk",
+       subtitle = "Dashed line: true Var(tau) = 1",
+       x = "", y = "Variance of estimated CATE") +
+  theme(legend.position = "none")
+```
+
+```{r variance-scatter, fig.height=9}
+ggplot(variances, aes(x = vt1, y = vt2, colour = model)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  geom_point(alpha = 0.4, size = 1) +
+  facet_grid(rows = vars(model), cols = vars(interim_prop)) +
+  drf_scale() +
+  drf_theme() +
+  labs(title = "CATE variance, chunk 1 vs. chunk 2, per run",
+       subtitle = "Dashed line: vt1 = vt2 (perfect replication)",
+       x = "Variance in chunk 1", y = "Variance in chunk 2") +
+  theme(legend.position = "none")
+```
+
+```{r variance-change}
+var_change_summary <- variances %>%
+  group_by(model, interim_prop) %>%
+  summarise(runs = sum(!is.na(var_change)),
+            mean_change = mean(var_change, na.rm = TRUE),
+            mcse = sd(var_change, na.rm = TRUE) / sqrt(runs),
+            .groups = "drop")
+
+ggplot(var_change_summary, aes(x = interim_prop, y = mean_change, colour = model,
+                               ymin = mean_change - mcse, ymax = mean_change + mcse)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(position = position_dodge(width = 0.3), size = 2) +
+  geom_errorbar(position = position_dodge(width = 0.3), linewidth = 0.3, width = 0.2) +
+  drf_scale() +
+  drf_theme(rotate_x = TRUE) +
+  labs(title = "Mean change in CATE variance, chunk 2 minus chunk 1",
+       x = "Interim point", y = "Mean(vt2 - vt1)", colour = "Model")
+```
+
+## Variable-importance rank stability
+
+`cts_val_analysis.R` ranks each covariate's TE-VIM within a chunk via
+`rank(tevim)`: **rank 1 is the least important covariate, rank `r n_covariates`
+is the most important.** X4 is the only true HTE driver, so a working
+estimator should rank it `r n_covariates` (most important) in both chunks.
+
+```{r rank-agreement}
+rank_corr <- var_imps %>%
+  group_by(model, interim_prop, run) %>%
+  filter(n() >= 2) %>%
+  summarise(rho = cor(vi1, vi2, method = "spearman"), .groups = "drop")
+
+rank_corr_summary <- rank_corr %>%
+  group_by(model, interim_prop) %>%
+  summarise(runs = sum(!is.na(rho)),
+            mean_rho = mean(rho, na.rm = TRUE),
+            mcse = sd(rho, na.rm = TRUE) / sqrt(runs),
+            .groups = "drop")
+
+ggplot(rank_corr_summary, aes(x = interim_prop, y = mean_rho, colour = model,
+                              ymin = mean_rho - mcse, ymax = mean_rho + mcse)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(position = position_dodge(width = 0.3), size = 2) +
+  geom_errorbar(position = position_dodge(width = 0.3), linewidth = 0.3, width = 0.2) +
+  drf_scale() +
+  drf_theme(rotate_x = TRUE) +
+  labs(title = "Spearman correlation between chunk 1 and chunk 2 TE-VIM ranks",
+       subtitle = "One value per run, across the 8 covariates. Dashed line: no agreement.",
+       x = "Interim point", y = "Mean Spearman correlation (vi1 vs vi2)", colour = "Model")
+```
+
+```{r rank-mean, fig.height=9}
+mean_vi <- var_imps %>%
+  group_by(variables, model, interim_prop) %>%
+  summarise(mean_vi1 = mean(vi1, na.rm = TRUE),
+            mean_vi2 = mean(vi2, na.rm = TRUE),
+            .groups = "drop") %>%
+  pivot_longer(cols = c(mean_vi1, mean_vi2), names_to = "chunk", values_to = "mean_rank") %>%
+  mutate(chunk = recode(chunk, mean_vi1 = "Chunk 1", mean_vi2 = "Chunk 2"),
+         is_truth = variables == "X4")
+
+ggplot(mean_vi, aes(x = variables, y = mean_rank, colour = chunk, group = chunk,
+                    shape = is_truth)) +
+  geom_point(size = 2) +
+  geom_line(aes(group = interaction(chunk, model))) +
+  facet_grid(rows = vars(model), cols = vars(interim_prop)) +
+  scale_shape_manual(values = c(`TRUE` = 17, `FALSE` = 16), guide = "none") +
+  drf_scale() +
+  drf_theme() +
+  coord_flip() +
+  labs(title = "Mean TE-VIM rank per covariate, by chunk",
+       subtitle = paste0("Rank 1 = least important, ", n_covariates,
+                         " = most important. X4 (triangle) is the only true HTE driver."),
+       x = "Covariate", y = "Mean rank", colour = "Chunk")
+```
+
+```{r rank-change, fig.height=9}
+top_vars <- var_imps %>%
+  group_by(variables, model, interim_prop) %>%
+  summarise(mean_abs_change = mean(abs(diff), na.rm = TRUE), .groups = "drop")
+
+ggplot(top_vars, aes(x = reorder(variables, mean_abs_change), y = mean_abs_change,
+                     fill = model)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  facet_wrap(~interim_prop) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  drf_theme() +
+  labs(title = "Mean absolute change in TE-VIM rank, chunk 2 minus chunk 1",
+       x = "Covariate", y = "Mean |rank change|", fill = "Model")
+```
+
+```{r x4-top-table}
+x4_top <- var_imps %>%
+  group_by(model, interim_prop, run) %>%
+  summarise(top1 = variables[which.max(vi1)] == "X4",
+            top2 = variables[which.max(vi2)] == "X4",
+            .groups = "drop") %>%
+  group_by(model, interim_prop) %>%
+  summarise(runs = n(),
+            p_top_chunk1 = mean(top1),
+            p_top_chunk2 = mean(top2),
+            p_top_both = mean(top1 & top2),
+            .groups = "drop")
+
+kable(x4_top, digits = 3,
+      col.names = c("Model", "Interim point", "Runs", "X4 top in chunk 1",
+                    "X4 top in chunk 2", "X4 top in both"),
+      caption = "How often the true HTE driver (X4) is ranked most important")
+```
+
+## Headline table
+
+```{r headline-table}
+headline <- subgroup_prop %>%
+  select(model, interim_prop, runs, prop_sig) %>%
+  left_join(variances %>% group_by(model, interim_prop) %>%
+              summarise(mean_vt1 = mean(vt1, na.rm = TRUE),
+                       mean_vt2 = mean(vt2, na.rm = TRUE),
+                       .groups = "drop"),
+            by = c("model", "interim_prop")) %>%
+  left_join(var_change_summary %>% select(model, interim_prop, mean_change),
+            by = c("model", "interim_prop")) %>%
+  left_join(rank_corr_summary %>% select(model, interim_prop, mean_rho),
+            by = c("model", "interim_prop")) %>%
+  left_join(x4_top %>% select(model, interim_prop, p_top_both),
+            by = c("model", "interim_prop"))
+
+kable(headline, digits = 3,
+      col.names = c("Model", "Interim point", "Runs", "P(top subgroup sig.)",
+                    "Mean vt1", "Mean vt2", "Mean var. change",
+                    "Mean rank correlation", "P(X4 top in both)"))
+```
