@@ -50,9 +50,7 @@ discovery, not an estimator comparison.
 
 **Estimators**: only `causal_forest` and `dr_random_forest`
 (`R/cate_models.R`). The question is whether one estimator's own findings
-persist across chunks, not which estimator is most accurate, so the
-oracle/semi-oracle/SuperLearner arms this repo's other studies carry are not
-run here.
+persist across chunks (can add superlearner for larger interim proportions)
 
 ### What the truth is
 
@@ -126,6 +124,8 @@ kable(na_counts, caption = "Missing values across all rows")
 
 `cts_val_analysis.R` fits a tree on chunk 1's top/bottom-10%-CATE responder
 groups, predicts them into chunk 2, and tests `Y ~ W * subgroup` there.
+
+
 **`bottom_pval` is not usable**: the analysis script pulls the `top10`
 column's interaction p-value correctly (`pvals_top[4]`) but pulls the
 *intercept* p-value for `bottom_pval` (`pvals_bottom[1]`), not a subgroup
@@ -180,7 +180,7 @@ tidy_variances <- variances %>%
 ggplot(tidy_variances, aes(x = stage, y = variance, fill = model, colour = model)) +
   geom_hline(yintercept = 1, linetype = "dashed") +
   geom_boxplot(alpha = 0.6, outlier.shape = NA) +
-  facet_grid(rows = vars(model), cols = vars(interim_prop)) +
+  facet_wrap(~interim_prop) +
   drf_scale() +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme() +
@@ -194,13 +194,14 @@ ggplot(tidy_variances, aes(x = stage, y = variance, fill = model, colour = model
 ggplot(variances, aes(x = vt1, y = vt2, colour = model)) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
   geom_point(alpha = 0.4, size = 1) +
-  facet_grid(rows = vars(model), cols = vars(interim_prop)) +
+  facet_wrap(~interim_prop) +
   drf_scale() +
   drf_theme() +
+  theme(aspect.ratio = 1) +
   labs(title = "CATE variance, chunk 1 vs. chunk 2, per run",
        subtitle = "Dashed line: vt1 = vt2 (perfect replication)",
        x = "Variance in chunk 1", y = "Variance in chunk 2") +
-  theme(legend.position = "none")
+  theme(legend.position = "bottom")
 ```
 
 ```{r variance-change}
@@ -272,7 +273,7 @@ ggplot(mean_vi, aes(x = variables, y = mean_rank, colour = chunk, group = chunk,
   scale_shape_manual(values = c(`TRUE` = 17, `FALSE` = 16), guide = "none") +
   drf_scale() +
   drf_theme() +
-  coord_flip() +
+  #coord_flip() +
   labs(title = "Mean TE-VIM rank per covariate, by chunk",
        subtitle = paste0("Rank 1 = least important, ", n_covariates,
                          " = most important. X4 (triangle) is the only true HTE driver."),

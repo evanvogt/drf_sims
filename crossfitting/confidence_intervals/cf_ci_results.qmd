@@ -27,12 +27,6 @@ library(knitr)
 
 ## Does the pilot's bootstrap deliver nominal coverage?
 
-`crossfitting/` benchmarks its double-crossfitting procedure against cheaper
-alternatives (see `cf_results.qmd`), but says nothing about whether any of
-them, once fitted, produce trustworthy confidence intervals. This pilot adds
-half-sample bootstrap intervals (`R/bootstrap_ci.R` — the same machinery
-`confidence_intervals/` uses elsewhere) to **all 12 non-SuperLearner arms**.
-The 3 SuperLearner arms stay out of scope: not RF-based.
 
 The 12 split into two structural families, and the bootstrap differs between
 them. The 5 arms whose stage 2 is a genuine per-fold crossfit use
@@ -70,7 +64,6 @@ figure below should reproduce `cf_results.qmd`'s exactly.
 |---|---|---|---|
 | `dcf` | DR-learner (RF) | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
 | `scf_scf` | DR-learner (RF) | single CF, leave-one-fold-out | crossfit, same folds |
-| `scf_scf_new` | DR-learner (RF) | single CF | crossfit, **fresh independent** split |
 | `scf_oob` | DR-learner (RF) | single CF | whole sample, **OOB** |
 | `scf_oob_t` | DR-learner (RF) | single CF, T-learner | whole sample, **OOB** |
 | `oob_oob` | DR-learner (RF) | whole sample, **OOB**, T-learner | whole sample, **OOB** |
@@ -130,6 +123,8 @@ metrics <- readRDS(file.path(res_path, "cf_ci_metrics.RDS"))
 
 # tidy up - no `set` column: training-sample tau only
 metrics_all <- metrics %>%
+  # filter out annoying scenarios
+  filter(!(arm == "scf_scf_new")) %>%
   mutate(
     scenario = factor(
       case_when(scenario == 1 ~ "Null",

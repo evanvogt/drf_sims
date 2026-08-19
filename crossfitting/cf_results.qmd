@@ -36,28 +36,16 @@ the second stage trains on `po_matrix[, k]` before predicting fold `k`. At
 
 Under ordinary (single) crossfitting, a stage-2 training row `i` carries a
 pseudo-outcome from a nuisance model trained on every fold except `i`'s - 
-which *includes* the held-out test fold. Re-randomising the
-stage-2 split cannot remove that dependence. So if double crossfitting
-matters, `scf_scf` and `scf_scf_new` should perform alike, and both should
-differ from `dcf`. If they don't, the cheap procedure is enough and the rest
-of the study can be sped up 4.5x.
+which *includes* the held-out test fold.
 
 ### Design
 
 Fixed at **n = 500, V = 10 folds, scenarios Null / Simple / Interaction /
-Non-linear, 500 replicates** (2000 array jobs). All variants within a
-replicate share one fold assignment, so differences are attributable to the
-procedure rather than to the fold draw.
+Non-linear, 500 replicates** (2000 array jobs). Every arm is scored twice:
+against the known truth on the **training** sample, and on an independent **test**
+sample of 2000 drawn from the same DGP.
 
-Every arm is scored twice: against the known truth on the **training**
-sample, and on an independent **test** sample of 2000 drawn from the same
-DGP.
-
-**There is no optimism to detect here, and the train-to-test gap isn't an
-overfitting diagnostic.** Optimism is what you see when a model is scored
-against the labels it was fit to. Every arm here is scored against the
-*known true CATE*, while the label the stage-2 model actually saw is a noisy
-pseudo-outcome. The test score measures how well the fitted surface
+The test score measures how well the fitted surface
 generalises to fresh covariate draws — the only like-for-like comparison of
 the final fitted models across procedures (see [Generalisation
 gap](#generalisation-gap)).
@@ -80,7 +68,6 @@ coincide for whole-sample arms, so any gap is the ensembling effect alone
 |---|---|---|
 | `dcf` | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
 | `scf_scf` | single CF, leave-one-fold-out | crossfit, same folds |
-| `scf_scf_new` | single CF | crossfit, **fresh independent** split |
 | `scf_oob` | single CF | whole sample, **OOB** predictions |
 | `oob_oob` | whole sample, **OOB**, T-learner | whole sample, **OOB** |
 | `oob_oob_s` | whole sample, **OOB**, S-learner (`X.orig` workaround) | whole sample, **OOB** |
@@ -96,7 +83,7 @@ maintainer-endorsed but unsupported `forest$X.orig` shortcut
 `get_tree()`/`get_leaf_node()` API and exists mainly to check the shortcut
 against it. See `crossfitting/README.md` for the full explanation.
 
-**DR-learner, SuperLearner (3 arms):** `dcf`, `scf_scf`, `scf_scf_new` — no
+**DR-learner, SuperLearner (2 arms):** `dcf`, `scf_scf` — no
 OOB analogue exists for SuperLearner, so the OOB arms and the T-learner
 control are dropped.
 
@@ -124,6 +111,8 @@ metrics <- readRDS(file.path(res_path, "cf_metrics.RDS"))
 
 # tidy up
 metrics <- metrics %>%
+  # remove some uninteresting things
+  filter(!(arm == "scf_scf_new" | arm == "sl_scf_scf_new")) %>%
   mutate(
     scenario = factor(
       case_when(scenario == 1 ~ "Null",
@@ -171,7 +160,7 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
     mutate(est = .data[[mean_col]],
            lo = .data[[mean_col]] - .data[[mcse_col]],
            hi = .data[[mean_col]] + .data[[mcse_col]]) %>%
-    ggplot(aes(x = variant, y = est, colour = set, ymin = lo, ymax = hi)) +
+    ggplot(aes(x = set, y = est, colour = variant, ymin = lo, ymax = hi)) +
     geom_hline(yintercept = hline, linetype = "dashed") +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
@@ -179,7 +168,7 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
     scale_colour_paletteer_d("rcartocolor::Safe") +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    labs(title = title, y = ylab, x = "Crossfitting procedure", colour = "Scored on")
+    labs(title = title, y = ylab, x = "Evaluation set", colour = "Variant")
 }
 ```
 
@@ -202,7 +191,8 @@ mse_plot <- metrics %>%
 mse_sum_plot <- summary_plot(metrics_summary, "mean_mse", "mcse_mse",
                              "Mean MSE of CATE estimates", "Mean MSE")
 
-(mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
+#(mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
+mse_sum_plot
 ```
 
 ## Correlation with the true CATE
@@ -230,7 +220,8 @@ corr_plot <- corr_df %>%
   labs(title = "Correlation between estimated and true CATEs",
        y = "Pearson correlation", x = "Crossfitting procedure", colour = "Scored on")
 
-(corr_sum_plot / corr_plot) + plot_layout(guides = "collect")
+#(corr_sum_plot / corr_plot) + plot_layout(guides = "collect")
+corr_sum_plot
 ```
 
 ## Generalisation gap {#generalisation-gap}

@@ -146,7 +146,9 @@ summarise_metrics <- function(metrics, group_cols,
 drf_scale <- function() scale_colour_paletteer_d("rcartocolor::Safe")
 
 drf_theme <- function(rotate_x = FALSE) {
-  th <- theme_minimal()
+  th <- theme_light() +
+    theme(strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black"))
   if (rotate_x) th <- th + theme(axis.text.x = element_text(angle = 90))
   th
 }
