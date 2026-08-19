@@ -6,7 +6,7 @@
 # directory is missing, and *logs*/ is gitignored so it is never checked out.
 #PBS -l walltime=04:00:00
 #PBS -l select=1:ncpus=3:ompthreads=2:mem=20gb
-#PBS -J 1-398%100
+#PBS -J 1-19%100
 #PBS -N surv_rerun
 #PBS -o logs_rerun/
 #PBS -e logs_rerun/
