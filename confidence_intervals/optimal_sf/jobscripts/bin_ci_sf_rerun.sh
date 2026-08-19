@@ -10,8 +10,8 @@
 # Needs logs_bin_rerun/ to exist on the cluster - PBS aborts a job whose output
 # directory is missing, and *logs*/ is gitignored so it is never checked out.
 #PBS -l walltime=12:00:00
-#PBS -l select=1:ncpus=3:ompthreads=2:mem=6gb
-#PBS -J 1-1%100
+#PBS -l select=1:ncpus=3:ompthreads=2:mem=10gb
+#PBS -J 1-1047%100
 #PBS -N ci_sf_bin_rerun
 #PBS -o logs_bin_rerun/
 #PBS -e logs_bin_rerun/
