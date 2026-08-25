@@ -9,6 +9,14 @@
 # 1400 array jobs completed at this request, and the 225 that did not were an R
 # error in pseudo_sl_t_split (see competing_risk/surv_failed_diagnose.R), not an
 # OOM - they failed again unchanged at 20gb.
+#
+# WALLTIME IS PROBABLY NOW TOO TIGHT. The 1h above was set from timings taken
+# BEFORE pretest_superlearner() was added to every SuperLearner arm, and the
+# first full rerun after that change left 398 missing runs - 318 of them indices
+# that had never failed, spread across all seven scenarios including 2 and 5,
+# which no known R-error route can touch. A rerun of those at 4h cleared 379.
+# That is inference from the pattern rather than proof (the logs were deleted),
+# but re-time a replicate before submitting the full array at 1h again.
 #PBS -l walltime=01:00:00
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=2gb
 #PBS -J 1-1400%100

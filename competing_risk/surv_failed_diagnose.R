@@ -5,14 +5,67 @@
 # runs is invisible on the cluster. This script reproduces it locally. It
 # diagnoses only - it changes nothing in surv_models.R.
 #
-# STATUS: the bug this script found is FIXED (see pseudo_sl_t_split()'s header
-# comment in surv_models.R). The script is kept because it is the tool for the
-# next batch of missing runs, not because the diagnosis is still open - run it
-# against a fresh failed_ids.txt and it will tell you whether you are looking at
-# the same two routes or something new. On the fixed code every stage should
-# come back clean.
+# STATUS: two rounds, two different answers. Read both.
 #
-# ROOT CAUSE (of the 225 failures of 1400, as found): every failure reproduced
+# ROUND 1 (225 failures of 1400) is written up below and is FIXED - see
+# pseudo_sl_t_split()'s header comment in surv_models.R.
+#
+# ROUND 2 (19 failures) is what stages 1-3 now measure. Those 19 are all a
+# SUBSET of the original 225, and they came back unchanged from a rerun at 4h
+# and 20gb, so they are deterministic in the array index and not a resource
+# problem. They did not fail for the reasons round 1 failed, and the mode labels
+# this script used in round 1 would have hidden that - so they have been
+# rewritten. Do not restore the old ones.
+#
+#   MODE C - whole-sample pseudo-value NA (15 of the 19, censoring = TRUE)
+#
+#   The round-1 fix guarded pseudo_sl_t_split()'s TRAINING-fold pseudo-values.
+#   pseudo_all() itself is still unguarded - it is the one pseudo-value producer
+#   in surv_models.R with no is.na() fallback - and pseudo_crossfit() fills its
+#   own NAs FROM pseudo_all()'s vector, so when that vector is NA the fallback
+#   substitutes an NA and the cvps arms inherit it too.
+#
+#   It goes NA when nobody is observed past the horizon (at_risk_past_horizon
+#   == 0): pseudoyl()'s leave-one-out risk set then empties at or below tmax, so
+#   the pseudo::ci.omit bug in README "Known issues" reaches the estimand rather
+#   than the unused tail. Confirmed on index 295 - max(Y) = 27.83 against
+#   horizon 28, one NA on each of cause 1 and cause 2.
+#
+#   The first consumer is pseudo_cf_whole_oob(), which is the FIRST pseudo-value
+#   arm in all_cate_surv_models() and long before any SuperLearner one, and grf
+#   refuses an NA outcome:
+#
+#     The vector of observations (W, Y, Z or D) contains at least one NA.
+#
+#   So blaming a SuperLearner arm for these would be blaming an arm the run
+#   never reaches. cf_whole_na_error in stage 2 is the receipt.
+#
+#   MODE A' - pretest's own fallback fails (4 of the 19, censoring = FALSE)
+#
+#   Round 1's mode A condition, but NOT round 1's mode A failure, and this is the
+#   distinction that matters: the round-1 fix added pretest_superlearner() and
+#   onlySL = TRUE, and neither of them covers this.
+#
+#   These four are more extreme than anything round 1 saw. min_n_unique is 1 - a
+#   LITERALLY constant treated-arm RMTL2 cell - against 3 on index 67. On a
+#   constant y, pretest_superlearner() drops every real candidate and takes its
+#   own "every candidate failed/warned" branch (R/cate_models.R:415-425), which
+#   returns SL.mean. The live SuperLearner() call then drops SL.mean too and
+#   errors before there is any fit at all:
+#
+#     All algorithms dropped from library
+#
+#   Confirmed on index 923: sl_pretest_kept = "RMTL2/W1 kept: SL.mean", followed
+#   by that error on 3 of 9 attempts. onlySL = TRUE is irrelevant here - the
+#   failure is at fit time, not predict time - so this is a live route in EVERY
+#   SuperLearner arm including the "fixed" pseudo_sl_t_split().
+#
+#   Stage 2 separates the two by whether the fit or the predict died
+#   (A_sl_fit_error vs A_null_fit_predict) and records both prediction paths
+#   (sl_predict_ok, sl_predict_onlysl_ok), so which fix is needed is measured
+#   rather than argued.
+#
+# ROUND 1 ROOT CAUSE (of the 225 failures of 1400, as found): every failure reproduced
 # was in ONE arm, pseudo_sl_t_split(), by TWO different routes. That arm was the
 # only SuperLearner call site in this study that passed
 # `SL.library = sl_library` unvalidated AND computed its pseudo-values with an
@@ -71,10 +124,18 @@
 #   Rscript surv_failed_diagnose.R --stage=4 --logs=jobscripts/logs_1
 #   Rscript surv_failed_diagnose.R --stage=4 --logs=jobscripts/logs_rerun --rerun
 #
+# Stage 4 had NO INPUT for round 2: both the .e and the .o files for that rerun
+# were deleted before anyone looked at them, so surv_analysis.R's error handler -
+# which writes the message and call stack to stdout precisely so a lost .e does
+# not lose the cause - had nothing left to be read from. That is why round 2 is
+# entirely local reproduction. Keep logs_rerun/ next time and most of stages 2
+# and 3 becomes unnecessary.
+#
 # Costs, measured on R 4.5.3 locally with plan(sequential):
 #   stage 1  instant
-#   stage 2  ~12 s an index, so ~65 min for the 225 failed plus 100 controls
-#            (most of it the N_PROBE_CELLS x SL_ATTEMPTS SuperLearner fits)
+#   stage 2  ~12 s an index, so ~65 min for the 225 failed plus 100 controls,
+#            or ~25 min for round 2's 19 plus 100 controls (most of it the
+#            N_PROBE_CELLS x SL_ATTEMPTS SuperLearner fits)
 #   stage 3  ~15 min an index - the SuperLearner arms are almost all of it -
 #            so it defaults to two indices and is meant to be pointed at a
 #            handful, not at the whole failed list
@@ -260,8 +321,33 @@ probe_index <- function(i) {
 
   # The whole-sample and leave-one-fold-out pseudo-values the guarded arms use,
   # so the README's ci.omit NA candidate is measured rather than assumed.
+  #
+  # na_whole is the one that is still FATAL. pseudo_all() has no NA guard - it is
+  # the only pseudo-value producer in surv_models.R without one - and
+  # pseudo_crossfit()'s is.na() fallback substitutes from this same vector, so an
+  # NA here reaches every pseudo-value arm rather than being filled. The split
+  # arm's own NAs (na_split_train, below) are guarded as of the SL fix and are
+  # now informational only. Do not let the two share a mode label.
   ps_whole <- pseudo_all(Y, d$D, HORIZON)
   na_whole <- sum(is.na(unlist(ps_whole)))
+
+  # The assertion the whole-sample-NA route rests on: all_cate_surv_models()
+  # reaches pseudo_cf_whole_oob() before any SuperLearner arm, and grf refuses an
+  # NA outcome ("The vector of observations (W, Y, Z or D) contains at least one
+  # NA."). Measured on the real vector rather than asserted from the docs, and
+  # only when there is an NA to feed it.
+  cf_whole_na_error <- ""
+  if (na_whole > 0) {
+    bad <- names(ps_whole)[vapply(ps_whole, anyNA, logical(1))]
+    err <- tryCatch(
+      {
+        pseudo_cf_whole_oob(d$X, ps_whole[[bad[[1]]]], W)
+        "NO ERROR - grf accepted the NA"
+      },
+      error = function(e) conditionMessage(e)
+    )
+    cf_whole_na_error <- paste0(paste(bad, collapse = "+"), ": ", err)
+  }
 
   # Replicate the 3-way split of pseudo_sl_t_split (surv_models.R:806-821) and
   # look at the training-fold pseudo-values it hands to SuperLearner.
@@ -304,10 +390,22 @@ probe_index <- function(i) {
   cells <- bind_rows(cells)
 
   # Reproduce the crash condition itself on the least varied cells: a NULL entry
-  # in $fitLibrary is exactly what make_t_cate()'s predict(..., onlySL = FALSE)
-  # then chokes on. See the SL_ATTEMPTS comment for why each cell is fitted more
-  # than once. min_n_unique below is the continuous risk score; this is the
-  # measurement of how often that score actually bites.
+  # in $fitLibrary is exactly what a predict(..., onlySL = FALSE) then chokes on.
+  # See the SL_ATTEMPTS comment for why each cell is fitted more than once.
+  # min_n_unique below is the continuous risk score; this is the measurement of
+  # how often that score actually bites.
+  #
+  # The library is PRETESTED here, because production now pretests everywhere -
+  # measuring the raw DEFAULT_SL_LIBRARY would re-measure the bug that was
+  # already fixed. What is NOT fixed everywhere is the prediction call:
+  # onlySL = TRUE was added to pseudo_sl_t_split() alone (surv_models.R:902),
+  # while pseudo_sl_t_standard() (surv_models.R:775-776), nuisance_pseudo_sl()
+  # and R/cate_models.R::stage_2_sl still take the onlySL = FALSE default. So a
+  # candidate that survives pretest's 2-fold CV and then fails in the live 5-fold
+  # one still leaves a NULL fit for those arms to trip on. Both prediction paths
+  # are therefore recorded: predict_ok is the live one in the unfixed arms,
+  # predict_onlysl_ok is what those arms would do if they were fixed like the
+  # split arm. predict_ok FALSE with predict_onlysl_ok TRUE names the fix.
   cells <- cells[order(cells$n_unique), ]
   worst <- cells[1, ]
 
@@ -315,8 +413,10 @@ probe_index <- function(i) {
   attempts <- 0L
   trips <- 0L
   predict_ok <- TRUE
+  predict_onlysl_ok <- TRUE
   sl_note <- "ok"
   sl_stderr <- ""
+  pretest_note <- ""
 
   for (r in seq_len(min(N_PROBE_CELLS, nrow(cells)))) {
     cell <- cells[r, ]
@@ -333,6 +433,21 @@ probe_index <- function(i) {
     y_cell <- ps[keep_w]
     x_cell <- as.data.frame(d$X[in_train, , drop = FALSE][keep_w, , drop = FALSE])
 
+    # pretest_superlearner() cats its own removals to stdout; keep them out of
+    # the report, but record what it kept - an empty-ish library is itself a
+    # finding, and "SL.mean" means every candidate died on this cell.
+    lib <- NULL
+    capture.output(
+      lib <- suppressWarnings(
+        pretest_superlearner(y_cell, x_cell, DEFAULT_SL_LIBRARY, gaussian())
+      )
+    )
+    if (!nzchar(pretest_note) && !identical(sort(lib), sort(DEFAULT_SL_LIBRARY))) {
+      pretest_note <- paste0(
+        cell$estimand, "/W", cell$arm, " kept: ", paste(lib, collapse = "+")
+      )
+    }
+
     for (attempt in seq_len(SL_ATTEMPTS)) {
       attempts <- attempts + 1L
 
@@ -343,7 +458,7 @@ probe_index <- function(i) {
         fit <- tryCatch(
           suppressWarnings(SuperLearner(
             Y = y_cell, X = x_cell,
-            SL.library = DEFAULT_SL_LIBRARY, cvControl = list(V = 5)
+            SL.library = lib, cvControl = list(V = 5)
           )),
           error = function(e) conditionMessage(e)
         ),
@@ -357,6 +472,7 @@ probe_index <- function(i) {
         trips <- trips + 1L
         null_fits <- NA_integer_
         predict_ok <- FALSE
+        predict_onlysl_ok <- FALSE
         sl_note <- paste0("SuperLearner() errored on ", cell$estimand,
                           "/W", cell$arm, ": ", fit)
         worst <- cell
@@ -370,6 +486,8 @@ probe_index <- function(i) {
       if (isTRUE(n_null > null_fits)) null_fits <- n_null
       worst <- cell
 
+      # The unfixed arms' call: default onlySL = FALSE predicts from every
+      # library member, NULL fits included.
       pred <- tryCatch(
         suppressWarnings(predict(fit, newdata = x_cell[1:2, , drop = FALSE])),
         error = function(e) conditionMessage(e)
@@ -378,6 +496,17 @@ probe_index <- function(i) {
         predict_ok <- FALSE
         sl_note <- paste0("predict() errored on ", cell$estimand,
                           "/W", cell$arm, ": ", pred)
+      }
+
+      # The split arm's call, for contrast.
+      pred_only <- tryCatch(
+        suppressWarnings(predict(fit, newdata = x_cell[1:2, , drop = FALSE],
+                                 onlySL = TRUE)),
+        error = function(e) conditionMessage(e)
+      )
+      if (is.character(pred_only)) {
+        predict_onlysl_ok <- FALSE
+        sl_note <- paste0(sl_note, " | onlySL = TRUE errored too: ", pred_only)
       }
     }
   }
@@ -391,8 +520,14 @@ probe_index <- function(i) {
     # in each treatment arm
     ce_before_horizon_W0 = sum(d$D == 2 & Y <= HORIZON & W == 0),
     ce_before_horizon_W1 = sum(d$D == 2 & Y <= HORIZON & W == 1),
+    # the driver of the whole-sample NA route. pseudoyl()'s leave-one-out risk
+    # set empties at the tail, so the max-time individual gets NaN - and that
+    # only reaches the estimand when the max observed time is at or below the
+    # horizon, i.e. exactly when at_risk_past_horizon is 0.
     at_risk_past_horizon = sum(Y > HORIZON),
+    max_Y = round(max(Y), 2),
     na_pseudo_whole = na_whole,
+    cf_whole_na_error = cf_whole_na_error,
     na_pseudo_split_train = na_split_train,
     # the risk score: the fewest distinct pseudo-values any (fold, estimand,
     # treatment arm) cell hands to SuperLearner
@@ -409,15 +544,47 @@ probe_index <- function(i) {
     sl_trips = trips,
     sl_fail_rate = round(trips / attempts, 3),
     sl_predict_ok = predict_ok,
+    sl_predict_onlysl_ok = predict_onlysl_ok,
+    sl_pretest_kept = pretest_note,
     sl_note = sl_note,
     sl_stderr = sl_stderr,
-    # Which of the two routes into pseudo_sl_t_split()'s SuperLearner() call
-    # this index is set up for. Mode B is checked first: an NA aborts the fit
-    # outright, so it wins wherever both are present.
-    predicted_mode = if (na_split_train > 0) {
-      "B_pseudo_NA"
+    # Which route this index is set up for, AGAINST THE CODE AS IT STANDS.
+    #
+    # This is not the taxonomy the 225-failure sweep used, and the difference
+    # matters. Back then both routes ran through pseudo_sl_t_split() and mode B
+    # was keyed on na_split_train. The SL fix guarded that arm, so na_split_train
+    # alone is no longer a cause of anything - keying on it would relabel the
+    # whole-sample NA route as "the bug we already fixed" and hide it.
+    #
+    # Checked in the order all_cate_surv_models() would hit them, so the label
+    # names the arm that actually aborts the run first.
+    predicted_mode = if (na_whole > 0) {
+      # pseudo_all() is unguarded, and pseudo_crossfit() fills from it, so this
+      # reaches pseudo_cf_whole_oob() - the FIRST pseudo-value arm, long before
+      # any SuperLearner one. cf_whole_na_error is the receipt.
+      "C_whole_pseudo_NA"
+    } else if (trips > 0 && !predict_ok && !predict_onlysl_ok) {
+      # The live SuperLearner() call itself died, so there was never a fit to
+      # predict from. onlySL = TRUE cannot help. This is where pretest's own
+      # SL.mean fallback lands on a constant cell: pretest drops every real
+      # candidate, returns SL.mean, and SuperLearner then drops that too
+      # ("All algorithms dropped from library"). Distinct from round 1's mode A,
+      # and NOT covered by the round-1 fix - see sl_pretest_kept.
+      "A_sl_fit_error"
+    } else if (trips > 0 && !predict_ok) {
+      # Round 1's mode A proper: the fit succeeded but left a NULL entry in
+      # $fitLibrary, and the arms that still predict with onlySL = FALSE hit it.
+      # predict_onlysl_ok is TRUE here by construction, so adding onlySL = TRUE
+      # to those call sites is the whole fix.
+      "A_null_fit_predict"
     } else if (trips > 0) {
-      "A_degenerate_library"
+      # NULL fits appeared but neither prediction path errored: a risk, not a
+      # cause. Do not count it as an explanation.
+      "A_degenerate_survivable"
+    } else if (na_split_train > 0) {
+      # The old mode B. Guarded since the SL fix - recorded so its absence as a
+      # cause is visible, not so it can be blamed again.
+      "B_split_pseudo_NA_guarded"
     } else {
       "unexplained"
     },
@@ -456,13 +623,14 @@ if (2L %in% stages) {
       }
     )
     cat(sprintf(
-      "  [%3d/%3d] index %4d (%-7s) %5.1fs  min_unique=%-3s sl_trips=%s/%s pseudo_NA=%-3s -> %s\n",
+      "  [%3d/%3d] index %4d (%-7s) %5.1fs  min_unique=%-3s sl_trips=%s/%s NA_whole=%-3s NA_split=%-3s -> %s\n",
       j, length(todo), todo[j], labels[j],
       as.numeric(difftime(Sys.time(), t0, units = "secs")),
       rows[[j]]$min_n_unique %||% NA,
       rows[[j]]$sl_trips %||% NA,
       rows[[j]]$sl_attempts %||% NA,
-      (rows[[j]]$na_pseudo_whole %||% NA) + (rows[[j]]$na_pseudo_split_train %||% NA),
+      rows[[j]]$na_pseudo_whole %||% NA,
+      rows[[j]]$na_pseudo_split_train %||% NA,
       rows[[j]]$predicted_mode %||% "probe error"
     ))
     flush.console()
@@ -483,12 +651,33 @@ if (2L %in% stages) {
       any_sl_trip = sum(sl_trips > 0, na.rm = TRUE),
       mean_sl_fail_rate = round(mean(sl_fail_rate, na.rm = TRUE), 3),
       predict_fails = sum(!sl_predict_ok, na.rm = TRUE),
+      # how many of those predict_fails onlySL = TRUE would have survived: the
+      # size of the prize for fixing the three call sites that still omit it
+      onlysl_would_fix = sum(!sl_predict_ok & sl_predict_onlysl_ok, na.rm = TRUE),
       median_min_unique = median(min_n_unique, na.rm = TRUE),
       median_ce_W1 = median(ce_before_horizon_W1, na.rm = TRUE),
       median_ce_W0 = median(ce_before_horizon_W0, na.rm = TRUE),
-      any_pseudo_NA = sum(na_pseudo_whole + na_pseudo_split_train > 0, na.rm = TRUE),
       .groups = "drop"
     ) %>% as.data.frame(), row.names = FALSE)
+
+  cat("\nis the WHOLE-SAMPLE pseudo-value NA? (the unguarded route)\n")
+  print(probe %>%
+    group_by(group) %>%
+    summarise(
+      n = n(),
+      na_whole = sum(na_pseudo_whole > 0, na.rm = TRUE),
+      na_split_only = sum(na_pseudo_whole == 0 & na_pseudo_split_train > 0,
+                          na.rm = TRUE),
+      nobody_past_horizon = sum(at_risk_past_horizon == 0, na.rm = TRUE),
+      median_max_Y = round(median(max_Y, na.rm = TRUE), 1),
+      .groups = "drop"
+    ) %>% as.data.frame(), row.names = FALSE)
+
+  cf_err <- unique(probe$cf_whole_na_error[nzchar(probe$cf_whole_na_error)])
+  if (length(cf_err)) {
+    cat("\nwhat pseudo_cf_whole_oob() does with that NA:\n")
+    for (e in cf_err) cat("  ", e, "\n", sep = "")
+  }
 
   cat("\nwhich cell is the least varied one, among failed indices:\n")
   print(with(
@@ -502,23 +691,34 @@ if (2L %in% stages) {
                        labels = c("<=3", "4-5", "6-10", "11-20", ">20")),
     group = group
   )))
-  cat("\npredicted route into pseudo_sl_t_split()'s SuperLearner() call:\n")
+  cat("\npredicted route, against the code as it stands:\n")
   print(with(probe, table(predicted_mode = predicted_mode, group = group)))
   cat(
-    "\n  A_degenerate_library  near-constant pseudo-values leave NULL entries in\n",
-    "                       $fitLibrary, and predict(onlySL = FALSE) hits one\n",
-    " B_pseudo_NA           unguarded pseudoyl/pseudomean returned NA, which\n",
-    "                       SuperLearner() rejects outright\n",
-    " unexplained           neither - stage 3 needs pointing at these\n"
+    "\n  C_whole_pseudo_NA         pseudo_all() returned NA and nothing guards it.\n",
+    "                            Kills pseudo_cf_whole_oob(), the first pseudo-\n",
+    "                            value arm. Driver: at_risk_past_horizon == 0\n",
+    " A_sl_fit_error            the live SuperLearner() call died outright. On a\n",
+    "                            constant cell pretest keeps only SL.mean and that\n",
+    "                            is dropped too. onlySL = TRUE cannot help\n",
+    " A_null_fit_predict        round 1's mode A: fit succeeded but left a NULL in\n",
+    "                            $fitLibrary, and an arm predicting with\n",
+    "                            onlySL = FALSE hit it. onlySL = TRUE is the fix\n",
+    " A_degenerate_survivable   NULL fits appeared but no prediction path errored:\n",
+    "                            a risk, not a cause\n",
+    " B_split_pseudo_NA_guarded the old mode B. Guarded since the SL fix, so it is\n",
+    "                            reported and NOT counted as an explanation\n",
+    " unexplained               none of the above - stage 3 needs pointing at these\n"
   )
 
   # Say plainly how much of the failed list this probe accounts for. Do not read
-  # silence as agreement: an unexplained failure is a third mode until shown
-  # otherwise.
+  # silence as agreement: an unexplained failure is a further mode until shown
+  # otherwise. Only the two FATAL modes count as explanations - a guarded NA or a
+  # survivable NULL fit is a description of the data, not a cause of death.
+  FATAL_MODES <- c("C_whole_pseudo_NA", "A_sl_fit_error", "A_null_fit_predict")
   unexplained <- probe[probe$group == "failed" &
-                         probe$predicted_mode == "unexplained", ]
+                         !(probe$predicted_mode %in% FATAL_MODES), ]
   false_alarms <- probe[probe$group == "control" &
-                          probe$predicted_mode != "unexplained", ]
+                          probe$predicted_mode %in% FATAL_MODES, ]
   cat(sprintf(
     paste0(
       "\n  %d of %d failed indices unexplained; %d of %d controls flagged anyway.\n",
@@ -633,6 +833,20 @@ debug_arms <- function(i) {
     if (!is.null(nuis_oob)) {
       run_arm(paste0("dr_whole_oob ", e), stage2_whole_rf(X, nuis_oob$po)$tau)
     }
+    # whole_scf was missing from this harness even though all_cate_surv_models()
+    # runs it (surv_models.R:88-98). It is the arm that isolates the pseudo-value
+    # factor from the fitting factor, and it consumes the whole-sample vector, so
+    # leaving it out would let a whole-sample NA look arm-specific.
+    nuis_whole_scf <- NULL
+    run_arm(paste0("nuis_rf_whole_scf ", e), {
+      nuis_whole_scf <- nuisance_pseudo_rf_scf(X, pw(e), W, pw(e), fold_indices,
+                                               fold_list)
+      nuis_whole_scf$po
+    })
+    if (!is.null(nuis_whole_scf)) {
+      run_arm(paste0("dr_whole_scf ", e),
+              stage_2_rf_scf(X, nuis_whole_scf$po, fold_indices, fold_list))
+    }
     nuis_scf <- NULL
     run_arm(paste0("nuis_rf_cvps_scf ", e), {
       nuis_scf <- nuisance_pseudo_rf_scf(X, pc(e), W, pw(e), fold_indices, fold_list)
@@ -658,6 +872,19 @@ debug_arms <- function(i) {
     if (!is.null(nuis_sl)) {
       run_arm(paste0("sl_dr_whole ", e),
               pseudo_dr_sl(X, nuis_sl$po, fold_indices, fold_list, DEFAULT_SL_LIBRARY))
+    }
+    # sl_dr_cvps was missing too (surv_models.R:158-168). Same reason: it is live
+    # in production and it consumes both pseudo-value vectors.
+    nuis_sl_cv <- NULL
+    run_arm(paste0("nuis_sl_cvps ", e), {
+      nuis_sl_cv <- nuisance_pseudo_sl(X, pc(e), W, pw(e), fold_indices, fold_list,
+                                       DEFAULT_SL_LIBRARY)
+      nuis_sl_cv$po
+    })
+    if (!is.null(nuis_sl_cv)) {
+      run_arm(paste0("sl_dr_cvps ", e),
+              pseudo_dr_sl(X, nuis_sl_cv$po, fold_indices, fold_list,
+                           DEFAULT_SL_LIBRARY))
     }
   }
 

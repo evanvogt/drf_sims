@@ -168,6 +168,110 @@ than trusting that.
 
 ## Known issues
 
+### 19 runs still fail — two routes the round-1 fix left open
+
+**Open.** After the split-T-learner fix below, a full rerun left 398 missing
+runs, and a rerun of those at 4h/20gb left **19**. All 19 were in the original
+225. They are deterministic in the array index — the same 19 came back with 4x
+the walltime and 10x the memory — so this is code, not resources.
+
+They are **not** the bug that fix addressed. Both routes below were reproduced
+end to end locally with `Rscript surv_analysis.R <index>`, whose error handler
+prints the call stack; `surv_failed_diagnose.R` stages 2 and 3 separate them and
+score them against 100 successful controls. Artefacts in
+`<results>/competing_risk/diagnostics/round2/`.
+
+| | count | dies in | error |
+|---|---|---|---|
+| whole-sample pseudo-value NA | 15 | `pseudo_cf_whole_oob` | `The vector of observations (W, Y, Z or D) contains at least one NA.` |
+| pretest's own fallback dropped | 4 | `pseudo_sl_t_split` | `All algorithms dropped from library` |
+
+Both discriminate perfectly: **0 of 19 unexplained, 0 of 100 controls flagged.**
+
+#### Route C — the whole-sample pseudo-values are NA, and nothing guards them
+
+15 indices, all `censoring = TRUE` (runs 22, 68, 86 x scenarios 1, 3, 4, 6, 7).
+
+The fix below guarded `pseudo_sl_t_split`'s *training-fold* pseudo-values.
+`pseudo_all()` itself was never guarded — it is the only pseudo-value producer in
+`surv_models.R` without an `is.na()` fallback — and `pseudo_crossfit()` fills its
+own NAs *from* `pseudo_all()`'s vector, so when that vector is NA the fallback
+substitutes an NA and the `cvps` arms inherit it too.
+
+The driver is **`at_risk_past_horizon == 0`**: when nobody is observed past the
+horizon of 28, `pseudoyl()`'s leave-one-out risk set empties at or below `tmax`,
+so the `pseudo:::ci.omit` bug already written up below reaches the estimand
+instead of an unused tail. On index 295, `max(Y) = 27.83` and `pseudoyl()`
+returns one NA on each of cause 1 and cause 2. It is a clean split: **15 of 19
+failures have nobody past the horizon, against 0 of 100 controls.**
+
+`pseudomean()` is unaffected, and that is the internal control — stage 3 on index
+295 errors in **20 arms, every one of them RMTL1 or RMTL2, and none of the RMSTc
+or `csf_*`/`ipw` arms**. The failure tracks the estimand whose pseudo-values are
+NA, exactly. `sl_t_split` is among the survivors: its `keep <- !is.na(y)`
+backstop does its job here.
+
+The run dies at `pseudo_cf_whole_oob`, the *first* pseudo-value arm — so for
+these 15 the SuperLearner arms blamed in round 1 are never even reached.
+
+#### Route A' — `pretest_superlearner`'s SL.mean fallback is not safe either
+
+4 indices, all `censoring = FALSE` (84, 462, 923, 924).
+
+Round 1's degenerate-library *condition*, but not its failure, and the difference
+is the point: these four are more extreme than anything round 1 saw —
+`min_n_unique` is **1**, a literally constant treated-arm RMTL2 cell, against 3
+on index 67. On a constant `y`, `pretest_superlearner()` drops all four
+candidates and takes its own "every candidate failed/warned" branch
+(`R/cate_models.R:415-425`), returning `SL.mean`. The live `SuperLearner()` call
+then drops `SL.mean` too and errors before there is any fit at all:
+
+```
+Removed libraries due to NA/error: SL.glm SL.glmnet SL.ranger SL.gam
+Error in SuperLearner(): All algorithms dropped from library
+```
+
+Reproduced in isolation on a constant vector, so it needs none of this study's
+data. **`onlySL = TRUE` is irrelevant here** — the failure is at fit time, not
+predict time — so the round-1 fix could not have caught it, and it is live in
+every SuperLearner call site, not just the ones that still omit `onlySL`. Stage 2
+measures that directly: `onlysl_would_fix = 0` of 4.
+
+Stage 3 on index 923 errors in **exactly one arm**, `sl_t_split`. The other
+SuperLearner arms survive because they train on `V-1` folds; the split arm's
+3-way split gives the most degenerate cell.
+
+#### Fixing it needs two decisions, not one
+
+- **Route C.** There is no `pseudo_whole`-style fallback available *for* the
+  whole sample, so this is the same design decision the disabled split-DR arm
+  faces: drop the affected observation, or impute it. Note the estimand is
+  genuinely not identified past the last observed time when
+  `at_risk_past_horizon == 0`, so dropping silently would be worse than it looks
+  — whatever is chosen needs an `n_na_fallback`-style counter like the others.
+- **Route A'.** `pretest_superlearner` should not return a library it has not
+  shown to survive the *caller's* `cvControl`, and a constant-outcome cell has no
+  meaningful CATE contribution anyway. Both point at handling the degenerate cell
+  explicitly rather than at another library-level patch.
+
+#### The 398 were probably walltime, and that matters for the next submission
+
+The intermediate batch is a separate story: 318 of its 398 were *new* indices,
+spread across all seven scenarios **including 2 and 5**, which neither route
+above can touch (`bW_1 = 0`). The likely cause is the same commit trimming
+`surv_1.sh` from 2h to 1h while `pretest_superlearner` made every SuperLearner
+arm markedly more expensive. The 4h rerun cleared 379 of them, which fits. This
+is inference from the failure pattern, not proof — the logs that would settle it
+were deleted. **Do not re-submit the full array at 1h.**
+
+#### The logs were deleted, and that cost most of this
+
+`surv_analysis.R`'s error handler writes the message and call stack to **stdout**
+precisely so a lost `.e` file does not lose the cause. Both the `.e` and the `.o`
+files for this rerun were deleted before anyone read them, so stage 4 had no
+input and the whole diagnosis had to be rebuilt from local reproduction under
+R 4.5.3 rather than the cluster's 4.3.2. Keep `logs_rerun/` next time.
+
 ### SuperLearner DR-learner, split pseudo-obs (disabled)
 
 `all_cate_surv_models()` used to abort with:
@@ -288,18 +392,29 @@ Rscript R/regression_check.R baseline competing_risk
 `scratch_dgm_params_check.R` is exploratory.
 `surv_dr_split_na_diagnose.R` reproduces and traces the split-DR-learner
 NA bug documented in "Known issues" above.
-`surv_failed_diagnose.R` is the diagnostic that found the 225-run failure: it
-decodes `jobscripts/failed_ids.txt` against the grid (stage 1), probes every
-failed index against a control sample for the two failure routes (stage 2),
-reruns each arm of `all_cate_surv_models()` separately and keeps going past a
-failure so one run reports all of them (stage 3), and triages PBS `.o` files
-(stage 4). Point it at the next batch of missing runs rather than starting from
-scratch:
+`surv_failed_diagnose.R` is the diagnostic that found both the 225-run failure
+and the 19-run one: it decodes `jobscripts/failed_ids.txt` against the grid
+(stage 1), probes every failed index against a control sample for each known
+failure route (stage 2), reruns each arm of `all_cate_surv_models()` separately
+and keeps going past a failure so one run reports all of them (stage 3), and
+triages PBS `.o` files (stage 4). Point it at the next batch of missing runs
+rather than starting from scratch:
 
 ```bash
-Rscript surv_failed_diagnose.R                      # stages 1 + 2
-Rscript surv_failed_diagnose.R --stage=3 --ids=67,85
+Rscript surv_failed_diagnose.R --out=<results>/diagnostics/round3
+Rscript surv_failed_diagnose.R --stage=3 --ids=295,923 --out=...
 ```
+
+**Pass `--out`.** Stage 2 and stage 3 overwrite `failed_probe.csv` and
+`failed_arms.csv` in place, so a fresh run silently destroys the previous round's
+evidence — which is how round 1's 325-row probe was lost (its `stage2.log` still
+carries the per-index lines, the CSV does not). Round 2's artefacts are under
+`diagnostics/round2/`.
+
+Its stage-2 mode labels are versioned against the code, not against history: the
+round-1 labels would have relabelled route C as "the bug we already fixed" and
+hidden it. If a future fix closes a route, retire its label rather than leaving
+it able to claim a failure it can no longer cause.
 
 `surv_analysis.R` sources `R/cate_models.R` before `surv_models.R`, so the
 study's own definitions win where they still exist. That is what supplies
