@@ -71,6 +71,21 @@ CANDIDATE_MODELS <- c("rf1", "rf2", "rf3", "net1", "net2", "net3", "SL1", "SL2",
 # deletion nobody can check.
 NUISANCE_ARMS <- c("whole", "cv_indep", "cv_shared", "holdout")
 
+# ---- the calibration score's group counts -----------------------------------
+# How many tau_hat quantile groups the DR calibration score (calc_cal_score(),
+# me_metrics.R) splits the evaluation rows into. Declared here for the same
+# reason as NUISANCE_ARMS: me_metrics.R emits one column family per K and
+# me_testing.R asserts the resulting column count, and a disagreement would
+# surface only as the wrong number of score columns.
+#
+# BOTH values are carried rather than one being chosen, because the right K is
+# a trade this study can measure instead of assume. At n = 250, K = 5 puts 50
+# rows in each group - enough for a stable GATE^DR - while K = 10 puts 25,
+# which resolves miscalibration more finely but estimates each group's mean
+# pseudo-outcome from very little. Emitting both makes the sensitivity to K a
+# result rather than a hidden choice.
+CAL_QUANTILES <- c(5L, 10L)
+
 # Blocks smaller than this are not worth handing to a 36-point XGBoost CV grid
 # or a 20-model AutoML run: the `holdout` arm fits mu0_T/mu1_T on the treated
 # and control rows WITHIN one block, so a 25-row block leaves ~12 rows per

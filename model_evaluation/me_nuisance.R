@@ -62,9 +62,14 @@ calculate_pseudos <- function(df, Y, W) {
     mutate(
       tau_T = mu1_T - mu0_T,
       phi = mu1_DR - mu0_DR + ((Y - mu_DR) * (W - pi)) / (pi * (1 - pi)),
-      # phi05 (propensity fixed at 0.5) is currently unused by any score in
-      # me_metrics.R - kept since it's one extra column from data already in
-      # scope, not worth deleting the way a whole unused function is.
+      # phi05 fixes the propensity at 0.5 instead of using the estimated pi.
+      # It is not an approximation: R/dgm_scenarios.R assigns treatment with
+      # `W <- rbinom(n, 1, 0.5)`, so 0.5 IS the true propensity and phi05 is
+      # the oracle-pi pseudo-outcome. me_metrics.R's dr05_* and cal05q*_*
+      # score columns are built from it, and the dr/dr05 contrast is what
+      # isolates the cost of estimating a propensity that did not need
+      # estimating. Computed here since this study's first commit - which is
+      # why those columns needed no rerun to add.
       phi05 = mu1_DR - mu0_DR + ((Y - mu_DR) * (W - 0.5)) / (0.5 * (1 - 0.5))
     )
   return(df)

@@ -199,22 +199,103 @@ excluded — a 50-row evaluation set is too thin to rank 9 models.
 
 ### Scores
 
-From these, `calculate_pseudos()` builds a T-learner CATE (`tau_T`), and an
-AIPW pseudo-outcome (`phi`; `phi05` also computed with propensity fixed at
-0.5, currently unused by any score). `me_metrics.R` scores every candidate's
-`tau` against both pipelines under every arm two ways — an
-influence-corrected PEHE proxy (`calc_infl_score`) and a DR-risk proxy
-(`calc_dr_risk`, MSE against the AIPW pseudo-outcome) — plus true PEHE
-(available because this is simulated data).
+From these, `calculate_pseudos()` builds a T-learner CATE (`tau_T`) and two
+AIPW pseudo-outcomes: `phi`, using the pipeline's estimated `pi`, and `phi05`,
+with the propensity fixed at 0.5. `me_metrics.R` scores every candidate's `tau`
+against both pipelines under every arm, plus true PEHE (available because this
+is simulated data).
+
+**Three score families, each in two propensity regimes** — 8 score types per
+(arm × pipeline):
+
+| family | estimated `pi` | fixed `pi = 0.5` | what it is |
+|---|---|---|---|
+| influence | `infl` | `infl05` | influence-corrected PEHE proxy (`calc_infl_score`) |
+| DR risk | `dr` | `dr05` | MSE against the AIPW pseudo-outcome (`calc_dr_risk`) |
+| calibration | `calq5`, `calq10` | `cal05q5`, `cal05q10` | DR calibration over K quantile groups (`calc_cal_score`) |
+
+Column names stay `<score_type>_<arm>_<pipeline>`; the propensity regime and
+the group count are folded into that first token (`cal05q10` = calibration,
+fixed `pi`, K = 10) rather than added as a fourth field, because
+`me_results.qmd` recovers the design axes by splitting the name. `"05"` never
+appears in a score type unless the propensity is fixed — `calq10` carries a
+`"10"`, never an `"05"` — so the regime is recoverable with `grepl("05", .)`.
+
+#### Fixing the propensity at 0.5 is an oracle, not an approximation
+
+`R/dgm_scenarios.R` assigns treatment with `W <- rbinom(n, 1, 0.5)` — a fair
+coin, independent of `X`, in **every** scenario. So 0.5 *is* the true
+propensity, the `*05` scores are oracle-π scores, and the `dr` / `dr05`
+contrast isolates exactly one thing: what it costs to estimate a propensity
+that never needed estimating. This is the RCT setting the study is about, so
+the answer is not incidental.
+
+**None of this required a rerun.** `phi05` has been computed by
+`calculate_pseudos()` since this study's first commit, so every completed
+replicate already carries it; `calc_infl_score()` already took `pi` as an
+argument; and the calibration score needs only each candidate's saved per-row
+`tau` and the arm's saved `phi`. Scores are a pure post-hoc function of
+`<prefix>_all.RDS`, so adding a score family means re-running `me_metrics.R`
+and nothing else — the same argument `me_strategies.R`'s header makes for its
+own pass. What *would* force a rerun is fixing `pi = 0.5` inside the
+**candidates**: `me_models.R` builds each learner's own pseudo-outcome from a
+trimmed estimated `W.hat`, and changing that invalidates every stored `tau`.
+Every arm here scores the identical candidate fits, which is the controlled
+comparison the study rests on.
+
+#### The calibration score
+
+Split the evaluation rows into K quantile groups `G_1..G_K` of the
+*candidate's own* `tau_hat`. Each group has the effect the candidate claims and
+the effect the DR scores imply:
+
+```
+GATE_k^hat = (1/|G_k|) Σ_{i∈G_k} tau_hat(x_i)
+GATE_k^DR  = (1/|G_k|) Σ_{i∈G_k} phi(x_i)
+M^CAL-DR   = Σ_k |G_k| · | GATE_k^hat − GATE_k^DR |
+```
+
+Three implementation choices worth stating, because each is easy to "correct"
+into something that measures a different thing:
+
+- **Absolute, not signed.** The signed sum `Σ_k |G_k| (GATE_k^hat − GATE_k^DR)`
+  telescopes to `n · (mean(tau_hat) − mean(phi))`: every group boundary cancels
+  and what survives is an ATE-bias measure that cannot see miscalibration at
+  all. Over- and under-estimation in different groups must not net out.
+- **Weights are group counts, not proportions** — `sum(w)` is `n`, not 1, so
+  the score scales with `n`. Within a run that factor is identical across the 9
+  candidates, so it moves no ranking, correlation, pick or regret; but the raw
+  magnitude is not comparable across sample sizes.
+- **Groups come from ranks, not `quantile()` cut points.** Cut points collapse
+  to fewer than K groups — or emit `NA` — the moment `tau_hat` is constant or
+  heavily tied, which is exactly what scenario 1 and a fully-shrunk `net*`
+  produce. `ceiling(K · rank(tau_hat) / n)` always gives K non-empty,
+  near-equal groups, so the column never silently goes `NA` for the flattest
+  candidates.
+
+`CAL_QUANTILES` (`me_config.R`) carries **both** K = 5 and K = 10 rather than
+picking one: at `n = 250` the first puts 50 rows in a group and the second 25,
+trading a stable `GATE^DR` against finer resolution, and emitting both makes
+the sensitivity to K a result instead of a hidden choice.
+
+**What it cannot see.** Unlike `infl` and `dr` this is not an estimate of PEHE;
+it measures calibration, not discrimination. A candidate predicting the
+constant ATE everywhere has arbitrary quantile groups, so each group's
+`GATE^DR` is about the overall mean and every discrepancy is near zero — a
+near-perfect score at whatever PEHE the true heterogeneity implies. Expect the
+shrunk-to-a-constant candidates to look good here, and read the family as a
+complement to the PEHE proxies rather than a replacement.
+
+#### Column counts
 
 The column set is *derived* from whatever arms the nuisance list carries, never
 enumerated, which is why one `me_per_model()` serves all three result trees:
 
 | tree | arms | score columns |
 |---|---|---|
-| `model_evaluation` | `cv`, `whole` | 1 + 2×2×2 = **9** |
-| `model_evaluation_strategies` | `whole`, `cv_indep`, `cv_shared`, `holdout` | 1 + 2×4×2 = **17** |
-| `model_evaluation_split` | `split` | 1 + 2×1×2 = **5** |
+| `model_evaluation` | `cv`, `whole` | 1 + 8×2×2 = **33** |
+| `model_evaluation_strategies` | `whole`, `cv_indep`, `cv_shared`, `holdout` | 1 + 8×4×2 = **65** |
+| `model_evaluation_split` | `split` | 1 + 8×1×2 = **17** |
 
 The split tree needs no scoring variant because `me_split.R` stores `data` and
 `truth` already restricted to its 20% evaluation rows, so every vector
@@ -333,6 +414,20 @@ qsub -v TREE=split model_evaluation/jobscripts/me_metrics.sh
 ```bash
 quarto render model_evaluation/me_results.qmd   # the report - needs me_metrics.RDS
 ```
+
+**Re-scoring an already-collected tree.** The score families in `me_metrics.R`
+are a pure post-hoc function of `<prefix>_all.RDS` — adding one means
+re-running only the last step, never the study:
+
+```bash
+qsub model_evaluation/jobscripts/me_metrics.sh   # rewrites me_metrics.RDS in place
+```
+
+`me_collect.R` output is untouched, so `me_all.RDS` does not need regenerating
+either. Because this overwrites `me_metrics.RDS`, it is worth keeping a copy of
+the old one and checking that the pre-existing columns come back bit-identical
+and only new ones were appended — the same kind of inertness proof
+`me_strategies_verify.R` gives for its pass.
 
 **Checking progress of the derived trees.** `Rscript me_check.R strategies`
 runs `check_failed(..., write = FALSE)` and reports how many runs are done.

@@ -69,19 +69,45 @@ number of covariates, 7–9 across these scenarios.
 | `SL2` | SuperLearner | `glmnet, xgboost, cforest, earth, gam, mean` |
 | `SL3` | SuperLearner | `svm, nnet, mean` |
 
-### The 8 proxy scores
+### The proxy scores
 
 A second, *independent* nuisance pipeline estimates `mu0_T`, `mu1_T`, `mu_DR`
-and `pi`, and is used only to score the candidates — never to fit them. Two
-pipelines, two fold regimes, two score types:
+and `pi`, and is used only to score the candidates — never to fit them. Four
+axes:
 
 | axis | levels |
 |---|---|
 | pipeline | **XGBoost** (36-combination CV grid) / **H2O AutoML** (up to 20 auto-tuned models) |
 | fold regime | **cv** (leave-one-fold-out) / **whole** (no split) |
-| score type | **infl** — influence-corrected PEHE proxy (`calc_infl_score`) / **dr** — DR risk, MSE against the AIPW pseudo-outcome `phi` (`calc_dr_risk`) |
+| score family | **infl** — influence-corrected PEHE proxy (`calc_infl_score`) / **dr** — DR risk, MSE against the AIPW pseudo-outcome `phi` (`calc_dr_risk`) / **cal** — DR calibration (`calc_cal_score`), at K = 5 and K = 10 quantile groups |
+| propensity | **estimated** (`pi` from the pipeline) / **fixed at 0.5** (score names carrying `05`) |
 
-All eight, and `true_pehe` itself, are **losses: lower is better**.
+Every one of them, and `true_pehe` itself, is a **loss: lower is better**.
+
+**Fixing the propensity at 0.5 is an oracle, not an approximation.**
+`R/dgm_scenarios.R` assigns treatment with `W <- rbinom(n, 1, 0.5)` — a fair
+coin, independent of `X`, in every scenario. So 0.5 *is* the true propensity,
+and `dr` vs `dr05` isolates one thing: what it costs to estimate a propensity
+that never needed estimating. These columns needed no rerun — `phi05` has been
+saved in every replicate since the study's first commit.
+
+**The calibration score** splits the evaluation rows into K quantile groups of
+the *candidate's own* `tau_hat`, then compares the group average treatment
+effect the candidate implies against the one the DR scores imply:
+`M = Σ_k |G_k| · |GATE_k^hat − GATE_k^DR|`. It is weighted by group *counts*,
+so it scales with `n` — constant within a run, so it moves no ranking here, but
+its raw magnitude is not comparable across sample sizes.
+
+Unlike `infl` and `dr`, **the calibration score is not an estimate of PEHE**,
+and it is worth being explicit about what it cannot see. It measures
+calibration, not discrimination: a candidate that predicts the *constant* ATE
+for every unit has arbitrary quantile groups, so each group's `GATE^DR` is
+roughly the overall mean and every discrepancy is near zero — a near-perfect
+calibration score, at whatever PEHE the true heterogeneity implies. So expect
+the shrunk-to-a-constant candidates (`net2` especially, and everything in
+scenario 1) to do *well* here, and read this score as a complement to the PEHE
+proxies rather than a substitute. Whether that failure mode actually bites at
+these sample sizes is one of the things the study now measures.
 
 **`whole` is resubstitution.** It fits and predicts the scoring nuisances on
 the entire sample, so they see the same rows the candidate's `tau_hat` was fit
@@ -112,24 +138,75 @@ model_levels <- c("rf1", "rf2", "rf3", "net1", "net2", "net3",
 family_labels <- c(rf = "Random forest", net = "Elastic net",
                    SL = "SuperLearner")
 
-# proxy display labels, ordered score type first so the infl/dr split reads
-# straight off the x axis
-proxy_labels <- c(
-  infl_cv_xgb       = "Infl / CV / XGB",
-  infl_cv_automl    = "Infl / CV / AutoML",
-  infl_whole_xgb    = "Infl / whole / XGB",
-  infl_whole_automl = "Infl / whole / AutoML",
-  dr_cv_xgb         = "DR / CV / XGB",
-  dr_cv_automl      = "DR / CV / AutoML",
-  dr_whole_xgb      = "DR / whole / XGB",
-  dr_whole_automl   = "DR / whole / AutoML"
-)
+# ---- parsing a score column name -------------------------------------------
+# me_metrics.R builds every score column as <score_type>_<fold_type>_<pipeline>,
+# where score_type is a single token of the form <family>[05][q<K>]:
+#
+#   infl_cv_xgb           infl05_cv_xgb        (05 = propensity fixed at 0.5)
+#   dr_cv_shared_automl   dr05_cv_shared_automl
+#   calq5_whole_xgb       cal05q10_holdout_automl
+#
+# The fold type is EVERYTHING BETWEEN the first and last token, not just the
+# first of them - the strategies tree's arms are cv_indep, cv_shared and
+# holdout, so a regex that takes one token reads `dr_cv_shared_xgb` as fold
+# "cv" and silently merges two arms that the whole study exists to separate.
+parse_proxy <- function(proxy_id) {
+  parts <- strsplit(proxy_id, "_", fixed = TRUE)
+  tibble(
+    proxy_id   = proxy_id,
+    score_type = vapply(parts, function(p) p[1], character(1)),
+    fold_type  = vapply(parts, function(p) paste(p[-c(1, length(p))], collapse = "_"),
+                        character(1)),
+    pipeline   = vapply(parts, function(p) p[length(p)], character(1))
+  ) %>%
+    mutate(
+      # the family with the propensity marker and group count stripped off.
+      # `score_family`, not `family` - the metrics tibble already uses that
+      # name for the candidate's own family (rf / net / SL), and the two would
+      # collide into family.x/family.y on the join in the long-form chunk.
+      score_family = sub("^([a-z]+?)(05)?(q[0-9]+)?$", "\\1", score_type),
+      # "05" appears in a score type only when the propensity is fixed - calq10
+      # carries a "10", never an "05"
+      pi_regime = ifelse(grepl("05", score_type), "fixed", "estimated"),
+      k_groups  = suppressWarnings(as.integer(sub("^.*q", "", score_type))),
+      k_groups  = ifelse(grepl("q[0-9]+$", score_type), k_groups, NA_integer_)
+    )
+}
 
-axis_labels <- c(score_type = "Score type", fold_type = "Fold regime",
-                 pipeline = "Nuisance pipeline")
+axis_labels <- c(score_type = "Score type", score_family = "Score family",
+                 fold_type = "Fold regime", pipeline = "Nuisance pipeline",
+                 pi_regime = "Propensity", k_groups = "Quantile groups")
 
-level_labels <- c(infl = "Influence", dr = "DR risk", cv = "CV",
-                  whole = "Whole", xgb = "XGBoost", automl = "AutoML")
+level_labels <- c(infl = "Influence", dr = "DR risk", cal = "Calibration",
+                  cv = "CV", cv_indep = "CV (indep.)", cv_shared = "CV (shared)",
+                  holdout = "Holdout", whole = "Whole", split = "80:20",
+                  xgb = "XGBoost", automl = "AutoML",
+                  estimated = "pi estimated", fixed = "pi = 0.5")
+
+# Display labels are BUILT from the parsed axes rather than typed out: the main
+# tree now carries 33 score columns and the strategies tree 65, so a hand-kept
+# lookup would be both unreadable and a silent source of NA labels the first
+# time a score family is added.
+label_or_id <- function(x) ifelse(is.na(level_labels[x]), x, level_labels[x])
+
+proxy_label_of <- function(parsed) {
+  paste(
+    ifelse(is.na(parsed$k_groups),
+           label_or_id(parsed$score_family),
+           paste0(label_or_id(parsed$score_family), " K=", parsed$k_groups)),
+    ifelse(parsed$pi_regime == "fixed", "[pi=.5]", "[pi-hat]"),
+    label_or_id(parsed$fold_type),
+    label_or_id(parsed$pipeline),
+    sep = " / "
+  )
+}
+
+# one row per score column, in the order me_metrics.R emitted them, which is
+# also the order the factor levels below take
+proxy_key <- parse_proxy(score_cols) %>%
+  mutate(proxy_label = proxy_label_of(.))
+
+proxy_labels <- setNames(proxy_key$proxy_label, proxy_key$proxy_id)
 
 metrics <- metrics %>%
   mutate(
@@ -149,12 +226,8 @@ metrics <- metrics %>%
 # <score_type>_<fold_type>_<pipeline>.
 long <- metrics %>%
   pivot_longer(all_of(score_cols), names_to = "proxy_id", values_to = "score") %>%
-  mutate(
-    score_type = sub("_.*$", "", proxy_id),
-    fold_type  = sub("^[^_]+_([^_]+)_.*$", "\\1", proxy_id),
-    pipeline   = sub("^.*_", "", proxy_id),
-    proxy = factor(proxy_labels[proxy_id], levels = unname(proxy_labels))
-  )
+  left_join(proxy_key, by = "proxy_id") %>%
+  mutate(proxy = factor(proxy_label, levels = unname(proxy_labels)))
 
 # a candidate only enters a ranking if both its score and its truth are there
 long_ok <- filter(long, !is.na(score), !is.na(true_pehe))
@@ -169,7 +242,8 @@ long_ok <- filter(long, !is.na(score), !is.na(true_pehe))
 # hypothetical complete set - so a run with a dropped candidate is scored
 # honestly rather than penalised for the gap.
 selection <- long_ok %>%
-  group_by(scenario, n, run, proxy, proxy_id, score_type, fold_type, pipeline) %>%
+  group_by(scenario, n, run, proxy, proxy_id, score_type, score_family,
+           pi_regime, k_groups, fold_type, pipeline) %>%
   filter(n() >= 2) %>%
   summarise(
     n_candidates = n(),
@@ -190,7 +264,8 @@ selection <- long_ok %>%
 
 # per (scenario, n, proxy) summaries, mean +/- Monte Carlo SE over the runs
 selection_summary <- selection %>%
-  group_by(scenario, n, proxy, score_type, fold_type, pipeline) %>%
+  group_by(scenario, n, proxy, score_type, score_family, pi_regime, k_groups,
+           fold_type, pipeline) %>%
   summarise(
     runs = n(),
     mean_rho = mean(rho, na.rm = T),
@@ -543,15 +618,24 @@ summary_plot(selection_summary, "mean_rel_regret", "mcse_rel_regret",
 
 ## Which axis matters?
 
-The 8 proxies are a 2 x 2 x 2 design. Reading a winner off an 8-level axis
-conflates the three questions it actually answers — influence-corrected versus
-DR risk, honest crossfitting versus resubstitution, XGBoost versus AutoML — so
-here each is marginalised over the other two.
+The proxies are a factorial design, not a flat list. Reading a winner off the
+full proxy axis conflates the questions it actually answers — influence-
+corrected versus DR risk versus calibration, an estimated propensity versus the
+true 0.5, honest crossfitting versus resubstitution, XGBoost versus AutoML — so
+here each is marginalised over the others.
+
+`score_family` is used rather than `score_type` because the latter is the
+composite token (`cal05q10` is *calibration*, *fixed pi*, *K=10* in one
+string); the propensity is pulled out as its own axis. `k_groups` is
+deliberately **not** marginalised here: it is defined only for the calibration
+columns, so a panel averaging over it would put two thirds of the rows in an
+"undefined" level. Compare K = 5 against K = 10 within the calibration family
+instead.
 
 ```{r axis-marginals}
 axis_long <- selection %>%
-  mutate(across(c(score_type, fold_type, pipeline), as.character)) %>%
-  pivot_longer(c(score_type, fold_type, pipeline),
+  mutate(across(c(score_family, pi_regime, fold_type, pipeline), as.character)) %>%
+  pivot_longer(c(score_family, pi_regime, fold_type, pipeline),
                names_to = "axis", values_to = "level") %>%
   mutate(axis = factor(axis_labels[axis], levels = unname(axis_labels)),
          level = factor(level_labels[level], levels = unname(level_labels)))
@@ -607,6 +691,9 @@ axis_plot(axis_summary, "mean_regret", "mcse_regret",
 
 ## Do the proxies track PEHE in level, not just rank?
 
+(*"Calibration" here means tracking PEHE in level — not the `cal*` score
+family, which is a different question entirely.*)
+
 Ranking is all selection needs, but a proxy that tracks PEHE in *level* would
 also tell you how good the winner is. The scores cannot be compared to PEHE
 raw: `calc_infl_score` and `calc_dr_risk` estimate PEHE only up to a
@@ -616,6 +703,10 @@ carries `E[tau^2]` terms that depend on the realised sample, not on the
 candidate being scored. Pooling raw scores across runs would produce a
 correlation driven entirely by that offset and would say nothing about the
 candidates.
+
+The `cal*` columns are a different matter again: they are not an estimate of
+PEHE up to a constant or otherwise, so centring does not put them on PEHE's
+scale and the panels below should be read for *rank* agreement only.
 
 Centering within each run tells us how each candidate deviates from its run's
 average, in the proxy and in the truth.

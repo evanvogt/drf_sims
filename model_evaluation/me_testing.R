@@ -8,10 +8,12 @@
 #
 # Checks, in order:
 #   1. me_per_model()'s scoring matches a direct calc_infl_score()/
-#      calc_dr_risk() call on the same synthetic fixture - i.e. moving the
-#      scoring loop from inside the old calc_metrics() to
+#      calc_dr_risk()/calc_cal_score() call on the same synthetic fixture -
+#      i.e. moving the scoring loop from inside the old calc_metrics() to
 #      compute_metrics()'s outer loop (see me_metrics.R) didn't change any
-#      number.
+#      number - plus calc_cal_score()'s own properties: exactly 0 under
+#      perfect calibration, K non-empty groups even when tau_hat is constant,
+#      count (not proportion) weights, and the n-scaling those imply.
 #   2. the DGM/design-matrix plumbing - Y, W first; covariates all numeric
 #      (R/dgm_scenarios.R's output needs no factor expansion, unlike the old
 #      benchtm-based data).
@@ -101,7 +103,11 @@ fake_nuisance_df_n <- function(n = n_fake) {
   data.frame(
     tau_T = rnorm(n),
     pi = runif(n, 0.2, 0.8),
-    phi = rnorm(n)
+    phi = rnorm(n),
+    # arm_scores() hard-fails without this rather than scoring an arm whose
+    # oracle-pi pseudo-outcome was never computed, so the fixture carries it
+    # exactly as every real nuisance data.frame does
+    phi05 = rnorm(n)
   )
 }
 fake_nuisance_df <- function() fake_nuisance_df_n(n_fake)
@@ -126,13 +132,25 @@ scored <- me_per_model(
   list(tau = tau_hat_fake), true_tau_fake, "test_model", sim_res_fake, NULL
 )
 
+# Every score type, written out longhand rather than by calling arm_scores() -
+# the point of the check is that the assembled column equals an independent
+# direct call, so reusing the assembler would make it vacuous.
 checks <- list(true_pehe = mean((tau_hat_fake - true_tau_fake)^2))
 for (p in fake_pipelines) {
   for (a in NUISANCE_ARMS) {
     d <- fake_nuis[[p]][[a]]
     checks[[paste0("infl_", a, "_", p)]] <-
       calc_infl_score(tau_hat_fake, d$tau_T, d$pi, Y_fake, W_fake)
+    checks[[paste0("infl05_", a, "_", p)]] <-
+      calc_infl_score(tau_hat_fake, d$tau_T, 0.5, Y_fake, W_fake)
     checks[[paste0("dr_", a, "_", p)]] <- calc_dr_risk(tau_hat_fake, d$phi)
+    checks[[paste0("dr05_", a, "_", p)]] <- calc_dr_risk(tau_hat_fake, d$phi05)
+    for (k in CAL_QUANTILES) {
+      checks[[paste0("calq", k, "_", a, "_", p)]] <-
+        calc_cal_score(tau_hat_fake, d$phi, k)
+      checks[[paste0("cal05q", k, "_", a, "_", p)]] <-
+        calc_cal_score(tau_hat_fake, d$phi05, k)
+    }
   }
 }
 
@@ -141,10 +159,23 @@ for (col in names(checks)) {
   report(diff < 1e-10, sprintf("%s matches a direct call (diff = %.2e)", col, diff))
 }
 
-n_expected <- 1 + length(fake_pipelines) * length(NUISANCE_ARMS) * 2
+# arm_scores() names and me_score_types() are two statements of the same list;
+# if they drift, the column count assertions below silently stop meaning
+# anything. This is what ties them together.
+report(
+  identical(
+    names(arm_scores(tau_hat_fake, fake_nuisance_df(), Y_fake, W_fake)),
+    me_score_types()
+  ),
+  "arm_scores() emits exactly me_score_types(), in order"
+)
+
+n_score_types <- length(me_score_types())
+n_expected <- 1 + length(fake_pipelines) * length(NUISANCE_ARMS) * n_score_types
 report(ncol(scored) == n_expected, sprintf(
-  "%d score columns from %d pipelines x %d arms x 2 score types (got %d)",
-  n_expected, length(fake_pipelines), length(NUISANCE_ARMS), ncol(scored)
+  "%d score columns from %d pipelines x %d arms x %d score types (got %d)",
+  n_expected, length(fake_pipelines), length(NUISANCE_ARMS), n_score_types,
+  ncol(scored)
 ))
 report(
   setequal(names(scored), names(checks)),
@@ -161,10 +192,70 @@ sim_res_split_fake <- list(
 scored_split <- me_per_model(
   list(tau = tau_hat_fake), true_tau_fake, "test_model", sim_res_split_fake, NULL
 )
+n_split_expected <- 1 + length(fake_pipelines) * 1 * n_score_types
 report(
-  ncol(scored_split) == 5 && all(c("dr_split_xgb", "infl_split_automl") %in% names(scored_split)),
-  sprintf("the 80:20 tree scores through the same me_per_model() (got %d columns)",
-          ncol(scored_split))
+  ncol(scored_split) == n_split_expected &&
+    all(c("dr_split_xgb", "infl_split_automl", "cal05q5_split_xgb") %in%
+          names(scored_split)),
+  sprintf("the 80:20 tree scores through the same me_per_model() (got %d of %d columns)",
+          ncol(scored_split), n_split_expected)
+)
+
+# ---- the calibration score's own properties --------------------------------
+# calc_cal_score() is the one genuinely new formula, so it gets checked against
+# its definition rather than only against me_per_model()'s assembly of it.
+
+# perfect calibration: if the DR scores agree with the candidate row for row,
+# every group's two GATEs are identical and the score is exactly 0
+report(
+  calc_cal_score(tau_hat_fake, tau_hat_fake, 5) == 0,
+  "phi == tau_hat gives exactly 0 (perfect calibration)"
+)
+
+# scenario 1 / a fully-shrunk elastic net: one predicted value for every row.
+# quantile cut points would collapse here; rank-based grouping must not.
+tau_const <- rep(0.3, n_fake)
+cal_const <- calc_cal_score(tau_const, rnorm(n_fake), 5)
+g_const <- ceiling(5 * rank(tau_const, ties.method = "first") / n_fake)
+report(
+  is.finite(cal_const) && length(unique(g_const)) == 5,
+  sprintf("constant tau_hat still forms 5 non-empty groups and scores finite (got %.3f)",
+          cal_const)
+)
+
+# weights are COUNTS, not proportions - sum(w) is n. Guards against a later
+# "fix" that divides by n and silently rescales every calibration column.
+g_fake <- ceiling(5 * rank(tau_hat_fake, ties.method = "first") / n_fake)
+report(
+  sum(as.numeric(table(g_fake))) == n_fake,
+  sprintf("calibration weights are group counts summing to n = %d", n_fake)
+)
+
+# the n-scaling that follows from those weights, stated as a check rather than
+# left to be discovered from a plot: duplicating the data doubles the score
+phi_fake_cal <- rnorm(n_fake)
+report(
+  abs(calc_cal_score(c(tau_hat_fake, tau_hat_fake), c(phi_fake_cal, phi_fake_cal), 5) -
+        2 * calc_cal_score(tau_hat_fake, phi_fake_cal, 5)) < 1e-10,
+  "the score scales with n (duplicating the data doubles it) - intended, see README"
+)
+
+cal_by_k <- vapply(CAL_QUANTILES, function(k) {
+  calc_cal_score(tau_hat_fake, phi_fake_cal, k)
+}, numeric(1))
+report(
+  all(is.finite(cal_by_k)) && length(unique(cal_by_k)) == length(CAL_QUANTILES),
+  sprintf("every K in CAL_QUANTILES gives a distinct finite score (%s)",
+          paste(sprintf("%.3f", cal_by_k), collapse = ", "))
+)
+
+# the fixed-pi twins rest on a scalar recycling through calc_infl_score()'s
+# vectorised arithmetic - cheap to prove, expensive to get silently wrong
+report(
+  abs(calc_infl_score(tau_hat_fake, fake_nuis$xgb[[1]]$tau_T, 0.5, Y_fake, W_fake) -
+        calc_infl_score(tau_hat_fake, fake_nuis$xgb[[1]]$tau_T,
+                        rep(0.5, n_fake), Y_fake, W_fake)) < 1e-12,
+  "calc_infl_score() with scalar pi = 0.5 equals the length-n version"
 )
 
 # =============================================================================
@@ -387,7 +478,10 @@ if (full && models_ok) {
     model_list[[1]], gen4$truth$tau, names(model_list)[1],
     list(data = list(Y = Y4, W = W4), nuisances = nuisances4), NULL
   )
-  n_real <- 1 + 2 * length(arms4) * 2
+  # derived from me_score_types() rather than a typed-in score-type count, so
+  # adding a score family cannot leave this assertion quietly checking the old
+  # number
+  n_real <- 1 + 2 * length(arms4) * length(me_score_types())
   report(
     ncol(scored_real) == n_real,
     sprintf("me_per_model() produces %d score columns on real pipeline output (got %d)",
