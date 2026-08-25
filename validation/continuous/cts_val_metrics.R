@@ -63,6 +63,8 @@ variances_metrics <- flatten_validations(all_results_df, function(val, key) {
 })
 
 # ---- variable-importance rank stability between chunks
+# vi_df now carries a `measure` column (tevim / shap); bind_cols takes it along
+# without needing to know about it.
 var_imp_metrics <- flatten_validations(all_results_df, function(val, key) {
   map_dfr(names(val$var_imps), function(model) {
     vi_df <- val$var_imps[[model]]
@@ -70,9 +72,18 @@ var_imp_metrics <- flatten_validations(all_results_df, function(val, key) {
   })
 })
 
+# ---- does chunk 1's most important covariate still interact in chunk 2
+top_var_metrics <- flatten_validations(all_results_df, function(val, key) {
+  map_dfr(names(val$top_var_tests), function(model) {
+    tv <- val$top_var_tests[[model]]
+    bind_cols(key[rep(1, nrow(tv)), , drop = FALSE], tibble(model = model), tv)
+  })
+})
+
 metrics <- list(subgroups = subgroups_metrics,
                 variances = variances_metrics,
-                var_imps = var_imp_metrics)
+                var_imps = var_imp_metrics,
+                top_var = top_var_metrics)
 
 saveRDS(metrics, file.path(study$res_path, "cts_val_metrics.RDS"))
 print("metrics calculated!")

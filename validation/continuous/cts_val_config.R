@@ -16,7 +16,11 @@ study <- study_config(
   grid = expand.grid(
     scenario = 3,
     n = 1000,
-    interim_prop = c(0.25, 0.5, 0.75),
+    # round() is load-bearing, not cosmetic: interim_prop is a path_cols entry,
+    # so its as.character() form becomes a results directory name. Unrounded,
+    # seq(by = 0.05) yields values like 0.30000000000000004 and get_results()
+    # can no longer match the directory back to its grid row.
+    interim_prop = round(seq(0.25, 0.75, by = 0.05), 2),
     run = c(1:100),
     stringsAsFactors = FALSE
   ),

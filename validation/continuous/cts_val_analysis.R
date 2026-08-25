@@ -83,15 +83,14 @@ for (model in models) {
   data2[paste0(model, "_top10")] <- as.numeric(group_pred == "top10")
   data2[paste0(model, "_bottom10")] <- as.numeric(group_pred == "bottom10")
 
-  lm_top <- lm(Y ~ W * get(paste0(model, "_top10")), data = data2)
-  lm_bottom <- lm(Y ~ W * get(paste0(model, "_bottom10")), data = data2)
-
-  sum_top <- summary(lm_top)
-  sum_bottom <- summary(lm_bottom)
-
-  pvals_top <- sum_top$coefficients[, 4]
-  pvals_bottom <- sum_bottom$coefficients[, 4]
-  subgroups[[model]] <- c(top = unname(pvals_top[4]), bottom = unname(pvals_bottom[1]))
+  # interaction_pval (cts_val_models.R) indexes the W:v coefficient by name.
+  # This used to be two positional lookups, and the bottom one read
+  # `pvals_bottom[1]` - the intercept - so bottom_pval was never a subgroup
+  # test at all. Results from before this fix are not comparable.
+  subgroups[[model]] <- c(
+    top    = interaction_pval(data2$Y, data2$W, data2[[paste0(model, "_top10")]]),
+    bottom = interaction_pval(data2$Y, data2$W, data2[[paste0(model, "_bottom10")]])
+  )
 }
 
 ##########
@@ -114,24 +113,60 @@ for (model in models) {
 ##########
 # Compare variable importance between early and late chunks
 ##########
+# Two measures now: the TE-VIMs and surrogate TreeSHAP (both in
+# cts_val_models.R). Both are larger-is-more-important, so rank() means the same
+# thing for each - rank 1 is the least important covariate.
+measure_fields <- c(tevim = "te_vims", shap = "shap_vims")
+
 var_imps <- list()
 for (model in models) {
   fit1 <- results1[[model]]
-  tevim1 <- unlist(fit1$te_vims[1, ])
-
-  varnames <- colnames(fit1$te_vims[1, ])
-
   fit2 <- results2[[model]]
-  tevim2 <- unlist(fit2$te_vims[1, ])
 
-  vi_df <- data.frame(variables = varnames,
-                      vi1 = rank(tevim1),
-                      vi2 = rank(tevim2))
-  vi_df <- vi_df %>%
-    mutate(
-      diff = vi2 - vi1
-    )
-  var_imps[[model]] <- vi_df
+  per_measure <- lapply(names(measure_fields), function(measure) {
+    field <- measure_fields[[measure]]
+    imp1 <- unlist(fit1[[field]][1, ])
+    imp2 <- unlist(fit2[[field]][1, ])
+
+    data.frame(variables = colnames(fit1[[field]]),
+               measure = measure,
+               vi1 = rank(imp1),
+               vi2 = rank(imp2),
+               stringsAsFactors = FALSE) %>%
+      mutate(diff = vi2 - vi1)
+  })
+
+  var_imps[[model]] <- do.call(rbind, per_measure)
+}
+
+##########
+# Carry the top-ranked covariate into the remaining participants
+##########
+# The point of ranking covariates is whether the winner means anything, so take
+# each measure's chunk-1 most important covariate and interaction-test it in
+# chunk 2. Two forms side by side: the continuous W x X_top interaction (works
+# for X1/X2/X4 and the already-binary X01-X05 alike, no arbitrary cut point),
+# and a median split, which is directly parallel to the top10/bottom10 tests
+# above. x_top2 is chunk 2's own winner, kept so the report can ask how often
+# the two chunks even agree on which covariate matters most.
+top_var_tests <- list()
+for (model in models) {
+  vi <- var_imps[[model]]
+
+  rows <- lapply(split(vi, vi$measure), function(v) {
+    x_top <- v$variables[which.max(v$vi1)]
+    xt <- data2[[x_top]]
+
+    data.frame(measure = v$measure[1],
+               x_top = x_top,
+               x_top2 = v$variables[which.max(v$vi2)],
+               p_cts = interaction_pval(data2$Y, data2$W, xt),
+               p_split = interaction_pval(data2$Y, data2$W,
+                                          as.numeric(xt > median(xt))),
+               stringsAsFactors = FALSE)
+  })
+
+  top_var_tests[[model]] <- do.call(rbind, rows)
 }
 
 ##########
@@ -143,7 +178,8 @@ for (model in models) {
 # chunk comparison could use directly. Not implemented yet - see
 # validation/README.md's Status section.
 
-validations <- list(subgroups = subgroups, variances = variances, var_imps = var_imps)
+validations <- list(subgroups = subgroups, variances = variances,
+                    var_imps = var_imps, top_var_tests = top_var_tests)
 
 results <- list(results1 = results1, results2 = results2, validations = validations)
 
