@@ -6,24 +6,42 @@
 # - not to fit them. No other study in this repo needs this concept, so it
 # doesn't map onto config/dgms/models/analysis/check/collect/metrics and gets
 # its own file, the same way crossfitting/ has files beyond that 7-role
-# floor (cf_testing.R, cf_profile.R, ...). The 7-file shape is a floor, not
-# a ceiling.
+# floor (cf_testing.R, cf_profile.R, ...)
 #
 # Two independent estimators of the same 4 nuisance targets (mu0_T, mu1_T,
-# mu_DR, pi): XGBoost with a hand-tuned CV grid, and H2O AutoML. Each used to
-# run under three fold regimes - cv (leave-one-fold-out), infold
-# (resubstitution), whole (no split) - now reduced to cv and whole. See the
-# comments above run_xgb_cross_validation()/run_automl_cross_validation()
-# for what the removed infold branches looked like and why one of them
-# (AutoML's) is flagged as suspect rather than just dropped silently.
+# mu_DR, pi): XGBoost with a hand-tuned CV grid, and H2O AutoML. Each runs
+# under a set of ARMS differing in one thing only: what data the nuisance sees
+# relative to the data the candidate it is scoring was trained on. The arm
+# names and what they mean live in me_config.R's NUISANCE_ARMS.
 #
-# The fold_indices/fold_list passed in here are an INDEPENDENT draw from the
-# one used to fit the 9 candidates in me_models.R - see me_analysis.R's
-# comment above kfolds/nuis_folds. This mattered less back when the
-# candidates double-crossfit; now that they're single-crossfit too, sharing
-# one split would fit a candidate's tau_hat and this pipeline's cv-regime
-# nuisance at the same row on the identical training set, correlating their
-# errors.
+# WHAT CHANGED, AND WHY THE OLD RATIONALE IS GONE. This file used to document
+# the fold_indices passed in as "an INDEPENDENT draw from the one used to fit
+# the 9 candidates", on the grounds that sharing one split would fit a
+# candidate's tau_hat and this pipeline's nuisance at the same row on the
+# identical training set, correlating their errors. That claim does not
+# survive the arithmetic:
+#
+#   - Row-level honesty - whether row i's own (Y_i, W_i) entered the model
+#     predicting at row i - holds under BOTH a shared and an independent draw.
+#     Neither lets a nuisance see the row it predicts. The second draw buys
+#     nothing on the axis it was justified by.
+#   - What it does change is the overlap of the two training sets for row i,
+#     from 100% down to (V-1)/V = 90%. It removes a tenth of the dependence.
+#
+# crossfitting/README.md makes the general version of this point ("Re-
+# randomising the stage-2 split cannot remove that dependence"), which is why
+# scf_scf_new is an arm to be TESTED there rather than the default. So the
+# independent draw is retired as a default here, kept as the `cv_indep` arm
+# because it is already computed, and set beside `cv_shared` - which uses the
+# candidates' own folds - so the comparison is empirical rather than asserted.
+#
+# The `holdout` arm restores the `infold` (resubstitution) branch that was
+# removed from this file: fit AND predict on the fold the candidate held out.
+# It is deliberately not row-level honest - it is the arm that is fully
+# decoupled from the candidate instead, and the two properties cannot both be
+# had from a single small block. See the comments above the two holdout
+# functions for what the removal took out and which part of it must NOT come
+# back.
 require(h2o)
 require(xgboost)
 
@@ -126,9 +144,48 @@ run_xgb_cv <- function(grid, train_data) {
     } else {
       "test_logloss_mean"
     }
+    log_col <- params$evaluation_log[[error_col]]
+
+    # WHERE best_iteration LIVES DEPENDS ON THE xgboost VERSION. Up to
+    # xgboost 2.x it is a top-level element of the xgb.cv() result, which is
+    # what this code originally read. xgboost 3.x moved it into an
+    # `early_stop` sub-list, so `params$best_iteration` is integer(0) there -
+    # for EVERY fit, at every data size, not just small ones. That made
+    # data.frame() error with "arguments imply differing number of rows: 0, 1"
+    # and would take a whole array task down.
+    #
+    # Local R has xgboost 3.2.1.1; the cluster's R/4.3.2 module has an older
+    # one (the 358 completed runs prove it, since they went through this exact
+    # line). So this is the same class of local/cluster version mismatch as
+    # SL2's - see README.md - and the fix has to work under both.
+    #
+    # The which.min() fallback is a genuine equivalent, not a degradation:
+    # early stopping selects the minimum of the very column being scanned
+    # here, and the two agree exactly where both are available. So this
+    # changes no number the cluster already produced.
+    best_it <- params$early_stop$best_iteration   # xgboost >= 3
+    if (length(best_it) != 1L || is.na(best_it)) {
+      best_it <- params$best_iteration            # xgboost <= 2
+    }
+    if (length(best_it) != 1L || is.na(best_it)) {
+      # neither location - fall back to the log itself. Only genuinely
+      # degenerate if the log is empty too, which is what a training block
+      # too small for a 5-fold inner CV would produce.
+      if (length(log_col)) {
+        best_it <- which.min(log_col)
+      } else {
+        best_it <- 1L
+        warning(
+          "xgb.cv() produced an empty evaluation log - training block too ",
+          "small for a 5-fold inner CV. Falling back to nrounds = 1.",
+          call. = FALSE
+        )
+      }
+    }
+
     data.frame(
-      nrounds = params$best_iteration,
-      error = min(params$evaluation_log[[error_col]])
+      nrounds = best_it,
+      error = if (length(log_col)) min(log_col) else Inf
     )
   })
 
@@ -169,19 +226,76 @@ predict_nuisance_xgb <- function(models, pred_matrices) {
   )
 }
 
+#' Fit-and-predict-on-the-same-block XGBoost nuisance estimation
+#'
+#' The `holdout` arm. This is the `infold` branch that used to live inside
+#' run_xgb_cross_validation() behind a `method` argument and was removed; the
+#' note left behind said a future re-add "can restore the branch above
+#' unchanged", and that is what this is. XGBoost's version had no companion
+#' bug (AutoML's did - see run_automl_holdout()).
+#'
+#' The blocks are the candidate's OWN folds, from holdout_blocks(), not a
+#' fresh draw: the point of the arm is that the nuisance sees only data the
+#' candidate never saw. What it gives up in exchange is row-level honesty -
+#' every row's own Y is in the model that predicts it, so mu_DR interpolates
+#' it and phi's AIPW correction (Y - mu_DR) collapses toward zero. That is the
+#' arm's defining property, not a defect to patch: cv_shared is the row-honest
+#' arm, and the pair is what makes the cost of each visible.
+run_xgb_holdout <- function(
+  X,
+  Y,
+  W,
+  fold_indices,
+  fold_list,
+  param_grids
+) {
+  nuisances <- lapply(fold_list, function(fold) {
+    # the whole arm in one line: train and test are the same rows
+    train_filter <- fold_indices %in% fold
+    test_filter <- train_filter
+
+    train_matrices <- prepare_xgb_matrices(
+      X,
+      Y,
+      W,
+      train_filter,
+      training = TRUE
+    )
+    pred_matrices <- prepare_xgb_matrices(
+      X,
+      Y,
+      W,
+      test_filter,
+      training = FALSE
+    )
+
+    models <- fit_nuisance_xgb(train_matrices, param_grids)
+
+    predictions <- predict_nuisance_xgb(models, pred_matrices)
+    predictions$row_index <- which(test_filter)
+
+    return(predictions)
+  })
+
+  result <- unlist_order(nuisances)
+  result <- calculate_pseudos(result, Y, W)
+
+  return(result)
+}
+
 #' Leave-one-fold-out XGBoost nuisance estimation
 #'
-#' This used to also take a `method` argument selecting an "infold"
-#' (resubstitution) regime - fit and predict on the SAME held-in fold rather
-#' than holding it out:
-#'
-#'   train_filter <- fold_indices == fold; test_filter <- train_filter
-#'
-#' vs. the leave-one-fold-out filter below. Removed - only this (`cv`) and
-#' run_xgb_whole_dataset() (`whole`) run. Unlike the AutoML version of this
-#' removal below, XGBoost's infold branch had no companion bug found while
-#' reading it; a future re-add can restore the branch above unchanged.
-run_xgb_cross_validation <- function(X, Y, W, fold_indices, fold_list, param_grids) {
+#' Serves both `cv_indep` and `cv_shared` - the two differ only in which fold
+#' vector the caller hands over (an independent draw vs. the candidate's own
+#' fold_info), not in anything this function does.
+run_xgb_cross_validation <- function(
+  X,
+  Y,
+  W,
+  fold_indices,
+  fold_list,
+  param_grids
+) {
   nuisances <- lapply(fold_list, function(fold) {
     train_filter <- !(fold_indices %in% fold)
     test_filter <- !train_filter
@@ -237,22 +351,32 @@ run_xgb_whole_dataset <- function(X, Y, W, param_grids) {
   return(result)
 }
 
-#' Both XGBoost nuisance regimes this study uses
+#' Every XGBoost nuisance arm the caller asks for
 #'
 #' Fixes a bug found while porting: the old sim_eval.R called this without
 #' n_cores, so XGBoost's own nthread grid parameter silently defaulted to 1
 #' regardless of the n_cores the script set elsewhere. run_all_nuisance_pipelines()
 #' below now always passes it through explicitly.
-run_all_xgb_nuisance <- function(X, Y, W, fold_indices, fold_list, n_cores = 1) {
+#'
+#' @param arms named list of arm specs - see nuisance_arm_spec(). Names become
+#'   the names of the returned list, and therefore the arm half of
+#'   me_metrics.R's score column names.
+run_all_xgb_nuisance <- function(X, Y, W, arms, n_cores = 1) {
   param_grids <- create_param_grid(n_cores)
 
-  # Cross-validation
-  xgb_cv <- run_xgb_cross_validation(X, Y, W, fold_indices, fold_list, param_grids)
-
-  # Whole dataset
-  xgb_whole <- run_xgb_whole_dataset(X, Y, W, param_grids)
-
-  return(list(cv = xgb_cv, whole = xgb_whole))
+  lapply(arms, function(spec) {
+    switch(
+      spec$type,
+      whole = run_xgb_whole_dataset(X, Y, W, param_grids),
+      cv = run_xgb_cross_validation(
+        X, Y, W, spec$fold_indices, spec$fold_list, param_grids
+      ),
+      holdout = run_xgb_holdout(
+        X, Y, W, spec$fold_indices, spec$fold_list, param_grids
+      ),
+      stop("unknown nuisance arm type: ", spec$type)
+    )
+  })
 }
 
 # AutoML
@@ -266,7 +390,10 @@ run_all_xgb_nuisance <- function(X, Y, W, fold_indices, fold_list, n_cores = 1) 
 # entirely so it's immune to this (and to any other special characters PBS
 # might put in a scratch path).
 h2o_ice_root <- function() {
-  file.path("/var/tmp", sprintf("h2o_ice_%s_%d", Sys.getenv("USER", "u"), Sys.getpid()))
+  file.path(
+    "/var/tmp",
+    sprintf("h2o_ice_%s_%d", Sys.getenv("USER", "u"), Sys.getpid())
+  )
 }
 
 setup_h2o_cluster <- function(n_cores, mem, model_seed = NULL) {
@@ -382,27 +509,71 @@ predict_automl_models <- function(models, pred_data) {
   )
 }
 
-#' Leave-one-fold-out H2O AutoML nuisance estimation
+#' Fit-and-predict-on-the-same-block H2O AutoML nuisance estimation
 #'
-#' This used to also take a `method` argument selecting an "infold"
-#' (resubstitution) regime, and a W-recoding line that shipped alongside it:
+#' The AutoML half of the `holdout` arm - see run_xgb_holdout() for what the
+#' arm is for and what it trades away.
 #'
-#'   train_filter <- fold_indices == fold; test_filter <- train_filter
-#'   ...
+#' THE PART OF THE OLD `infold` BRANCH THAT IS DELIBERATELY NOT RESTORED. The
+#' removed code was not just the train/test filter below; it shipped with a
+#' W-recoding line:
+#'
 #'   W_final <- if (method == "infold") as.numeric(W) - 1 else W
 #'   result <- calculate_pseudos(result, Y, W_final)
 #'
-#' prepare_h2o_data()'s WX <- cbind(W = as.factor(W), X) turns W into a
-#' factor for H2O's classification target; as.numeric() on a 2-level factor
-#' returns 1/2, not the original 0/1, so `as.numeric(W) - 1` reads like an
-#' attempt to undo that conversion. But `W` in THIS function's scope is the
-#' caller's original numeric vector - it is never itself converted to a
-#' factor - so as.numeric(W) - 1 would take a plain 0/1 vector to -1/0, not
-#' back to 0/1, and calculate_pseudos()'s formulas (mu_DR, phi) assume
-#' W in {0,1}. This was never confirmed by an actual run (the pipeline has
-#' never completed one), so it's flagged here rather than asserted as a
-#' fixed bug - a future re-add of infold should verify this rather than
-#' restoring the line unchanged.
+#' prepare_h2o_data()'s `WX <- cbind(W = as.factor(W), X)` turns W into a
+#' factor for H2O's classification target, and as.numeric() on a 2-level
+#' factor gives 1/2 rather than 0/1 - so the line reads as an attempt to undo
+#' that. But `W` in THIS function's scope is the caller's original numeric
+#' vector; it is never itself converted to a factor. as.numeric(W) - 1 would
+#' therefore take a plain 0/1 vector to -1/0, and calculate_pseudos()'s mu_DR
+#' and phi both assume W in {0,1}. The old note flagged this as unverified
+#' rather than fixed, because the pipeline had never completed a run; it has
+#' now, and the reading holds. The filter comes back, the recoding does not -
+#' W is passed through to calculate_pseudos() unchanged, exactly as the cv and
+#' whole arms already do.
+run_automl_holdout <- function(
+  X,
+  Y,
+  W,
+  fold_indices,
+  fold_list,
+  model_seed,
+  max_models = 20,
+  exclude_algos = c("DeepLearning", "XGBoost")
+) {
+  nuisances <- lapply(fold_list, function(fold) {
+    train_filter <- fold_indices %in% fold
+    test_filter <- train_filter
+
+    train_data <- prepare_h2o_data(X, Y, W, train_filter, training = TRUE)
+    pred_data <- prepare_h2o_data(X, Y, W, test_filter, training = FALSE)
+
+    models <- fit_automl_models(
+      train_data,
+      model_seed,
+      max_models,
+      exclude_algos
+    )
+
+    predictions <- predict_automl_models(models, pred_data)
+    predictions$row_index <- which(test_filter)
+
+    h2o.removeAll()
+
+    return(predictions)
+  })
+
+  result <- unlist_order(nuisances)
+  result <- calculate_pseudos(result, Y, W)
+
+  return(result)
+}
+
+#' Leave-one-fold-out H2O AutoML nuisance estimation
+#'
+#' Serves both `cv_indep` and `cv_shared`, as the XGBoost version does - only
+#' the fold vector handed in differs.
 run_automl_cross_validation <- function(
   X,
   Y,
@@ -446,8 +617,14 @@ run_automl_cross_validation <- function(
   return(result)
 }
 
-run_automl_whole_dataset <- function(X, Y, W, model_seed, max_models = 20,
-                                     exclude_algos = c("DeepLearning", "XGBoost")) {
+run_automl_whole_dataset <- function(
+  X,
+  Y,
+  W,
+  model_seed,
+  max_models = 20,
+  exclude_algos = c("DeepLearning", "XGBoost")
+) {
   n_obs <- nrow(X)
   all_indices <- rep(TRUE, n_obs)
 
@@ -464,12 +641,18 @@ run_automl_whole_dataset <- function(X, Y, W, model_seed, max_models = 20,
   return(result)
 }
 
+#' Every AutoML nuisance arm the caller asks for
+#'
+#' The cluster is started once for ALL arms and shut down once at the end -
+#' not per arm. Each h2o.init() is a JVM launch, and the arm list is now three
+#' or four long rather than two.
+#'
+#' @param arms named list of arm specs - see nuisance_arm_spec()
 run_all_automl_nuisance <- function(
   X,
   Y,
   W,
-  fold_indices,
-  fold_list,
+  arms,
   n_cores = 1,
   mem = "5G",
   model_seed,
@@ -486,40 +669,101 @@ run_all_automl_nuisance <- function(
   # to call twice, but there's no need to) and has been removed.
   on.exit(h2o_shutdown_check(), add = TRUE)
 
-  # Cross-validation
-  auto_cv <- run_automl_cross_validation(
-    X,
-    Y,
-    W,
-    fold_indices,
-    fold_list,
-    model_seed,
-    max_models,
-    exclude_algos
-  )
-
-  # Whole dataset
-  auto_whole <- run_automl_whole_dataset(
-    X,
-    Y,
-    W,
-    model_seed,
-    max_models,
-    exclude_algos
-  )
-
-  return(list(cv = auto_cv, whole = auto_whole))
+  lapply(arms, function(spec) {
+    switch(
+      spec$type,
+      whole = run_automl_whole_dataset(
+        X, Y, W, model_seed, max_models, exclude_algos
+      ),
+      cv = run_automl_cross_validation(
+        X, Y, W, spec$fold_indices, spec$fold_list,
+        model_seed, max_models, exclude_algos
+      ),
+      holdout = run_automl_holdout(
+        X, Y, W, spec$fold_indices, spec$fold_list,
+        model_seed, max_models, exclude_algos
+      ),
+      stop("unknown nuisance arm type: ", spec$type)
+    )
+  })
 }
 
-#' Both nuisance-evaluation pipelines this study uses
+#' One arm's specification
 #'
-#' Single entry point for me_analysis.R, replacing the inline
-#' list(xgb=, automl=) construction that used to live in sim_eval.R.
-run_all_nuisance_pipelines <- function(X, Y, W, fold_indices, fold_list,
-                                       n_cores, mem, model_seed) {
-  list(
-    xgb    = run_all_xgb_nuisance(X, Y, W, fold_indices, fold_list, n_cores = n_cores),
-    automl = run_all_automl_nuisance(X, Y, W, fold_indices, fold_list,
-                                     n_cores = n_cores, mem = mem, model_seed = model_seed)
+#' @param type "whole", "cv" (leave-one-fold-out) or "holdout" (fit and
+#'   predict on the same block)
+#' @param folds for cv/holdout, a list of fold_indices and fold_list as
+#'   returned by split_folds() or holdout_blocks()
+nuisance_arm_spec <- function(type, folds = NULL) {
+  type <- match.arg(type, c("whole", "cv", "holdout"))
+  if (type == "whole") return(list(type = type))
+  stopifnot(!is.null(folds), !is.null(folds$fold_indices), !is.null(folds$fold_list))
+  list(type = type, fold_indices = folds$fold_indices, fold_list = folds$fold_list)
+}
+
+#' Both nuisance-evaluation pipelines, over an arbitrary set of arms
+#'
+#' The general entry point, used by me_strategies.R and me_split.R.
+#' run_all_nuisance_pipelines() below is the legacy two-arm wrapper.
+#'
+#' @param arms named list of nuisance_arm_spec()s. Names become the arm half
+#'   of me_metrics.R's score column names, so they should come from
+#'   me_config.R's NUISANCE_ARMS rather than being typed at the call site.
+#' @param pipelines which estimators to run. Restricting to "xgb" is what lets
+#'   me_testing.R exercise the arm plumbing locally without a Java runtime.
+run_nuisance_arms <- function(
+  X,
+  Y,
+  W,
+  arms,
+  n_cores,
+  mem,
+  model_seed,
+  pipelines = c("xgb", "automl")
+) {
+  out <- list()
+
+  if ("xgb" %in% pipelines) {
+    out$xgb <- run_all_xgb_nuisance(X, Y, W, arms, n_cores = n_cores)
+  }
+  if ("automl" %in% pipelines) {
+    out$automl <- run_all_automl_nuisance(
+      X, Y, W, arms,
+      n_cores = n_cores, mem = mem, model_seed = model_seed
+    )
+  }
+
+  out
+}
+
+#' The original two-arm pipeline, unchanged in behaviour
+#'
+#' Kept at its old signature ON PURPOSE. me_analysis.R has already produced
+#' 358 of 360 runs against it, and rerunning one of the two failures must
+#' still write the same `cv`/`whole` shape those files have - me_strategies.R
+#' is what renames `cv` to `cv_indep` and adds the rest, and it has to find
+#' the same thing in every input file regardless of when that file was
+#' written.
+run_all_nuisance_pipelines <- function(
+  X,
+  Y,
+  W,
+  fold_indices,
+  fold_list,
+  n_cores,
+  mem,
+  model_seed
+) {
+  folds <- list(fold_indices = fold_indices, fold_list = fold_list)
+
+  run_nuisance_arms(
+    X, Y, W,
+    arms = list(
+      cv = nuisance_arm_spec("cv", folds),
+      whole = nuisance_arm_spec("whole")
+    ),
+    n_cores = n_cores,
+    mem = mem,
+    model_seed = model_seed
   )
 }

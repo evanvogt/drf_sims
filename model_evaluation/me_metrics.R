@@ -23,9 +23,20 @@
 # unnecessary once scoring pulls df$tau_T/df$pi/df$phi directly from one
 # fold-type's data.frame at a time.
 #
-# infold is gone (see me_nuisance.R), so this produces 9 score columns
-# (true_pehe + infl_{cv,whole}_{xgb,automl} + dr_{cv,whole}_{xgb,automl}),
-# not the original 13.
+# The score columns are DERIVED from whatever arms the nuisance list carries,
+# never enumerated here - which is what lets the same me_per_model() serve all
+# three result trees without an edit:
+#
+#   main        cv, whole                                    -> 1 + 2x2x2 =  9
+#   strategies  whole, cv_indep, cv_shared, holdout           -> 1 + 2x4x2 = 17
+#   split       split                                         -> 1 + 2x1x2 =  5
+#
+# The split tree works unchanged for a second reason too: me_split.R stores
+# `data` and `truth` ALREADY RESTRICTED to its 20% evaluation rows, so
+# tau_hat, Y, W, the nuisance data.frame and true_tau are all the same length
+# there, and every formula below is length-agnostic. Scoring an 80:20 arm on
+# its holdout therefore needed no per_model variant, only a results object
+# assembled with the restriction already applied.
 #
 # Note: compute_metrics() always does true_tau <- sim_res$truth$tau - there
 # is no equivalent of the old calc_metrics(..., truth_avail = FALSE) branch.
@@ -65,7 +76,10 @@ me_per_model <- function(model_res, true_tau, model, sim_res, keys) {
   scores <- list(true_pehe = mean((tau_hat - true_tau)^2))
 
   for (pipeline in names(sim_res$nuisances)) { # xgb, automl
-    for (fold_type in names(sim_res$nuisances[[pipeline]])) { # cv, whole
+    # whatever arms this tree carries - see the table above. Deliberately not
+    # checked against NUISANCE_ARMS: the same function has to score the main
+    # tree's cv/whole and the split tree's single arm too.
+    for (fold_type in names(sim_res$nuisances[[pipeline]])) {
       df <- sim_res$nuisances[[pipeline]][[fold_type]]
       scores[[paste0("infl_", fold_type, "_", pipeline)]] <- calc_infl_score(
         tau_hat, df$tau_T, df$pi, Y, W
@@ -79,22 +93,37 @@ me_per_model <- function(model_res, true_tau, model, sim_res, keys) {
   tibble::as_tibble(scores)
 }
 
+# Which tree to score:
+#
+#   Rscript me_metrics.R                # the main study
+#   Rscript me_metrics.R strategies     # the nuisance-arm pass
+#   Rscript me_metrics.R split          # the 80:20 arm
+#
+# Unrecognised arguments fall back to "main" rather than erroring, because
+# me_testing.R sources this file for its function definitions and would
+# otherwise hand its own `full` argument to me_study().
+which_study <- commandArgs(trailingOnly = TRUE)[1]
+if (is.na(which_study) || !which_study %in% c("main", "strategies", "split")) {
+  which_study <- "main"
+}
+st <- me_study(which_study)
+
 # The compute-and-save step only runs once there's something to collect. This
 # guard lets me_testing.R source this file purely for calc_infl_score()/
-# calc_dr_risk()/me_per_model() without needing me_all.RDS to exist yet.
-me_all_path <- file.path(study$res_path, "me_all.RDS")
-if (file.exists(me_all_path)) {
-  all_results_df <- readRDS(me_all_path)
+# calc_dr_risk()/me_per_model() without needing the collected file to exist.
+all_path <- file.path(st$res_path, paste0(st$prefix, "_all.RDS"))
+if (file.exists(all_path)) {
+  all_results_df <- readRDS(all_path)
 
   metrics <- compute_metrics(
-    study, all_results_df, models = CANDIDATE_MODELS, per_model = me_per_model
+    st, all_results_df, models = CANDIDATE_MODELS, per_model = me_per_model
   )
 
-  saveRDS(metrics, file.path(study$res_path, "me_metrics.RDS"))
-  print("metrics calculated!")
+  saveRDS(metrics, file.path(st$res_path, paste0(st$prefix, "_metrics.RDS")))
+  print(paste0("metrics calculated! (", st$name, ")"))
 } else {
   message(
-    "me_all.RDS not found at ", me_all_path,
+    basename(all_path), " not found at ", all_path,
     " - sourced for its function definitions only. Run me_collect.R first, ",
     "then `Rscript me_metrics.R` directly, to actually compute metrics."
   )

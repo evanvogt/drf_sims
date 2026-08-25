@@ -68,12 +68,16 @@ scheme in the ranking. All `n` now use `V=10`: single crossfitting trains each
 fold's stage-2 model on `(V-1)/V` of the data (vs. double crossfitting's
 `(V-2)/V`), so unlike `continuous/` there's no need to shrink `V` at `n=250`.
 
+The candidates' crossfitting is fixed at `V=10` single crossfit everywhere and
+is **not** what this study varies. The one exception is the 80:20 arm, where
+refitting them on a training split is the point (see below).
+
 `me_analysis.R` draws two *independent* fold assignments per replicate — one
-for the 9 candidates, one for `me_nuisance.R`'s scoring pipelines. They could
-safely share one draw under the old double-crossfit candidates; under single
-crossfitting, sharing would fit a candidate's `tau_hat` and the scoring
-pipeline's `cv`-regime nuisance at the same row on the identical training set,
-correlating their errors and biasing the proxy score.
+for the 9 candidates, one for `me_nuisance.R`'s scoring pipelines. That second
+draw was justified as preserving honesty. **It does not, and the justification
+has been retired** — see the next section. The draw itself is left in place so
+`me_analysis.R` keeps producing the shape the 358 completed runs already have;
+what changed is that it is now one arm among four rather than the default.
 
 ## Candidate models
 
@@ -116,24 +120,116 @@ never to fit them:
 - **H2O AutoML** — up to 20 auto-tuned models per target
   (`exclude_algos = c("DeepLearning", "XGBoost")`).
 
-Each runs under two fold regimes: **`cv`** (leave-one-fold-out) and
-**`whole`** (no split). A third regime, **`infold`** (resubstitution — fit
-and predict on the same held-in fold), was in the ported prototype and has
-been removed rather than left unused. `me_nuisance.R` keeps a comment
-documenting exactly what the removed code did, including a documented risk
-in the AutoML version's `infold` branch (a `W`-recoding line that was never
-confirmed correct, since this pipeline has never completed a run) — a future
-re-add should verify that rather than restoring it unchanged.
+### The four arms
+
+What varies is **what data the evaluation nuisance sees relative to the data
+the candidate it is scoring was trained on**. That is the only axis; the
+candidate fits are identical across all four arms, because `me_strategies.R`
+reads them from the completed results rather than refitting them.
+
+| arm | nuisance trained on | predicted on | row-honest | decoupled from candidate |
+|---|---|---|---|---|
+| `whole` | all `n` rows | all `n` rows | ✗ | ✗ |
+| `cv_indep` | 90%, from a second *independent* fold draw | held-out 10% | ✓ | ✗ (90% overlap) |
+| `cv_shared` | the candidate's own `V-1` training folds | the candidate's held-out fold | ✓ | ✗ (identical training set) |
+| `holdout` | the candidate's held-out fold **only** | that same fold | ✗ | ✓ |
+
+**Why `cv_indep` is retired as the default.** The second independent draw was
+justified as stopping a candidate's `tau_hat` and the nuisance at the same row
+being fit on the identical training set. Two things are wrong with that:
+
+- Row-level honesty — whether row `i`'s own `(Y_i, W_i)` entered the model
+  predicting at row `i` — holds under **both** a shared and an independent
+  draw. Neither ever lets a nuisance see the row it predicts, so the second
+  draw buys nothing on the axis it was justified by.
+- What it actually changes is the *overlap* of the two training sets for row
+  `i`, from 100% down to `(V-1)/V` = **90%**. It removes a tenth of the
+  dependence.
+
+`crossfitting/README.md` makes the general version of this point — *"Re-
+randomising the stage-2 split cannot remove that dependence"* — which is why
+`scf_scf_new` is an arm to be *tested* there rather than the default. The arm
+is kept here (it is already computed, so it costs nothing) precisely so the
+claim becomes empirical: if `cv_indep` and `cv_shared` rank the candidates
+alike, that is the direct demonstration that the extra draw did nothing.
+
+**What `holdout` gives up.** It is resubstitution — fit and predict on the
+same block — so every row's own `Y` is in the model that predicts it, `mu_DR`
+interpolates it, and `phi`'s AIPW correction `(Y - mu_DR)` collapses toward
+zero. That is the arm's defining property, not a defect: it is the only
+fold-based arm fully decoupled from the candidate, and row-level honesty and
+decoupling cannot both be had from a single small block. `cv_shared` is the
+row-honest comparator, and the pair makes the cost of each visible.
+
+This restores the `infold` regime the ported prototype had and that was
+removed. Its AutoML branch shipped with a `W`-recoding line
+(`as.numeric(W) - 1`) flagged at the time as unverified; the flag was right,
+and the line is deliberately **not** restored — `W` in that scope is the
+caller's numeric 0/1 vector and was never converted to a factor, so the line
+would send it to `-1/0` and break `calculate_pseudos()`. Only the fold filter
+came back. See `run_automl_holdout()`.
+
+**Block size at `n=250`.** `V=10` gives 25-row folds, and `mu0_T`/`mu1_T` fit
+on the ~12 control / ~12 treated rows inside one — not estimable. So at
+`n=250` only, `holdout_blocks()` pools *adjacent pairs of the candidate's
+folds* into 5 blocks of 50. Pooling rather than drawing a fresh 5-fold split
+is what keeps each block tied to the candidate's own partition without
+refitting any candidate. The cost, stated plainly: a pooled block is only
+*half*-decoupled from any single candidate fold model, because the partner
+fold was in that model's training set. `cv_shared` stays at `V=10` at every
+`n` — it trains on 225 rows at `n=250`, so nothing forces a change there.
+
+### The 80:20 arm
+
+A fifth position on the same axis, run as its own study (`me_split.R`,
+`results/model_evaluation_split`) rather than a fifth column, because three
+things move together: `tau_hat` exists only on the 20%, the evaluation rows
+*are* that 20%, and `true_pehe` therefore has to be computed on those same
+rows or the reference is not matched to the proxies. Reporting it as another
+column would silently compare scores over different row sets against
+differently-computed truths.
+
+It is the **only** arm that refits the candidates, and that is the point:
+every other arm scores `me_analysis.R`'s crossfit fits, whose training data
+covers all `n` rows, so no matter where the nuisance is fit the candidate has
+already seen those rows. Here the candidates see only the 80% (still
+crossfit within it, still the same hyperparameters via
+`candidate_hyperparams()`) and the nuisance sees only the 20%. `n=250` is
+excluded — a 50-row evaluation set is too thin to rank 9 models.
+
+### Scores
 
 From these, `calculate_pseudos()` builds a T-learner CATE (`tau_T`), and an
 AIPW pseudo-outcome (`phi`; `phi05` also computed with propensity fixed at
 0.5, currently unused by any score). `me_metrics.R` scores every candidate's
-`tau` against both pipelines under both fold regimes two ways — an
+`tau` against both pipelines under every arm two ways — an
 influence-corrected PEHE proxy (`calc_infl_score`) and a DR-risk proxy
 (`calc_dr_risk`, MSE against the AIPW pseudo-outcome) — plus true PEHE
-(available because this is simulated data). That's 2 pipelines × 2 fold
-regimes × 2 score types + `true_pehe` = **9 score columns** per candidate per
-run.
+(available because this is simulated data).
+
+The column set is *derived* from whatever arms the nuisance list carries, never
+enumerated, which is why one `me_per_model()` serves all three result trees:
+
+| tree | arms | score columns |
+|---|---|---|
+| `model_evaluation` | `cv`, `whole` | 1 + 2×2×2 = **9** |
+| `model_evaluation_strategies` | `whole`, `cv_indep`, `cv_shared`, `holdout` | 1 + 2×4×2 = **17** |
+| `model_evaluation_split` | `split` | 1 + 2×1×2 = **5** |
+
+The split tree needs no scoring variant because `me_split.R` stores `data` and
+`truth` already restricted to its 20% evaluation rows, so every vector
+`me_per_model()` touches is the same length.
+
+### Propensity trimming — an open question, deliberately left open
+
+`calculate_pseudos()` divides by `pi * (1 - pi)` with **no** trimming, while
+the candidates trim via `trim_ps()` (`me_models.R`). The `whole` arm has always
+carried that exposure and completed 358/360 runs. `holdout` and `split` fit
+`pi` on 25–100 rows, so their predictions sit much closer to 0/1 and the
+weight `1/(pi(1-pi))` can dominate `phi`. The formula is **not** changed —
+trimming one arm and not the others would make them non-comparable — but
+`me_strategies.R` records per-arm `pi` min/max/quantiles and the max weight in
+each run's `pi_diagnostics`, so the decision can be made from measured numbers.
 
 ## Files
 
@@ -145,9 +241,12 @@ run.
 | `me_models.R` | the 9 candidate CATE-learner configurations and their fitting logic |
 | `me_nuisance.R` | the two independent nuisance-evaluation pipelines — see below for why this exists outside the usual 7-file shape |
 | `me_analysis.R` | array entry point; one row of the grid per index |
-| `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
-| `me_collect.R` | gathers per-run files into `me_all.RDS` |
-| `me_metrics.R` | computes `me_metrics.RDS` (reuses `R/metrics.R::compute_metrics()`) |
+| `me_strategies.R` | second pass over completed runs — adds the `cv_shared` and `holdout` arms, writes to `model_evaluation_strategies` |
+| `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `whole`/`cv_indep` through bit-identically |
+| `me_split.R` | the 80:20 arm — the only script that refits the candidates |
+| `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript. Takes a tree: `main` (default) / `strategies` / `split` |
+| `me_collect.R` | gathers per-run files into `<prefix>_all.RDS`. Same tree argument |
+| `me_metrics.R` | computes `<prefix>_metrics.RDS` (reuses `R/metrics.R::compute_metrics()`). Same tree argument |
 | `me_results.qmd` | the results report — see below for why it derives its own quantities |
 | `me_testing.R` | verification checks — run before submitting anything |
 | `me_profile.R` | timing / memory / CPU sweep over `(workers, n_cores)`, instrumented with `syrup` |
@@ -182,10 +281,24 @@ but low-risk scope reduction from the original code.
 
 ## Running it
 
-```bash
-Rscript model_evaluation/me_testing.R              # quick: structure + regression checks
-Rscript model_evaluation/me_testing.R full          # adds the real XGBoost-CV/H2O AutoML pipelines (slow)
+**Locally**, run only the fast check. `full` mode is the slow half and `SL2`
+fails on the Windows machine for a documented package-version reason (see
+"Known local-environment limitation"), so it is not a useful local signal —
+run it on the cluster instead:
 
+```bash
+Rscript model_evaluation/me_testing.R               # structure + regression checks + arm plumbing
+qsub    model_evaluation/jobscripts/me_testing.sh   # the full suite, with real XGB-CV/H2O AutoML
+```
+
+`me_testing.sh` also settles two things about the cluster environment that
+nothing else does: whether `sim-env` really carries `h2o`/`xgboost`/`caret`
+with a working Java runtime, and whether `SL2`'s local failure reproduces
+there (it should not).
+
+The main study (already complete — 358/360):
+
+```bash
 Rscript model_evaluation/me_profile.R 1             # smoke-test the profiler locally
 qsub model_evaluation/jobscripts/me_profile.sh      # 16 profiling jobs
 Rscript model_evaluation/me_profile_summary.R       # writes measured directives into me_1.sh
@@ -194,14 +307,46 @@ qsub model_evaluation/jobscripts/me_1.sh            # the study itself - 1-360
 Rscript model_evaluation/me_check.R                 # writes failed_ids.txt if any are missing
 qsub model_evaluation/jobscripts/me_collect.sh
 qsub model_evaluation/jobscripts/me_metrics.sh
+```
 
+The nuisance-arm pass. **This does not require rerunning the study** — it
+reads the completed results and adds arms to them (see `me_strategies.R`'s
+header for why that is sound):
+
+```bash
+qsub    model_evaluation/jobscripts/me_strategies.sh      # 1-360, reads the main tree
+Rscript model_evaluation/me_check.R strategies            # progress / completion
+qsub    model_evaluation/jobscripts/me_strategies_verify.sh
+qsub -v TREE=strategies model_evaluation/jobscripts/me_collect.sh
+qsub -v TREE=strategies model_evaluation/jobscripts/me_metrics.sh
+```
+
+The 80:20 arm, independent of the above:
+
+```bash
+qsub    model_evaluation/jobscripts/me_split.sh           # 1-240 (n = 500, 1000 only)
+Rscript model_evaluation/me_check.R split
+qsub -v TREE=split model_evaluation/jobscripts/me_collect.sh
+qsub -v TREE=split model_evaluation/jobscripts/me_metrics.sh
+```
+
+```bash
 quarto render model_evaluation/me_results.qmd   # the report - needs me_metrics.RDS
 ```
 
-Results land in `../results/model_evaluation/` (a sibling of the repo, as
-elsewhere). `me_results.qmd` reads `me_metrics.RDS` from there, so it renders
-wherever the results are — not on a machine that only has the repo. The
-rendered `.html` is gitignored, as every other study's report is.
+**Checking progress of the derived trees.** `Rscript me_check.R strategies`
+runs `check_failed(..., write = FALSE)` and reports how many runs are done.
+Note the completion criterion is *not* zero missing: `study_strat`'s grid is
+all 360 rows (the array index has to keep meaning the same grid row), so the
+2 runs excluded from the main study are reported missing forever. `me_check.R`
+diffs the two trees and separates "missing because there is no source run"
+from "missing because this pass failed" — only the latter needs resubmitting,
+which is also why `failed_ids_strat.txt` is not written automatically.
+
+Results land in `../results/model_evaluation{,_strategies,_split}/` (siblings
+of the repo, as elsewhere). `me_results.qmd` reads `me_metrics.RDS` from
+there, so it renders wherever the results are — not on a machine that only has
+the repo. The rendered `.html` is gitignored, as every other study's report is.
 
 ## Sizing the array job
 
@@ -272,8 +417,48 @@ local `me_testing.R full` run as a sign this study is ready to submit.
 
 ## Status
 
-**First run, not a re-run.** Unlike every other study in this repo, there is
-no prior successful run of this study to compare against or to regenerate
+**The main study has completed: 358 of 360 runs.** Two runs failed repeatedly
+and are permanently excluded. They have no `res_sim_*.RDS`, so every derived
+pass skips them by design (exiting 0 with a message rather than erroring) and
+they stay excluded consistently across all three trees — see `me_check.R` for
+why that means the derived trees' completion criterion is "exactly those 2
+missing", not zero.
+
+**The nuisance-arm reconfiguration does not require rerunning any of it.**
+Everything the new arms consume — `data$Y/W/X`, `truth`, `fold_info`, and each
+candidate's `tau` — is already saved per replicate. `me_strategies.R` reads
+those, so the DGM is never re-run and the 9 candidates are never refit: all
+four arms score the *identical* candidate fits, which is what makes the
+comparison controlled rather than confounded with fit-to-fit variation. The
+only new fitting is the two new nuisance arms themselves, and (separately) the
+80:20 arm, which refits candidates because that is its entire purpose.
+
+Cost, roughly: `cv_shared` re-runs the full 10-fold nuisance pipeline, about
+what the old `cv` arm cost on its own; `holdout` fits on 25–100-row blocks, so
+its cost is dominated by H2O's per-call JVM overhead across 10 blocks rather
+than by model size. Budget on the order of the original job's nuisance half —
+and re-profile rather than trusting `me_strategies.sh`'s placeholder walltime,
+since that per-call overhead is exactly what a placeholder gets wrong.
+
+**A second local/cluster version mismatch, found while adding the arms.**
+`run_xgb_cv()` read `best_iteration` from the top level of `xgb.cv()`'s
+result. xgboost 3.x moved it into an `early_stop` sub-list, so on local
+xgboost (3.2.1.1) it is `integer(0)` for **every** fit at every data size —
+`data.frame()` then errors with *"arguments imply differing number of rows:
+0, 1"*. The cluster's `R/4.3.2` module still has an older xgboost, which is
+why the 358 runs completed: they went through this exact line. `run_xgb_cv()`
+now reads whichever location the installed version uses, falling back to
+`which.min()` on the evaluation log.
+
+That fallback is an equivalent, not a degradation — early stopping selects the
+minimum of the very column being scanned, and the two agree exactly where both
+are available (verified: both give iteration 31 on the same fit). So it
+changes no number the cluster has already produced. Same class of problem as
+the `SL2` limitation below, and the same caution applies: local xgboost and
+cluster xgboost are not the same package.
+
+**Port history.** Unlike every other study in this repo, there was no prior
+successful run of this study to compare against or to regenerate
 after a bug fix — the ported prototype never completed a run (it referenced
 an undefined variable, among other bugs; see the git history around the
 `me_*` files for what changed during the port). Bugs fixed during the port:

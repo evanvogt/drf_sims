@@ -20,4 +20,8 @@ conda activate sim-env
 # Navigate to the script directory
 cd "${PBS_O_WORKDIR}/.."
 
-Rscript me_collect.R
+# Which result tree to process - pass with qsub, e.g.
+#   qsub -v TREE=strategies me_collect.sh
+# Unset means the main study, which is what the bare Rscript call did
+# before the derived trees existed.
+Rscript me_collect.R ${TREE}
