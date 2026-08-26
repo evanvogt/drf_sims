@@ -19,9 +19,18 @@ source(here("validation", "continuous", "cts_val_models.R"))
 source(here("validation/continuous/cts_val_config.R"))
 
 # simulation parameters
-i <- as.numeric(commandArgs(trailingOnly = TRUE))
+#
+# workers and grf_threads come off the jobscript's Rscript line rather than
+# being hardcoded here, so the PBS resource request and the R-level parallelism
+# cannot drift apart - same arrangement as continuous/cts_analysis.R. The
+# defaults reproduce what this script did before they were arguments, so a bare
+# `Rscript cts_val_analysis.R <i>` (cts_val_testing.R check 7) still works.
+# cts_val_profile.R measures what these should be.
+args <- commandArgs(trailingOnly = TRUE)
 
-workers <- 5
+i <- as.numeric(args[1])
+workers <- if (length(args) >= 2) as.integer(args[2]) else 5L
+grf_threads <- if (length(args) >= 3) as.integer(args[3]) else NULL
 
 # The parameter grid lives in the study config, so this script and the
 # check/collect scripts cannot disagree about what index i means.
@@ -46,15 +55,22 @@ data2 <- gen2$dataset
 n_folds1 <- ifelse(n * interim_prop < 250, 5, 10)
 n_folds2 <- ifelse(n * (1 - interim_prop) < 250, 5, 10)
 
+# multisession workers are new R processes and inherit this, so setting it here
+# does control their OpenMP thread pools even though this process's own libraries
+# have already initialised - matches continuous/cts_analysis.R
+if (!is.null(grf_threads)) Sys.setenv(OMP_NUM_THREADS = grf_threads)
+
 metaplan <- plan(multisession, workers = workers)
 on.exit(plan(metaplan), add = TRUE)
 
 # Fit both estimators on each chunk
-results1 <- run_all_cate_methods(data = data1, n_folds = n_folds1)
+results1 <- run_all_cate_methods(data = data1, n_folds = n_folds1,
+                                 num.threads = grf_threads)
 results1$data <- data1
 results1$truth <- gen1$truth
 
-results2 <- run_all_cate_methods(data = data2, n_folds = n_folds2)
+results2 <- run_all_cate_methods(data = data2, n_folds = n_folds2,
+                                 num.threads = grf_threads)
 results2$data <- data2
 results2$truth <- gen2$truth
 
@@ -64,7 +80,11 @@ results2$truth <- gen2$truth
 
 X2 <- data2[, -c(1, 2)]
 
-models <- setdiff(names(results1), c("data", "truth"))
+# "timings" is only present when run_all_cate_methods() was called with
+# verbose_timing = TRUE (cts_val_profile.R does, this script does not), but it is
+# excluded here anyway so the two call sites can never disagree about whether
+# every non-data element of `results1` is a model.
+models <- setdiff(names(results1), c("data", "truth", "timings"))
 subgroups <- list()
 for (model in models) {
   fit <- results1[[model]]

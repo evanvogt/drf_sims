@@ -27,32 +27,62 @@ library(SHAPforxgboost)
 
 source(here::here("R", "cate_models.R"))
 
-run_all_cate_methods <- function(data, n_folds = 10) {
+#' Fit both estimators and both importance measures on one trial chunk
+#'
+#' @param num.threads grf thread count, forwarded to every regression_forest()/
+#'   causal_forest() call below - including the TE-VIM refits, which run inside
+#'   `future_map()` and so would otherwise each grab every visible core. NULL
+#'   keeps grf's own default (all cores), which is what this study did before
+#'   the knob existed.
+#' @param verbose_timing if TRUE, time each block below with R/utils.R's
+#'   `timed()` and attach the elapsed seconds as `results$timings`. Same idea as
+#'   R/cate_models.R::cate_methods(), and the same caveat: `timings` is then an
+#'   element of `results` that is not a model, so callers deriving a model list
+#'   from `names(results)` must exclude it (cts_val_analysis.R does).
+run_all_cate_methods <- function(data, n_folds = 10, num.threads = NULL,
+                                 verbose_timing = FALSE) {
 
   X <- as.matrix(data[, -c(1:2)])
   Y <- data$Y
   W <- data$W
 
+  timings <- list()
+  time_step <- function(label, expr) {
+    if (verbose_timing) {
+      t <- timed(expr)
+      timings[[label]] <<- t$time
+      t$value
+    } else {
+      expr
+    }
+  }
+
   cat("Computing nuisance functions...\n")
-  nuisances <- nuisance_rf(X, Y, W)
+  nuisances <- time_step("nuisance_rf", nuisance_rf(X, Y, W, num.threads = num.threads))
 
   results <- list()
 
   cat("Running Causal Forest...\n")
-  results$causal_forest <- run_causal_forest(X, Y, W, nuisances)
-  results$causal_forest$te_vims <- get_te_vims_causal_forest(
-    X, Y, W, nuisances$po, results$causal_forest$tau
-  )
-  results$causal_forest$shap_vims <- get_shap_vims(X, results$causal_forest$tau)
+  results$causal_forest <- time_step(
+    "causal_forest", run_causal_forest(X, Y, W, nuisances, num.threads = num.threads))
+  results$causal_forest$te_vims <- time_step("cf_te_vims", get_te_vims_causal_forest(
+    X, Y, W, nuisances$po, results$causal_forest$tau, num.threads = num.threads
+  ))
+  results$causal_forest$shap_vims <- time_step(
+    "cf_shap_vims", get_shap_vims(X, results$causal_forest$tau))
 
   cat("Running DR Random Forest...\n")
-  results$dr_random_forest <- run_dr_random_forest(X, Y, W, nuisances)
-  results$dr_random_forest$te_vims <- get_te_vims(
-    X, nuisances$po, results$dr_random_forest$tau
-  )
-  results$dr_random_forest$shap_vims <- get_shap_vims(
+  results$dr_random_forest <- time_step(
+    "dr_random_forest",
+    run_dr_random_forest(X, Y, W, nuisances, num.threads = num.threads))
+  results$dr_random_forest$te_vims <- time_step("dr_te_vims", get_te_vims(
+    X, nuisances$po, results$dr_random_forest$tau, num.threads = num.threads
+  ))
+  results$dr_random_forest$shap_vims <- time_step("dr_shap_vims", get_shap_vims(
     X, results$dr_random_forest$tau
-  )
+  ))
+
+  if (verbose_timing) results$timings <- timings
 
   results
 }
@@ -76,13 +106,16 @@ run_all_cate_methods <- function(data, n_folds = 10) {
 #' @param X covariate matrix
 #' @param po pseudo-outcome vector
 #' @param tau full-model OOB CATE estimates
-get_te_vims <- function(X, po, tau) {
+#' @param num.threads grf thread count for each dropped-covariate refit. These
+#'   run one per worker, so leaving it NULL means every worker spawns a forest on
+#'   all visible cores at once - the oversubscription cts_val_profile.R measures.
+get_te_vims <- function(X, po, tau, num.threads = NULL) {
   n_obs <- nrow(X)
   covariates <- colnames(X)
 
   sub_taus_list <- future_map(seq_along(covariates), function(i) {
     new_X <- as.matrix(X[, -i])
-    predict(regression_forest(new_X, po))$predictions
+    predict(regression_forest(new_X, po, num.threads = num.threads))$predictions
   }, .options = furrr_options(seed = TRUE))
 
   sub_taus <- do.call(cbind, sub_taus_list)
@@ -111,13 +144,16 @@ get_te_vims <- function(X, po, tau) {
 #' @param po the po field of nuisance_rf()'s output, used for scoring only -
 #'   the forest itself no longer takes externally-supplied nuisances
 #' @param tau full-model OOB CATE estimates
-get_te_vims_causal_forest <- function(X, Y, W, po, tau) {
+#' @param num.threads grf thread count, as in get_te_vims() - and it matters more
+#'   here, since a causal_forest cross-fits its own nuisances and so is the more
+#'   expensive of the two refits
+get_te_vims_causal_forest <- function(X, Y, W, po, tau, num.threads = NULL) {
   n_obs <- nrow(X)
   covariates <- colnames(X)
 
   sub_taus_list <- future_map(seq_along(covariates), function(i) {
     new_X <- as.matrix(X[, -i])
-    predict(causal_forest(new_X, Y, W))$predictions
+    predict(causal_forest(new_X, Y, W, num.threads = num.threads))$predictions
   }, .options = furrr_options(seed = TRUE))
 
   sub_taus <- do.call(cbind, sub_taus_list)
