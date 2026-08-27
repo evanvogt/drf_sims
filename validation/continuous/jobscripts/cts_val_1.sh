@@ -1,6 +1,6 @@
 #!/bin/bash
-#PBS -l walltime=01:00:00
-#PBS -l select=1:ncpus=5:ompthreads=5:mem=10gb
+#PBS -l walltime=00:05:00
+#PBS -l select=1:ncpus=1:ompthreads=1:mem=3gb
 #PBS -J 1-1100
 #PBS -N cts_val_1
 #PBS -o logs_1/
@@ -17,4 +17,4 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script - PBS array index is a row number of study$grid (cts_val_config.R)
-Rscript cts_val_analysis.R "$PBS_ARRAY_INDEX"
+Rscript cts_val_analysis.R "$PBS_ARRAY_INDEX" 1 1
