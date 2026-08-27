@@ -80,6 +80,7 @@ else in the repo, so it stays in `cts_val_models.R` rather than moving into `R/`
 | `cts_val_dgms.R` | names this study's slice of `R/dgm_scenarios.R` |
 | `cts_val_models.R` | wraps `R/cate_models.R`'s causal_forest/DR-RF + the TE-VIM, TreeSHAP and interaction-test helpers |
 | `cts_val_analysis.R` | array entry point; fits both chunks, computes the four chunk comparisons |
+| `cts_val_run.R` | runs the whole grid in one RStudio session, 8 rows at a time — the no-queue alternative to `cts_val_1.sh` |
 | `cts_val_testing.R` | pre-submission verification — dependencies, grid, and the helpers above |
 | `cts_val_profile.R` | resource sweep over `(interim_prop, workers, grf_threads)` — run in an RStudio session, not a job |
 | `cts_val_profile_summary.R` | turns the sweep into PBS directives and writes them into the jobscripts |
@@ -103,6 +104,33 @@ qsub validation/continuous/jobscripts/cts_val_metrics.sh
 replicate end to end and reports how long it took, which is the number to read
 against the jobscript's 1h walltime before submitting. It exits non-zero on any
 failure. Drop `full` for a quick local smoke test.
+
+### Without the queue
+
+When the queue is slower than the work, `cts_val_run.R` runs the same 1100 rows
+inside one interactive session instead. Request an RStudio session with 8 cores
+and 64gb — the same session `cts_val_profile.R` asks for — then:
+
+```r
+source(here::here("validation", "continuous", "cts_val_run.R"))
+```
+
+It runs 8 rows at a time, each as its own `Rscript cts_val_analysis.R <i> 1 1`
+subprocess — the identical command `cts_val_1.sh` gives one array index, so a
+row produced here and a row produced by the array are the same calculation and
+land in the same place. Budget roughly 7h for a full grid.
+
+Rows that already have a results file are skipped (the same missing-run logic
+`cts_val_check.R` uses), so an interrupted session — or one that hits its
+walltime — is resumed by sourcing the file again, and so is a row that failed.
+Edit `ids` at the top to run a subset, e.g.
+`grid_indices(study, interim_prop = 0.25)`; trailing arguments do the same
+non-interactively (`Rscript cts_val_run.R 1 2 3`). Per-row logs go to
+`<results>/validation/continuous/session_logs/`.
+
+It never writes `jobscripts/failed_ids.txt` and never edits `cts_val_rerun.sh` —
+those belong to the queue path. Afterwards, `cts_val_check.R`, collect and
+metrics run exactly as they would after an array run.
 
 ### Sizing the job
 
