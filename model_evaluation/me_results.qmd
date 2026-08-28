@@ -82,7 +82,7 @@ used only to score the candidates — never to fit them. Four axes:
 | axis | levels |
 |---|---|
 | pipeline | **XGBoost** (36-combination CV grid) / **H2O AutoML** (up to 20 auto-tuned models) |
-| fold regime | **cv** (leave-one-fold-out) / **whole** (no split) |
+| fold regime | **cv_shared** only (see below) |
 | score family | **infl** — influence-corrected PEHE proxy (`calc_infl_score`) / **dr** — DR risk, MSE against the AIPW pseudo-outcome `phi` (`calc_dr_risk`) / **cal** — DR calibration (`calc_cal_score`), at K = 5 and K = 10 quantile groups |
 | propensity | **estimated** (`pi` from the pipeline) / **fixed at 0.5** (score names carrying `05`) |
 
@@ -106,30 +106,47 @@ scenario 1) to do *well* here, and read this score as a complement to the PEHE
 proxies rather than a substitute. Whether that failure mode actually bites at
 these sample sizes is one of the things the study now measures.
 
-**`whole` is resubstitution.** It fits and predicts the scoring nuisances on
-the entire sample, so they see the same rows the candidate's `tau_hat` was fit
-on. `cv` is the honest regime. This was done to see if there is a tradeoff between
-data leakage and more samples for AutoML/XGB accuracy.
+**This report shows the `cv_shared` arm only** — the scoring nuisance is fit
+using the same fold assignment (`fold_info`) the 9 candidates were single-
+crossfit on, so model fitting and nuisance estimation always see identical CV
+splits. `me_strategies.R`/`me_config.R`'s `NUISANCE_ARMS` also computes three
+other arms, deliberately excluded here: `cv_indep` (a second, independently
+drawn fold assignment for the nuisance — ~90% training-row overlap with the
+candidate's own folds rather than 100%), `holdout` (the nuisance fit only
+within the candidate's held-out fold), and `whole` (resubstitution — nuisance
+fit and predicted on the entire sample, so it sees the same rows the
+candidate's `tau_hat` was fit on). Those exist to measure whether the
+nuisance-fit strategy itself — not just the candidate model — affects proxy-
+score quality; see `model_evaluation/README.md` and `me_config.R`'s
+`NUISANCE_ARMS` comment for that comparison.
 
 ```{r data}
 # paths
 path <- here()
-res_path <- file.path(dirname(path), "results", "model_evaluation")
+# the STRATEGIES tree (me_strategies.R / me_config.R's study_strat), not the
+# main tree - it's the only one that carries the cv_shared arm this report
+# restricts to. See me_config.R's NUISANCE_ARMS comment.
+res_path <- file.path(dirname(path), "results", "model_evaluation_strategies")
 figpath <- here("../results/all_figures/model_evaluation")
 dir.create(figpath, showWarnings = F, recursive = T)
 
+key_cols <- c("scenario", "n", "run", "model")
 
-metrics <- readRDS(file.path(res_path, "me_metrics.RDS"))
+metrics <- readRDS(file.path(res_path, "me_strat_metrics.RDS"))
+# Keep only the cv_shared columns: the candidate's own fold assignment is
+# reused for the scoring nuisance, so model fitting and nuisance estimation
+# see identical CV splits. This drops cv_indep (independent fold draw),
+# holdout, and whole entirely - see the Design section above.
 # add for now: remove calibration scores as they're not finished
 # also remove sample size 1000 because it's too much info
 metrics <- metrics %>%
+  select(all_of(key_cols), true_pehe, matches("_cv_shared_")) %>%
   select(!all_of(matches("calq|cal05q"))) #%>%
   #filter(n != 1000)
 
 # the proxy columns are whatever me_metrics.R produced that isn't a key or the
 # truth - derived rather than hardcoded so that re-adding a fold regime (the
 # `infold` one me_nuisance.R removed) needs no edit here
-key_cols <- c("scenario", "n", "run", "model")
 score_cols <- setdiff(names(metrics), c(key_cols, "true_pehe"))
 
 # labels. Scenario labels match crossfitting/cf_results.qmd, which reports the
