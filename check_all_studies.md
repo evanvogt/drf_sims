@@ -1,14 +1,14 @@
 # Rerun campaign status
 
-Last updated: 2026-08-24 12:10 BST
+Last updated: 2026-08-26 09:48 BST
 
 | study_name | category | expected_jobs | found_jobs | missing_jobs | pct_complete | status | patchable_jobs | patched_jobs | patch_status | reason |
 |---|---|---|---|---|---|---|---|---|---|---|
 | crossfitting | no_rerun |  2000 |     0 | 2000 |   0.0 | not_started | NA | NA | not_applicable | own comparison arms unchanged; only the production consumers of R/cate_models.R moved |
 | crossfitting/confidence_intervals | no_rerun |   150 |     0 |  150 |   0.0 | not_started | NA | NA | not_applicable | own comparison arms unchanged; pilot study, not part of the production rerun |
 | competing_risk | crossfit_rerun |  1400 |  1381 |   19 |  98.6 | in_progress | NA | NA | not_applicable | crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy |
-| confidence_intervals/optimal_sf (bin) | crossfit_rerun |  2000 |  1939 |   61 |  97.0 | in_progress | NA | NA | not_applicable | crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README) |
-| confidence_intervals/optimal_sf (cts) | crossfit_rerun |  2000 |   960 | 1040 |  48.0 | in_progress | NA | NA | not_applicable | crossfitting strategy change |
+| confidence_intervals/optimal_sf (bin) | crossfit_rerun |  2000 |  1994 |    6 |  99.7 | in_progress | NA | NA | not_applicable | crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README) |
+| confidence_intervals/optimal_sf (cts) | crossfit_rerun |  2000 |  1114 |  886 |  55.7 | in_progress | NA | NA | not_applicable | crossfitting strategy change |
 | missing/ci_example | crossfit_rerun |   500 |   453 |   47 |  90.6 | in_progress | NA | NA | not_applicable | crossfitting strategy change |
 | model_evaluation | first_run |   360 |   358 |    2 |  99.4 | in_progress | NA | NA | not_applicable | first run, not a re-run - its own 9 candidates moved off double crossfitting (me_models.R); the 16 pre-change res_sim_*.RDS have been deleted, so the count restarts from zero |
 | binary | crossfit_rerun |  4000 |  4000 |    0 | 100.0 | complete | NA | NA | not_applicable | crossfitting strategy change; also bug F (dr_superlearner) |

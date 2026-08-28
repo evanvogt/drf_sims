@@ -11,7 +11,7 @@ format:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
-                       fig.width = 11, fig.height = 8)
+                       fig.width = 11, fig.height = 6)
 ```
 
 ```{r libraries, include=FALSE}
@@ -36,7 +36,7 @@ once more data has accrued? This study fits two CATE estimators on the first
 top and bottom responder subgroups, the variance of the estimated CATEs, the
 ranking of covariates by variable importance, and whether the single most
 important covariate still interacts with treatment — replicates on the remaining
-chunk. It is a robustness check for CATE-based subgroup discovery, not an
+stage. It is a robustness check for CATE-based subgroup discovery, not an
 estimator comparison.
 
 ### Design
@@ -47,14 +47,14 @@ estimator comparison.
 | n | 1000, split into chunks of `n * interim_prop` and `n * (1 - interim_prop)` |
 | `interim_prop` | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
 | runs | 100 — **1100 array jobs** |
-| folds | 5 below n=250 per chunk, else 10 |
+| folds | 5 below n=250 per stage, else 10 |
 
 **Estimators**: only `causal_forest` and `dr_random_forest`
 (`R/cate_models.R`). The question is whether one estimator's own findings
-persist across chunks (can add superlearner for larger interim proportions)
+persist across stages (can add superlearner for larger interim proportions)
 
 **Variable importance**: two measures, computed side by side for each estimator
-in each chunk (`cts_val_models.R`).
+in each stage (`cts_val_models.R`).
 
 - **TE-VIM** — refit the second stage with each covariate dropped in turn and
   compare out-of-bag prediction error. Asks how much worse the CATE is predicted
@@ -65,7 +65,7 @@ in each chunk (`cts_val_models.R`).
   is attributable to that covariate.
 
 They need not agree, which is why both are carried: each gets its own
-chunk-1-vs-chunk-2 rank comparison, and each nominates its own top covariate for
+stage-1-vs-stage-2 rank comparison, and each nominates its own top covariate for
 the interaction test below.
 
 ### What the truth is
@@ -77,21 +77,27 @@ Scenario 3 of the continuous set is `TE_10[3]`: `tau = bW + b4 * X4`, with
 
 Three consequences used as reference lines below:
 
-- **`Var(tau) = b4^2 * Var(X4) = 1`**, in both chunks and at every
-  `interim_prop`. `bW` is recalibrated per chunk size, but it is an additive
+- **`Var(tau) = b4^2 * Var(X4) = 1`**, in both stages and at every
+  `interim_prop`. `bW` is recalibrated per stage size, but it is an additive
   constant and does not enter the variance.
 - **X4 is the only true HTE driver.** The other seven covariates in the
   fitted model (X1, X2, X01, X02, X03, X04, X05) are noise as far as the CATE
   is concerned, and X4 should rank as the single most important one in both
-  chunks, under either importance measure.
+  stages, under either importance measure.
 - **X4 is therefore the right answer to the top-variable test.** A run that
-  nominates X4 and then finds a significant `W x X4` interaction in chunk 2 has
+  nominates X4 and then finds a significant `W x X4` interaction in stage 2 has
   done the whole job correctly.
 
 ```{r data}
 res_path <- study$res_path
-
+fig_path <- here("../results/all_figures/validation")
+dir.create(fig_path, showWarnings = FALSE)
 metrics <- readRDS(file.path(res_path, "cts_val_metrics.RDS"))
+
+# restrict to DR learner for the chapter, put causal forest results in the appendix
+metrics <- lapply(metrics, function(df) {
+  df %>% filter(model == "dr_random_forest")
+})
 
 subgroups <- metrics$subgroups %>% select(-scenario) %>% apply_labels()
 variances <- metrics$variances %>% select(-scenario) %>% apply_labels()
@@ -136,40 +142,31 @@ kable(runs_present,
       caption = paste0("Replicates present per cell (", n_runs_expected,
                        " expected)"))
 
-na_counts <- bind_rows(
-  subgroups %>% summarise(across(c(top_pval, bottom_pval), ~ sum(is.na(.x)))) %>%
-    pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
-    mutate(table = "subgroups"),
-  variances %>% summarise(across(c(vt1, vt2), ~ sum(is.na(.x)))) %>%
-    pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
-    mutate(table = "variances"),
-  var_imps %>% summarise(across(c(vi1, vi2), ~ sum(is.na(.x)))) %>%
-    pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
-    mutate(table = "var_imps"),
-  top_var %>% summarise(across(c(p_cts, p_split), ~ sum(is.na(.x)))) %>%
-    pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
-    mutate(table = "top_var")
-) %>% select(table, column, n_missing)
-
-kable(na_counts, caption = "Missing values across all rows")
+# na_counts <- bind_rows(
+#   subgroups %>% summarise(across(c(top_pval, bottom_pval), ~ sum(is.na(.x)))) %>%
+#     pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
+#     mutate(table = "subgroups"),
+#   variances %>% summarise(across(c(vt1, vt2), ~ sum(is.na(.x)))) %>%
+#     pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
+#     mutate(table = "variances"),
+#   var_imps %>% summarise(across(c(vi1, vi2), ~ sum(is.na(.x)))) %>%
+#     pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
+#     mutate(table = "var_imps"),
+#   top_var %>% summarise(across(c(p_cts, p_split), ~ sum(is.na(.x)))) %>%
+#     pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
+#     mutate(table = "top_var")
+# ) %>% select(table, column, n_missing)
+# 
+# kable(na_counts, caption = "Missing values across all rows")
 ```
 
-An NA in `subgroups` or `top_var` is not a failure: `interaction_pval()`
-(`cts_val_models.R`) returns NA when the covariate it is handed carries no
-contrast in chunk 2 — most often because the chunk-1 tree predicted no
-`bottom10` leaf into chunk 2 at all.
 
 ## Subgroup persistence
 
-`cts_val_analysis.R` fits a tree on chunk 1's top/bottom-10%-CATE responder
-groups, predicts them into chunk 2, and tests the `W x subgroup` interaction
+`cts_val_analysis.R` fits a tree on stage 1's top/bottom-10%-CATE responder
+groups, predicts them into stage 2, and tests the `W x subgroup` interaction
 there.
 
-Both subgroups are reported. `bottom_pval` used to be unusable — the analysis
-script pulled the *intercept* p-value for it rather than the interaction — and
-was excluded from earlier versions of this report. That is fixed
-(`interaction_pval()` now indexes the coefficient by name), so these are the
-first results in which the bottom-10% group is a real test.
 
 ```{r subgroup-long}
 subgroups_long <- subgroups %>%
@@ -178,55 +175,58 @@ subgroups_long <- subgroups %>%
          which = factor(which, levels = c("Top 10%", "Bottom 10%")))
 ```
 
-```{r subgroup-ecdf}
+```{r subgroup-ecdf, fig.width=10, fig.height=6}
 ggplot(subgroups_long, aes(x = pval, colour = interim_prop, group = interim_prop)) +
   stat_ecdf(geom = "step", linewidth = 0.5, na.rm = TRUE) +
-  geom_vline(xintercept = 0.05, linetype = "dashed") +
+  geom_vline(xintercept = 0.1, linetype = "dashed") +
   facet_grid(model ~ which) +
   scale_colour_viridis_c(option = "viridis") +
   drf_theme() +
-  labs(title = "Cumulative distribution of chunk-2 subgroup p-values",
-       subtitle = "One curve per interim point. The height where a curve crosses the dashed line is that cell's proportion significant.",
-       x = "p-value (W x subgroup interaction)", y = "Cumulative proportion of runs",
+  labs(title = "Cumulative distribution of stage 2 subgroup p-values",
+       x = "p-value (W x subgroup interaction)", y = "Cumulative proportion",
        colour = "Interim\nproportion")
+ggsave("cts_val_sg_cumu.png", path = fig_path, width = 20, height = 12, units = "cm")
 ```
 
-```{r subgroup-prop}
+```{r subgroup-prop, fig.width=10, fig.height=6}
 subgroup_prop <- subgroups_long %>%
-  mutate(is_sig = pval < 0.05) %>%
-  group_by(model, which, interim_prop) %>%
+  tidyr::crossing(threshold = c(0.05, 0.1)) %>%
+  mutate(is_sig = pval < threshold,
+         threshold = factor(threshold, levels = c(0.05, 0.1), labels = c("0.05", "0.10"))) %>%
+  group_by(model, which, interim_prop, threshold) %>%
   summarise(runs = sum(!is.na(is_sig)),
             prop_sig = mean(is_sig, na.rm = TRUE),
             mcse = sqrt(prop_sig * (1 - prop_sig) / runs),
             .groups = "drop")
 
-ggplot(subgroup_prop, aes(x = interim_prop, y = prop_sig, colour = model,
+ggplot(subgroup_prop, aes(x = interim_prop, y = prop_sig, colour = threshold,
                           ymin = prop_sig - mcse, ymax = prop_sig + mcse)) +
-  geom_hline(yintercept = 0.05, linetype = "dashed") +
-  geom_ribbon(aes(fill = model), alpha = 0.15, colour = NA) +
+  geom_ribbon(aes(fill = threshold), alpha = 0.15, colour = NA) +
   geom_line() +
   geom_point(size = 1.5) +
-  facet_wrap(~which) +
+  facet_grid(~which) +
   scale_x_continuous(breaks = sort(unique(subgroup_prop$interim_prop))) +
+  scale_y_continuous(breaks = seq(0.45, 1, 0.05)) +
   drf_scale() +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
-  labs(title = "Proportion of runs where the interim subgroup validates",
-       subtitle = "Ribbon: +/- 1 Monte Carlo SE. Dashed line: nominal 5% false-positive rate. Scenario 3 has genuine HTE, so higher is better.",
-       x = "Interim proportion", y = "Proportion with p < 0.05",
-       colour = "Model", fill = "Model")
+  labs(title = "Proportion of successful stage 2 interaction tests",
+       x = "Stage 1 proportion", y = "Proportion with p < threshold",
+       colour = "Threshold", fill = "Threshold")
+ggsave("cts_val_sg_props.png", path = fig_path, width = 20, height = 12, units = "cm")
+
 ```
 
 ## CATE variance stability
 
-Does the spread of estimated treatment effects in chunk 1 (`vt1`) match the
-spread in chunk 2 (`vt2`)? The dashed line is the true `Var(tau) = 1`.
+Does the spread of estimated treatment effects in stage 1 (`vt1`) match the
+spread in stage 2 (`vt2`)? The dashed line is the true `Var(tau) = 1`.
 
 ```{r variance-box, fig.height=9}
 tidy_variances <- variances %>%
   rename(stage1 = vt1, stage2 = vt2) %>%
   pivot_longer(cols = c(stage1, stage2), names_to = "stage", values_to = "variance") %>%
-  mutate(stage = recode(stage, stage1 = "Chunk 1", stage2 = "Chunk 2"))
+  mutate(stage = recode(stage, stage1 = "stage 1", stage2 = "stage 2"))
 
 ggplot(tidy_variances, aes(x = interim_lab, y = variance, fill = stage)) +
   geom_hline(yintercept = 1, linetype = "dashed") +
@@ -234,9 +234,9 @@ ggplot(tidy_variances, aes(x = interim_lab, y = variance, fill = stage)) +
   facet_wrap(~model, ncol = 1) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
-  labs(title = "CATE variance in early vs. late chunk",
-       subtitle = "Dashed line: true Var(tau) = 1. Chunk 1 grows and chunk 2 shrinks left to right.",
-       x = "Interim proportion", y = "Variance of estimated CATE", fill = "Chunk")
+  labs(title = "CATE variance in early vs. late stage",
+       subtitle = "Dashed line: true Var(tau) = 1. stage 1 grows and stage 2 shrinks left to right.",
+       x = "Interim proportion", y = "Variance of estimated CATE", fill = "stage")
 ```
 
 ```{r variance-scatter, fig.height=9}
@@ -247,9 +247,9 @@ ggplot(variances, aes(x = vt1, y = vt2, colour = model)) +
   drf_scale() +
   drf_theme() +
   theme(aspect.ratio = 1) +
-  labs(title = "CATE variance, chunk 1 vs. chunk 2, per run",
+  labs(title = "CATE variance, stage 1 vs. stage 2, per run",
        subtitle = "Dashed line: vt1 = vt2 (perfect replication)",
-       x = "Variance in chunk 1", y = "Variance in chunk 2") +
+       x = "Variance in stage 1", y = "Variance in stage 2") +
   theme(legend.position = "bottom")
 ```
 
@@ -271,17 +271,17 @@ ggplot(var_change_summary, aes(x = interim_prop, y = mean_change, colour = model
   drf_scale() +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
-  labs(title = "Mean change in CATE variance, chunk 2 minus chunk 1",
+  labs(title = "Mean change in CATE variance, stage 2 minus stage 1",
        x = "Interim proportion", y = "Mean(vt2 - vt1)",
        colour = "Model", fill = "Model")
 ```
 
 ## Variable-importance rank stability
 
-`cts_val_analysis.R` ranks each covariate's importance within a chunk via
+`cts_val_analysis.R` ranks each covariate's importance within a stage via
 `rank()`: **rank 1 is the least important covariate, rank `r n_covariates`
 is the most important.** X4 is the only true HTE driver, so a working
-estimator should rank it `r n_covariates` (most important) in both chunks,
+estimator should rank it `r n_covariates` (most important) in both stages,
 under both measures.
 
 ```{r rank-agreement}
@@ -297,22 +297,18 @@ rank_corr_summary <- rank_corr %>%
             mcse = sd(rho, na.rm = TRUE) / sqrt(runs),
             .groups = "drop")
 
-ggplot(rank_corr_summary, aes(x = interim_prop, y = mean_rho, colour = model,
+ggplot(rank_corr_summary, aes(x = interim_prop, y = mean_rho, colour = measure,
                               ymin = mean_rho - mcse, ymax = mean_rho + mcse)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_ribbon(aes(fill = model), alpha = 0.15, colour = NA) +
+  geom_ribbon(aes(fill = measure), alpha = 0.15, colour = NA) +
   geom_line() +
   geom_point(size = 1.5) +
-  facet_wrap(~measure) +
   scale_x_continuous(breaks = sort(unique(rank_corr_summary$interim_prop))) +
   drf_scale() +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
-  labs(title = "Spearman correlation between chunk 1 and chunk 2 importance ranks",
-       subtitle = paste0("One value per run, across the ", n_covariates,
-                         " covariates. Dashed line: no agreement."),
-       x = "Interim proportion", y = "Mean Spearman correlation (vi1 vs vi2)",
-       colour = "Model", fill = "Model")
+  labs(title = "Spearman correlation between stage 1 and stage 2 importance ranks",
+       x = "Interim proportion", y = "Mean Spearman correlation between stages",
+       colour = "Measure", fill = "Measure")
 ```
 
 ```{r rank-mean, fig.height=9}
@@ -321,21 +317,21 @@ mean_vi <- var_imps %>%
   summarise(mean_vi1 = mean(vi1, na.rm = TRUE),
             mean_vi2 = mean(vi2, na.rm = TRUE),
             .groups = "drop") %>%
-  pivot_longer(cols = c(mean_vi1, mean_vi2), names_to = "chunk", values_to = "mean_rank") %>%
-  mutate(chunk = recode(chunk, mean_vi1 = "Chunk 1", mean_vi2 = "Chunk 2"))
+  pivot_longer(cols = c(mean_vi1, mean_vi2), names_to = "stage", values_to = "mean_rank") %>%
+  mutate(stage = recode(stage, mean_vi1 = "Stage 1", mean_vi2 = "Stage 2"))
 
 ggplot(mean_vi, aes(x = interim_prop, y = mean_rank, colour = variables,
-                    linetype = chunk)) +
+                    linetype = stage)) +
   geom_line() +
   facet_grid(model ~ measure) +
   scale_x_continuous(breaks = sort(unique(mean_vi$interim_prop))) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
-  labs(title = "Mean importance rank per covariate, by chunk",
+  labs(title = "Mean importance rank per covariate, by stage",
        subtitle = paste0("Rank 1 = least important, ", n_covariates,
                          " = most important. X4 is the only true HTE driver."),
        x = "Interim proportion", y = "Mean rank",
-       colour = "Covariate", linetype = "Chunk")
+       colour = "Covariate", linetype = "stage")
 ```
 
 ```{r rank-change, fig.height=9}
@@ -345,11 +341,11 @@ top_vars <- var_imps %>%
 
 ggplot(top_vars, aes(x = interim_prop, y = mean_abs_change, colour = variables)) +
   geom_line() +
-  facet_grid(model ~ measure) +
+  facet_grid(~ measure) +
   scale_x_continuous(breaks = sort(unique(top_vars$interim_prop))) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
-  labs(title = "Mean absolute change in importance rank, chunk 2 minus chunk 1",
+  labs(title = "Mean absolute change in importance rank, stage 2 minus stage 1",
        x = "Interim proportion", y = "Mean |rank change|", colour = "Covariate")
 ```
 
@@ -361,37 +357,36 @@ x4_top <- var_imps %>%
             .groups = "drop") %>%
   group_by(model, measure, interim_prop) %>%
   summarise(runs = n(),
-            p_top_chunk1 = mean(top1),
-            p_top_chunk2 = mean(top2),
+            p_top_stage1 = mean(top1),
+            p_top_stage2 = mean(top2),
             p_top_both = mean(top1 & top2),
             .groups = "drop")
 
-ggplot(x4_top, aes(x = interim_prop, y = p_top_both, colour = model)) +
+ggplot(x4_top, aes(x = interim_prop, y = p_top_both, colour = measure)) +
   geom_line() +
   geom_point(size = 1.5) +
-  facet_wrap(~measure) +
   scale_x_continuous(breaks = sort(unique(x4_top$interim_prop))) +
   ylim(0, 1) +
   drf_scale() +
   drf_theme(rotate_x = TRUE) +
-  labs(title = "How often the true HTE driver (X4) is ranked most important in both chunks",
-       x = "Interim proportion", y = "Proportion of runs", colour = "Model")
+  labs(title = "How often the true HTE driver (X4) is ranked most important in both stages",
+       x = "Interim proportion", y = "Proportion of runs", colour = "Measure")
 ```
 
 ```{r x4-top-table}
 kable(x4_top %>% filter(interim_prop %in% landmarks), digits = 3,
       col.names = c("Model", "Measure", "Interim point", "Runs",
-                    "X4 top in chunk 1", "X4 top in chunk 2", "X4 top in both"),
+                    "X4 top in stage 1", "X4 top in stage 2", "X4 top in both"),
       caption = "How often X4 is ranked most important, at the three landmark interim points")
 ```
 
 ## Does the top-ranked driver replicate?
 
 The point of ranking covariates is whether the winner means anything. For each
-estimator and each importance measure, `cts_val_analysis.R` takes chunk 1's
+estimator and each importance measure, `cts_val_analysis.R` takes stage 1's
 most important covariate and tests its treatment interaction on the remaining
 trial participants — two ways: `p_cts`, the continuous `W x X_top` interaction,
-and `p_split`, the same test after dichotomising `X_top` at its chunk-2 median.
+and `p_split`, the same test after dichotomising `X_top` at its stage-2 median.
 
 ```{r top-var-long}
 top_var_long <- top_var %>%
@@ -420,7 +415,7 @@ ggplot(top_var_prop, aes(x = interim_prop, y = prop_sig, colour = model,
   drf_scale() +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
-  labs(title = "Proportion of runs where the interim's top covariate still interacts in chunk 2",
+  labs(title = "Proportion of runs where the interim's top covariate still interacts in stage 2",
        subtitle = "Ribbon: +/- 1 Monte Carlo SE. Dashed line: nominal 5%. The continuous form should dominate the median split.",
        x = "Interim proportion", y = "Proportion with p < 0.05",
        colour = "Model", fill = "Model")
@@ -435,19 +430,19 @@ top_var_agree <- top_var %>%
   group_by(model, measure, interim_prop) %>%
   summarise(runs = n(),
             p_x_top_is_X4 = mean(x_top == "X4"),
-            p_chunks_agree = mean(x_top == x_top2),
+            p_stages_agree = mean(x_top == x_top2),
             .groups = "drop")
 
 ggplot(top_var_agree, aes(x = interim_prop, colour = model)) +
   geom_line(aes(y = p_x_top_is_X4, linetype = "Nominates X4")) +
-  geom_line(aes(y = p_chunks_agree, linetype = "Chunks agree")) +
+  geom_line(aes(y = p_stages_agree, linetype = "stages agree")) +
   facet_wrap(~measure) +
   scale_x_continuous(breaks = sort(unique(top_var_agree$interim_prop))) +
   ylim(0, 1) +
   drf_scale() +
   drf_theme(rotate_x = TRUE) +
   labs(title = "Does the interim nominate the right covariate?",
-       subtitle = "'Nominates X4': chunk 1's top covariate is the true driver. 'Chunks agree': both chunks pick the same one, right or wrong.",
+       subtitle = "'Nominates X4': stage 1's top covariate is the true driver. 'stages agree': both stages pick the same one, right or wrong.",
        x = "Interim proportion", y = "Proportion of runs",
        colour = "Model", linetype = NULL)
 ```
@@ -455,7 +450,7 @@ ggplot(top_var_agree, aes(x = interim_prop, colour = model)) +
 ```{r top-var-table}
 kable(top_var_agree %>% filter(interim_prop %in% landmarks), digits = 3,
       col.names = c("Model", "Measure", "Interim point", "Runs",
-                    "Nominates X4", "Chunks agree"),
+                    "Nominates X4", "stages agree"),
       caption = "Which covariate the interim nominates, at the three landmark interim points")
 ```
 
@@ -501,6 +496,6 @@ headline <- subgroup_prop %>%
 kable(headline, digits = 3,
       caption = paste("Landmark summary. sig_* = proportion of runs where that",
                       "subgroup validates; rho_* = mean rank correlation between",
-                      "chunks; topvar_* = proportion where the nominated top",
+                      "stages; topvar_* = proportion where the nominated top",
                       "covariate still interacts (continuous form)."))
 ```

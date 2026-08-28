@@ -84,13 +84,6 @@ axes:
 
 Every one of them, and `true_pehe` itself, is a **loss: lower is better**.
 
-**Fixing the propensity at 0.5 is an oracle, not an approximation.**
-`R/dgm_scenarios.R` assigns treatment with `W <- rbinom(n, 1, 0.5)` — a fair
-coin, independent of `X`, in every scenario. So 0.5 *is* the true propensity,
-and `dr` vs `dr05` isolates one thing: what it costs to estimate a propensity
-that never needed estimating. These columns needed no rerun — `phi05` has been
-saved in every replicate since the study's first commit.
-
 **The calibration score** splits the evaluation rows into K quantile groups of
 the *candidate's own* `tau_hat`, then compares the group average treatment
 effect the candidate implies against the one the DR scores imply:
@@ -538,29 +531,56 @@ Top-1 accuracy alone is harsh, especially when models have similar PEHEs. Let's
 look at true rankings across top selections.
 
 ```{r rank-dist-plot, fig.height=12}
+# strip the pipeline component out of the proxy label now that pipeline is a
+# facet column, not a bar-by-bar distinction — label_or_id()/level_labels
+# come from the score-column parsing chunk above; selection already carries
+# score_family/pi_regime/k_groups/fold_type per row so no re-parsing needed
 rank_dist <- selection %>%
-  count(scenario, n, proxy, pick_rank, name = "runs") %>%
-  group_by(scenario, n, proxy) %>%
+  mutate(
+    proxy_sub = paste(
+      ifelse(is.na(k_groups), label_or_id(score_family),
+             paste0(label_or_id(score_family), " K=", k_groups)),
+      ifelse(pi_regime == "fixed", "[pi=.5]", "[pi-hat]"),
+      label_or_id(fold_type),
+      sep = " / "
+    )
+  ) %>%
+  count(scenario, n, pipeline, proxy_sub, pick_rank, name = "runs") %>%
+  group_by(scenario, n, pipeline, proxy_sub) %>%
   mutate(prop = runs / sum(runs)) %>%
   ungroup()
 
 # viridis rather than the house qualitative palette: pick_rank is ordinal, and
 # rcartocolor::Safe would give 9 unordered hues to an ordered scale
-rank_plot <- rank_dist %>%
-  ggplot(aes(x = proxy, y = prop, fill = factor(pick_rank))) +
-  geom_col() +
-  facet_grid(rows = vars(scenario), cols = vars(n)) +
-  scale_fill_viridis_d(direction = -1) +
-  theme_light() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
-  labs(title = "Where the selected candidate really ranked",
-       subtitle = "1 = the proxy picked the true best, 9 = it picked the true worst",
-       y = "Proportion of runs", x = "Proxy score",
-       fill = "True rank of pick")
+#
+# One plot per scenario; within each, rows = n, cols = pipeline. scales/space
+# = "free_x" so a panel only reserves x-slots for the proxy_sub combos that
+# actually occur in it, instead of the union across every panel - that union
+# (all fold regimes x families x pi-regimes, most of them belonging to the
+# other pipeline) was the source of the blank space.
+rank_plots <- rank_dist %>%
+  split(.$scenario) %>%
+  imap(function(df, scen) {
+    ggplot(df, aes(x = proxy_sub, y = prop, fill = factor(pick_rank))) +
+      geom_col() +
+      facet_grid(rows = vars(n), cols = vars(pipeline),
+                 scales = "free_x", space = "free_x",
+                 labeller = labeller(n = label_both)) +
+      scale_fill_viridis_d(direction = -1) +
+      theme_light() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+            strip.background = element_rect(fill = "white"),
+            strip.text = element_text(colour = "black")) +
+      labs(title = paste("Where the selected candidate really ranked —", scen),
+           subtitle = "1 = the proxy picked the true best, 9 = it picked the true worst",
+           y = "Proportion of runs", x = "Proxy score",
+           fill = "True rank of pick")
+  })
 
-rank_plot
+wrap_plots(rank_plots, ncol = 2) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
 ```
 
 ```{r mean-rank-plot, fig.height=9}
