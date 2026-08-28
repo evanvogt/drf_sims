@@ -898,6 +898,8 @@ axis_summary <- axis_long %>%
     mcse_hit = sd(hit, na.rm = T) / sqrt(n()),
     mean_kendall = mean(kendall, na.rm = T),
     mcse_kendall = sd(kendall, na.rm = T) / sqrt(n()),
+    mean_rank = mean(pick_rank, na.rm = T),
+    mcse_rank = sd(pick_rank, na.rm = T) / sqrt(n()),
     mean_regret = mean(regret, na.rm = T),
     mcse_regret = sd(regret, na.rm = T) / sqrt(n()),
     .groups = "drop"
@@ -954,6 +956,19 @@ kendall_axis <- axis_plot(
 
 (hit_axis / kendall_axis) + plot_layout(guides = "collect")
 ```
+
+```{r axis-rank-plot, fig.height=9}
+axis_plot(
+  axis_summary,
+  "mean_rank",
+  "mcse_rank",
+  "Mean true rank of the selected candidate by design axis",
+  "Mean rank (1 = best of 9)",
+  hline = (1 + length(model_levels)) / 2
+)
+```
+
+The dashed line is the mean rank you would get by picking at random.
 
 ```{r axis-regret-plot, fig.height=9}
 axis_plot(
