@@ -101,7 +101,6 @@ W_fake <- rbinom(n_fake, 1, 0.5)
 # the original 50-row default
 fake_nuisance_df_n <- function(n = n_fake) {
   data.frame(
-    tau_T = rnorm(n),
     pi = runif(n, 0.2, 0.8),
     phi = rnorm(n),
     # arm_scores() hard-fails without this rather than scoring an arm whose
@@ -140,9 +139,9 @@ for (p in fake_pipelines) {
   for (a in NUISANCE_ARMS) {
     d <- fake_nuis[[p]][[a]]
     checks[[paste0("infl_", a, "_", p)]] <-
-      calc_infl_score(tau_hat_fake, d$tau_T, d$pi, Y_fake, W_fake)
+      calc_infl_score(tau_hat_fake, d$phi, d$pi, Y_fake, W_fake)
     checks[[paste0("infl05_", a, "_", p)]] <-
-      calc_infl_score(tau_hat_fake, d$tau_T, 0.5, Y_fake, W_fake)
+      calc_infl_score(tau_hat_fake, d$phi05, 0.5, Y_fake, W_fake)
     checks[[paste0("dr_", a, "_", p)]] <- calc_dr_risk(tau_hat_fake, d$phi)
     checks[[paste0("dr05_", a, "_", p)]] <- calc_dr_risk(tau_hat_fake, d$phi05)
     for (k in CAL_QUANTILES) {
@@ -252,8 +251,8 @@ report(
 # the fixed-pi twins rest on a scalar recycling through calc_infl_score()'s
 # vectorised arithmetic - cheap to prove, expensive to get silently wrong
 report(
-  abs(calc_infl_score(tau_hat_fake, fake_nuis$xgb[[1]]$tau_T, 0.5, Y_fake, W_fake) -
-        calc_infl_score(tau_hat_fake, fake_nuis$xgb[[1]]$tau_T,
+  abs(calc_infl_score(tau_hat_fake, fake_nuis$xgb[[1]]$phi05, 0.5, Y_fake, W_fake) -
+        calc_infl_score(tau_hat_fake, fake_nuis$xgb[[1]]$phi05,
                         rep(0.5, n_fake), Y_fake, W_fake)) < 1e-12,
   "calc_infl_score() with scalar pi = 0.5 equals the length-n version"
 )
@@ -456,11 +455,11 @@ if (full && models_ok) {
   arms_ok <- vapply(nuisances4, function(p) setequal(names(p), names(arms4)), logical(1))
   report(all(arms_ok), "both pipelines expose exactly the arms they were asked for")
 
-  expected_cols <- c("mu0_T", "mu1_T", "mu0_DR", "mu1_DR", "pi", "mu_DR", "tau_T", "phi", "phi05")
+  expected_cols <- c("mu0_DR", "mu1_DR", "pi", "mu_DR", "phi", "phi05")
   cols_ok <- vapply(names(nuisances4), function(p) {
     all(vapply(nuisances4[[p]], function(ft_df) setequal(names(ft_df), expected_cols), logical(1)))
   }, logical(1))
-  report(all(cols_ok), "every pipeline/arm data.frame has the expected 9 columns")
+  report(all(cols_ok), "every pipeline/arm data.frame has the expected 6 columns")
 
   rows_ok <- vapply(names(nuisances4), function(p) {
     all(vapply(nuisances4[[p]], function(d) nrow(d) == n_test, logical(1)))
@@ -569,9 +568,9 @@ cat("\n=== 6. me_strategies.R assembly, on a synthetic res_sim object ===\n")
 # estimator produced the data.frames.
 
 # the study's smallest n, deliberately: the holdout arm is tightest here
-# (25-row candidate folds, pooled to 5 blocks of 50, and mu0_T/mu1_T then see
-# only the ~25 control / ~25 treated rows inside a block). Testing at some
-# smaller convenience size would exercise a configuration the study never runs
+# (25-row candidate folds, pooled to 5 blocks of 50, and mu_DR/pi then fit on
+# just the 50 rows inside a block). Testing at some smaller convenience size
+# would exercise a configuration the study never runs
 # and miss the one that is actually near the edge.
 n_asm <- 250L
 setup_rng_stream(7)

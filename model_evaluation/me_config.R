@@ -87,12 +87,12 @@ NUISANCE_ARMS <- c("whole", "cv_indep", "cv_shared", "holdout")
 CAL_QUANTILES <- c(5L, 10L)
 
 # Blocks smaller than this are not worth handing to a 36-point XGBoost CV grid
-# or a 20-model AutoML run: the `holdout` arm fits mu0_T/mu1_T on the treated
-# and control rows WITHIN one block, so a 25-row block leaves ~12 rows per
-# target. At n = 250 the V = 10 candidate folds are 25 rows, so the arm pools
-# adjacent fold PAIRS into 5 blocks of 50 (see holdout_blocks() in
-# me_utils.R). Pooling rather than a fresh 5-fold draw is what keeps a block
-# tied to the candidate split without refitting any candidate.
+# or a 20-model AutoML run: the `holdout` arm fits mu_DR/pi on nothing but the
+# rows WITHIN one block, so a 25-row block leaves very little to fit on. At
+# n = 250 the V = 10 candidate folds are 25 rows, so the arm pools adjacent
+# fold PAIRS into 5 blocks of 50 (see holdout_blocks() in me_utils.R).
+# Pooling rather than a fresh 5-fold draw is what keeps a block tied to the
+# candidate split without refitting any candidate.
 HOLDOUT_MIN_BLOCK <- 40L
 
 # ---- the derived result trees ----------------------------------------------

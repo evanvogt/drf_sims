@@ -111,9 +111,9 @@ study needs it.
 
 ## Nuisance-evaluation pipelines
 
-A second, *independent* estimate of 4 nuisance targets (`mu0_T`, `mu1_T`,
-`mu_DR`, `pi`) — used only to build proxy scores for the 9 candidates above,
-never to fit them:
+A second, *independent* estimate of 2 nuisance targets (`mu_DR`, `pi`) —
+used only to build proxy scores for the 9 candidates above, never to fit
+them:
 
 - **XGBoost** — a hand-tuned CV grid (`eta`, `max_depth`, `subsample`,
   `colsample_bytree`).
@@ -169,8 +169,8 @@ caller's numeric 0/1 vector and was never converted to a factor, so the line
 would send it to `-1/0` and break `calculate_pseudos()`. Only the fold filter
 came back. See `run_automl_holdout()`.
 
-**Block size at `n=250`.** `V=10` gives 25-row folds, and `mu0_T`/`mu1_T` fit
-on the ~12 control / ~12 treated rows inside one — not estimable. So at
+**Block size at `n=250`.** `V=10` gives 25-row folds, and `mu_DR`/`pi` fit on
+just the rows inside one — not estimable. So at
 `n=250` only, `holdout_blocks()` pools *adjacent pairs of the candidate's
 folds* into 5 blocks of 50. Pooling rather than drawing a fresh 5-fold split
 is what keeps each block tied to the candidate's own partition without
@@ -199,9 +199,9 @@ excluded — a 50-row evaluation set is too thin to rank 9 models.
 
 ### Scores
 
-From these, `calculate_pseudos()` builds a T-learner CATE (`tau_T`) and two
-AIPW pseudo-outcomes: `phi`, using the pipeline's estimated `pi`, and `phi05`,
-with the propensity fixed at 0.5. `me_metrics.R` scores every candidate's `tau`
+From these, `calculate_pseudos()` builds two AIPW pseudo-outcomes: `phi`,
+using the pipeline's estimated `pi`, and `phi05`, with the propensity fixed
+at 0.5. `me_metrics.R` scores every candidate's `tau`
 against both pipelines under every arm, plus true PEHE (available because this
 is simulated data).
 

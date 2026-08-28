@@ -51,13 +51,13 @@ split_folds <- function(Y, k = 10) {
 #' saw". This derives them rather than drawing them, which is also why it needs
 #' no RNG and can run from a saved fold_info.
 #'
-#' Where a fold is too small to fit four nuisance targets in (mu0_T and mu1_T
-#' see only the control and treated rows of the block), adjacent folds are
-#' POOLED. At n = 250, V = 10 that is 25-row folds pooled into 5 blocks of 50.
-#' The cost of pooling, worth stating: a pooled block is only half-decoupled
-#' from any single candidate fold model, since the partner fold WAS in that
-#' model's training set. The alternative - 12 rows per nuisance target - is
-#' not estimable at all, so this is the lesser problem.
+#' Where a fold is too small to fit the two nuisance targets in (mu_DR and pi,
+#' both fit on the whole block), adjacent folds are POOLED. At n = 250,
+#' V = 10 that is 25-row folds pooled into 5 blocks of 50. The cost of
+#' pooling, worth stating: a pooled block is only half-decoupled from any
+#' single candidate fold model, since the partner fold WAS in that model's
+#' training set. The alternative - a 25-row block - is not estimable at all,
+#' so this is the lesser problem.
 #'
 #' @param fold_indices the candidate fold assignment (fold_info$fold_indices)
 #' @param min_block smallest acceptable block size, default HOLDOUT_MIN_BLOCK

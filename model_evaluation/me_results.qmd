@@ -71,9 +71,8 @@ number of covariates, 7–9 across these scenarios.
 
 ### The proxy scores
 
-A second, *independent* nuisance pipeline estimates `mu0_T`, `mu1_T`, `mu_DR`
-and `pi`, and is used only to score the candidates — never to fit them. Four
-axes:
+A second, *independent* nuisance pipeline estimates `mu_DR` and `pi`, and is
+used only to score the candidates — never to fit them. Four axes:
 
 | axis | levels |
 |---|---|

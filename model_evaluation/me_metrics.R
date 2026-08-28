@@ -20,8 +20,8 @@
 # column that predict_automl_models() (me_nuisance.R) never actually
 # produces - confirmed by reading it directly, it always names that column
 # "pi" - and extract_surrogate()'s cv/infold/whole-wide surrogate matrix is
-# unnecessary once scoring pulls df$tau_T/df$pi/df$phi directly from one
-# fold-type's data.frame at a time.
+# unnecessary once scoring pulls df$pi/df$phi directly from one fold-type's
+# data.frame at a time.
 #
 # The score columns are DERIVED from whatever arms the nuisance list carries,
 # never enumerated here - which is what lets the same me_per_model() serve all
@@ -69,6 +69,10 @@ source(here("R", "metrics.R"))
 #'   Every operation here is vectorised arithmetic, so a length-1 pi recycles
 #'   to give exactly the same answer as rep(0.5, n) - me_testing.R checks this
 #'   rather than leaving it to be assumed.
+#' @param tau the proxy target diff_tau is measured against. Called with
+#'   df$phi/df$phi05 (the DR pseudo-outcome) below, not the T-learner tau_T -
+#'   so infl and dr are anchored to the same target and their difference
+#'   isolates what the influence correction itself adds.
 calc_infl_score <- function(tau_hat, tau, pi, Y, W) {
   A <- W - pi
   C <- pi * (1 - pi)
@@ -180,8 +184,8 @@ arm_scores <- function(tau_hat, df, Y, W, k_groups = CAL_QUANTILES) {
 
   c(
     list(
-      infl   = calc_infl_score(tau_hat, df$tau_T, df$pi, Y, W),
-      infl05 = calc_infl_score(tau_hat, df$tau_T, 0.5, Y, W),
+      infl   = calc_infl_score(tau_hat, df$phi, df$pi, Y, W),
+      infl05 = calc_infl_score(tau_hat, df$phi05, 0.5, Y, W),
       dr     = calc_dr_risk(tau_hat, df$phi),
       dr05   = calc_dr_risk(tau_hat, df$phi05)
     ),

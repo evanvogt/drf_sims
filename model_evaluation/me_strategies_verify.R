@@ -104,8 +104,8 @@ for (r in seq_len(nrow(cmb))) {
         } else if (nrow(d) != length(new$data$Y)) {
           report_fail("%s: %s `%s` has %d rows, expected %d",
                       tag, pipeline, arm, nrow(d), length(new$data$Y))
-        } else if (anyNA(d$phi) || anyNA(d$tau_T) || anyNA(d$pi)) {
-          report_fail("%s: %s `%s` has NA in phi/tau_T/pi", tag, pipeline, arm)
+        } else if (anyNA(d$phi) || anyNA(d$pi)) {
+          report_fail("%s: %s `%s` has NA in phi/pi", tag, pipeline, arm)
         }
       }
       # cv_shared must use the CANDIDATES' folds, which is the entire

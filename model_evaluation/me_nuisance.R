@@ -8,8 +8,8 @@
 # its own file, the same way crossfitting/ has files beyond that 7-role
 # floor (cf_testing.R, cf_profile.R, ...)
 #
-# Two independent estimators of the same 4 nuisance targets (mu0_T, mu1_T,
-# mu_DR, pi): XGBoost with a hand-tuned CV grid, and H2O AutoML. Each runs
+# Two independent estimators of the same 2 nuisance targets (mu_DR, pi):
+# XGBoost with a hand-tuned CV grid, and H2O AutoML. Each runs
 # under a set of ARMS differing in one thing only: what data the nuisance sees
 # relative to the data the candidate it is scoring was trained on. The arm
 # names and what they mean live in me_config.R's NUISANCE_ARMS.
@@ -60,7 +60,6 @@ calculate_pseudos <- function(df, Y, W) {
     )
   df <- df %>%
     mutate(
-      tau_T = mu1_T - mu0_T,
       phi = mu1_DR - mu0_DR + ((Y - mu_DR) * (W - pi)) / (pi * (1 - pi)),
       # phi05 fixes the propensity at 0.5 instead of using the estimated pi.
       # It is not an approximation: R/dgm_scenarios.R assigns treatment with
@@ -97,14 +96,6 @@ prepare_xgb_matrices <- function(X, Y, W, filter_indices, training = TRUE) {
       X_Y = xgb.DMatrix(
         data = as.matrix(X[filter_indices, ]),
         label = Y[filter_indices]
-      ),
-      X_0_Y = xgb.DMatrix(
-        data = as.matrix(X[filter_indices & W == 0, ]),
-        label = Y[filter_indices & W == 0]
-      ),
-      X_1_Y = xgb.DMatrix(
-        data = as.matrix(X[filter_indices & W == 1, ]),
-        label = Y[filter_indices & W == 1]
       ),
       XW_Y = xgb.DMatrix(
         data = as.matrix(cbind(W = W[filter_indices], X[filter_indices, ])),
@@ -214,8 +205,6 @@ train_best_xgb <- function(grid, cv_results, train_data) {
 
 fit_nuisance_xgb <- function(train_matrices, param_grids) {
   list(
-    mu0_T = fit_xgb(param_grids$continuous, train_matrices$X_0_Y),
-    mu1_T = fit_xgb(param_grids$continuous, train_matrices$X_1_Y),
     mu_DR = fit_xgb(param_grids$continuous, train_matrices$XW_Y),
     pi = fit_xgb(param_grids$binary, train_matrices$X_W)
   )
@@ -223,8 +212,6 @@ fit_nuisance_xgb <- function(train_matrices, param_grids) {
 
 predict_nuisance_xgb <- function(models, pred_matrices) {
   data.frame(
-    mu0_T = predict(models$mu0_T, newdata = pred_matrices$X),
-    mu1_T = predict(models$mu1_T, newdata = pred_matrices$X),
     mu0_DR = predict(models$mu_DR, newdata = pred_matrices$X0),
     mu1_DR = predict(models$mu_DR, newdata = pred_matrices$X1),
     pi = predict(models$pi, newdata = pred_matrices$X)
@@ -441,13 +428,10 @@ h2o_shutdown_check <- function() {
 prepare_h2o_data <- function(X, Y, W, filter_indices, training = TRUE) {
   # Prepare different data combinations
   if (training) {
-    YX <- cbind(Y, X)
     YWX <- cbind(Y, W, X)
     WX <- cbind(W = as.factor(W), X)
 
     list(
-      YX_0 = as.h2o(YX[filter_indices & W == 0, ]),
-      YX_1 = as.h2o(YX[filter_indices & W == 1, ]),
       YWX = as.h2o(YWX[filter_indices, ]),
       WX = as.h2o(WX[filter_indices, ])
     )
@@ -467,22 +451,6 @@ fit_automl_models <- function(
   exclude_algos = c("DeepLearning", "XGBoost")
 ) {
   list(
-    mu0_T = h2o.automl(
-      y = "Y",
-      training_frame = train_data$YX_0,
-      nfolds = 0,
-      max_models = max_models,
-      exclude_algos = exclude_algos,
-      seed = model_seed
-    ),
-    mu1_T = h2o.automl(
-      y = "Y",
-      training_frame = train_data$YX_1,
-      nfolds = 0,
-      max_models = max_models,
-      exclude_algos = exclude_algos,
-      seed = model_seed
-    ),
     mu_DR = h2o.automl(
       y = "Y",
       training_frame = train_data$YWX,
@@ -506,8 +474,6 @@ predict_automl_models <- function(models, pred_data) {
   pi_pred <- h2o.predict(models$pi, newdata = pred_data$X) %>% as.data.frame()
 
   data.frame(
-    mu0_T = h2o.predict(models$mu0_T, newdata = pred_data$X) %>% as.vector(),
-    mu1_T = h2o.predict(models$mu1_T, newdata = pred_data$X) %>% as.vector(),
     mu0_DR = h2o.predict(models$mu_DR, newdata = pred_data$X0) %>% as.vector(),
     mu1_DR = h2o.predict(models$mu_DR, newdata = pred_data$X1) %>% as.vector(),
     pi = pi_pred$p1
