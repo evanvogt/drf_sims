@@ -10,8 +10,13 @@ format:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
-                       fig.width = 11, fig.height = 8)
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 11,
+  fig.height = 8
+)
 ```
 
 ```{r libraries, include=FALSE}
@@ -112,6 +117,11 @@ path <- here()
 res_path <- file.path(dirname(path), "results", "model_evaluation")
 
 metrics <- readRDS(file.path(res_path, "me_metrics.RDS"))
+# add for now: remove calibration scores as they're not finished
+# also remove sample size 1000 because it's too much info
+metrics <- metrics %>%
+  select(!all_of(matches("calq|cal05q"))) %>%
+  filter(n != 1000)
 
 # the proxy columns are whatever me_metrics.R produced that isn't a key or the
 # truth - derived rather than hardcoded so that re-adding a fold regime (the
@@ -121,14 +131,30 @@ score_cols <- setdiff(names(metrics), c(key_cols, "true_pehe"))
 
 # labels. Scenario labels match crossfitting/cf_results.qmd, which reports the
 # same 1/4/6/9 subset.
-scenario_labels <- c(`1` = "Null", `4` = "Simple", `6` = "Interaction",
-                     `9` = "Non-linear")
+scenario_labels <- c(
+  `1` = "Null",
+  `4` = "Simple",
+  `6` = "Interaction",
+  `9` = "Non-linear"
+)
 
-model_levels <- c("rf1", "rf2", "rf3", "net1", "net2", "net3",
-                  "SL1", "SL2", "SL3")
+model_levels <- c(
+  "rf1",
+  "rf2",
+  "rf3",
+  "net1",
+  "net2",
+  "net3",
+  "SL1",
+  "SL2",
+  "SL3"
+)
 
-family_labels <- c(rf = "Random forest", net = "Elastic net",
-                   SL = "SuperLearner")
+family_labels <- c(
+  rf = "Random forest",
+  net = "Elastic net",
+  SL = "SuperLearner"
+)
 
 # ---- parsing a score column name -------------------------------------------
 # me_metrics.R builds every score column as <score_type>_<fold_type>_<pipeline>,
@@ -145,11 +171,14 @@ family_labels <- c(rf = "Random forest", net = "Elastic net",
 parse_proxy <- function(proxy_id) {
   parts <- strsplit(proxy_id, "_", fixed = TRUE)
   tibble(
-    proxy_id   = proxy_id,
+    proxy_id = proxy_id,
     score_type = vapply(parts, function(p) p[1], character(1)),
-    fold_type  = vapply(parts, function(p) paste(p[-c(1, length(p))], collapse = "_"),
-                        character(1)),
-    pipeline   = vapply(parts, function(p) p[length(p)], character(1))
+    fold_type = vapply(
+      parts,
+      function(p) paste(p[-c(1, length(p))], collapse = "_"),
+      character(1)
+    ),
+    pipeline = vapply(parts, function(p) p[length(p)], character(1))
   ) %>%
     mutate(
       # the family with the propensity marker and group count stripped off.
@@ -160,20 +189,35 @@ parse_proxy <- function(proxy_id) {
       # "05" appears in a score type only when the propensity is fixed - calq10
       # carries a "10", never an "05"
       pi_regime = ifelse(grepl("05", score_type), "fixed", "estimated"),
-      k_groups  = suppressWarnings(as.integer(sub("^.*q", "", score_type))),
-      k_groups  = ifelse(grepl("q[0-9]+$", score_type), k_groups, NA_integer_)
+      k_groups = suppressWarnings(as.integer(sub("^.*q", "", score_type))),
+      k_groups = ifelse(grepl("q[0-9]+$", score_type), k_groups, NA_integer_)
     )
 }
 
-axis_labels <- c(score_type = "Score type", score_family = "Score family",
-                 fold_type = "Fold regime", pipeline = "Nuisance pipeline",
-                 pi_regime = "Propensity", k_groups = "Quantile groups")
+axis_labels <- c(
+  score_type = "Score type",
+  score_family = "Score family",
+  fold_type = "Fold regime",
+  pipeline = "Nuisance pipeline",
+  pi_regime = "Propensity",
+  k_groups = "Quantile groups"
+)
 
-level_labels <- c(infl = "Influence", dr = "DR risk", cal = "Calibration",
-                  cv = "CV", cv_indep = "CV (indep.)", cv_shared = "CV (shared)",
-                  holdout = "Holdout", whole = "Whole", split = "80:20",
-                  xgb = "XGBoost", automl = "AutoML",
-                  estimated = "pi estimated", fixed = "pi = 0.5")
+level_labels <- c(
+  infl = "Influence",
+  dr = "DR risk",
+  cal = "Calibration",
+  cv = "CV",
+  cv_indep = "CV (indep.)",
+  cv_shared = "CV (shared)",
+  holdout = "Holdout",
+  whole = "Whole",
+  split = "80:20",
+  xgb = "XGBoost",
+  automl = "AutoML",
+  estimated = "pi estimated",
+  fixed = "pi = 0.5"
+)
 
 # Display labels are BUILT from the parsed axes rather than typed out: the main
 # tree now carries 33 score columns and the strategies tree 65, so a hand-kept
@@ -183,9 +227,11 @@ label_or_id <- function(x) ifelse(is.na(level_labels[x]), x, level_labels[x])
 
 proxy_label_of <- function(parsed) {
   paste(
-    ifelse(is.na(parsed$k_groups),
-           label_or_id(parsed$score_family),
-           paste0(label_or_id(parsed$score_family), " K=", parsed$k_groups)),
+    ifelse(
+      is.na(parsed$k_groups),
+      label_or_id(parsed$score_family),
+      paste0(label_or_id(parsed$score_family), " K=", parsed$k_groups)
+    ),
     ifelse(parsed$pi_regime == "fixed", "[pi=.5]", "[pi-hat]"),
     label_or_id(parsed$fold_type),
     label_or_id(parsed$pipeline),
@@ -202,12 +248,16 @@ proxy_labels <- setNames(proxy_key$proxy_label, proxy_key$proxy_id)
 
 metrics <- metrics %>%
   mutate(
-    scenario = factor(scenario_labels[as.character(scenario)],
-                      levels = unname(scenario_labels)),
+    scenario = factor(
+      scenario_labels[as.character(scenario)],
+      levels = unname(scenario_labels)
+    ),
     n = factor(n, levels = sort(unique(n))),
     model = factor(model, levels = model_levels),
-    family = factor(family_labels[sub("[0-9]+$", "", as.character(model))],
-                    levels = unname(family_labels))
+    family = factor(
+      family_labels[sub("[0-9]+$", "", as.character(model))],
+      levels = unname(family_labels)
+    )
     # maybe adding version: 1,2,3 would make plots nicer?
   )
 ```
@@ -217,7 +267,11 @@ metrics <- metrics %>%
 # recovered from the column name, which me_metrics.R builds as
 # <score_type>_<fold_type>_<pipeline>.
 long <- metrics %>%
-  pivot_longer(all_of(score_cols), names_to = "proxy_id", values_to = "score") %>%
+  pivot_longer(
+    all_of(score_cols),
+    names_to = "proxy_id",
+    values_to = "score"
+  ) %>%
   left_join(proxy_key, by = "proxy_id") %>%
   mutate(proxy = factor(proxy_label, levels = unname(proxy_labels)))
 
@@ -234,20 +288,31 @@ long_ok <- filter(long, !is.na(score), !is.na(true_pehe))
 # hypothetical complete set - so a run with a dropped candidate is scored
 # honestly rather than penalised for the gap.
 selection <- long_ok %>%
-  group_by(scenario, n, run, proxy, proxy_id, score_type, score_family,
-           pi_regime, k_groups, fold_type, pipeline) %>%
+  group_by(
+    scenario,
+    n,
+    run,
+    proxy,
+    proxy_id,
+    score_type,
+    score_family,
+    pi_regime,
+    k_groups,
+    fold_type,
+    pipeline
+  ) %>%
   filter(n() >= 2) %>%
   summarise(
     n_candidates = n(),
-    rho          = cor(score, true_pehe, method = "spearman"),
-    kendall      = cor(score, true_pehe, method = "kendall"),
-    pick         = model[which.min(score)],
-    best         = model[which.min(true_pehe)],
-    hit          = as.numeric(pick == best),
-    pick_rank    = rank(true_pehe, ties.method = "min")[which.min(score)],
-    regret       = true_pehe[which.min(score)] - min(true_pehe),
-    rel_regret   = regret / min(true_pehe),
-    spread       = max(true_pehe) - min(true_pehe),
+    rho = cor(score, true_pehe, method = "spearman"),
+    kendall = cor(score, true_pehe, method = "kendall"),
+    pick = model[which.min(score)],
+    best = model[which.min(true_pehe)],
+    hit = as.numeric(pick == best),
+    pick_rank = rank(true_pehe, ties.method = "min")[which.min(score)],
+    regret = true_pehe[which.min(score)] - min(true_pehe),
+    rel_regret = regret / min(true_pehe),
+    spread = max(true_pehe) - min(true_pehe),
     # expected cost of ignoring the scores and picking one of the candidates
     # uniformly at random - the floor any useful proxy has to beat
     random_regret = mean(true_pehe) - min(true_pehe),
@@ -256,8 +321,17 @@ selection <- long_ok %>%
 
 # per (scenario, n, proxy) summaries, mean +/- Monte Carlo SE over the runs
 selection_summary <- selection %>%
-  group_by(scenario, n, proxy, score_type, score_family, pi_regime, k_groups,
-           fold_type, pipeline) %>%
+  group_by(
+    scenario,
+    n,
+    proxy,
+    score_type,
+    score_family,
+    pi_regime,
+    k_groups,
+    fold_type,
+    pipeline
+  ) %>%
   summarise(
     runs = n(),
     mean_rho = mean(rho, na.rm = T),
@@ -299,9 +373,11 @@ fixed_choice <- metrics %>%
   left_join(oracle_by_run, by = c("scenario", "n", "run")) %>%
   mutate(fixed_regret = true_pehe - oracle_pehe) %>%
   group_by(scenario, n, model) %>%
-  summarise(mean_regret = mean(fixed_regret, na.rm = T),
-            mcse_regret = sd(fixed_regret, na.rm = T) / sqrt(n()),
-            .groups = "drop")
+  summarise(
+    mean_regret = mean(fixed_regret, na.rm = T),
+    mcse_regret = sd(fixed_regret, na.rm = T) / sqrt(n()),
+    .groups = "drop"
+  )
 
 best_fixed <- fixed_choice %>%
   group_by(scenario, n) %>%
@@ -318,57 +394,123 @@ best_fixed <- fixed_choice %>%
 
 box_plot <- function(df, metric, title, ylab, hline = NULL) {
   p <- ggplot(df, aes(x = proxy, y = .data[[metric]], colour = score_type))
-  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  if (!is.null(hline)) {
+    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  }
   p +
     geom_boxplot(fill = "transparent", outlier.shape = NA) +
     facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
-    scale_colour_paletteer_d("rcartocolor::Safe",
-                             labels = c(dr = "DR risk", infl = "Influence")) +
+    scale_colour_paletteer_d(
+      "rcartocolor::Safe",
+      labels = c(dr = "DR risk", infl = "Influence")
+    ) +
     theme_light() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(colour = "black")
+    ) +
     labs(title = title, y = ylab, x = "Proxy score", colour = "Score type")
 }
 
 summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
   df <- df %>%
-    mutate(est = .data[[mean_col]],
-           lo = .data[[mean_col]] - .data[[mcse_col]],
-           hi = .data[[mean_col]] + .data[[mcse_col]])
-  p <- ggplot(df, aes(x = n, y = est, colour = score_type, shape = pipeline, ymin = lo, ymax = hi))
-  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+    mutate(
+      est = .data[[mean_col]],
+      lo = .data[[mean_col]] - .data[[mcse_col]],
+      hi = .data[[mean_col]] + .data[[mcse_col]]
+    )
+  p <- ggplot(
+    df,
+    aes(
+      x = n,
+      y = est,
+      colour = score_type,
+      shape = pipeline,
+      ymin = lo,
+      ymax = hi
+    )
+  )
+  if (!is.null(hline)) {
+    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  }
   p +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
-    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
-    facet_grid(rows = vars(scenario), cols = vars(fold_type), scales = "free_y") +
-    scale_colour_paletteer_d("rcartocolor::Safe",
-                             labels = c(dr = "DR risk", infl = "Influence")) +
+    geom_errorbar(
+      position = position_dodge(width = 0.5),
+      linewidth = 0.3,
+      width = 0.3
+    ) +
+    facet_grid(
+      rows = vars(scenario),
+      cols = vars(fold_type),
+      scales = "free_y"
+    ) +
+    scale_colour_paletteer_d(
+      "rcartocolor::Safe",
+      labels = c(dr = "DR risk", infl = "Influence")
+    ) +
     theme_light() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
-    labs(title = title, y = ylab, x = "sample size", colour = "Score type", shape = "Machinery")
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(colour = "black")
+    ) +
+    labs(
+      title = title,
+      y = ylab,
+      x = "sample size",
+      colour = "Score type",
+      shape = "Machinery"
+    )
 }
 
 sum_ns_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
   df <- df %>%
-    mutate(est = .data[[mean_col]],
-           lo = .data[[mean_col]] - .data[[mcse_col]],
-           hi = .data[[mean_col]] + .data[[mcse_col]])
-  p <- ggplot(df, aes(x = fold_type, y = est, colour = score_type, shape = pipeline, ymin = lo, ymax = hi))
-  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+    mutate(
+      est = .data[[mean_col]],
+      lo = .data[[mean_col]] - .data[[mcse_col]],
+      hi = .data[[mean_col]] + .data[[mcse_col]]
+    )
+  p <- ggplot(
+    df,
+    aes(
+      x = fold_type,
+      y = est,
+      colour = score_type,
+      shape = pipeline,
+      ymin = lo,
+      ymax = hi
+    )
+  )
+  if (!is.null(hline)) {
+    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  }
   p +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
-    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
-    facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
-    scale_colour_paletteer_d("rcartocolor::Safe",
-                             labels = c(dr = "DR risk", infl = "Influence")) +
+    geom_errorbar(
+      position = position_dodge(width = 0.5),
+      linewidth = 0.3,
+      width = 0.3
+    ) +
+    facet_grid(rows = vars(n), cols = vars(scenario), scales = "free_y") +
+    scale_colour_paletteer_d(
+      "rcartocolor::Safe",
+      labels = c(dr = "DR risk", infl = "Influence")
+    ) +
     theme_light() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
-    labs(title = title, y = ylab, x = "Fold type", colour = "Score type", shape = "Machinery")
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(colour = "black")
+    ) +
+    labs(
+      title = title,
+      y = ylab,
+      x = "Fold type",
+      colour = "Score type",
+      shape = "Machinery"
+    )
 }
 ```
 
@@ -394,9 +536,12 @@ na_counts <- metrics %>%
   pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
   mutate(pct = 100 * n_missing / nrow(metrics))
 
-kable(na_counts, digits = 2,
-      col.names = c("Score column", "Missing values", "% of rows"),
-      caption = "Missing scores across all (scenario, n, run, candidate) rows")
+kable(
+  na_counts,
+  digits = 2,
+  col.names = c("Score column", "Missing values", "% of rows"),
+  caption = "Missing scores across all (scenario, n, run, candidate) rows"
+)
 ```
 
 ```{r completeness-candidates}
@@ -407,9 +552,11 @@ short_rankings <- selection %>%
 if (nrow(short_rankings) == 0) {
   cat("Every ranking scored all", length(model_levels), "candidates.\n")
 } else {
-  kable(short_rankings,
-        col.names = c("Scenario", "n", "Proxy", "Candidates ranked", "Rankings"),
-        caption = "Rankings built from fewer than the full candidate set")
+  kable(
+    short_rankings,
+    col.names = c("Scenario", "n", "Proxy", "Candidates ranked", "Rankings"),
+    caption = "Rankings built from fewer than the full candidate set"
+  )
 }
 ```
 
@@ -429,12 +576,18 @@ pehe_plot <- metrics %>%
   #scale_y_log10() +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_light() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
-  labs(title = "True PEHE of each candidate",
-       subtitle = "The values that metrics compared are trying to emulate",
-       y = "True PEHE", x = "Sample size", colour = "Model")
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "True PEHE of each candidate",
+    subtitle = "The values that metrics compared are trying to emulate",
+    y = "True PEHE",
+    x = "Sample size",
+    colour = "Model"
+  )
 
 pehe_plot
 ```
@@ -457,12 +610,17 @@ winner_plot <- winners %>%
   facet_wrap(~scenario) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   theme_light() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
-  labs(title = "How often each candidate is the true best",
-       subtitle = "Proportion of runs in which this candidate has the lowest true PEHE",
-       y = "Proportion of runs", x = "Candidate")
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "How often each candidate is the true best",
+    subtitle = "Proportion of runs in which this candidate has the lowest true PEHE",
+    y = "Proportion of runs",
+    x = "Candidate"
+  )
 
 winner_plot
 ```
@@ -471,17 +629,29 @@ winner_plot
 spread_tab <- selection %>%
   distinct(scenario, n, run, spread, random_regret) %>%
   group_by(scenario, n) %>%
-  summarise(mean_spread = mean(spread, na.rm = T),
-            mean_random_regret = mean(random_regret, na.rm = T),
-            .groups = "drop") %>%
-  left_join(select(best_fixed, scenario, n, best_fixed_model, best_fixed_regret),
-            by = c("scenario", "n"))
+  summarise(
+    mean_spread = mean(spread, na.rm = T),
+    mean_random_regret = mean(random_regret, na.rm = T),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    select(best_fixed, scenario, n, best_fixed_model, best_fixed_regret),
+    by = c("scenario", "n")
+  )
 
-kable(spread_tab, digits = 4,
-      col.names = c("Scenario", "n", "Worst - best true PEHE",
-                    "Regret of a random pick", "Best fixed choice",
-                    "Its regret"),
-      caption = "How much selection is worth, per cell")
+kable(
+  spread_tab,
+  digits = 4,
+  col.names = c(
+    "Scenario",
+    "n",
+    "Worst - best true PEHE",
+    "Regret of a random pick",
+    "Best fixed choice",
+    "Its regret"
+  ),
+  caption = "How much selection is worth, per cell"
+)
 ```
 
 `Worst - best true PEHE` is the full range on the table (max - min); `regret of a random
@@ -496,22 +666,36 @@ computed across the 9 candidates within a run. A proxy that is useful for
 selection sits well above 0.
 
 ```{r rho-plot, fig.height=9}
-rho_box <- box_plot(selection, "rho",
-                    "Spearman correlation with true PEHE",
-                    "Spearman correlation", hline = NULL)
+rho_box <- box_plot(
+  selection,
+  "rho",
+  "Spearman correlation with true PEHE",
+  "Spearman correlation",
+  hline = NULL
+)
 
-rho_sum <- summary_plot(selection_summary, "mean_rho", "mcse_rho",
-                        "Mean Spearman correlation with true PEHE",
-                        "Mean Spearman correlation", hline = 0)
+rho_sum <- sum_ns_plot(
+  selection_summary,
+  "mean_rho",
+  "mcse_rho",
+  "Mean Spearman correlation with true PEHE",
+  "Mean Spearman correlation",
+  hline = 0
+)
 # boxplot is quite hard to read just look at summary
 #(rho_box / rho_sum) + plot_layout(guides = "collect")
 rho_sum
 ```
 
 ```{r kendall-plot, fig.height=9}
-summary_plot(selection_summary, "mean_kendall", "mcse_kendall",
-             "Mean Kendall correlation with true PEHE",
-             "Mean Kendall tau", hline = 0)
+sum_ns_plot(
+  selection_summary,
+  "mean_kendall",
+  "mcse_kendall",
+  "Mean Kendall correlation with true PEHE",
+  "Mean Kendall tau",
+  hline = 0
+)
 ```
 
 ## Top-1 selection accuracy
@@ -520,10 +704,14 @@ The proportion of times a method selects the best performing model. Reference li
 is the accuracy for picking the models at random.
 
 ```{r hit-plot, fig.height=9}
-summary_plot(selection_summary, "mean_hit", "mcse_hit",
-             "Top-1 selection accuracy",
-             "Proportion of runs the proxy picks the true best",
-             hline = 1 / length(model_levels))
+sum_ns_plot(
+  selection_summary,
+  "mean_hit",
+  "mcse_hit",
+  "Top-1 selection accuracy",
+  "Proportion of runs the proxy picks the true best",
+  hline = 1 / length(model_levels)
+)
 ```
 
 Top-1 accuracy alone is harsh, especially when models have similar PEHEs. Let's 
@@ -537,8 +725,11 @@ look at true rankings across top selections.
 rank_dist <- selection %>%
   mutate(
     proxy_sub = paste(
-      ifelse(is.na(k_groups), label_or_id(score_family),
-             paste0(label_or_id(score_family), " K=", k_groups)),
+      ifelse(
+        is.na(k_groups),
+        label_or_id(score_family),
+        paste0(label_or_id(score_family), " K=", k_groups)
+      ),
       ifelse(pi_regime == "fixed", "[pi=.5]", "[pi-hat]"),
       label_or_id(fold_type),
       sep = " / "
@@ -562,32 +753,46 @@ rank_plots <- rank_dist %>%
   imap(function(df, scen) {
     ggplot(df, aes(x = proxy_sub, y = prop, fill = factor(pick_rank))) +
       geom_col() +
-      facet_grid(rows = vars(n), cols = vars(pipeline),
-                 scales = "free_x", space = "free_x",
-                 labeller = labeller(n = label_both)) +
+      facet_grid(
+        rows = vars(n),
+        cols = vars(pipeline),
+        scales = "free_x",
+        space = "free_x",
+        labeller = labeller(n = label_both)
+      ) +
       scale_fill_viridis_d(direction = -1) +
       theme_light() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
-            strip.background = element_rect(fill = "white"),
-            strip.text = element_text(colour = "black")) +
-      labs(title = scen,
-           y = "Proportion of runs", x = "Proxy score",
-           fill = "True rank of pick")
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")
+      ) +
+      labs(
+        title = scen,
+        y = "Proportion of runs",
+        x = "Proxy score",
+        fill = "True rank of pick"
+      )
   })
 
 wrap_plots(rank_plots, ncol = 2) +
   plot_layout(guides = "collect") +
-  plot_annotation(title = "Where the selected candidate really ranked",
-                   subtitle = "1 = the proxy picked the true best, 9 = it picked the true worst") &
+  plot_annotation(
+    title = "True rankings of selected candidates",
+    subtitle = "1 (best) - 9 (worst)"
+  ) &
   theme(legend.position = "bottom")
-
 ```
 
 ```{r mean-rank-plot, fig.height=9}
-summary_plot(selection_summary, "mean_rank", "mcse_rank",
-             "Mean true rank of the selected candidate",
-             "Mean rank (1 = best of 9)",
-             hline = (1 + length(model_levels)) / 2)
+sum_ns_plot(
+  selection_summary,
+  "mean_rank",
+  "mcse_rank",
+  "Mean true rank of the selected candidate",
+  "Mean rank (1 = best of 9)",
+  hline = (1 + length(model_levels)) / 2
+)
 ```
 
 The dashed line is the mean rank you would get by picking at random.
@@ -598,28 +803,41 @@ Regret is the excess true PEHE incurred by deploying the proxy's pick instead
 of the true best candidate. The solid reference line in each panel is the regret
 of picking at random; the dashed line is the best fixed choice.
 
-```{r regret-plot, fig.height=16}
+```{r regret-plot, fig.height=9}
 regret_refs <- list(
-  geom_hline(data = random_baseline,
-             aes(yintercept = random_regret, linetype = "Random pick"),
-             colour = "grey30"),
-  geom_hline(data = best_fixed,
-             aes(yintercept = best_fixed_regret, linetype = "Best fixed choice"),
-             colour = "grey30"),
+  geom_hline(
+    data = random_baseline,
+    aes(yintercept = random_regret, linetype = "Random pick"),
+    colour = "grey30"
+  ),
+  geom_hline(
+    data = best_fixed,
+    aes(yintercept = best_fixed_regret, linetype = "Best fixed choice"),
+    colour = "grey30"
+  ),
   scale_linetype_manual(
     name = "Reference",
     breaks = c("Random pick", "Best fixed choice"),
-    values = c("Random pick" = "solid", "Best fixed choice" = "dashed")),
+    values = c("Random pick" = "solid", "Best fixed choice" = "dashed")
+  ),
   guides(linetype = guide_legend(override.aes = list(colour = "grey30")))
 )
 
-regret_box <- box_plot(selection, "regret",
-                       "Regret: excess true PEHE from following the proxy",
-                       "Regret") +
+regret_box <- box_plot(
+  selection,
+  "regret",
+  "Regret: excess true PEHE from following the proxy",
+  "Regret"
+) +
   regret_refs
 
-regret_sum <- sum_ns_plot(selection_summary, "mean_regret", "mcse_regret",
-                           "Mean regret", "Mean regret") +
+regret_sum <- sum_ns_plot(
+  selection_summary,
+  "mean_regret",
+  "mcse_regret",
+  "Mean regret",
+  "Mean regret"
+) +
   regret_refs
 
 #(regret_box / regret_sum) + plot_layout(guides = "collect")
@@ -631,9 +849,14 @@ scenarios and sample sizes: excess PEHE as a fraction of the best achievable
 PEHE.
 
 ```{r rel-regret-plot, fig.height=9}
-summary_plot(selection_summary, "mean_rel_regret", "mcse_rel_regret",
-             "Mean relative regret",
-             "Excess PEHE as a fraction of the best achievable", hline = 0)
+sum_ns_plot(
+  selection_summary,
+  "mean_rel_regret",
+  "mcse_rel_regret",
+  "Mean relative regret",
+  "Excess PEHE as a fraction of the best achievable",
+  hline = 0
+)
 ```
 
 ## Which axis matters?
@@ -654,11 +877,19 @@ instead.
 
 ```{r axis-marginals}
 axis_long <- selection %>%
-  mutate(across(c(score_family, pi_regime, fold_type, pipeline), as.character)) %>%
-  pivot_longer(c(score_family, pi_regime, fold_type, pipeline),
-               names_to = "axis", values_to = "level") %>%
-  mutate(axis = factor(axis_labels[axis], levels = unname(axis_labels)),
-         level = factor(level_labels[level], levels = unname(level_labels)))
+  mutate(across(
+    c(score_family, pi_regime, fold_type, pipeline),
+    as.character
+  )) %>%
+  pivot_longer(
+    c(score_family, pi_regime, fold_type, pipeline),
+    names_to = "axis",
+    values_to = "level"
+  ) %>%
+  mutate(
+    axis = factor(axis_labels[axis], levels = unname(axis_labels)),
+    level = factor(level_labels[level], levels = unname(level_labels))
+  )
 
 axis_summary <- axis_long %>%
   group_by(scenario, n, axis, level) %>%
@@ -674,39 +905,64 @@ axis_summary <- axis_long %>%
 
 axis_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
   df <- df %>%
-    mutate(est = .data[[mean_col]],
-           lo = .data[[mean_col]] - .data[[mcse_col]],
-           hi = .data[[mean_col]] + .data[[mcse_col]])
+    mutate(
+      est = .data[[mean_col]],
+      lo = .data[[mean_col]] - .data[[mcse_col]],
+      hi = .data[[mean_col]] + .data[[mcse_col]]
+    )
   p <- ggplot(df, aes(x = level, y = est, colour = n, ymin = lo, ymax = hi))
-  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  if (!is.null(hline)) {
+    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  }
   p +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
-    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    geom_errorbar(
+      position = position_dodge(width = 0.5),
+      linewidth = 0.3,
+      width = 0.3
+    ) +
     facet_grid(rows = vars(scenario), cols = vars(axis), scales = "free_x") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
     theme_light() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(colour = "black")
+    ) +
     labs(title = title, y = ylab, x = NULL, colour = "n")
 }
 ```
 
 ```{r axis-accuracy-plot, fig.height=16}
-hit_axis <- axis_plot(axis_summary, "mean_hit", "mcse_hit",
-                      "Top-1 accuracy by design axis",
-                      "Mean top-1 accuracy", hline = 1 / length(model_levels))
+hit_axis <- axis_plot(
+  axis_summary,
+  "mean_hit",
+  "mcse_hit",
+  "Top-1 accuracy by design axis",
+  "Mean top-1 accuracy",
+  hline = 1 / length(model_levels)
+)
 
-kendall_axis <- axis_plot(axis_summary, "mean_kendall", "mcse_kendall",
-                          "Rank agreement by design axis",
-                          "Mean Kendall tau", hline = 1)
+kendall_axis <- axis_plot(
+  axis_summary,
+  "mean_kendall",
+  "mcse_kendall",
+  "Rank agreement by design axis",
+  "Mean Kendall tau",
+  hline = 1
+)
 
 (hit_axis / kendall_axis) + plot_layout(guides = "collect")
 ```
 
 ```{r axis-regret-plot, fig.height=9}
-axis_plot(axis_summary, "mean_regret", "mcse_regret",
-          "Regret by design axis", "Mean regret")
+axis_plot(
+  axis_summary,
+  "mean_regret",
+  "mcse_regret",
+  "Regret by design axis",
+  "Mean regret"
+)
 ```
 
 ## Do the proxies track PEHE in level, not just rank?
@@ -731,11 +987,13 @@ scale and the panels below should be read for *rank* agreement only.
 Centering within each run tells us how each candidate deviates from its run's
 average, in the proxy and in the truth.
 
-```{r calibration-plot, fig.height=16}
+```{r calibration-plot, fig.height=12}
 centred <- long_ok %>%
   group_by(scenario, n, run, proxy) %>%
-  mutate(score_c = score - mean(score),
-         pehe_c = true_pehe - mean(true_pehe)) %>%
+  mutate(
+    score_c = score - mean(score),
+    pehe_c = true_pehe - mean(true_pehe)
+  ) %>%
   ungroup()
 
 calibration_plot <- centred %>%
@@ -746,15 +1004,21 @@ calibration_plot <- centred %>%
   geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
   geom_point(size = 0.5, alpha = 0.15) +
   geom_smooth(method = "lm", se = FALSE, linewidth = 0.6) +
-  facet_wrap(~proxy, ncol = 2, scales = "free_y") +
+  facet_wrap(~proxy, ncol = 4, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_light() +
-  theme(strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black"),
-        aspect.ratio = 1) +
-  labs(title = "Proxy score against true PEHE, both centred within run",
-       subtitle = "Centring is required: the proxies estimate PEHE only up to a run-specific constant",
-       y = "Centred proxy score", x = "Centred true PEHE", colour = "Scenario")
+  theme(
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black"),
+    aspect.ratio = 1
+  ) +
+  labs(
+    title = "Proxy score against true PEHE, both centred within run",
+    subtitle = "Centring is required: the proxies estimate PEHE only up to a run-specific constant",
+    y = "Centred proxy score",
+    x = "Centred true PEHE",
+    colour = "Scenario"
+  )
 
 calibration_plot
 ```
@@ -766,24 +1030,56 @@ within each cell.
 
 ```{r headline-table}
 headline <- selection_summary %>%
-  select(scenario, n, proxy, runs, mean_kendall, mean_rho, mean_hit,
-         mean_rank, mean_regret, mean_rel_regret) %>%
+  select(
+    scenario,
+    n,
+    proxy,
+    runs,
+    mean_kendall,
+    mean_rho,
+    mean_hit,
+    mean_rank,
+    mean_regret,
+    mean_rel_regret
+  ) %>%
   arrange(scenario, n, mean_regret)
 
-kable(headline, digits = 4,
-      col.names = c("Scenario", "n", "Proxy", "Runs", "Mean Kendall tau",
-                    "Mean Spearman", "Top-1 accuracy", "Mean rank of pick",
-                    "Mean regret", "Mean relative regret"))
+kable(
+  headline,
+  digits = 4,
+  col.names = c(
+    "Scenario",
+    "n",
+    "Proxy",
+    "Runs",
+    "Mean Kendall tau",
+    "Mean Spearman",
+    "Top-1 accuracy",
+    "Mean rank of pick",
+    "Mean regret",
+    "Mean relative regret"
+  )
+)
 ```
 
 For reference, the two baselines the regret columns should be read against:
 
 ```{r baseline-table}
 baseline_tab <- random_baseline %>%
-  left_join(select(best_fixed, scenario, n, best_fixed_model, best_fixed_regret),
-            by = c("scenario", "n"))
+  left_join(
+    select(best_fixed, scenario, n, best_fixed_model, best_fixed_regret),
+    by = c("scenario", "n")
+  )
 
-kable(baseline_tab, digits = 4,
-      col.names = c("Scenario", "n", "Regret of a random pick",
-                    "Best fixed choice", "Its regret"))
+kable(
+  baseline_tab,
+  digits = 4,
+  col.names = c(
+    "Scenario",
+    "n",
+    "Regret of a random pick",
+    "Best fixed choice",
+    "Its regret"
+  )
+)
 ```
