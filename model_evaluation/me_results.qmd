@@ -115,6 +115,9 @@ data leakage and more samples for AutoML/XGB accuracy.
 # paths
 path <- here()
 res_path <- file.path(dirname(path), "results", "model_evaluation")
+figpath <- here("../results/all_figures/model_evaluation")
+dir.create(figpath, showWarnings = F, recursive = T)
+
 
 metrics <- readRDS(file.path(res_path, "me_metrics.RDS"))
 # add for now: remove calibration scores as they're not finished
@@ -717,37 +720,43 @@ sum_ns_plot(
 Top-1 accuracy alone is harsh, especially when models have similar PEHEs. Let's 
 look at true rankings across top selections.
 
-```{r rank-dist-plot, fig.height=12}
-# strip the pipeline component out of the proxy label now that pipeline is a
-# facet column, not a bar-by-bar distinction — label_or_id()/level_labels
-# come from the score-column parsing chunk above; selection already carries
-# score_family/pi_regime/k_groups/fold_type per row so no re-parsing needed
+```{r rank-dist-plot, fig.height=10}
+# strip the score_family component out of the proxy label now that
+# score_family is a facet column, not a bar-by-bar distinction — pipeline
+# moves back into the label since it's no longer the facet. label_or_id()/
+# level_labels come from the score-column parsing chunk above; selection
+# already carries score_family/pi_regime/k_groups/fold_type/pipeline per row
+# so no re-parsing needed
 rank_dist <- selection %>%
   mutate(
     proxy_sub = paste(
       ifelse(
         is.na(k_groups),
-        label_or_id(score_family),
-        paste0(label_or_id(score_family), " K=", k_groups)
+        ifelse(pi_regime == "fixed", "[pi=.5]", "[pi-hat]"),
+        paste0(
+          "K=", k_groups, " ",
+          ifelse(pi_regime == "fixed", "[pi=.5]", "[pi-hat]")
+        )
       ),
-      ifelse(pi_regime == "fixed", "[pi=.5]", "[pi-hat]"),
       label_or_id(fold_type),
+      label_or_id(pipeline),
       sep = " / "
     )
   ) %>%
-  count(scenario, n, pipeline, proxy_sub, pick_rank, name = "runs") %>%
-  group_by(scenario, n, pipeline, proxy_sub) %>%
+  count(scenario, n, score_family, proxy_sub, pick_rank, name = "runs") %>%
+  group_by(scenario, n, score_family, proxy_sub) %>%
   mutate(prop = runs / sum(runs)) %>%
   ungroup()
 
 # viridis rather than the house qualitative palette: pick_rank is ordinal, and
 # rcartocolor::Safe would give 9 unordered hues to an ordered scale
 #
-# One plot per scenario; within each, rows = n, cols = pipeline. scales/space
-# = "free_x" so a panel only reserves x-slots for the proxy_sub combos that
-# actually occur in it, instead of the union across every panel - that union
-# (all fold regimes x families x pi-regimes, most of them belonging to the
-# other pipeline) was the source of the blank space.
+# One plot per scenario; within each, rows = n, cols = score_family. scales/
+# space = "free_x" so a panel only reserves x-slots for the proxy_sub combos
+# that actually occur in it, instead of the union across every panel - that
+# union (all fold regimes x pi-regimes x pipelines, most of them belonging to
+# other score families, e.g. K= variants only exist under "cal") was the
+# source of the blank space.
 rank_plots <- rank_dist %>%
   split(.$scenario) %>%
   imap(function(df, scen) {
@@ -755,12 +764,12 @@ rank_plots <- rank_dist %>%
       geom_col() +
       facet_grid(
         rows = vars(n),
-        cols = vars(pipeline),
+        cols = vars(score_family),
         scales = "free_x",
         space = "free_x",
-        labeller = labeller(n = label_both)
+        labeller = labeller(n = label_both, score_family = label_or_id)
       ) +
-      scale_fill_viridis_d(direction = -1) +
+      scale_fill_viridis_d(direction = -1, guide = guide_legend(ncol = 9)) +
       theme_light() +
       theme(
         axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
@@ -775,13 +784,17 @@ rank_plots <- rank_dist %>%
       )
   })
 
-wrap_plots(rank_plots, ncol = 2) +
+ranks_all <- wrap_plots(rank_plots, ncol = 2) +
   plot_layout(guides = "collect") +
   plot_annotation(
     title = "True rankings of selected candidates",
     subtitle = "1 (best) - 9 (worst)"
   ) &
   theme(legend.position = "bottom")
+
+ranks_all
+
+ggsave("me_rankings.png", ranks_all, path = figpath, height = 25, width = 25, units = "cm")
 ```
 
 ```{r mean-rank-plot, fig.height=9}
