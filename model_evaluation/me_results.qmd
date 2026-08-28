@@ -123,8 +123,8 @@ metrics <- readRDS(file.path(res_path, "me_metrics.RDS"))
 # add for now: remove calibration scores as they're not finished
 # also remove sample size 1000 because it's too much info
 metrics <- metrics %>%
-  select(!all_of(matches("calq|cal05q"))) %>%
-  filter(n != 1000)
+  select(!all_of(matches("calq|cal05q"))) #%>%
+  #filter(n != 1000)
 
 # the proxy columns are whatever me_metrics.R produced that isn't a key or the
 # truth - derived rather than hardcoded so that re-adding a fold regime (the
@@ -218,8 +218,8 @@ level_labels <- c(
   split = "80:20",
   xgb = "XGBoost",
   automl = "AutoML",
-  estimated = "pi estimated",
-  fixed = "pi = 0.5"
+  estimated = "pi-hat",
+  fixed = "pi-fixed"
 )
 
 # Display labels are BUILT from the parsed axes rather than typed out: the main
@@ -241,7 +241,7 @@ proxy_label_of <- function(parsed) {
       label_or_id(parsed$score_family),
       paste0(label_or_id(parsed$score_family), " K=", parsed$k_groups)
     ),
-    pi_label(parsed$pi_regime),
+    label_or_id(parsed$pi_regime),
     label_or_id(parsed$fold_type),
     label_or_id(parsed$pipeline),
     sep = " / "
@@ -738,8 +738,8 @@ rank_dist <- selection %>%
     proxy_sub = paste(
       ifelse(
         is.na(k_groups),
-        pi_label(pi_regime),
-        paste0("K=", k_groups, " ", pi_label(pi_regime))
+        label_or_id(pi_regime),
+        paste0("K=", k_groups, " ", label_or_id(pi_regime))
       ),
       label_or_id(fold_type),
       label_or_id(pipeline),
@@ -780,7 +780,7 @@ rank_plots <- rank_dist %>%
         strip.text = element_text(colour = "black")
       ) +
       labs(
-        title = scen,
+        title = paste0(scen, " scenario"),
         y = "Proportion of runs",
         x = "Proxy score",
         fill = "True rank of pick"
@@ -848,7 +848,7 @@ regret_box <- box_plot(
   regret_refs
 
 regret_sum <- sum_ns_plot(
-  selection_summary,
+  selection_summary |> filter(!grepl("05", score_type)),
   "mean_regret",
   "mcse_regret",
   "Mean regret",
@@ -858,6 +858,7 @@ regret_sum <- sum_ns_plot(
 
 #(regret_box / regret_sum) + plot_layout(guides = "collect")
 regret_sum
+ggsave("me_regret.png", regret_sum, path = figpath, height = 7, width = 10, units = "in")
 ```
 
 Relative regret puts the same quantity on a scale that is comparable across
@@ -982,6 +983,7 @@ axis_plot(
   "Mean rank (1 = best of 9)",
   hline = (1 + length(model_levels)) / 2
 )
+
 ```
 
 The dashed line is the mean rank you would get by picking at random.
@@ -994,6 +996,7 @@ axis_plot(
   "Regret by design axis",
   "Mean regret"
 )
+ggsave("me_axis_regret.png", path = figpath, height = 9, width = 10, units = "in")
 ```
 
 ## Do the proxies track PEHE in level, not just rank?
