@@ -112,6 +112,11 @@ path <- here()
 res_path <- file.path(dirname(path), "results", "model_evaluation")
 
 metrics <- readRDS(file.path(res_path, "me_metrics.RDS"))
+# add for now: remove calibration scores as they're not finished
+# also remove sample size 1000 because it's too much info 
+metrics <- metrics %>%
+  select(!all_of(matches("calq|cal05q"))) %>%
+  filter(n!=1000)
 
 # the proxy columns are whatever me_metrics.R produced that isn't a key or the
 # truth - derived rather than hardcoded so that re-adding a fold regime (the
@@ -361,7 +366,7 @@ sum_ns_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
   p +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
-    facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
+    facet_grid(rows = vars(n), cols = vars(scenario), scales = "free_y") +
     scale_colour_paletteer_d("rcartocolor::Safe",
                              labels = c(dr = "DR risk", infl = "Influence")) +
     theme_light() +
@@ -500,7 +505,7 @@ rho_box <- box_plot(selection, "rho",
                     "Spearman correlation with true PEHE",
                     "Spearman correlation", hline = NULL)
 
-rho_sum <- summary_plot(selection_summary, "mean_rho", "mcse_rho",
+rho_sum <- sum_ns_plot(selection_summary, "mean_rho", "mcse_rho",
                         "Mean Spearman correlation with true PEHE",
                         "Mean Spearman correlation", hline = 0)
 # boxplot is quite hard to read just look at summary
@@ -509,7 +514,7 @@ rho_sum
 ```
 
 ```{r kendall-plot, fig.height=9}
-summary_plot(selection_summary, "mean_kendall", "mcse_kendall",
+sum_ns_plot(selection_summary, "mean_kendall", "mcse_kendall",
              "Mean Kendall correlation with true PEHE",
              "Mean Kendall tau", hline = 0)
 ```
@@ -520,7 +525,7 @@ The proportion of times a method selects the best performing model. Reference li
 is the accuracy for picking the models at random.
 
 ```{r hit-plot, fig.height=9}
-summary_plot(selection_summary, "mean_hit", "mcse_hit",
+sum_ns_plot(selection_summary, "mean_hit", "mcse_hit",
              "Top-1 selection accuracy",
              "Proportion of runs the proxy picks the true best",
              hline = 1 / length(model_levels))
@@ -570,20 +575,21 @@ rank_plots <- rank_dist %>%
       theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
             strip.background = element_rect(fill = "white"),
             strip.text = element_text(colour = "black")) +
-      labs(title = paste("Where the selected candidate really ranked —", scen),
-           subtitle = "1 = the proxy picked the true best, 9 = it picked the true worst",
+      labs(title = scen,
            y = "Proportion of runs", x = "Proxy score",
            fill = "True rank of pick")
   })
 
 wrap_plots(rank_plots, ncol = 2) +
-  plot_layout(guides = "collect") &
+  plot_layout(guides = "collect") +
+  plot_annotation(title = "True rankings of selected candidates",
+                   subtitle = "1 (best) - 9 (worst)") &
   theme(legend.position = "bottom")
 
 ```
 
 ```{r mean-rank-plot, fig.height=9}
-summary_plot(selection_summary, "mean_rank", "mcse_rank",
+sum_ns_plot(selection_summary, "mean_rank", "mcse_rank",
              "Mean true rank of the selected candidate",
              "Mean rank (1 = best of 9)",
              hline = (1 + length(model_levels)) / 2)
@@ -597,7 +603,7 @@ Regret is the excess true PEHE incurred by deploying the proxy's pick instead
 of the true best candidate. The solid reference line in each panel is the regret
 of picking at random; the dashed line is the best fixed choice.
 
-```{r regret-plot, fig.height=16}
+```{r regret-plot, fig.height=9}
 regret_refs <- list(
   geom_hline(data = random_baseline,
              aes(yintercept = random_regret, linetype = "Random pick"),
@@ -630,7 +636,7 @@ scenarios and sample sizes: excess PEHE as a fraction of the best achievable
 PEHE.
 
 ```{r rel-regret-plot, fig.height=9}
-summary_plot(selection_summary, "mean_rel_regret", "mcse_rel_regret",
+sum_ns_plot(selection_summary, "mean_rel_regret", "mcse_rel_regret",
              "Mean relative regret",
              "Excess PEHE as a fraction of the best achievable", hline = 0)
 ```
@@ -730,7 +736,7 @@ scale and the panels below should be read for *rank* agreement only.
 Centering within each run tells us how each candidate deviates from its run's
 average, in the proxy and in the truth.
 
-```{r calibration-plot, fig.height=16}
+```{r calibration-plot, fig.height=12}
 centred <- long_ok %>%
   group_by(scenario, n, run, proxy) %>%
   mutate(score_c = score - mean(score),
@@ -745,7 +751,7 @@ calibration_plot <- centred %>%
   geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
   geom_point(size = 0.5, alpha = 0.15) +
   geom_smooth(method = "lm", se = FALSE, linewidth = 0.6) +
-  facet_wrap(~proxy, ncol = 2, scales = "free_y") +
+  facet_wrap(~proxy, ncol = 4, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_light() +
   theme(strip.background = element_rect(fill = "white"),
