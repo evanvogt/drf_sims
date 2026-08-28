@@ -570,14 +570,15 @@ rank_plots <- rank_dist %>%
       theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
             strip.background = element_rect(fill = "white"),
             strip.text = element_text(colour = "black")) +
-      labs(title = paste("Where the selected candidate really ranked —", scen),
-           subtitle = "1 = the proxy picked the true best, 9 = it picked the true worst",
+      labs(title = scen,
            y = "Proportion of runs", x = "Proxy score",
            fill = "True rank of pick")
   })
 
 wrap_plots(rank_plots, ncol = 2) +
-  plot_layout(guides = "collect") &
+  plot_layout(guides = "collect") +
+  plot_annotation(title = "Where the selected candidate really ranked",
+                   subtitle = "1 = the proxy picked the true best, 9 = it picked the true worst") &
   theme(legend.position = "bottom")
 
 ```
