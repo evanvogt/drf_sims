@@ -228,6 +228,12 @@ level_labels <- c(
 # time a score family is added.
 label_or_id <- function(x) ifelse(is.na(level_labels[x]), x, level_labels[x])
 
+# the single place pi_regime gets turned into display text - everywhere else
+# that wants a bracketed propensity tag calls this instead of re-deriving its
+# own "[pi=.5]"/"[pi-hat]" strings, which used to drift from level_labels'
+# "pi = 0.5"/"pi estimated" and from each other
+pi_label <- function(x) paste0("[", label_or_id(x), "]")
+
 proxy_label_of <- function(parsed) {
   paste(
     ifelse(
@@ -235,7 +241,7 @@ proxy_label_of <- function(parsed) {
       label_or_id(parsed$score_family),
       paste0(label_or_id(parsed$score_family), " K=", parsed$k_groups)
     ),
-    ifelse(parsed$pi_regime == "fixed", "[pi=.5]", "[pi-hat]"),
+    pi_label(parsed$pi_regime),
     label_or_id(parsed$fold_type),
     label_or_id(parsed$pipeline),
     sep = " / "
@@ -732,11 +738,8 @@ rank_dist <- selection %>%
     proxy_sub = paste(
       ifelse(
         is.na(k_groups),
-        ifelse(pi_regime == "fixed", "[pi=.5]", "[pi-hat]"),
-        paste0(
-          "K=", k_groups, " ",
-          ifelse(pi_regime == "fixed", "[pi=.5]", "[pi-hat]")
-        )
+        pi_label(pi_regime),
+        paste0("K=", k_groups, " ", pi_label(pi_regime))
       ),
       label_or_id(fold_type),
       label_or_id(pipeline),
