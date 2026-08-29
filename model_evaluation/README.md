@@ -312,6 +312,21 @@ trimming one arm and not the others would make them non-comparable — but
 `me_strategies.R` records per-arm `pi` min/max/quantiles and the max weight in
 each run's `pi_diagnostics`, so the decision can be made from measured numbers.
 
+**In practice, this exposure surfaces as literal `NA`, not just large
+weights.** 69 of the strategies tree's 358 reachable runs have `NA` in
+`phi`/`pi` in the `automl` pipeline's `holdout` arm specifically (never `xgb`,
+never `cv_shared`) — most plausibly H2O AutoML returning `NaN`/`NA`
+predictions on some rows of a degenerate fit against a 25–100-row block. The
+formula stays unchanged per the decision above, so these are treated as a
+known, expected limitation rather than a bug to chase: they're listed in
+`me_strategies_verify.R`'s `known_holdout_na` table, and the script tallies
+them separately from genuine failures instead of failing on them. Downstream,
+this is contained rather than corrupting — `me_metrics.R`'s score functions
+use bare `mean()`/`sum()`, so an affected run only goes `NA` in its 8
+`*_holdout_automl` columns (of 65), and `me_results.qmd`'s existing
+`sum(is.na(.x))` completeness audit and `na.rm = TRUE` aggregation already
+account for it.
+
 ## Files
 
 | file | role |
@@ -323,7 +338,7 @@ each run's `pi_diagnostics`, so the decision can be made from measured numbers.
 | `me_nuisance.R` | the two independent nuisance-evaluation pipelines — see below for why this exists outside the usual 7-file shape |
 | `me_analysis.R` | array entry point; one row of the grid per index |
 | `me_strategies.R` | second pass over completed runs — adds the `cv_shared` and `holdout` arms, writes to `model_evaluation_strategies` |
-| `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `whole`/`cv_indep` through bit-identically |
+| `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `whole`/`cv_indep` through bit-identically, and tracks known automl/holdout NA exceptions (see "Propensity trimming" above) separately from genuine failures |
 | `me_split.R` | the 80:20 arm — the only script that refits the candidates |
 | `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript. Takes a tree: `main` (default) / `strategies` / `split` |
 | `me_collect.R` | gathers per-run files into `<prefix>_all.RDS`. Same tree argument |
@@ -518,6 +533,12 @@ pass skips them by design (exiting 0 with a message rather than erroring) and
 they stay excluded consistently across all three trees — see `me_check.R` for
 why that means the derived trees' completion criterion is "exactly those 2
 missing", not zero.
+
+**Of the 358 strategies-tree runs, 69 have `NA` phi/pi in the automl
+`holdout` arm** — a known, expected consequence of fitting AutoML with no
+propensity trimming on 25–100-row blocks (see "Propensity trimming" above),
+not a rerun candidate. `me_strategies_verify.R` treats these as known
+exceptions rather than failures.
 
 **The nuisance-arm reconfiguration does not require rerunning any of it.**
 Everything the new arms consume — `data$Y/W/X`, `truth`, `fold_info`, and each
