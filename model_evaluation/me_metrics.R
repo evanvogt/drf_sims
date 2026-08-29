@@ -77,7 +77,7 @@ calc_infl_score <- function(tau_hat, tau, pi, Y, W) {
   A <- W - pi
   C <- pi * (1 - pi)
   B <- 2 * W * A / C
-  diff_tau <- tau_hat - tau
+  diff_tau <- tau - tau_hat
 
   pehe_infl <- (1 - B) * tau^2 + B * Y * diff_tau - A * diff_tau^2 + tau_hat^2
 

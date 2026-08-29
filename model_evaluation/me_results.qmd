@@ -141,7 +141,7 @@ metrics <- readRDS(file.path(res_path, "me_strat_metrics.RDS"))
 # also remove sample size 1000 because it's too much info
 metrics <- metrics %>%
   select(all_of(key_cols), true_pehe, matches("_cv_shared_")) %>%
-  select(!all_of(matches("calq|cal05q"))) #%>%
+  select(!all_of(matches("calq5|cal05q5"))) #%>%
   #filter(n != 1000)
 
 # the proxy columns are whatever me_metrics.R produced that isn't a key or the
