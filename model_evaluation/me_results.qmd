@@ -82,43 +82,23 @@ used only to score the candidates — never to fit them. Four axes:
 | axis | levels |
 |---|---|
 | pipeline | **XGBoost** (36-combination CV grid) / **H2O AutoML** (up to 20 auto-tuned models) |
-| fold regime | **cv_shared** only (see below) |
-| score family | **infl** — influence-corrected PEHE proxy (`calc_infl_score`) / **dr** — DR risk, MSE against the AIPW pseudo-outcome `phi` (`calc_dr_risk`) / **cal** — DR calibration (`calc_cal_score`), at K = 5 and K = 10 quantile groups |
+| fold regime | **CV** (the candidate's own single-crossfit folds, `fold_info`, reused for the scoring nuisance) / **holdout** (nuisance fit only within the candidate's held-out fold) / **whole** (resubstitution — nuisance fit and predicted on the entire sample) |
+| score family | **infl** — influence-corrected PEHE proxy (`calc_infl_score`) / **dr** — DR risk, MSE against the AIPW pseudo-outcome `phi` (`calc_dr_risk`) |
 | propensity | **estimated** (`pi` from the pipeline) / **fixed at 0.5** (score names carrying `05`) |
 
 Every one of them, and `true_pehe` itself, is a **loss: lower is better**.
 
-**The calibration score** splits the evaluation rows into K quantile groups of
-the *candidate's own* `tau_hat`, then compares the group average treatment
-effect the candidate implies against the one the DR scores imply:
-`M = Σ_k |G_k| · |GATE_k^hat − GATE_k^DR|`. It is weighted by group *counts*,
-so it scales with `n` — constant within a run, so it moves no ranking here, but
-its raw magnitude is not comparable across sample sizes.
-
-Unlike `infl` and `dr`, **the calibration score is not an estimate of PEHE**,
-and it is worth being explicit about what it cannot see. It measures
-calibration, not discrimination: a candidate that predicts the *constant* ATE
-for every unit has arbitrary quantile groups, so each group's `GATE^DR` is
-roughly the overall mean and every discrepancy is near zero — a near-perfect
-calibration score, at whatever PEHE the true heterogeneity implies. So expect
-the shrunk-to-a-constant candidates (`net2` especially, and everything in
-scenario 1) to do *well* here, and read this score as a complement to the PEHE
-proxies rather than a substitute. Whether that failure mode actually bites at
-these sample sizes is one of the things the study now measures.
-
-**This report shows the `cv_shared` arm only** — the scoring nuisance is fit
-using the same fold assignment (`fold_info`) the 9 candidates were single-
+**This report keeps three of the four nuisance-fitting arms** `me_strategies.R`/
+`me_config.R`'s `NUISANCE_ARMS` computes: **CV** (`cv_shared` — the scoring
+nuisance is fit using the same fold assignment the 9 candidates were single-
 crossfit on, so model fitting and nuisance estimation always see identical CV
-splits. `me_strategies.R`/`me_config.R`'s `NUISANCE_ARMS` also computes three
-other arms, deliberately excluded here: `cv_indep` (a second, independently
-drawn fold assignment for the nuisance — ~90% training-row overlap with the
-candidate's own folds rather than 100%), `holdout` (the nuisance fit only
-within the candidate's held-out fold), and `whole` (resubstitution — nuisance
-fit and predicted on the entire sample, so it sees the same rows the
-candidate's `tau_hat` was fit on). Those exist to measure whether the
-nuisance-fit strategy itself — not just the candidate model — affects proxy-
-score quality; see `model_evaluation/README.md` and `me_config.R`'s
-`NUISANCE_ARMS` comment for that comparison.
+splits), **holdout**, and **whole**. `cv_indep` (a second, independently drawn
+fold assignment for the nuisance — ~90% training-row overlap with the
+candidate's own folds rather than 100%) is discarded here — it exists to
+measure whether the nuisance-fit strategy itself affects proxy-score quality;
+see `model_evaluation/README.md` and `me_config.R`'s `NUISANCE_ARMS` comment
+for that comparison. Calibration scores (`cal`) are also excluded from this
+report entirely.
 
 ```{r data}
 # paths
@@ -133,15 +113,14 @@ dir.create(figpath, showWarnings = F, recursive = T)
 key_cols <- c("scenario", "n", "run", "model")
 
 metrics <- readRDS(file.path(res_path, "me_strat_metrics.RDS"))
-# Keep only the cv_shared columns: the candidate's own fold assignment is
-# reused for the scoring nuisance, so model fitting and nuisance estimation
-# see identical CV splits. This drops cv_indep (independent fold draw),
-# holdout, and whole entirely - see the Design section above.
-# add for now: remove calibration scores as they're not finished
+# Keep only the CV (cv_shared), holdout, and whole columns - cv_indep
+# (independent fold draw) is discarded entirely, see the Design section
+# above. Also drop every calibration (cal*/cal05*) column: they're not an
+# estimate of PEHE and are out of scope for this report.
 # also remove sample size 1000 because it's too much info
 metrics <- metrics %>%
-  select(all_of(key_cols), true_pehe, matches("_cv_shared_|_cv_indep_|_whole_")) %>%
-  select(!all_of(matches("calq5|cal05q5"))) #%>%
+  select(all_of(key_cols), true_pehe, matches("_cv_shared_|_holdout_|_whole_")) %>%
+  select(!matches("^cal")) #%>%
   #filter(n != 1000)
 
 # the proxy columns are whatever me_metrics.R produced that isn't a key or the
@@ -185,9 +164,10 @@ family_labels <- c(
 #   calq5_whole_xgb       cal05q10_holdout_automl
 #
 # The fold type is EVERYTHING BETWEEN the first and last token, not just the
-# first of them - the strategies tree's arms are cv_indep, cv_shared and
-# holdout, so a regex that takes one token reads `dr_cv_shared_xgb` as fold
-# "cv" and silently merges two arms that the whole study exists to separate.
+# first of them - the arms kept in this report are cv_shared, holdout and
+# whole (cv_indep is discarded upstream, see the Design section above), so a
+# regex that takes one token would read `dr_cv_shared_xgb` as fold "cv" and
+# silently merge it with `dr_cv_indep_xgb` had that arm still been present.
 parse_proxy <- function(proxy_id) {
   parts <- strsplit(proxy_id, "_", fixed = TRUE)
   tibble(
@@ -226,10 +206,8 @@ axis_labels <- c(
 level_labels <- c(
   infl = "Influence",
   dr = "DR risk",
-  cal = "Calibration",
   cv = "CV",
-  cv_indep = "CV (indep.)",
-  cv_shared = "CV (shared)",
+  cv_shared = "CV",
   holdout = "Holdout",
   whole = "Whole",
   split = "80:20",
@@ -743,79 +721,52 @@ sum_ns_plot(
 Top-1 accuracy alone is harsh, especially when models have similar PEHEs. Let's 
 look at true rankings across top selections.
 
-```{r rank-dist-plot, fig.height=10}
-# strip the score_family component out of the proxy label now that
-# score_family is a facet column, not a bar-by-bar distinction — pipeline
-# moves back into the label since it's no longer the facet. label_or_id()/
-# level_labels come from the score-column parsing chunk above; selection
-# already carries score_family/pi_regime/k_groups/fold_type/pipeline per row
-# so no re-parsing needed
+```{r rank-dist-plot, fig.height=9}
+# Only DR risk / influence at fixed pi (score_family is already just infl/dr
+# post the cal-column drop above; pi_regime is filtered to "fixed" and left
+# out of the label since it's now constant). label_or_id()/level_labels come
+# from the score-column parsing chunk above; selection already carries
+# score_family/pi_regime/fold_type/pipeline per row so no re-parsing needed.
 rank_dist <- selection %>%
-  filter(score_family != "cal") %>%
+  filter(pi_regime == "fixed") %>%
   mutate(
     proxy_sub = paste(
-      ifelse(
-        is.na(k_groups),
-        label_or_id(pi_regime),
-        paste0("K=", k_groups, " ", label_or_id(pi_regime))
-      ),
+      label_or_id(score_family),
       label_or_id(fold_type),
       label_or_id(pipeline),
       sep = " / "
     )
   ) %>%
-  count(scenario, n, score_family, proxy_sub, pick_rank, name = "runs") %>%
-  group_by(scenario, n, score_family, proxy_sub) %>%
+  count(scenario, n, proxy_sub, pick_rank, name = "runs") %>%
+  group_by(scenario, n, proxy_sub) %>%
   mutate(prop = runs / sum(runs)) %>%
   ungroup()
 
 # viridis rather than the house qualitative palette: pick_rank is ordinal, and
-# rcartocolor::Safe would give 9 unordered hues to an ordered scale
-#
-# One plot per scenario; within each, rows = n, cols = score_family. scales/
-# space = "free_x" so a panel only reserves x-slots for the proxy_sub combos
-# that actually occur in it, instead of the union across every panel - that
-# union (all fold regimes x pi-regimes x pipelines, most of them belonging to
-# other score families, e.g. K= variants only exist under "cal") was the
-# source of the blank space.
-rank_plots <- rank_dist %>%
-  split(.$scenario) %>%
-  imap(function(df, scen) {
-    ggplot(df, aes(x = proxy_sub, y = prop, fill = factor(pick_rank))) +
-      geom_col() +
-      facet_grid(
-        rows = vars(n),
-        cols = vars(score_family),
-        scales = "free_x",
-        space = "free_x",
-        labeller = labeller(n = label_both, score_family = label_or_id)
-      ) +
-      scale_fill_viridis_d(direction = -1, guide = guide_legend(ncol = 9)) +
-      theme_light() +
-      theme(
-        axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")
-      ) +
-      labs(
-        title = paste0(scen, " scenario"),
-        y = "Proportion of runs",
-        x = "Proxy score",
-        fill = "True rank of pick"
-      )
-  })
-
-ranks_all <- wrap_plots(rank_plots, ncol = 2) +
-  plot_layout(guides = "collect") +
-  plot_annotation(
+# rcartocolor::Safe would give 9 unordered hues to an ordered scale. Single
+# plot faceted by n (rows) x scenario (cols), matching sum_ns_plot() above.
+rank_plot <- rank_dist %>%
+  ggplot(aes(x = proxy_sub, y = prop, fill = factor(pick_rank))) +
+  geom_col() +
+  facet_grid(rows = vars(n), cols = vars(scenario)) +
+  scale_fill_viridis_d(direction = -1) +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
     title = "True rankings of selected candidates",
-    subtitle = "1 (best) - 9 (worst)"
-  ) &
-  theme(legend.position = "bottom")
+    subtitle = "1 (best) - 9 (worst), fixed-pi DR risk / influence scores only",
+    y = "Proportion of runs",
+    x = "Proxy score",
+    fill = "True rank of pick"
+  )
 
-ranks_all
+rank_plot
 
-ggsave("me_rankings.png", ranks_all, path = figpath, height = 25, width = 25, units = "cm")
+ggsave("me_rankings.png", rank_plot, path = figpath, height = 9, width = 12, units = "in")
 ```
 
 ```{r mean-rank-plot, fig.height=9}
@@ -898,17 +849,13 @@ sum_ns_plot(
 
 The proxies are a factorial design, not a flat list. Reading a winner off the
 full proxy axis conflates the questions it actually answers — influence-
-corrected versus DR risk versus calibration, an estimated propensity versus the
-true 0.5, honest crossfitting versus resubstitution, XGBoost versus AutoML — so
-here each is marginalised over the others.
+corrected versus DR risk, an estimated propensity versus the true 0.5, honest
+crossfitting versus resubstitution, XGBoost versus AutoML — so here each is
+marginalised over the others.
 
 `score_family` is used rather than `score_type` because the latter is the
-composite token (`cal05q10` is *calibration*, *fixed pi*, *K=10* in one
-string); the propensity is pulled out as its own axis. `k_groups` is
-deliberately **not** marginalised here: it is defined only for the calibration
-columns, so a panel averaging over it would put two thirds of the rows in an
-"undefined" level. Compare K = 5 against K = 10 within the calibration family
-instead.
+composite token (`dr05` is *DR risk*, *fixed pi* in one string); the
+propensity is pulled out as its own axis.
 
 ```{r axis-marginals}
 axis_long <- selection %>%
@@ -1019,9 +966,6 @@ ggsave("me_axis_regret.png", path = figpath, height = 9, width = 10, units = "in
 
 ## Do the proxies track PEHE in level, not just rank?
 
-(*"Calibration" here means tracking PEHE in level — not the `cal*` score
-family, which is a different question entirely.*)
-
 Ranking is all selection needs, but a proxy that tracks PEHE in *level* would
 also tell you how good the winner is. The scores cannot be compared to PEHE
 raw: `calc_infl_score` and `calc_dr_risk` estimate PEHE only up to a
@@ -1031,10 +975,6 @@ carries `E[tau^2]` terms that depend on the realised sample, not on the
 candidate being scored. Pooling raw scores across runs would produce a
 correlation driven entirely by that offset and would say nothing about the
 candidates.
-
-The `cal*` columns are a different matter again: they are not an estimate of
-PEHE up to a constant or otherwise, so centring does not put them on PEHE's
-scale and the panels below should be read for *rank* agreement only.
 
 Centering within each run tells us how each candidate deviates from its run's
 average, in the proxy and in the truth.
