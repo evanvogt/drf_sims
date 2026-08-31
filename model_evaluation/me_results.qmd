@@ -140,7 +140,7 @@ metrics <- readRDS(file.path(res_path, "me_strat_metrics.RDS"))
 # add for now: remove calibration scores as they're not finished
 # also remove sample size 1000 because it's too much info
 metrics <- metrics %>%
-  select(all_of(key_cols), true_pehe, matches("_cv_shared_")) %>%
+  select(all_of(key_cols), true_pehe, matches("_cv_shared_|_cv_indep_|_whole_")) %>%
   select(!all_of(matches("calq5|cal05q5"))) #%>%
   #filter(n != 1000)
 
@@ -751,6 +751,7 @@ look at true rankings across top selections.
 # already carries score_family/pi_regime/k_groups/fold_type/pipeline per row
 # so no re-parsing needed
 rank_dist <- selection %>%
+  filter(score_family != "cal") %>%
   mutate(
     proxy_sub = paste(
       ifelse(
