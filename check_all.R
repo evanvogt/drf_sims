@@ -35,18 +35,6 @@ library(dplyr)
 source(here("R", "pipeline.R"))
 source(here("R", "study_registry.R"))
 
-#' Load a study's `study_config()` object into its own environment, so
-#' sourcing 14 config files in one script run can't leak variables between
-#' them (some configs define extra top-level constants alongside `study`).
-load_study <- function(config_path, config_var) {
-  env <- new.env()
-  source(here(config_path), local = env)
-  if (!exists(config_var, envir = env, inherits = FALSE)) {
-    stop("'", config_var, "' not found after sourcing ", config_path)
-  }
-  get(config_var, envir = env)
-}
-
 #' Count res_sim_*.RDS files actually present for a study, without touching
 #' failed_ids.txt (that's what check_failed(..., write = TRUE) is for).
 count_found <- function(study) {
