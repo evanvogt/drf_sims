@@ -15,11 +15,11 @@ study <- study_config(
     scenario = 1:7,
     censoring = c(TRUE, FALSE),
     n = c(500),
-    run = 1:100,
+    run = 1:500,
     stringsAsFactors = FALSE
   ),
   path_cols   = c("scenario", "n", "censoring"),
   path_prefix = c(scenario = "scenario_", censoring = "censor_"),
-  n_sims      = 100,
+  n_sims      = 500,
   failed_file = here("competing_risk", "jobscripts", "failed_ids.txt")
 )

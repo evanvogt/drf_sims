@@ -10,10 +10,24 @@ shared ones.
 | scenarios | 1–7 |
 | n | 500 |
 | censoring | TRUE, FALSE |
-| runs | 100 |
-| array | **1,400 jobs** |
+| runs | 500 |
+| array | **7,000 jobs** |
 | horizon | 28 |
 | results | `../results/competing_risk/scenario_<k>/<n>/censor_<TRUE\|FALSE>/` |
+
+## Without the queue
+
+Runs 101–500 (the grid was widened from 100 to 500 runs per combo) can be
+produced inside one interactive RStudio session instead of resubmitting the
+array: request an RStudio session with 8 cores and 64gb, then
+
+```r
+source(here::here("competing_risk", "surv_run.R"))
+```
+
+Same `surv_analysis.R`, same results, 4 rows at a time (2 cores each, matching
+`surv_1.sh`'s `ncpus=2`). See `surv_run.R`'s header for why 4 and not 8, and
+`validation/continuous/cts_val_run.R` for the pattern this follows.
 
 ## Design
 
@@ -388,7 +402,8 @@ Rscript R/regression_check.R baseline competing_risk
 ## Files
 
 `surv_config.R` (grid), `surv_dgm.R`, `surv_models.R`, `surv_analysis.R`,
-`surv_check.R`, `surv_collect.R`, `surv_metrics.R`.
+`surv_run.R` (the no-queue RStudio-session alternative, see "Without the
+queue" above), `surv_check.R`, `surv_collect.R`, `surv_metrics.R`.
 `scratch_dgm_params_check.R` is exploratory.
 `surv_dr_split_na_diagnose.R` reproduces and traces the split-DR-learner
 NA bug documented in "Known issues" above.
