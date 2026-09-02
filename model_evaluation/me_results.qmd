@@ -204,9 +204,8 @@ axis_labels <- c(
 )
 
 level_labels <- c(
-  infl = "Influence",
-  dr = "DR risk",
-  cv = "CV",
+  infl = "IF",
+  dr = "DR",
   cv_shared = "CV",
   holdout = "Holdout",
   whole = "Whole",

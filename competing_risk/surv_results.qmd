@@ -87,13 +87,13 @@ metrics <- readRDS(file.path(res_path, "surv_metrics.RDS"))
 # (unlike crossfitting/cf_metrics.R), so these stay inline, matching
 # continuous/cts_results.qmd's precedent
 scenario_labels <- c(
-  `1` = "1: ATE on EOI",
-  `2` = "2: ATE on CE",
-  `3` = "3: HTE on EOI",
-  `4` = "4: HTE on EOI + ATE on CE",
-  `5` = "5: HTE on CE",
-  `6` = "6: HTE on CE + ATE on EOI",
-  `7` = "7: HTE on both"
+  `1` = "ATE E1",
+  `2` = "ATE E2",
+  `3` = "HTE E1",
+  `4` = "HTE E1, ATE E2",
+  `5` = "HTE E2",
+  `6` = "HTE E2, ATE E1",
+  `7` = "HTE E1&2"
 )
 
 # framework is split into family (the estimator) and variant (the arm),
@@ -145,6 +145,16 @@ metrics <- metrics %>%
                        labels = c("Censored", "Uncensored")),
     target    = factor(target, levels = c("Event 1", "Event 2", "Combined"))
   ) %>%
+  droplevels()
+
+# remove boring bits
+metrics <- metrics %>%
+  # remove CSH stuff for conference presentations
+  filter(!(family %in% c("CSF (cause-specific)", "IPW"))) %>%
+  # remove combined event
+  filter(target != "Combined") %>%
+  # remove superfluous crossfitting variants
+  filter(!(variant %in% c("Split PV", "Whole-sample PV", "Whole-sample, OOB", "Whole-sample, single CF"))) %>%
   droplevels()
 
 # per (scenario, censoring, target, family, variant) summaries
@@ -201,15 +211,18 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
     mutate(est = .data[[mean_col]],
            lo = .data[[mean_col]] - .data[[mcse_col]],
            hi = .data[[mean_col]] + .data[[mcse_col]]) %>%
-    ggplot(aes(x = target, y = est, colour = variant, ymin = lo, ymax = hi)) +
+    ggplot(aes(x = family, y = est, ymin = lo, ymax = hi, colour = censoring)) +
     geom_hline(yintercept = hline, linetype = "dashed") +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
-    facet_wrap(vars(family, scenario, censoring), nrow = n_distinct(df$family), scales = "free") +
+    facet_grid(rows = vars(target), cols = vars(scenario), scales = "free") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    labs(title = title, y = ylab, x = "Target (event)", colour = "Arm")
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = "bottom",
+          strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
+    labs(title = title, y = ylab, x = "Model", colour = "Censoring")
 }
 ```
 
@@ -218,7 +231,7 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
 Average bias in the estimated CATE (estimate minus truth), against each
 target's own truth column.
 
-```{r bias-plot, fig.height=20}
+```{r bias-plot, fig.height=8}
 summary_plot(metrics_summary, "mean_bias", "mcse_bias",
              "Mean bias in CATE estimates", "Mean bias")
 ```
@@ -228,7 +241,7 @@ summary_plot(metrics_summary, "mean_bias", "mcse_bias",
 The headline metric: mean squared error of the estimated CATE against the
 known truth.
 
-```{r mse-plot, fig.height=20}
+```{r mse-plot, fig.height=10}
 summary_plot(metrics_summary, "mean_mse", "mcse_mse",
              "Mean MSE of CATE estimates", "Mean MSE")
 ```
@@ -237,7 +250,7 @@ summary_plot(metrics_summary, "mean_mse", "mcse_mse",
 
 `sqrt(mse)` — the same ranking as MSE, on the outcome's own scale.
 
-```{r rmse-plot, fig.height=20}
+```{r rmse-plot, fig.height=10}
 summary_plot(metrics_summary, "mean_rmse", "mcse_rmse",
              "Mean RMSE of CATE estimates", "Mean RMSE")
 ```
@@ -247,7 +260,7 @@ summary_plot(metrics_summary, "mean_rmse", "mcse_rmse",
 Mean absolute error — a robustness check on MSE, less sensitive to outlying
 runs.
 
-```{r mae-plot, fig.height=20}
+```{r mae-plot, fig.height=10}
 summary_plot(metrics_summary, "mean_mae", "mcse_mae",
              "Mean MAE of CATE estimates", "Mean MAE")
 ```
@@ -260,7 +273,7 @@ correlate with — excluded here. Also see the scenario-5 note above: the
 `ipw`/`csf_cs` Event 1 cells there are genuine `NA` (zero-variance truth),
 dropped by `na.rm = TRUE` rather than shown as 0.
 
-```{r corr-plot, fig.height=20}
+```{r corr-plot, fig.height=10}
 summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
              "mean_corr", "mcse_corr",
              "Mean correlation with the true CATE", "Mean correlation")
@@ -272,7 +285,7 @@ Rank correlation alongside the Pearson correlation above — less sensitive to
 outlying CATE estimates and non-linear-but-monotone miscalibration. Same
 scenario-1-undefined convention, so scenario 1 is excluded here too.
 
-```{r spearman-plot, fig.height=20}
+```{r spearman-plot, fig.height=10}
 summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
              "mean_spearman", "mcse_spearman",
              "Mean Spearman correlation with the true CATE", "Mean Spearman correlation")
@@ -283,7 +296,7 @@ summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
 Proportion of units where the estimated CATE has the correct sign. 0.5
 (dashed line) is chance level.
 
-```{r sign-acc-plot, fig.height=20}
+```{r sign-acc-plot, fig.height=10}
 summary_plot(metrics_summary, "mean_sign_acc", "mcse_sign_acc",
              "Mean sign accuracy", "Mean proportion correct sign", hline = 0.5)
 ```
@@ -295,7 +308,7 @@ Harrell's C for a continuous outcome. Forced to 0.5 in scenario 1 (no
 heterogeneity to rank), so it's excluded here for the same reason as the
 correlation metrics above; 0.5 (dashed line) is chance level elsewhere.
 
-```{r c-stat-plot, fig.height=20}
+```{r c-stat-plot, fig.height=10}
 summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
              "mean_c_stat", "mcse_c_stat",
              "Mean C-statistic", "Mean C-statistic", hline = 0.5)
