@@ -4,9 +4,9 @@
 # As missing/continuous, and with the same bugs C and D fixed by construction
 # (bug B was continuous-only - this study already spelled the mechanisms MNAR).
 #
-# NOTE: this study's DGM carries three further defects, all gated by
-# LEGACY_BIN_MISS in R/dgm_scenarios.R - continuous coefficients, a continuous
-# power calibration, and a log-odds truth. See missing/binary/README.md.
+# NOTE: this study's DGM carried three further defects (continuous coefficients,
+# continuous power calibration, log-odds truth), all fixed together.
+# See missing/binary/README.md.
 
 library(here)
 source(here("R", "pipeline.R"))

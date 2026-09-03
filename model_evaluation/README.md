@@ -557,42 +557,21 @@ and re-profile rather than trusting `me_strategies.sh`'s placeholder walltime,
 since that per-call overhead is exactly what a placeholder gets wrong.
 
 **A second local/cluster version mismatch, found while adding the arms.**
-`run_xgb_cv()` read `best_iteration` from the top level of `xgb.cv()`'s
-result. xgboost 3.x moved it into an `early_stop` sub-list, so on local
-xgboost (3.2.1.1) it is `integer(0)` for **every** fit at every data size —
-`data.frame()` then errors with *"arguments imply differing number of rows:
-0, 1"*. The cluster's `R/4.3.2` module still has an older xgboost, which is
-why the 358 runs completed: they went through this exact line. `run_xgb_cv()`
-now reads whichever location the installed version uses, falling back to
-`which.min()` on the evaluation log.
+`run_xgb_cv()` — fixed an xgboost 3.x API location bug; now reads whichever location the installed version uses, falling back to `which.min()` on the evaluation log. Same class of problem as the `SL2` limitation below, and the same caution applies: local xgboost and cluster xgboost are not the same package.
 
-That fallback is an equivalent, not a degradation — early stopping selects the
-minimum of the very column being scanned, and the two agree exactly where both
-are available (verified: both give iteration 31 on the same fit). So it
-changes no number the cluster has already produced. Same class of problem as
-the `SL2` limitation below, and the same caution applies: local xgboost and
-cluster xgboost are not the same package.
+### Port history (bugs found and fixed)
 
-**Port history.** Unlike every other study in this repo, there was no prior
-successful run of this study to compare against or to regenerate
-after a bug fix — the ported prototype never completed a run (it referenced
-an undefined variable, among other bugs; see the git history around the
-`me_*` files for what changed during the port). Bugs fixed during the port:
-nonexistent `here("src", ...)` paths, the undefined-variable bug just
-mentioned, a `future` plan that was never restored on exit, a
-`create_rf_hyperparams()` typo (`NUL` for `NULL`), an `on.exit()` missing its
-call parens (so the H2O cluster's shutdown safety net never actually fired),
-a dead defensive check (`fix_automl()`), a duplicated `collate_predictions()`
-now sourced from `R/utils.R` instead, and `run_all_xgb_nuisance()` being
-called without `n_cores` (so XGBoost silently never used the intended thread
-count).
+Unlike every other study in this repo, the ported prototype never completed a run — it referenced an undefined variable and other bugs. Bugs fixed during the port:
 
-One thing *did* change beyond pure plumbing, found by `me_testing.R full`
-rather than by inspection: `rf2`/`rf3`'s fixed `mtry` values (30, 10) were
-calibrated to `benchtm`'s wider covariate set and crash `ranger` against this
-DGM's smaller one (7-9 columns) — see the candidate-models table above for
-the scaled replacement. Every other candidate model's and both nuisance
-pipelines' modeling choices are unchanged.
+- Nonexistent `here("src", ...)` paths
+- Undefined variable reference
+- A `future` plan leak
+- A `create_rf_hyperparams()` typo (`NUL` for `NULL`)
+- Missing `on.exit()` call parens
+- A dead defensive check (`fix_automl()`)
+- Duplicate `collate_predictions()` definition
+- Missing `n_cores` argument in `run_all_xgb_nuisance()`
+- `mtry` scaling needed for `rf2`/`rf3` after porting (calibrated to `benchtm`'s wider covariate set, crashed `ranger` against this DGM's smaller one)
 
 The 9 candidates' crossfitting scheme *also* changed after the port, from
 double crossfitting to single crossfitting — see "Crossfitting strategy"

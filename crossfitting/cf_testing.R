@@ -292,18 +292,10 @@ report(all(is.finite(m_null$mse)), "all null-scenario MSEs finite")
 # =============================================================================
 cat("\n=== 4. test-set plumbing and the OOB-counterfactual workaround ===\n")
 #
-# There is no "optimism" to detect in this study, and an earlier version of this
-# check wrongly assumed there was. Optimism is what you see when a model is scored
-# against the labels it was fit to. Here every arm is scored against the KNOWN true
-# CATE, while the label the stage-2 model saw is a noisy pseudo-outcome.
-#
-# What is checked instead: that test predictions are wired to the right truth, and
-# that the grf X.orig OOB-counterfactual shortcut (oob_predict_counterfactual)
-# actually reproduces the documented-API tree-loop it stands in for
-# (oob_predict_counterfactual_manual). Every remaining arm is a distinct forest fit
-# (no two arms share one fitted model any more, now that the in-sample/naive arms -
-# which paired with an OOB view of the same forest - are gone), so there is no
-# same-model test-prediction identity left to check.
+# No 'optimism' to detect in this study (fixed test-design flaw).
+# Test predictions are wired to the right truth; the grf X.orig OOB-counterfactual
+# shortcut (oob_predict_counterfactual) is verified against the documented-API
+# tree-loop (oob_predict_counterfactual_manual).
 
 m <- run_metrics(
   list(

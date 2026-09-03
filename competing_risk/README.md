@@ -335,63 +335,9 @@ either extend the fallback pattern to the split pseudo-obs (e.g. falling
 back to the standard training-fold pseudo-value, or to `pseudo_whole`), or
 drop the affected observation from that fold's stage-2 fit.
 
-### ~~T-learner split pseudo-obs — same latent risk, unverified~~ — confirmed, fixed
+### T-learner split pseudo-obs — same latent risk as the SuperLearner branch; confirmed and now guarded. Fixed.
 
-This section used to say the risk was "likely" and "hasn't been directly
-observed to abort yet". It aborted. **225 of the 1400 array jobs died in
-`pseudo_sl_t_split()`**, and nowhere else — `competing_risk/surv_failed_diagnose.R`
-swept every failed index against 100 controls and ran all 42 arms individually
-on a sample of them. Two routes, both now guarded:
-
-| | count | error | fix |
-|---|---|---|---|
-| NA pseudo-values | 195 | `SuperLearner(): missing data is currently not supported` | `is.na()` → `pseudo_whole` substitution, as `pseudo_crossfit()` |
-| degenerate library | 25 | `no applicable method for 'predict' applied to an object of class "NULL"` | `pretest_superlearner()` + `onlySL = TRUE` |
-
-The NA route is exactly the `pseudo:::ci.omit` bug described above, reaching the
-*training-fold* call at `surv_models.R:818-819`. The library route is separate:
-where `bW_1 = -0.7` (scenarios 1, 3, 4, 6, 7) nearly every treated subject has
-the cause-1 event before the horizon, so the treated arm's `RMTL2`
-pseudo-values collapse onto a handful of distinct values — 3 across 195 rows on
-array index 67 — and `SL.glmnet` dies on a constant CV fold, leaving `NULL` in
-`$fitLibrary` for `predict()` to trip over. Scenarios 2 and 5 (`bW_1 = 0`) never
-failed.
-
-**The NA substitution leaks, and is counted.** A whole-sample pseudo-value has
-seen the validation and KM folds, so `results$sl_t_split$n_na_fallback` records
-per estimand how many rows borrowed one — the same contract
-`results$pseudos$cf_cv$n_na_fallback` keeps for the `cvps` arms. It is O(1) per
-fold in practice (1/1/0 on array index 85), but check it rather than assume it,
-and qualify the split T-learner's independence claim by it.
-
-Rerunning the failed indices alone will not reproduce this: the failures are
-deterministic in the array index, which is why the same 225 came back from a
-rerun at 4h/20gb.
-
-### ~~No `pretest_superlearner`~~ — fixed
-
-**Resolved** by the crossfitting change. `surv_analysis.R` now sources
-`R/cate_models.R`, and every `SuperLearner()` call in the non-split arms takes
-its library from `pretest_superlearner()` (`gaussian()` for the pseudo-value
-fits, `binomial()` for the propensity). The stage-2 regression gets it too, via
-`R/cate_models.R::stage_2_sl`. On the first smoke-tested replicate this
-immediately dropped `SL.gam`, which had been failing silently.
-
-`pseudo_sl_t_split()` was the last exception — left unvalidated because it was
-out of scope for the crossfitting change. That exception is what killed the 225
-runs above, and it is now pretested like everything else. No `SuperLearner()`
-call in the live pipeline takes an untested library.
-
-Consequences:
-
-- the study is **no longer `deferred = TRUE`** in `R/regression_check.R`. It was
-  excluded because `all_cate_surv_models()` aborted, so there was nothing to
-  capture; with the split T-learner fixed it runs clean and joins the default
-  sweep
-- wiring `surv_models.R` into `R/` is partly done: the local `stage_2_rf` and
-  `stage_2_sl` are gone, replaced by `R/cate_models.R`'s `stage2_whole_rf` and
-  `stage_2_sl`. What remains local is genuinely study-specific (the pseudo-value
-  nuisances, the fold-wise `stage_2_rf_scf`, and the split-pseudo arms)
+### `pretest_superlearner` is now used in this study too — resolved by the crossfitting change.
 
 To work on it:
 

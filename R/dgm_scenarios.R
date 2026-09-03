@@ -25,29 +25,6 @@
 
 require(dplyr)
 
-# ---- flags pending a decision ----------------------------------------------
-# All three reproduce known copy-paste bugs so that the move into R/ can be
-# proved inert first. Step 8 flips them and deletes the options.
-
-# Bug A: confidence_intervals/binary/bin_ci_dgms.R carried the CONTINUOUS
-# coefficient table (b0 = c(0.4, 0.2, ...), b1 = -0.05, b2 = c(2, 2, ...)) on a
-# logit scale. It did calibrate bW and compute truth the binary way, so the
-# coefficients are the only thing wrong. TRUE keeps them; FALSE uses the binary
-# table and forces confidence_intervals/binary + optimal_sf/bin to re-run.
-LEGACY_BIN_CI_PARAMS <- FALSE
-
-# missing/binary/bin_miss_dgms.R was forked from the continuous version and only
-# half-converted. THREE things came across unchanged, all fixed together because
-# they are one mistake and one re-run:
-#   1. the continuous coefficient table (as bug A)
-#   2. bW calibrated with power.t.test on s_err + s2 - the two-sample t-test for
-#      a continuous outcome - instead of power.prop.test
-#   3. truth computed as p0 = b0 + b1*X1 + b2*X2 with no plogis, so truth$tau is
-#      a LOG-ODDS difference while every estimator targets a RISK DIFFERENCE
-# TRUE reproduces all three; FALSE fixes all three and forces missing/binary to
-# re-run.
-LEGACY_BIN_MISS <- FALSE
-
 # ---- scenario tables --------------------------------------------------------
 
 # treatment-effect expressions, evaluated with bW, n, X3, X4, X5 and U_term in
@@ -182,32 +159,8 @@ SCENARIO_SETS <- list(
     needs_X4 = c(FALSE, FALSE, TRUE, TRUE, TRUE),
     needs_X5 = c(FALSE, FALSE, FALSE, TRUE, FALSE),
     te_expr = TE_5, oracle_expr = ORACLE_5
-  ),
-
-  # LEGACY: identical to continuous_missing, which is the bug. See
-  # LEGACY_BIN_MISS_PARAMS and binary_missing_fixed below.
-  binary_missing = scenario_table(
-    scenario = 1:5, description = DESC_5,
-    X1_prob = 0.4, X3_prob = 0.7,
-    b0 = c(0.4, 0.2, 0.4, 1, 0.4),
-    b1 = -0.05,
-    b2 = c(2, 2, 2, 2, 1),
-    b3 = c(NA, 2, 0.3, 2, NA),
-    b4 = c(NA, NA, -1, 0.5, 1),
-    b5 = c(NA, NA, NA, -0.5, NA),
-    b34 = NA,
-    b45 = c(NA, NA, NA, -0.5, NA),
-    # s_err is carried but never used to draw an error term: this study has a
-    # binary outcome. It is here because the legacy bW calibration feeds it to
-    # power.t.test (see LEGACY_BIN_MISS).
-    s2 = 1, s4 = 1, s5 = 1, s_err = 0.5,
-    bU = 1, sU = 1,
-    needs_X3 = c(FALSE, TRUE, TRUE, TRUE, FALSE),
-    needs_X4 = c(FALSE, FALSE, TRUE, TRUE, TRUE),
-    needs_X5 = c(FALSE, FALSE, FALSE, TRUE, FALSE),
-    te_expr = TE_5,
-    oracle_expr = paste0("plogis(", ORACLE_5, ")")
   )
+
 )
 
 # The corrected binary missing-data coefficients. b0/b1/b2 come straight from the
@@ -216,7 +169,7 @@ SCENARIO_SETS <- list(
 # scenario descriptions, not something the original code recorded, so worth a
 # sanity check before the re-run.
 SCENARIO_SETS$binary_missing_fixed <- transform(
-  SCENARIO_SETS$binary_missing,
+  SCENARIO_SETS$continuous_missing,
   b0 = -0.4, b1 = 0.5, b2 = 0.5,
   b3 = c(NA, -0.4, -0.4, 0.2, 0.2),
   b4 = c(NA, NA, 0.3, 0.5, 0.5),
@@ -225,17 +178,18 @@ SCENARIO_SETS$binary_missing_fixed <- transform(
 )
 
 # which sets produce a binary outcome
-BINARY_SETS <- c("binary", "binary_missing", "binary_missing_fixed")
+BINARY_SETS <- c("binary", "binary_missing")
 
-#' Resolve a scenario-set name to its table, applying the legacy-bug flags
+#' Resolve a scenario-set name to its table
 #'
-#' @param set one of names(SCENARIO_SETS), or "binary_ci" for the binary CI study
+#' @param set one of names(SCENARIO_SETS), or "binary_ci" for the binary CI study,
+#'   or "binary_missing" for the missing/binary study (resolves to the
+#'   corrected `binary_missing_fixed` table)
 resolve_set <- function(set) {
   if (set == "binary_ci") {
-    # bug A: the CI binary study ran on the continuous table
-    return(if (LEGACY_BIN_CI_PARAMS) SCENARIO_SETS$continuous else SCENARIO_SETS$binary)
+    return(SCENARIO_SETS$binary)
   }
-  if (set == "binary_missing" && !LEGACY_BIN_MISS) {
+  if (set == "binary_missing") {
     return(SCENARIO_SETS$binary_missing_fixed)
   }
   tbl <- SCENARIO_SETS[[set]]
@@ -249,11 +203,9 @@ is_binary_set <- function(set) {
 
 #' Which power calculation calibrates bW for this set
 #'
-#' Normally this follows the outcome type, but missing/binary inherited the
-#' continuous two-sample t-test from the file it was forked from (see
-#' LEGACY_BIN_MISS), so it is not derivable from the outcome alone.
+#' Follows the outcome type: binary outcomes use a two-proportion test,
+#' continuous outcomes use a two-sample t-test.
 calibration_for <- function(set) {
-  if (set == "binary_missing" && LEGACY_BIN_MISS) return("t")
   if (is_binary_set(set)) "prop" else "t"
 }
 
@@ -354,8 +306,7 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
     # the missing-data studies subtract the U contribution so that tau is the
     # marginal treatment effect (U is independent of X, so E[U] = 0)
     reduced <- !is.null(mech)
-    # missing/binary reported truth on the linear-predictor scale; see LEGACY_BIN_MISS
-    link_truth <- binary && !(set == "binary_missing" && LEGACY_BIN_MISS)
+    link_truth <- binary
 
     if (!reduced) {
       # the non-MNAR path is shared with build_query_grid_truth() below, via
@@ -393,8 +344,7 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
 #' @param params one-row scenario params, already subset to `scenario` (as
 #'   resolve_set(set) then filtered - see get_oracle_info for the pattern)
 #' @param bW calibrated treatment coefficient
-#' @param link_truth TRUE to report p0/p1 on the plogis scale (binary outcomes,
-#'   modulo the LEGACY_BIN_MISS carve-out - see generate_scenario_data)
+#' @param link_truth TRUE to report p0/p1 on the plogis scale (binary outcomes)
 #' @param X1,X2 numeric vectors, same length, the two covariates that always
 #'   exist
 #' @param X3,X4,X5 numeric vectors (same length as X1) or NULL, matching that
@@ -503,7 +453,7 @@ build_query_grid_truth <- function(scenario, set, bW, grid_df) {
   params <- resolve_set(set)
   params <- params[params$scenario == scenario, ]
   binary <- is_binary_set(set)
-  link_truth <- binary && !(set == "binary_missing" && LEGACY_BIN_MISS)
+  link_truth <- binary
 
   truth_at(params, bW, link_truth,
            X1 = grid_df$X1, X2 = grid_df$X2,

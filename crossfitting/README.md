@@ -388,16 +388,8 @@ in the first second with a clear message if it is not.
   `cts_models.R` only trims for SuperLearner. With `W ~ Bernoulli(0.5)` this is a
   no-op for the crossfit arms — `cf_testing.R` asserts it — but it stops the in-sample
   nuisances from producing exploding pseudo-outcomes and losing on a technicality.
-- **`bias` is `estimate - truth`**, the usual convention. This used to be a
-  deviation: `cts_metrics.R` computed `bias` as `mean(true - est)` while its
-  `ate_bias` used the opposite sign. That was bug G, and the whole repo now uses
-  `est - true` (`R/metrics.R`), so these numbers ARE comparable with the other
-  studies once their metrics are regenerated.
-- **`stage2_crossfit_sl` uses the pretested library in both branches.** This was
-  bug F, and it was worse than it looked: every caller of the shared `stage_2_sl`
-  passed a matrix, so the pretested library had never been used in stage 2 in any
-  study and the correct vector branch was dead code. Fixed repo-wide
-  (`PRETEST_STAGE2` in `R/cate_models.R`); this folder was right all along.
+- **`bias` is `estimate - truth`** (bug G, fixed repo-wide).
+- **`stage2_crossfit_sl` uses the pretested library in both branches** (bug F, fixed repo-wide).
 - **The per-run files carry no `data` and no nuisance matrices** — only `tau`,
   `tau_test` and timings per arm, plus the truth vectors. Replicates are
   reproducible from `run` via `setup_rng_stream`. This is why `cf_collect.sh` asks

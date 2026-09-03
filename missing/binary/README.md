@@ -11,31 +11,7 @@ mechanisms, handling methods and the shared bug fixes.
 
 ## ⚠ This file was a half-converted fork
 
-`bin_miss_dgms.R` was copied from the continuous version and only partly
-converted to a binary outcome. **Three things came across unchanged**, all fixed
-together behind `LEGACY_BIN_MISS` in `R/dgm_scenarios.R`:
-
-**1. The continuous coefficient table.** `b0 = c(0.4, 0.2, 0.4, 1, 0.4)`,
-`b1 = -0.05`, `b2 = c(2, 2, 2, 2, 1)` — the continuous values — fed through
-`plogis`. With `b2 = 2` on a logit scale the outcome model saturates. The binary
-study uses `b0 = -0.4`, `b1 = 0.5`, `b2 = 0.5`.
-
-**2. The wrong power calculation.** `bW` was calibrated with `power.t.test` on
-`s_err + s2`, the two-sample t-test for a *continuous* outcome, rather than
-`power.prop.test`. The table even carries an `s_err` column despite the outcome
-being binary and no error term ever being drawn.
-
-**3. Truth on the wrong scale — the most consequential.** `truth$p0` and `p1`
-were computed as `b0 + b1*X1 + b2*X2` with **no `plogis`**, making `truth$tau` a
-difference in **log-odds**. But the outcome is `rbinom(n, 1, plogis(lp))` and
-every estimator targets a **risk difference**, and `bin_miss_metrics.R` compared
-the two directly. Because `plogis` compresses, the two differ by a lot, not by
-rounding — bias and MSE for this study were computed against a mis-scaled target.
-
-The oracle was *not* affected: `get_binary_oracle_info()` here wraps its formula
-in `plogis(...)`, which is why `bin_miss_models.R` passes
-`oracle_link = "identity"` — the opposite convention to `binary/`. That is
-correct, not a fourth bug.
+`bin_miss_dgms.R` was copied from the continuous version and only partly converted to a binary outcome, carrying three related defects (continuous coefficient table, wrong power-test calibration, un-plogis'd truth) — all fixed together; the code now always uses the corrected values. The oracle formula here already contains `plogis(...)`, so `bin_miss_models.R` passes `oracle_link = "identity"` — the opposite convention to `binary/bin_dgms.R`, which is correct.
 
 ### The corrected coefficients
 
@@ -189,46 +165,4 @@ changes.
 
 ## Known issue found while profiling (fixed — see below)
 
-While smoke-testing `bin_miss_profile.R` (see that file's header) the DR
-SuperLearner arm crashed for `scenario = 1, mechanism = MAR, run = 1` at both
-`method = complete_cases` (n = 331 after complete-case removal) and
-`method = mean_imputation` (n = 500, no rows dropped) - same seed, same crash,
-two different sample sizes, so it is not purely a small-`n` artifact:
-
-```
-Removed libraries due to NA/error:
-[1] "SL.glm"    "SL.glmnet" "SL.earth"  "SL.gam"    "SL.mean"   "SL.ranger"
-Error in (function (.x, .f, ..., .progress = FALSE)  : ℹ In index: 7.
-Caused by error in `data.frame()`:
-! arguments imply differing number of rows: 0, 1
-```
-
-**Reproduces on the unmodified `bin_miss_analysis.R`** (confirmed by running
-`Rscript bin_miss_analysis.R 1`, i.e. `study$grid`'s row 1) - it predates and is
-unrelated to the profiling patches added alongside `bin_miss_profile.R`.
-
-**Root cause**, read from `R/cate_models.R`: `pretest_superlearner()` drops
-any candidate algorithm that errors, warns, or returns all-`NA` on a 2-fold
-inner CV, and returns whatever survives - which could be `character(0)` if
-every candidate failed on a given fold (exactly what the "Removed libraries"
-list above shows: all six did). Both callers fed that result straight into
-`SuperLearner(..., SL.library = <possibly empty>)` with no guard against the
-empty case:
-- `nuisance_sl()`, for `Y.hat`/`W.hat` per fold
-- `stage_2_sl()`, for the pseudo-outcome regression - this is the one that
-  crashed above (`PRETEST_STAGE2 = TRUE` means it always uses the pretested
-  library now, per bug F in `R/README.md`)
-
-This is a different failure mode from bug F, which was about *which* library
-variant gets used once pretesting leaves at least one survivor. This is what
-happens when pretesting leaves zero — **fixed as bug K** in `R/README.md`'s
-ledger: `pretest_superlearner()` now falls back to `"SL.mean"` (asserted
-directly rather than re-run through the pretest loop) whenever nothing else
-survives, so it can never return `character(0)` again.
-
-**Confirmed trigger:** `scenario = 1` (no `X3`/`X4`/`X5`, the covariate-poorest
-scenario in `binary_missing`), `mechanism = MAR`, `run = 1`, `n_folds = 10`.
-Also independently confirmed in `continuous/` — 23 of the 24 array IDs that
-failed on the cluster there hit this exact bug, for several different
-scenarios and sample sizes (not `missing/binary`-specific, or
-small-`n`-specific).
+A profiling run found `pretest_superlearner()` could return an empty SuperLearner library and crash downstream calls (bug K); fixed — it now falls back to `"SL.mean"` when every candidate algorithm fails a fold.

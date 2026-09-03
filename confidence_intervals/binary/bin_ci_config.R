@@ -1,9 +1,7 @@
 ##########
 # title: binary CI study - the one definition of its parameter grid
 ##########
-# NOTE: this study's DGM carries bug A - see confidence_intervals/binary/README.md
-# and LEGACY_BIN_CI_PARAMS in R/dgm_scenarios.R. Fixing it invalidates everything
-# under ../results/confidence_intervals/binary.
+# NOTE: bug A (continuous coefficient table) was fixed; study now always uses binary table.
 
 library(here)
 source(here("R", "pipeline.R"))

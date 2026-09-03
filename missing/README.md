@@ -88,27 +88,11 @@ which is why `check_all.R` reports `patchable_jobs` of 8,800 rather than 9,900.
 
 ## Bugs fixed here
 
-**Bug B — `cts_miss_collect.R` looked for directories that could not exist.** It
-used `mechanism = c("MAR", "AUX", "AUX-Y")` while the DGM, analysis and check
-scripts all used `MNAR`/`MNAR-Y`. Two of the three mechanisms were silently
-collected as empty. `missing/binary/` was already consistent.
+**Bug B** — `cts_miss_collect.R` looked for `AUX`/`AUX-Y` where the DGM said `MNAR`/`MNAR-Y`; two mechanisms were silently collected as empty. Fixed.
 
-**Bug C — `rel_efficiency` was `NA` everywhere.** The metrics scripts built the
-reference from `method == "complete_data"`, which the collect grid did not
-contain, so the join found nothing.
+**Bug C** — `rel_efficiency` was `NA` everywhere; the metrics scripts built the reference from `method == "complete_data"`, which the collect grid did not contain. Fixed.
 
-**Bug D — the array index meant two different things.** Both analysis scripts
-appended `filter(method == "complete_data")` *after* `expand.grid`, renumbering
-every row. A `failed_ids.txt` written by the check script would have resubmitted
-the wrong parameters. The grid now lives in `<prefix>_config.R` and is never
-filtered; to run one arm, select indices instead:
-
-```r
-idx <- grid_indices(study, method = "complete_data")
-```
-
-This is also why the jobscript ranges changed: `1-1100` was the *post-filter*
-size, and `cts_miss_2.sh`'s `10001-12200` referred to indices that never existed.
+**Bug D** — the array index meant two different things: both analysis scripts filtered `method == "complete_data"` *after* `expand.grid`, renumbering every row. A `failed_ids.txt` would have resubmitted the wrong parameters. The grid now lives in `<prefix>_config.R` and is never filtered. Fixed.
 
 ## Status
 
@@ -116,9 +100,7 @@ size, and `cts_miss_2.sh`'s `10001-12200` referred to indices that never existed
 arms) and separately for bug F (`dr_superlearner` only).
 
 `missing/binary` — re-runs entirely; see its own README, it had three further
-defects, plus a newly found, not-yet-fixed `pretest_superlearner()` crash
-(empty `SL.library` when every candidate algorithm fails a fold) - see
-"Known issue found while profiling" in `missing/binary/README.md`.
+defects plus a `pretest_superlearner()` crash (bug K), now fixed.
 
 **Both** additionally owe the `dr_random_forest` HTE back-fill — a one-off
 in-place repair of finished results, not a re-run. Track it in

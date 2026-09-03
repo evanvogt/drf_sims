@@ -110,7 +110,7 @@ Rscript continuous/cts_profile.R 1      # runs on a laptop as a smoke test
 
 **Re-runs required** — for the crossfitting strategy change to
 `R/cate_models.R` (see root README Methods/Status), which moves all five
-estimator arms, and separately for bug F (`PRETEST_STAGE2`), which changes
+estimator arms, and separately for bug F, now fixed permanently, which changes
 `dr_superlearner`: the second-stage SuperLearner library was pretested and
 the result discarded, so failing algorithms were never dropped. Only the
 `dr_superlearner` arm moves for bug F specifically — the harness can confirm

@@ -13,14 +13,6 @@ require(tibble)
 require(tidyr)   # unnest_longer
 require(purrr)   # map, map_int
 
-# ---- bias sign --------------------------------------------------------------
-# TEMPORARY (bug G). Historically `bias` was mean(true - est) while `ate_bias`
-# in the same tibble was mean(est) - mean(true), so the two disagreed in sign.
-# The agreed fix is `est - true` everywhere. Until the metrics are regenerated,
-# the default reproduces the old behaviour so the refactor can be proved inert;
-# Step 8 flips this to "est-true" and then deletes the option entirely.
-BIAS_SIGN <- "est-true"
-
 #' Point metrics for one set of CATE estimates against the known truth
 #'
 #' @param est estimated CATEs
@@ -28,8 +20,6 @@ BIAS_SIGN <- "est-true"
 #' @param scenario scenario index. Scenario 1 has no heterogeneity, so the true
 #'   CATE is constant, the correlation metrics are undefined, and both are
 #'   reported as 0 rather than NA - the convention the study has always used.
-#' @param bias_sign "est-true" (the convention) or "true-est" (legacy). Affects
-#'   `bias` only; `ate_bias` has always been est - true.
 #'
 #' `rel_ate_bias` and `rel_bias_cate` are "relative bias" in the conventional,
 #' vs-true-parameter sense (as opposed to `rel_efficiency`/`rel_bias_complete`
@@ -39,13 +29,8 @@ BIAS_SIGN <- "est-true"
 #' true` averaged over units. True CATE is heterogeneous and crosses zero in
 #' several scenarios, so both guard a zero denominator with NA rather than
 #' letting it produce Inf/NaN.
-cate_metrics <- function(est, true, scenario, bias_sign = BIAS_SIGN) {
-  bias_sign <- match.arg(bias_sign, c("true-est", "est-true"))
-  bias <- if (bias_sign == "est-true") {
-    mean(est - true, na.rm = TRUE)
-  } else {
-    mean(true - est, na.rm = TRUE)
-  }
+cate_metrics <- function(est, true, scenario) {
+  bias <- mean(est - true, na.rm = TRUE)
   ate_bias <- mean(est, na.rm = TRUE) - mean(true, na.rm = TRUE)
   true_ate <- mean(true, na.rm = TRUE)
   cate_ratio <- (est - true) / true
@@ -93,9 +78,9 @@ hte_test_metrics <- function(model_res) {
 #' @param model_res one model's entry in a per-run results object
 #' @param true true CATEs for that run
 #' @param scenario scenario index
-run_model_metrics <- function(model_res, true, scenario, bias_sign = BIAS_SIGN) {
+run_model_metrics <- function(model_res, true, scenario) {
   bind_cols(
-    cate_metrics(model_res$tau, true, scenario, bias_sign),
+    cate_metrics(model_res$tau, true, scenario),
     hte_test_metrics(model_res)
   )
 }

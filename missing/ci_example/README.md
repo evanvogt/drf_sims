@@ -66,11 +66,7 @@ compared directly. `cts_miss_ci_results.qmd` says so on the relevant section.
 
 ## Gotchas
 
-**`alpha` used to be a free variable.** `combine_mi()` read `alpha` from the
-global environment at five places — it was never one of its arguments — and only
-worked because `cts_miss_ci_analysis.R` happened to define `alpha <- 0.05` at top
-level. It is now an explicit argument of `combine_mi_ci()`. Any other caller
-would have silently used the wrong level or failed outright.
+**`alpha` used to be a free variable in `combine_mi()`; it is now an explicit argument.**
 
 **The hybrid margin looks like a typo.** It computes
 `sqrt(lambda_hat * S_star)` where the other two strategies and
@@ -78,15 +74,9 @@ would have silently used the wrong level or failed outright.
 root of the critical value. Preserved as written, but flagged: if the hybrid
 intervals look oddly narrow, this is why.
 
-**This study spells the mechanisms `AUX` / `AUX-Y`** where the others say
-`MNAR` / `MNAR-Y`. Both are accepted and normalised in `R/missingness.R`. Its
-grid only ever runs MAR, so the unobserved-`U` branches never fire here — which
-is also why its divergent `p1` definition (it did not subtract the `U` term) made
-no difference to anything it produced.
+**This study spells the mechanisms `AUX` / `AUX-Y` where the others say `MNAR` / `MNAR-Y`; both are accepted and normalised in `R/missingness.R`.**
 
-**The header used to claim imputations were reduced "from 50 to 20"** to keep
-generation tractable. The code set `n_imp <- 50` and the completion message
-printed `"<n_imp> 50 imputed datasets"`. 50 is what ran, and 50 is kept.
+**The header claimed imputations were reduced "from 50 to 20" to keep generation tractable; the code actually uses 50 and always has.**
 
 ## Status
 

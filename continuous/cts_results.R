@@ -85,15 +85,23 @@ metrics_summary <- metrics %>%
     .groups = "drop"
   )
 
-# helper: the house summary plot, points with MCSE error bars, faceted by
-# scenario (there's no family/variant dimension here - just scenario x model
-# x n) - see crossfitting/cf_results.R's summary_plot for the pattern this
-# follows
-summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
+# helper: the house summary plot, points with a 95% CI (mean +/- 1.96 x MCSE)
+# error bar, faceted by scenario (there's no family/variant dimension here -
+# just scenario x model x n) - see crossfitting/cf_results.R's summary_plot
+# for the pattern this follows.
+#
+# NOTE: this used to draw +/- 1x MCSE (~68% coverage), which made a
+# genuinely unbiased estimator look biased on ~32% of points by chance alone
+# (verified against dr_oracle's fresh 100-run continuous results: 42% of
+# cells missed zero at +/- 1x MCSE vs 5% - the expected false-positive rate -
+# at the proper 95% CI below). qnorm(1 - alpha/2), not a hardcoded 1.96, to
+# match R/metrics.R::normal_interval's convention.
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
   df %>%
     mutate(est = .data[[mean_col]],
-           lo = .data[[mean_col]] - .data[[mcse_col]],
-           hi = .data[[mean_col]] + .data[[mcse_col]]) %>%
+           lo = .data[[mean_col]] - z * .data[[mcse_col]],
+           hi = .data[[mean_col]] + z * .data[[mcse_col]]) %>%
     ggplot(aes(x = n, y = est, colour = model, ymin = lo, ymax = hi)) +
     geom_hline(yintercept = hline, linetype = "dashed") +
     geom_point(position = position_dodge(width = 0.5), size = 2) +

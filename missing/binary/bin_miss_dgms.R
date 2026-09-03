@@ -3,22 +3,8 @@
 ###############
 # Scenarios in R/dgm_scenarios.R, missingness machinery in R/missingness.R.
 #
-# TWO KNOWN BUGS, both gated by flags in R/dgm_scenarios.R:
-#
-#  LEGACY_BIN_MISS_PARAMS - this study carries the CONTINUOUS coefficient table
-#    (b0 = c(0.4, 0.2, 0.4, 1, 0.4), b1 = -0.05, b2 = c(2, 2, 2, 2, 1)) rather
-#    than the binary one, the same copy-paste as bug A in
-#    confidence_intervals/binary.
-#
-#  LEGACY_BIN_MISS_TRUTH - truth was computed as p0 = b0 + b1*X1 + b2*X2 with no
-#    plogis, so truth$tau is a difference in LOG-ODDS, while the outcome is
-#    rbinom(n, 1, plogis(lp)) and every estimator targets a RISK DIFFERENCE.
-#    bin_miss_metrics.R compares the two directly.
-#
-# Flipping either invalidates everything under ../results/missing/binary.
-#
-# The oracle formula here already contains plogis(...), so bin_miss_models.R must
-# pass oracle_link = "identity" - the opposite convention to binary/bin_dgms.R.
+# Previously carried the continuous coefficient table, wrong t-test calibration,
+# and un-plogis'd truth (three related defects, fixed together).
 
 source(here::here("R", "missingness.R"))
 

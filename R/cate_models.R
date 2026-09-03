@@ -58,12 +58,6 @@ source(here::here("R", "bootstrap_ci.R")) # cf_half_boot, rf_half_boot
 
 # ---- flags pending a decision ----------------------------------------------
 
-# TEMPORARY (bug F). stage_2_sl computes a pretested library and then, in the
-# matrix branch, passes the untested one. Every caller passes a matrix, so the
-# pretested library has never been used in stage 2 in any study, and the vector
-# branch below is dead code. FALSE reproduces that; Step 8 flips it to TRUE and
-# deletes the option.
-PRETEST_STAGE2 <- TRUE
 
 # ---- orchestration profiles -------------------------------------------------
 #
@@ -460,10 +454,7 @@ stage_2_sl <- function(X, po, fold_indices, fold_list, sl_lib, ipw = NULL) {
     y_train <- if (single) po[in_train] else po[in_train, fold]
     po_lib <- pretest_superlearner(y_train, X[in_train, ], sl_lib, gaussian())
 
-    # bug F: the matrix branch historically passed the untested sl_lib even though
-    # po_lib had just been computed. Every caller passes a matrix, so the pretested
-    # library has never actually been used here. PRETEST_STAGE2 gates the fix.
-    lib <- if (single || PRETEST_STAGE2) po_lib else sl_lib
+    lib <- po_lib
 
     po_model <- SuperLearner(y_train, X[in_train, ], family = gaussian(),
                              SL.library = lib, obsWeights = wts(ipw, in_train))
