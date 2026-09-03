@@ -48,21 +48,36 @@ metrics_all <- metrics %>%
 metrics <- filter(metrics_all, ci_method == ci_method_labels[["half_boot"]])
 
 # per variant summaries
+# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
+# column - not sqrt(n()), the whole group's row count regardless of NAs.
+# interval_metrics() (R/metrics.R) has no internal na.rm, so one failed CI
+# bound in a run makes marginal_coverage/mean_ci_length NA for that whole
+# run - exactly the case this denominator needs to handle correctly.
 metrics_summary <- metrics %>%
   group_by(scenario, family, variant) %>%
   summarise(
     mean_marg_cov = mean(marginal_coverage, na.rm = T),
-    mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(n()),
+    mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(sum(!is.na(marginal_coverage))),
+    # simultaneous_coverage is a genuine 0/1 indicator per run (whole-band
+    # coverage), so it gets the exact binomial MCSE, not the general one
+    # marginal_coverage above uses (that's a proportion over many units
+    # within a run, not Bernoulli at the run level)
     mean_simul_cov = mean(simultaneous_coverage, na.rm = T),
-    mcse_simul_cov = sd(simultaneous_coverage, na.rm = T) / sqrt(n()),
+    mcse_simul_cov = sqrt(mean_simul_cov * (1 - mean_simul_cov) / sum(!is.na(simultaneous_coverage))),
     mean_ci_len = mean(mean_ci_length, na.rm = T),
-    mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(n()),
+    mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(sum(!is.na(mean_ci_length))),
     mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T) / sqrt(n()),
+    mcse_bias = sd(bias, na.rm = T) / sqrt(sum(!is.na(bias))),
+    mean_ate_bias = mean(ate_bias, na.rm = T),
+    mcse_ate_bias = sd(ate_bias, na.rm = T) / sqrt(sum(!is.na(ate_bias))),
+    mean_rel_ate_bias = mean(rel_ate_bias, na.rm = T),
+    mcse_rel_ate_bias = sd(rel_ate_bias, na.rm = T) / sqrt(sum(!is.na(rel_ate_bias))),
+    mean_rel_bias_cate = mean(rel_bias_cate, na.rm = T),
+    mcse_rel_bias_cate = sd(rel_bias_cate, na.rm = T) / sqrt(sum(!is.na(rel_bias_cate))),
     mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T) / sqrt(n()),
+    mcse_mse = sd(mse, na.rm = T) / sqrt(sum(!is.na(mse))),
     mean_corr = mean(corr, na.rm = T),
-    mcse_corr = sd(corr, na.rm = T) / sqrt(n()),
+    mcse_corr = sd(corr, na.rm = T) / sqrt(sum(!is.na(corr))),
     mean_time_nuisance = mean(time_nuisance, na.rm = T),
     mean_time_stage2 = mean(time_stage2, na.rm = T),
     mean_time_boot = mean(time_boot, na.rm = T),
@@ -70,16 +85,19 @@ metrics_summary <- metrics %>%
     .groups = "drop"
   )
 
-# helper: the house summary plot, points with MCSE error bars. Unlike
+# helper: the house summary plot, points with a 95% CI (mean +/- qnorm(1 -
+# alpha/2) x MCSE) error bar - see continuous/cts_results.R's summary_plot for
+# why this isn't a raw +/- 1x MCSE (~68% coverage, not 95%). Unlike
 # cf_results.R's version there's no `set` (train/test) dimension to dodge on
 # - one sample per arm/run - so colour by variant instead (redundant with x
 # under faceting, so the legend is dropped). hline is optional: not every
 # metric here has a natural 0/0.95 reference.
-summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
   df <- df %>%
     mutate(est = .data[[mean_col]],
-           lo = .data[[mean_col]] - .data[[mcse_col]],
-           hi = .data[[mean_col]] + .data[[mcse_col]])
+           lo = .data[[mean_col]] - z * .data[[mcse_col]],
+           hi = .data[[mean_col]] + z * .data[[mcse_col]])
   p <- ggplot(df, aes(x = variant, y = est, colour = variant, ymin = lo, ymax = hi))
   if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
   p +
@@ -154,14 +172,18 @@ method_df <- metrics_all %>%
   droplevels() %>%
   group_by(scenario, family, variant, ci_method) %>%
   summarise(mean_marg_cov = mean(marginal_coverage, na.rm = T),
-            mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(n()),
+            mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(sum(!is.na(marginal_coverage))),
             mean_ci_len = mean(mean_ci_length, na.rm = T),
-            mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(n()),
+            mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(sum(!is.na(mean_ci_length))),
             .groups = "drop")
+
+# same 95% CI convention as summary_plot() above - z x MCSE, not raw MCSE
+method_z <- qnorm(0.975)
 
 method_cov_panel <- method_df %>%
   ggplot(aes(x = variant, y = mean_marg_cov, colour = ci_method,
-             ymin = mean_marg_cov - mcse_marg_cov, ymax = mean_marg_cov + mcse_marg_cov)) +
+             ymin = mean_marg_cov - method_z * mcse_marg_cov,
+             ymax = mean_marg_cov + method_z * mcse_marg_cov)) +
   geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_point(size = 2, position = position_dodge(width = 0.5)) +
   geom_errorbar(linewidth = 0.3, width = 0.3, position = position_dodge(width = 0.5)) +
@@ -173,7 +195,8 @@ method_cov_panel <- method_df %>%
 
 method_width_panel <- method_df %>%
   ggplot(aes(x = variant, y = mean_ci_len, colour = ci_method,
-             ymin = mean_ci_len - mcse_ci_len, ymax = mean_ci_len + mcse_ci_len)) +
+             ymin = mean_ci_len - method_z * mcse_ci_len,
+             ymax = mean_ci_len + method_z * mcse_ci_len)) +
   geom_point(size = 2, position = position_dodge(width = 0.5)) +
   geom_errorbar(linewidth = 0.3, width = 0.3, position = position_dodge(width = 0.5)) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(method_df$family), scales = "free") +
@@ -276,7 +299,8 @@ ggsave("cf_ci_coverage_cost.png", path = fig_path, width = 21, height = 15, unit
 # --- headline table -------------------------------------------------------
 headline <- metrics_summary %>%
   select(scenario, family, variant, mean_marg_cov, mcse_marg_cov, mean_simul_cov,
-         mean_ci_len, mean_bias, mean_mse, mean_time_total) %>%
+         mean_ci_len, mean_bias, mean_ate_bias, mean_rel_ate_bias,
+         mean_rel_bias_cate, mean_mse, mean_time_total) %>%
   arrange(family, scenario, desc(mean_marg_cov))
 
 print(headline, n = Inf)

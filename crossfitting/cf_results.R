@@ -40,36 +40,49 @@ metrics <- metrics %>%
   droplevels()
 
 # per variant summaries
+# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
+# column - not sqrt(n()), which is the whole group's row count regardless of
+# NAs (mse_test_single in particular is NA_real_ for whole-sample arms, see
+# cf_metrics.R:50, so mcse_mse_single needs the narrower count)
 metrics_summary <- metrics %>%
   group_by(scenario, family, variant, set) %>%
   summarise(
     mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T) / sqrt(n()),
+    mcse_bias = sd(bias, na.rm = T) / sqrt(sum(!is.na(bias))),
+    mean_ate_bias = mean(ate_bias, na.rm = T),
+    mcse_ate_bias = sd(ate_bias, na.rm = T) / sqrt(sum(!is.na(ate_bias))),
+    mean_rel_ate_bias = mean(rel_ate_bias, na.rm = T),
+    mcse_rel_ate_bias = sd(rel_ate_bias, na.rm = T) / sqrt(sum(!is.na(rel_ate_bias))),
+    mean_rel_bias_cate = mean(rel_bias_cate, na.rm = T),
+    mcse_rel_bias_cate = sd(rel_bias_cate, na.rm = T) / sqrt(sum(!is.na(rel_bias_cate))),
     mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T) / sqrt(n()),
+    mcse_mse = sd(mse, na.rm = T) / sqrt(sum(!is.na(mse))),
     mean_corr = mean(corr, na.rm = T),
-    mcse_corr = sd(corr, na.rm = T) / sqrt(n()),
+    mcse_corr = sd(corr, na.rm = T) / sqrt(sum(!is.na(corr))),
     mean_sign_acc = mean(sign_acc, na.rm = T),
-    mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(n()),
+    mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(sum(!is.na(sign_acc))),
     mean_mse_single = mean(mse_test_single, na.rm = T),
-    mcse_mse_single = sd(mse_test_single, na.rm = T) / sqrt(n()),
+    mcse_mse_single = sd(mse_test_single, na.rm = T) / sqrt(sum(!is.na(mse_test_single))),
     mean_time = mean(time_total, na.rm = T),
     mean_time_nuisance = mean(time_nuisance, na.rm = T),
     mean_time_stage2 = mean(time_stage2, na.rm = T),
     .groups = "drop"
   )
 
-# helper: the house summary plot, points with MCSE error bars
+# helper: the house summary plot, points with a 95% CI (mean +/- qnorm(1 -
+# alpha/2) x MCSE) error bar - see continuous/cts_results.R's summary_plot for
+# why this isn't a raw +/- 1x MCSE (~68% coverage, not 95%)
 # facet_wrap (not facet_grid) because variant is family-specific - each family
 # only populates 5-8 of the 13 levels, and facet_grid's free scales only vary
 # per row/column, never per panel, so it would still show every panel all 13
 # categories. facet_wrap frees per panel, dropping the ones absent from that
 # family's arms.
-summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
   df %>%
     mutate(est = .data[[mean_col]],
-           lo = .data[[mean_col]] - .data[[mcse_col]],
-           hi = .data[[mean_col]] + .data[[mcse_col]]) %>%
+           lo = .data[[mean_col]] - z * .data[[mcse_col]],
+           hi = .data[[mean_col]] + z * .data[[mcse_col]]) %>%
     ggplot(aes(x = variant, y = est, colour = set, ymin = lo, ymax = hi)) +
     geom_hline(yintercept = hline, linetype = "dashed") +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
@@ -102,6 +115,25 @@ corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != "Null"),
                               "mean_corr", "mcse_corr",
                               "Mean correlation with the true CATE", "Mean correlation")
 ggsave("cf_corr_summary.png", plot = corr_sum_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
+bias_sum_plot <- summary_plot(metrics_summary, "mean_bias", "mcse_bias",
+                              "Mean bias of CATE estimates", "Mean bias")
+ggsave("cf_bias_summary.png", plot = bias_sum_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
+rel_ate_bias_sum_plot <- summary_plot(metrics_summary, "mean_rel_ate_bias",
+                                      "mcse_rel_ate_bias",
+                                      "Mean relative bias in the ATE",
+                                      "Mean relative ATE bias")
+ggsave("cf_rel_ate_bias_summary.png", plot = rel_ate_bias_sum_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
+rel_bias_cate_sum_plot <- summary_plot(metrics_summary, "mean_rel_bias_cate",
+                                       "mcse_rel_bias_cate",
+                                       "Mean relative bias in the CATE",
+                                       "Mean relative CATE bias")
+ggsave("cf_rel_bias_cate_summary.png", plot = rel_bias_cate_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- generalisation gap: test MSE minus train MSE, per run ------------------
@@ -225,8 +257,10 @@ ggsave("cf_frontier.png", path = fig_path, width = 21, height = 15, units = "cm"
 # --- headline table ---------------------------------------------------------
 headline <- metrics_summary %>%
   filter(set == "Test sample") %>%
-  select(scenario, family, variant, mean_mse, mcse_mse, mean_mse_single,
-         mean_corr, mean_time) %>%
+  select(scenario, family, variant, mean_bias, mcse_bias, mean_ate_bias,
+         mcse_ate_bias, mean_rel_ate_bias, mcse_rel_ate_bias,
+         mean_rel_bias_cate, mcse_rel_bias_cate, mean_mse, mcse_mse,
+         mean_mse_single, mean_corr, mean_time) %>%
   arrange(family, scenario, mean_mse)
 
 print(headline, n = Inf)

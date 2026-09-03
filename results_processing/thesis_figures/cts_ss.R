@@ -25,6 +25,10 @@ metrics <- metrics %>%
 
 metrics_summary <- summarise_metrics(metrics, c("scenario", "n", "model"))
 
+# error bars below are a 95% CI (mean +/- qnorm(0.975) x MCSE), not a raw
+# +/- 1x MCSE (~68% coverage) - see continuous/cts_results.R's summary_plot
+z <- qnorm(0.975)
+
 # bias plots
 bias_plot <- metrics %>%
   ggplot(aes(x=n, y = bias, colour = model)) +
@@ -39,11 +43,11 @@ bias_plot <- metrics %>%
 ggsave("cts_bias_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 bias_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = n, y = mean_bias, colour = model, ymin = mean_bias - mcse_bias, ymax = mean_bias + mcse_bias)) +
+  ggplot(aes(x = n, y = mean_bias, colour = model, ymin = mean_bias - z * mcse_bias, ymax = mean_bias + z * mcse_bias)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(aes(ymin = mean_bias - mcse_bias,
-                    ymax = mean_bias + mcse_bias),
+  geom_errorbar(aes(ymin = mean_bias - z * mcse_bias,
+                    ymax = mean_bias + z * mcse_bias),
                 position = position_dodge(width = 0.5), linewidth = 0.3) +
   facet_wrap(~scenario) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
@@ -70,7 +74,7 @@ ggsave("cts_mse_all.png", path = fig_path, width = 21, height = 15, units = "cm"
 
 mse_sum_plot <- metrics_summary %>%
   #filter(!(n == 100 & model == "DR-SuperLearner")) %>%
-  ggplot(aes(x = n, y = mean_mse, colour = model, ymin = mean_mse - mcse_mse, ymax = mean_mse + mcse_mse)) +
+  ggplot(aes(x = n, y = mean_mse, colour = model, ymin = mean_mse - z * mcse_mse, ymax = mean_mse + z * mcse_mse)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
@@ -107,8 +111,8 @@ corr_sum_plot <- metrics_summary %>%
   filter(scenario != "Null") %>%
   ggplot(aes(x = n, y = mean_corr, colour = model)) +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(aes(ymin = mean_corr - mcse_corr,
-                    ymax = mean_corr + mcse_corr),
+  geom_errorbar(aes(ymin = mean_corr - z * mcse_corr,
+                    ymax = mean_corr + z * mcse_corr),
                 position = position_dodge(width = 0.5), linewidth = 0.3) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   facet_wrap(~scenario) +
@@ -135,8 +139,8 @@ BLP_sum_plot <- metrics_summary %>%
   ggplot(aes(x = n, y = mean_BLP, colour = model)) +
   geom_hline(yintercept = 0.1, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(aes(ymin = mean_BLP - mcse_BLP,
-                    ymax = mean_BLP + mcse_BLP),
+  geom_errorbar(aes(ymin = mean_BLP - z * mcse_BLP,
+                    ymax = mean_BLP + z * mcse_BLP),
                 position = position_dodge(width = 0.5), linewidth = 0.3) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   facet_wrap(~scenario) +
@@ -164,8 +168,8 @@ indep_cate_sum_plot <- metrics_summary %>%
   ggplot(aes(x = n, y = mean_indep_cate, colour = model)) +
   geom_hline(yintercept = 0.1, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(aes(ymin = mean_indep_cate - mcse_indep_cate,
-                    ymax = mean_indep_cate + mcse_indep_cate),
+  geom_errorbar(aes(ymin = mean_indep_cate - z * mcse_indep_cate,
+                    ymax = mean_indep_cate + z * mcse_indep_cate),
                 position = position_dodge(width = 0.5), linewidth = 0.3) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   facet_wrap(~scenario) +
@@ -193,8 +197,8 @@ indep_po_sum_plot <- metrics_summary %>%
   ggplot(aes(x = n, y = mean_indep_po, colour = model)) +
   geom_hline(yintercept = 0.1, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(aes(ymin = mean_indep_po - mcse_indep_po,
-                    ymax = mean_indep_po + mcse_indep_po),
+  geom_errorbar(aes(ymin = mean_indep_po - z * mcse_indep_po,
+                    ymax = mean_indep_po + z * mcse_indep_po),
                 position = position_dodge(width = 0.5), linewidth = 0.3) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   facet_wrap(~scenario) +
@@ -232,7 +236,7 @@ all_tests_sum_plot <- metrics_summary %>%
     names_from = stat_type,
     values_from = value
   ) %>%
-  ggplot(aes(x = model, y = mean, colour = variable, ymin = mean - mcse, ymax = mean + mcse)) +
+  ggplot(aes(x = model, y = mean, colour = variable, ymin = mean - z * mcse, ymax = mean + z * mcse)) +
   geom_hline(yintercept = 0.1, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +

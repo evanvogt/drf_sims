@@ -211,25 +211,37 @@ metrics <- metrics %>%
   droplevels()
 
 # per (scenario, censoring, target, family, variant) summaries
+#
+# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
+# column - not sqrt(n()), the whole group's row count regardless of NAs.
+# corr/spearman/c_stat are genuinely NA for some Event 1 cells (zero-variance
+# truth in scenario 5's ipw/csf_cs arms - see the correlation section below),
+# so those columns are the most exposed.
 metrics_summary <- metrics %>%
   group_by(scenario, censoring, target, family, variant) %>%
   summarise(
     mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T) / sqrt(n()),
+    mcse_bias = sd(bias, na.rm = T) / sqrt(sum(!is.na(bias))),
+    mean_ate_bias = mean(ate_bias, na.rm = T),
+    mcse_ate_bias = sd(ate_bias, na.rm = T) / sqrt(sum(!is.na(ate_bias))),
+    mean_rel_ate_bias = mean(rel_ate_bias, na.rm = T),
+    mcse_rel_ate_bias = sd(rel_ate_bias, na.rm = T) / sqrt(sum(!is.na(rel_ate_bias))),
+    mean_rel_bias_cate = mean(rel_bias_cate, na.rm = T),
+    mcse_rel_bias_cate = sd(rel_bias_cate, na.rm = T) / sqrt(sum(!is.na(rel_bias_cate))),
     mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T) / sqrt(n()),
+    mcse_mse = sd(mse, na.rm = T) / sqrt(sum(!is.na(mse))),
     mean_rmse = mean(rmse, na.rm = T),
-    mcse_rmse = sd(rmse, na.rm = T) / sqrt(n()),
+    mcse_rmse = sd(rmse, na.rm = T) / sqrt(sum(!is.na(rmse))),
     mean_mae = mean(mae, na.rm = T),
-    mcse_mae = sd(mae, na.rm = T) / sqrt(n()),
+    mcse_mae = sd(mae, na.rm = T) / sqrt(sum(!is.na(mae))),
     mean_corr = mean(corr, na.rm = T),
-    mcse_corr = sd(corr, na.rm = T) / sqrt(n()),
+    mcse_corr = sd(corr, na.rm = T) / sqrt(sum(!is.na(corr))),
     mean_spearman = mean(spearman, na.rm = T),
-    mcse_spearman = sd(spearman, na.rm = T) / sqrt(n()),
+    mcse_spearman = sd(spearman, na.rm = T) / sqrt(sum(!is.na(spearman))),
     mean_sign_acc = mean(sign_acc, na.rm = T),
-    mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(n()),
+    mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(sum(!is.na(sign_acc))),
     mean_c_stat = mean(c_stat, na.rm = T),
-    mcse_c_stat = sd(c_stat, na.rm = T) / sqrt(n()),
+    mcse_c_stat = sd(c_stat, na.rm = T) / sqrt(sum(!is.na(c_stat))),
     mean_n_na = mean(n_na, na.rm = T),
     total_n_na = sum(n_na, na.rm = T),
     .groups = "drop"
@@ -259,17 +271,20 @@ kable(
 ```
 
 ```{r summary-plot-helper, include=FALSE}
-# helper: the house summary plot, points with MCSE error bars, faceted by
-# family x scenario x censoring - extends crossfitting/cf_results.qmd's
-# family x scenario facet with the censoring dimension this study has and
-# the precedents don't. facet_wrap (not facet_grid) because variant is
-# family-specific, same reasoning as cf_results.qmd.
-summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0) {
+# helper: the house summary plot, points with a 95% CI (mean +/- qnorm(1 -
+# alpha/2) x MCSE) error bar, faceted by family x scenario x censoring -
+# extends crossfitting/cf_results.qmd's family x scenario facet with the
+# censoring dimension this study has and the precedents don't. facet_wrap
+# (not facet_grid) because variant is family-specific, same reasoning as
+# cf_results.qmd. See continuous/cts_results.R's summary_plot for why this
+# isn't a raw +/- 1x MCSE (~68% coverage, not 95%).
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
   df %>%
     mutate(
       est = .data[[mean_col]],
-      lo = .data[[mean_col]] - .data[[mcse_col]],
-      hi = .data[[mean_col]] + .data[[mcse_col]]
+      lo = .data[[mean_col]] - z * .data[[mcse_col]],
+      hi = .data[[mean_col]] + z * .data[[mcse_col]]
     ) %>%
     ggplot(aes(x = family, y = est, ymin = lo, ymax = hi, colour = variant, shape = censoring)) +
     geom_hline(yintercept = hline, linetype = "dashed") +
@@ -306,6 +321,43 @@ summary_plot(
   "Mean bias"
 )
 ggsave("surv_bias.png", path = figdir, height = 20, width = 30, units = "cm")
+```
+
+## Relative bias
+
+`rel_ate_bias` is the parameter-level relative bias (ATE bias divided by the
+true ATE); `rel_bias_cate` is the per-unit version, `(est - true) / true`
+averaged over units (undefined and set to `NA` wherever the true CATE is
+exactly 0 for a unit — see `R/metrics.R::cate_metrics()`). Both are computed
+alongside `bias` but weren't previously surfaced in this report.
+
+```{r rel-bias-plot, fig.height=8}
+summary_plot(
+  metrics_summary,
+  "mean_ate_bias",
+  "mcse_ate_bias",
+  "Mean bias in the ATE",
+  "Mean ATE bias"
+)
+ggsave("surv_ate_bias.png", path = figdir, height = 20, width = 30, units = "cm")
+
+summary_plot(
+  metrics_summary,
+  "mean_rel_ate_bias",
+  "mcse_rel_ate_bias",
+  "Mean relative bias in the ATE",
+  "Mean relative ATE bias"
+)
+ggsave("surv_rel_ate_bias.png", path = figdir, height = 20, width = 30, units = "cm")
+
+summary_plot(
+  metrics_summary,
+  "mean_rel_bias_cate",
+  "mcse_rel_bias_cate",
+  "Mean relative bias in the CATE",
+  "Mean relative CATE bias"
+)
+ggsave("surv_rel_bias_cate.png", path = figdir, height = 20, width = 30, units = "cm")
 ```
 
 ## MSE of CATE estimates
@@ -478,6 +530,9 @@ headline <- metrics_summary %>%
     family,
     variant,
     mean_bias,
+    mean_ate_bias,
+    mean_rel_ate_bias,
+    mean_rel_bias_cate,
     mean_mse,
     mean_rmse,
     mean_mae,
@@ -496,6 +551,9 @@ kable(
     "Family",
     "Arm",
     "Mean bias",
+    "Mean ATE bias",
+    "Mean relative ATE bias",
+    "Mean relative CATE bias",
     "Mean MSE",
     "Mean RMSE",
     "Mean MAE",

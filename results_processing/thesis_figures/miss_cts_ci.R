@@ -28,21 +28,35 @@ metrics <- metrics %>%
 
 
 # per scenario summaries
+#
+# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
+# column - not sqrt(n()), the whole group's row count regardless of NAs.
+# mcse_mar_cov/mcse_sim_cov/mcse_ci_len previously had NO denominator at all
+# (just sd(x)) - those were raw standard deviations plotted as if they were
+# standard errors, inflating the error bars by sqrt(n_runs).
 metrics_summary <- metrics %>%
   group_by(scenario, n, type, prop, mechanism, method, model, strategy) %>%
   summarise(
     mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T)/sqrt(n()),
+    mcse_bias = sd(bias, na.rm = T)/sqrt(sum(!is.na(bias))),
     mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T)/sqrt(n()),
+    mcse_mse = sd(mse, na.rm = T)/sqrt(sum(!is.na(mse))),
     mean_mar_cov = mean(marginal_coverage, na.rm = T),
-    mcse_mar_cov = sd(marginal_coverage, na.rm = T),
+    mcse_mar_cov = sd(marginal_coverage, na.rm = T)/sqrt(sum(!is.na(marginal_coverage))),
+    # simultaneous_coverage is a genuine 0/1 indicator per run (whole-band
+    # coverage), so it gets the exact binomial MCSE, not the general one
+    # marginal_coverage above uses (that's a proportion over many units
+    # within a run, not Bernoulli at the run level)
     mean_sim_cov = mean(simultaneous_coverage, na.rm = T),
-    mcse_sim_cov = sd(simultaneous_coverage, na.rm = T),
+    mcse_sim_cov = sqrt(mean_sim_cov * (1 - mean_sim_cov)/sum(!is.na(simultaneous_coverage))),
     mean_ci_len = mean(mean_ci_length, na.rm = T),
-    mcse_ci_len = sd(mean_ci_length, na.rm = T),
+    mcse_ci_len = sd(mean_ci_length, na.rm = T)/sqrt(sum(!is.na(mean_ci_length))),
     .groups = "drop"
   )
+
+# error bars below are a 95% CI (mean +/- qnorm(0.975) x MCSE), not a raw
+# +/- 1x MCSE (~68% coverage) - see continuous/cts_results.R's summary_plot
+z <- qnorm(0.975)
 
 # combining everything into a single plot?
 
@@ -60,7 +74,7 @@ mar_cov_plot <- metrics %>%
 
 # summary
 mar_cov_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = strategy, y = mean_mar_cov, colour = model, ymin = mean_mar_cov - mcse_mar_cov, ymax = mean_mar_cov + mcse_mar_cov)) +
+  ggplot(aes(x = strategy, y = mean_mar_cov, colour = model, ymin = mean_mar_cov - z * mcse_mar_cov, ymax = mean_mar_cov + z * mcse_mar_cov)) +
   geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
@@ -84,7 +98,7 @@ sim_cov_plot <- metrics %>%
 
 # summary
 sim_cov_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = strategy, y = mean_sim_cov, colour = model, ymin = mean_sim_cov - mcse_sim_cov, ymax = mean_sim_cov + mcse_sim_cov)) +
+  ggplot(aes(x = strategy, y = mean_sim_cov, colour = model, ymin = mean_sim_cov - z * mcse_sim_cov, ymax = mean_sim_cov + z * mcse_sim_cov)) +
   geom_hline(yintercept = 0.95, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
@@ -106,7 +120,7 @@ ci_len_plot <- metrics %>%
 
 # summary
 ci_len_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = strategy, y = mean_ci_len, colour = model, ymin = mean_ci_len - mcse_ci_len, ymax = mean_ci_len + mcse_ci_len)) +
+  ggplot(aes(x = strategy, y = mean_ci_len, colour = model, ymin = mean_ci_len - z * mcse_ci_len, ymax = mean_ci_len + z * mcse_ci_len)) +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
   facet_wrap(~scenario) +

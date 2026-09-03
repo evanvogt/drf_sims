@@ -5,34 +5,16 @@
 # while streaming the per-run files, so the metrics tibble is built in one pass
 # and the large nested intermediate the other studies write is never materialised.
 #
-# Note on sign: bias is (estimate - truth) here, the usual convention. cts_metrics.R:37
-# uses mean(true - est) for bias while its ate_bias at line 43 uses the opposite
-# sign, so these numbers are not sign-comparable with the main continuous study.
+# cate_metrics() itself now comes from R/metrics.R, the same shared definition
+# every other study uses - this used to be its own local copy here (predating
+# the shared version, and missing rel_ate_bias/rel_bias_cate as a result). Both
+# versions use the same (estimate - truth) bias convention, so this is a
+# straight swap with no sign change.
 
 require(dplyr)
 require(tibble)
-
-#' Point metrics for one set of CATE estimates against the known truth
-#'
-#' @param est estimated CATEs
-#' @param true true CATEs
-#' @param scenario scenario index; scenario 1 has no heterogeneity so the
-#'   correlation metrics are undefined and forced to 0, as in cts_metrics.R:41
-cate_metrics <- function(est, true, scenario) {
-  tibble(
-    bias = mean(est - true, na.rm = TRUE),
-    ate_bias = mean(est, na.rm = TRUE) - mean(true, na.rm = TRUE),
-    mse = mean((est - true)^2, na.rm = TRUE),
-    rmse = sqrt(mean((est - true)^2, na.rm = TRUE)),
-    mae = mean(abs(est - true), na.rm = TRUE),
-    corr = if (scenario != 1) cor(true, est, use = "pairwise.complete.obs") else 0,
-    spearman = if (scenario != 1) {
-      cor(true, est, method = "spearman", use = "pairwise.complete.obs")
-    } else 0,
-    sign_acc = mean(sign(est) == sign(true), na.rm = TRUE),
-    n_na = sum(is.na(est))
-  )
-}
+library(here)
+source(here("R", "metrics.R"))
 
 #' Metrics for every arm of one replicate, on both the training and test samples
 #'

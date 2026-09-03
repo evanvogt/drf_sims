@@ -55,31 +55,47 @@ metrics <- metrics %>%
   droplevels()
 
 # per (scenario, model, n) summaries
+# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
+# column - not sqrt(n()), the whole group's row count regardless of NAs.
+# BLP_p/indep_cate/indep_po are NA_real_ whenever the HTE test wasn't run
+# (R/metrics.R::hte_test_metrics()), so those columns are the most exposed.
 metrics_summary <- metrics %>%
   group_by(scenario, model, n) %>%
   summarise(
     mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T) / sqrt(n()),
+    mcse_bias = sd(bias, na.rm = T) / sqrt(sum(!is.na(bias))),
     mean_ate_bias = mean(ate_bias, na.rm = T),
-    mcse_ate_bias = sd(ate_bias, na.rm = T) / sqrt(n()),
+    mcse_ate_bias = sd(ate_bias, na.rm = T) / sqrt(sum(!is.na(ate_bias))),
+    mean_rel_ate_bias = mean(rel_ate_bias, na.rm = T),
+    mcse_rel_ate_bias = sd(rel_ate_bias, na.rm = T) / sqrt(sum(!is.na(rel_ate_bias))),
+    mean_rel_bias_cate = mean(rel_bias_cate, na.rm = T),
+    mcse_rel_bias_cate = sd(rel_bias_cate, na.rm = T) / sqrt(sum(!is.na(rel_bias_cate))),
     mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T) / sqrt(n()),
+    mcse_mse = sd(mse, na.rm = T) / sqrt(sum(!is.na(mse))),
     mean_rmse = mean(rmse, na.rm = T),
-    mcse_rmse = sd(rmse, na.rm = T) / sqrt(n()),
+    mcse_rmse = sd(rmse, na.rm = T) / sqrt(sum(!is.na(rmse))),
     mean_mae = mean(mae, na.rm = T),
-    mcse_mae = sd(mae, na.rm = T) / sqrt(n()),
+    mcse_mae = sd(mae, na.rm = T) / sqrt(sum(!is.na(mae))),
     mean_corr = mean(corr, na.rm = T),
-    mcse_corr = sd(corr, na.rm = T) / sqrt(n()),
+    mcse_corr = sd(corr, na.rm = T) / sqrt(sum(!is.na(corr))),
     mean_spearman = mean(spearman, na.rm = T),
-    mcse_spearman = sd(spearman, na.rm = T) / sqrt(n()),
+    mcse_spearman = sd(spearman, na.rm = T) / sqrt(sum(!is.na(spearman))),
     mean_sign_acc = mean(sign_acc, na.rm = T),
-    mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(n()),
+    mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(sum(!is.na(sign_acc))),
     mean_BLP = mean(BLP_p, na.rm = T),
-    mcse_BLP = sd(BLP_p, na.rm = T) / sqrt(n()),
+    mcse_BLP = sd(BLP_p, na.rm = T) / sqrt(sum(!is.na(BLP_p))),
     mean_indep_cate = mean(indep_cate, na.rm = T),
-    mcse_indep_cate = sd(indep_cate, na.rm = T) / sqrt(n()),
+    mcse_indep_cate = sd(indep_cate, na.rm = T) / sqrt(sum(!is.na(indep_cate))),
     mean_indep_po = mean(indep_po, na.rm = T),
-    mcse_indep_po = sd(indep_po, na.rm = T) / sqrt(n()),
+    mcse_indep_po = sd(indep_po, na.rm = T) / sqrt(sum(!is.na(indep_po))),
+    # power: proportion of runs rejecting at alpha=0.05 - a genuine 0/1
+    # indicator, so it gets the binomial MCSE, unlike the mean p-values above
+    power_BLP = mean(BLP_p < 0.05, na.rm = T),
+    mcse_power_BLP = sqrt(power_BLP * (1 - power_BLP) / sum(!is.na(BLP_p))),
+    power_indep_cate = mean(indep_cate < 0.05, na.rm = T),
+    mcse_power_indep_cate = sqrt(power_indep_cate * (1 - power_indep_cate) / sum(!is.na(indep_cate))),
+    power_indep_po = mean(indep_po < 0.05, na.rm = T),
+    mcse_power_indep_po = sqrt(power_indep_po * (1 - power_indep_po) / sum(!is.na(indep_po))),
     mean_n_na = mean(n_na, na.rm = T),
     total_n_na = sum(n_na, na.rm = T),
     .groups = "drop"
@@ -149,6 +165,24 @@ ggsave("cts_ate_bias_all.png", path = fig_path, width = 21, height = 15, units =
 ate_bias_sum_plot <- summary_plot(metrics_summary, "mean_ate_bias", "mcse_ate_bias",
                                   "Mean ATE bias", "Mean ATE bias")
 ggsave("cts_ate_bias_summary.png", plot = ate_bias_sum_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
+# --- relative bias -----------------------------------------------------
+# rel_ate_bias: ATE bias divided by the true ATE. rel_bias_cate: per-unit
+# (est - true) / true, averaged over units (NA wherever true CATE is exactly
+# 0 for a unit - see R/metrics.R::cate_metrics())
+rel_ate_bias_sum_plot <- summary_plot(metrics_summary, "mean_rel_ate_bias",
+                                      "mcse_rel_ate_bias",
+                                      "Mean relative bias in the ATE",
+                                      "Mean relative ATE bias")
+ggsave("cts_rel_ate_bias_summary.png", plot = rel_ate_bias_sum_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
+rel_bias_cate_sum_plot <- summary_plot(metrics_summary, "mean_rel_bias_cate",
+                                       "mcse_rel_bias_cate",
+                                       "Mean relative bias in the CATE",
+                                       "Mean relative CATE bias")
+ggsave("cts_rel_bias_cate_summary.png", plot = rel_bias_cate_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- MSE -----------------------------------------------------------------
@@ -324,6 +358,28 @@ indep_po_sum_plot <- summary_plot(metrics_summary, "mean_indep_po", "mcse_indep_
 ggsave("cts_indep_po_summary.png", plot = indep_po_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
+# --- HTE test power (proportion rejecting at alpha=0.05) --------------------
+# the rsimsum-standard measure for a hypothesis test's simulated behaviour,
+# alongside the mean p-values above
+BLP_power_plot <- summary_plot(metrics_summary, "power_BLP", "mcse_power_BLP",
+                               "BLP test power", "Power", hline = 0.05)
+ggsave("cts_blp_power.png", plot = BLP_power_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
+indep_cate_power_plot <- summary_plot(metrics_summary, "power_indep_cate",
+                                      "mcse_power_indep_cate",
+                                      "CATE permutation test power", "Power",
+                                      hline = 0.05)
+ggsave("cts_indep_cate_power.png", plot = indep_cate_power_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
+indep_po_power_plot <- summary_plot(metrics_summary, "power_indep_po",
+                                    "mcse_power_indep_po",
+                                    "PO permutation test power", "Power",
+                                    hline = 0.05)
+ggsave("cts_indep_po_power.png", plot = indep_po_power_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
 # --- missing estimates (n_na) diagnostic ------------------------------------
 # a count, mostly zero - not a performance metric, so a table rather than a
 # boxplot; printed only, not saved, same treatment as every other
@@ -341,8 +397,10 @@ if (nrow(na_table) > 0) {
 
 # --- headline table -----------------------------------------------------
 headline <- metrics_summary %>%
-  select(scenario, model, n, mean_bias, mean_mse, mean_rmse, mean_mae,
-         mean_sign_acc, mean_corr, mean_BLP, mean_indep_cate, mean_indep_po) %>%
+  select(scenario, model, n, mean_bias, mean_ate_bias, mean_rel_ate_bias,
+         mean_rel_bias_cate, mean_mse, mean_rmse, mean_mae,
+         mean_sign_acc, mean_corr, mean_BLP, mean_indep_cate, mean_indep_po,
+         power_BLP, power_indep_cate, power_indep_po) %>%
   arrange(scenario, n, mean_mse)
 
 print(headline, n = Inf)

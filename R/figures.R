@@ -108,25 +108,50 @@ apply_labels <- function(metrics, scenario_labels = NULL) {
 
 #' Mean and Monte Carlo standard error for each metric, by group
 #'
-#' The MCSE is sd / sqrt(number of runs), so it describes how precisely the
-#' simulation has pinned down the mean - not the spread across runs.
+#' For a continuous measure (bias, MSE, a p-value, ...) the MCSE is
+#' sd(x) / sqrt(number of non-NA runs) - it describes how precisely the
+#' simulation has pinned down the mean, not the spread across runs. For a
+#' genuine 0/1 indicator measured once per run (coverage of the whole band,
+#' a hit/miss pick, ...) the correct MCSE is instead the binomial
+#' sqrt(p(1-p)/n) - using the general sd-based formula there is not wrong in
+#' the limit, but doesn't match the convention `rsimsum`/Morris, White &
+#' Crowther (2019) document for these measures. List any such column's stem
+#' in `binomial` to get that treatment instead. Do NOT list a column that is
+#' a proportion averaged over many units *within* a run (e.g. marginal
+#' coverage, sign accuracy) - those are not Bernoulli at the run level, and
+#' the binomial formula would badly overstate their MCSE.
 #'
 #' @param metrics one row per run
 #' @param group_cols character vector of grouping columns
 #' @param cols named vector: names are the output stems, values the source
 #'   columns. The default keeps the stems the existing figure code already uses -
 #'   note `BLP` rather than `BLP_p`, giving mean_BLP / mcse_BLP.
+#' @param binomial character vector of stems (from `names(cols)`) that are
+#'   genuine per-run 0/1 indicators and should get the binomial MCSE formula
+#'   instead of the general one. Empty by default.
 summarise_metrics <- function(metrics, group_cols,
                               cols = c(bias = "bias", mse = "mse", corr = "corr",
                                        BLP = "BLP_p", indep_cate = "indep_cate",
-                                       indep_po = "indep_po")) {
+                                       indep_po = "indep_po",
+                                       rel_ate_bias = "rel_ate_bias",
+                                       rel_bias_cate = "rel_bias_cate"),
+                              binomial = character()) {
   cols <- cols[cols %in% names(metrics)]
+  cont_cols <- cols[!names(cols) %in% binomial]
+  binom_cols <- cols[names(cols) %in% binomial]
 
   out <- metrics %>%
     group_by(across(all_of(group_cols))) %>%
-    summarise(across(all_of(unname(cols)),
+    summarise(across(all_of(unname(cont_cols)),
                      list(mean = ~ mean(.x, na.rm = TRUE),
                           mcse = ~ sd(.x, na.rm = TRUE) / sqrt(sum(!is.na(.x)))),
+                     .names = "{.fn}__{.col}"),
+              across(all_of(unname(binom_cols)),
+                     list(mean = ~ mean(.x, na.rm = TRUE),
+                          mcse = ~ {
+                            p <- mean(.x, na.rm = TRUE)
+                            sqrt(p * (1 - p) / sum(!is.na(.x)))
+                          }),
                      .names = "{.fn}__{.col}"),
               .groups = "drop")
 
@@ -167,16 +192,21 @@ save_fig <- function(filename, path, width = 21, height = 15) {
 #' @param metric metric stem, e.g. "bias" - expects mean_<metric>/mcse_<metric>
 #' @param y_lab axis label
 #' @param facet_scales passed to facet_grid
+#' @param alpha error bar is a (1 - alpha) CI, i.e. mean +/- qnorm(1 -
+#'   alpha/2) x MCSE - not a raw +/- 1x MCSE, which is only a ~68% interval
+#'   (see continuous/cts_results.R's summary_plot() for the verification of
+#'   why the raw form is wrong)
 point_range_plot <- function(summary, metric, y_lab, x = "model",
                              colour = "method", facet_scales = "free",
-                             blank_x = FALSE) {
+                             blank_x = FALSE, alpha = 0.05) {
   mean_col <- paste0("mean_", metric)
   mcse_col <- paste0("mcse_", metric)
+  z <- qnorm(1 - alpha / 2)
 
   p <- ggplot(summary, aes(x = .data[[x]], y = .data[[mean_col]],
                            colour = .data[[colour]],
-                           ymin = .data[[mean_col]] - .data[[mcse_col]],
-                           ymax = .data[[mean_col]] + .data[[mcse_col]])) +
+                           ymin = .data[[mean_col]] - z * .data[[mcse_col]],
+                           ymax = .data[[mean_col]] + z * .data[[mcse_col]])) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +

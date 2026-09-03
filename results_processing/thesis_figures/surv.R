@@ -51,27 +51,36 @@ metrics <- metrics %>%
   )
 
 # per scenario summaries
+#
+# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
+# column - not sqrt(n()), the whole group's row count regardless of NAs.
+# corr is genuinely NA for some Event 1 cells (zero-variance truth in
+# scenario 5's ipw/csf_cs arms), so it's the most exposed here.
 metrics_summary <- metrics %>%
   group_by(scenario, description, n, censoring, framework, target) %>%
   summarise(
     mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T)/sqrt(n()),
+    mcse_bias = sd(bias, na.rm = T)/sqrt(sum(!is.na(bias))),
     mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T)/sqrt(n()),
+    mcse_mse = sd(mse, na.rm = T)/sqrt(sum(!is.na(mse))),
     mean_corr = mean(corr, na.rm = T),
-    mcse_corr = sd(corr, na.rm = T)/sqrt(n()),
+    mcse_corr = sd(corr, na.rm = T)/sqrt(sum(!is.na(corr))),
     .groups = "drop"
   )
 
-# create a cleaner metrics table to save and look at to write results
+# create a cleaner metrics table to save and look at to write results.
+# intervals are a 95% CI (mean +/- qnorm(0.975) x MCSE), not a raw +/- 1x
+# MCSE (~68% coverage) - see continuous/cts_results.R's summary_plot
+z <- qnorm(0.975)
+
 metrics_sum_tidy <- metrics_summary %>%
   mutate(
-    bias_lb = signif(mean_bias - mcse_bias, 4),
-    bias_ub = signif(mean_bias + mcse_bias, 4),
-    mse_lb = signif(mean_mse - mcse_mse, 4),
-    mse_ub = signif(mean_mse + mcse_mse, 4),
-    corr_lb = signif(mean_corr - mcse_corr, 4),
-    corr_ub = signif(mean_corr + mcse_corr, 4),
+    bias_lb = signif(mean_bias - z * mcse_bias, 4),
+    bias_ub = signif(mean_bias + z * mcse_bias, 4),
+    mse_lb = signif(mean_mse - z * mcse_mse, 4),
+    mse_ub = signif(mean_mse + z * mcse_mse, 4),
+    corr_lb = signif(mean_corr - z * mcse_corr, 4),
+    corr_ub = signif(mean_corr + z * mcse_corr, 4),
     bias = signif(mean_bias, 4),
     mse = signif(mean_mse, 4),
     corr = signif(mean_corr, 4)
@@ -87,7 +96,7 @@ write.csv(metrics_sum_tidy, file.path(res_path, "surv_metric_sum_tidy.csv"))
 bias_plot <- metrics_summary %>%
   filter(!(framework == "IPW" & target == "Event 2")) %>%
   #filter(!(framework %in% c("CSF - censoring CEs", "IPW"))) %>%
-  ggplot(aes(x = censoring, colour = framework, y = mean_bias, ymin = mean_bias - mcse_bias, ymax = mean_bias + mcse_bias)) +
+  ggplot(aes(x = censoring, colour = framework, y = mean_bias, ymin = mean_bias - z * mcse_bias, ymax = mean_bias + z * mcse_bias)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
@@ -102,7 +111,7 @@ ggsave("surv_bias.png", path = fig_path, width = 21, height = 15, units = "cm")
 mse_plot <- metrics_summary %>%
   filter(!(framework == "IPW" & target == "Event 2")) %>%
   #filter(!(framework %in% c("CSF - censoring CEs", "IPW"))) %>%
-  ggplot(aes(x = censoring, colour = framework, y = mean_mse, ymin = mean_mse - mcse_mse, ymax = mean_mse + mcse_mse)) +
+  ggplot(aes(x = censoring, colour = framework, y = mean_mse, ymin = mean_mse - z * mcse_mse, ymax = mean_mse + z * mcse_mse)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
@@ -119,7 +128,7 @@ ggsave("surv_mse.png", path = fig_path, width = 21, height = 15, units = "cm")
 metrics_summary %>%
   filter(framework == "IPW") %>%
   #filter(framework %in% c("CSF - censoring CEs", "CSF - subdistribution")) %>%
-  ggplot(aes(x = censoring, colour = framework, y = mean_bias, ymin = mean_bias - mcse_bias, ymax = mean_bias + mcse_bias)) +
+  ggplot(aes(x = censoring, colour = framework, y = mean_bias, ymin = mean_bias - z * mcse_bias, ymax = mean_bias + z * mcse_bias)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
@@ -133,7 +142,7 @@ metrics_summary %>%
 metrics_summary %>%
   filter(framework == "IPW") %>%
   #filter(framework %in% c("CSF - censoring CEs", "CSF - subdistribution")) %>%
-  ggplot(aes(x = censoring, colour = framework, y = mean_mse, ymin = mean_mse - mcse_mse, ymax = mean_mse + mcse_mse)) +
+  ggplot(aes(x = censoring, colour = framework, y = mean_mse, ymin = mean_mse - z * mcse_mse, ymax = mean_mse + z * mcse_mse)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +

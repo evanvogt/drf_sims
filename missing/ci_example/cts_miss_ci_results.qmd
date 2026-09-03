@@ -82,13 +82,21 @@ metrics <- metrics %>%
   mutate(n = factor(n), prop = factor(prop)) %>%
   droplevels()
 
+# sim_cov (simultaneous_coverage) is a genuine 0/1 indicator per run
+# (whole-band coverage), so it's flagged for the exact binomial MCSE via
+# `binomial=` - mar_cov (marginal_coverage) is a proportion over many units
+# within a run, not Bernoulli at the run level, so it stays on the general
+# sd(x)/sqrt(n) path.
 metrics_summary <- summarise_metrics(
   metrics,
   c("scenario", "n", "type", "prop", "mechanism", "method", "model", "strategy"),
-  cols = c(bias = "bias", ate_bias = "ate_bias", mse = "mse", rmse = "rmse",
+  cols = c(bias = "bias", ate_bias = "ate_bias",
+           rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate",
+           mse = "mse", rmse = "rmse",
            mae = "mae", corr = "corr", spearman = "spearman",
            sign_acc = "sign_acc", mar_cov = "marginal_coverage",
-           sim_cov = "simultaneous_coverage", ci_len = "mean_ci_length")
+           sim_cov = "simultaneous_coverage", ci_len = "mean_ci_length"),
+  binomial = c("sim_cov")
 )
 ```
 

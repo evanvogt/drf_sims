@@ -166,15 +166,21 @@ for (scenario in SCENARIOS) {
     }
 
     cell_i <- cell_i + 1
+    # na.rm = TRUE + sqrt(sum(!is.na(x))), not sqrt(N_REPS) - the requested
+    # rep count, not necessarily the number of non-NA values a cell actually
+    # got (matches the convention in R/figures.R::summarise_metrics())
     cell_results[[cell_i]] <- tibble(
       scenario = scenario, n = n, n_reps = N_REPS,
-      stage1_bias_mean = mean(stage1_bias), stage1_bias_mcse = sd(stage1_bias) / sqrt(N_REPS),
-      final_bias_mean  = mean(final_bias),  final_bias_mcse  = sd(final_bias) / sqrt(N_REPS),
-      ols_bias_mean    = mean(ols_bias),    ols_bias_mcse    = sd(ols_bias) / sqrt(N_REPS),
-      stage2_contribution = mean(final_bias) - mean(stage1_bias),
-      forest_minus_ols = mean(final_bias) - mean(ols_bias),
-      mse_mean = mean(mse), corr_mean = mean(corr),
-      te_exact_maxdev = max(te_maxdev)
+      stage1_bias_mean = mean(stage1_bias, na.rm = TRUE),
+      stage1_bias_mcse = sd(stage1_bias, na.rm = TRUE) / sqrt(sum(!is.na(stage1_bias))),
+      final_bias_mean  = mean(final_bias, na.rm = TRUE),
+      final_bias_mcse  = sd(final_bias, na.rm = TRUE) / sqrt(sum(!is.na(final_bias))),
+      ols_bias_mean    = mean(ols_bias, na.rm = TRUE),
+      ols_bias_mcse    = sd(ols_bias, na.rm = TRUE) / sqrt(sum(!is.na(ols_bias))),
+      stage2_contribution = mean(final_bias, na.rm = TRUE) - mean(stage1_bias, na.rm = TRUE),
+      forest_minus_ols = mean(final_bias, na.rm = TRUE) - mean(ols_bias, na.rm = TRUE),
+      mse_mean = mean(mse, na.rm = TRUE), corr_mean = mean(corr, na.rm = TRUE),
+      te_exact_maxdev = max(te_maxdev, na.rm = TRUE)
     )
   }
 }

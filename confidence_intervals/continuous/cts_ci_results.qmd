@@ -160,15 +160,24 @@ metrics <- metrics %>%
 # per (scenario, n, CI_sf, model, interval) summaries. Computed over every
 # interval kind so the comparison section can reuse them; `summary_hb` is the
 # bootstrap-only view every other section uses.
+#
+# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
+# column - not sqrt(n()), the whole group's row count regardless of NAs.
+# interval_metrics() (R/metrics.R) has no internal na.rm, so one failed CI
+# bound in a run makes marginal_coverage/mean_ci_length NA for that whole run.
 metrics_summary <- metrics %>%
   group_by(scenario, n, CI_sf, model, interval) %>%
   summarise(
     mean_marg_cov = mean(marginal_coverage, na.rm = T),
-    mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(n()),
+    mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(sum(!is.na(marginal_coverage))),
+    # simultaneous_coverage is a genuine 0/1 indicator per run (whole-band
+    # coverage), so it gets the exact binomial MCSE, not the general one
+    # marginal_coverage above uses (that's a proportion over many units
+    # within a run, not Bernoulli at the run level)
     mean_simul_cov = mean(simultaneous_coverage, na.rm = T),
-    mcse_simul_cov = sd(simultaneous_coverage, na.rm = T) / sqrt(n()),
+    mcse_simul_cov = sqrt(mean_simul_cov * (1 - mean_simul_cov) / sum(!is.na(simultaneous_coverage))),
     mean_ci_len = mean(mean_ci_length, na.rm = T),
-    mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(n()),
+    mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(sum(!is.na(mean_ci_length))),
     .groups = "drop"
   )
 
@@ -197,11 +206,12 @@ box_plot <- function(df, metric, title, ylab, hline = NULL) {
     labs(title = title, y = ylab, x = "Subsampling ratio", colour = "Model")
 }
 
-summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
   df <- df %>%
     mutate(est = .data[[mean_col]],
-           lo = .data[[mean_col]] - .data[[mcse_col]],
-           hi = .data[[mean_col]] + .data[[mcse_col]])
+           lo = .data[[mean_col]] - z * .data[[mcse_col]],
+           hi = .data[[mean_col]] + z * .data[[mcse_col]])
   p <- ggplot(df, aes(x = CI_sf, y = est, colour = model, ymin = lo, ymax = hi))
   if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
   p +
@@ -217,11 +227,12 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
 # the interval-kind comparison needs a different assignment of aesthetics: the
 # kind takes the colour, so the estimator moves onto the facet columns and n
 # onto the point shape.
-interval_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+interval_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
   df <- df %>%
     mutate(est = .data[[mean_col]],
-           lo = .data[[mean_col]] - .data[[mcse_col]],
-           hi = .data[[mean_col]] + .data[[mcse_col]])
+           lo = .data[[mean_col]] - z * .data[[mcse_col]],
+           hi = .data[[mean_col]] + z * .data[[mcse_col]])
   p <- ggplot(df, aes(x = CI_sf, y = est, colour = interval, shape = n,
                       ymin = lo, ymax = hi))
   if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")

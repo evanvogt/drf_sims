@@ -337,18 +337,24 @@ selection_summary <- selection %>%
   ) %>%
   summarise(
     runs = n(),
+    # mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of
+    # that column, not sqrt(n()) - rho/kendall are NA whenever score or
+    # true_pehe is constant within a run (a degenerate fit), so those two are
+    # the most exposed.
     mean_rho = mean(rho, na.rm = T),
-    mcse_rho = sd(rho, na.rm = T) / sqrt(n()),
+    mcse_rho = sd(rho, na.rm = T) / sqrt(sum(!is.na(rho))),
     mean_kendall = mean(kendall, na.rm = T),
-    mcse_kendall = sd(kendall, na.rm = T) / sqrt(n()),
+    mcse_kendall = sd(kendall, na.rm = T) / sqrt(sum(!is.na(kendall))),
+    # hit is a genuine 0/1 indicator per run (pick == best), so it gets the
+    # exact binomial MCSE, not the general sd(x)/sqrt(n) formula used above
     mean_hit = mean(hit, na.rm = T),
-    mcse_hit = sd(hit, na.rm = T) / sqrt(n()),
+    mcse_hit = sqrt(mean_hit * (1 - mean_hit) / sum(!is.na(hit))),
     mean_rank = mean(pick_rank, na.rm = T),
-    mcse_rank = sd(pick_rank, na.rm = T) / sqrt(n()),
+    mcse_rank = sd(pick_rank, na.rm = T) / sqrt(sum(!is.na(pick_rank))),
     mean_regret = mean(regret, na.rm = T),
-    mcse_regret = sd(regret, na.rm = T) / sqrt(n()),
+    mcse_regret = sd(regret, na.rm = T) / sqrt(sum(!is.na(regret))),
     mean_rel_regret = mean(rel_regret, na.rm = T),
-    mcse_rel_regret = sd(rel_regret, na.rm = T) / sqrt(n()),
+    mcse_rel_regret = sd(rel_regret, na.rm = T) / sqrt(sum(!is.na(rel_regret))),
     .groups = "drop"
   )
 ```
@@ -378,7 +384,7 @@ fixed_choice <- metrics %>%
   group_by(scenario, n, model) %>%
   summarise(
     mean_regret = mean(fixed_regret, na.rm = T),
-    mcse_regret = sd(fixed_regret, na.rm = T) / sqrt(n()),
+    mcse_regret = sd(fixed_regret, na.rm = T) / sqrt(sum(!is.na(fixed_regret))),
     .groups = "drop"
   )
 
@@ -416,12 +422,13 @@ box_plot <- function(df, metric, title, ylab, hline = NULL) {
     labs(title = title, y = ylab, x = "Proxy score", colour = "Score type")
 }
 
-summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
   df <- df %>%
     mutate(
       est = .data[[mean_col]],
-      lo = .data[[mean_col]] - .data[[mcse_col]],
-      hi = .data[[mean_col]] + .data[[mcse_col]]
+      lo = .data[[mean_col]] - z * .data[[mcse_col]],
+      hi = .data[[mean_col]] + z * .data[[mcse_col]]
     )
   p <- ggplot(
     df,
@@ -468,12 +475,13 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
     )
 }
 
-sum_ns_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+sum_ns_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
   df <- df %>%
     mutate(
       est = .data[[mean_col]],
-      lo = .data[[mean_col]] - .data[[mcse_col]],
-      hi = .data[[mean_col]] + .data[[mcse_col]]
+      lo = .data[[mean_col]] - z * .data[[mcse_col]],
+      hi = .data[[mean_col]] + z * .data[[mcse_col]]
     )
   p <- ggplot(
     df,
@@ -872,26 +880,33 @@ axis_long <- selection %>%
     level = factor(level_labels[level], levels = unname(level_labels))
   )
 
+# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
+# column, not sqrt(n()) - kendall carries the same degenerate-fit NA risk
+# noted at selection_summary above, since axis_long is built from the same
+# selection rows.
 axis_summary <- axis_long %>%
   group_by(scenario, n, axis, level) %>%
   summarise(
+    # hit is a genuine 0/1 indicator per run, so it gets the exact binomial
+    # MCSE, not the general sd(x)/sqrt(n) formula the others here use
     mean_hit = mean(hit, na.rm = T),
-    mcse_hit = sd(hit, na.rm = T) / sqrt(n()),
+    mcse_hit = sqrt(mean_hit * (1 - mean_hit) / sum(!is.na(hit))),
     mean_kendall = mean(kendall, na.rm = T),
-    mcse_kendall = sd(kendall, na.rm = T) / sqrt(n()),
+    mcse_kendall = sd(kendall, na.rm = T) / sqrt(sum(!is.na(kendall))),
     mean_rank = mean(pick_rank, na.rm = T),
-    mcse_rank = sd(pick_rank, na.rm = T) / sqrt(n()),
+    mcse_rank = sd(pick_rank, na.rm = T) / sqrt(sum(!is.na(pick_rank))),
     mean_regret = mean(regret, na.rm = T),
-    mcse_regret = sd(regret, na.rm = T) / sqrt(n()),
+    mcse_regret = sd(regret, na.rm = T) / sqrt(sum(!is.na(regret))),
     .groups = "drop"
   )
 
-axis_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+axis_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
   df <- df %>%
     mutate(
       est = .data[[mean_col]],
-      lo = .data[[mean_col]] - .data[[mcse_col]],
-      hi = .data[[mean_col]] + .data[[mcse_col]]
+      lo = .data[[mean_col]] - z * .data[[mcse_col]],
+      hi = .data[[mean_col]] + z * .data[[mcse_col]]
     )
   p <- ggplot(df, aes(x = level, y = est, colour = n, ymin = lo, ymax = hi))
   if (!is.null(hline)) {

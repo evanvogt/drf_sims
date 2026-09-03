@@ -200,7 +200,8 @@ subgroup_prop <- subgroups_long %>%
             .groups = "drop")
 
 ggplot(subgroup_prop, aes(x = interim_prop, y = prop_sig, colour = threshold,
-                          ymin = prop_sig - mcse, ymax = prop_sig + mcse)) +
+                          ymin = prop_sig - qnorm(0.975) * mcse,
+                          ymax = prop_sig + qnorm(0.975) * mcse)) +
   geom_ribbon(aes(fill = threshold), alpha = 0.15, colour = NA) +
   geom_line() +
   geom_point(size = 1.5) +
@@ -262,7 +263,8 @@ var_change_summary <- variances %>%
             .groups = "drop")
 
 ggplot(var_change_summary, aes(x = interim_prop, y = mean_change, colour = model,
-                               ymin = mean_change - mcse, ymax = mean_change + mcse)) +
+                               ymin = mean_change - qnorm(0.975) * mcse,
+                               ymax = mean_change + qnorm(0.975) * mcse)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_ribbon(aes(fill = model), alpha = 0.15, colour = NA) +
   geom_line() +
@@ -298,7 +300,8 @@ rank_corr_summary <- rank_corr %>%
             .groups = "drop")
 
 ggplot(rank_corr_summary, aes(x = interim_prop, y = mean_rho, colour = measure,
-                              ymin = mean_rho - mcse, ymax = mean_rho + mcse)) +
+                              ymin = mean_rho - qnorm(0.975) * mcse,
+                              ymax = mean_rho + qnorm(0.975) * mcse)) +
   geom_ribbon(aes(fill = measure), alpha = 0.15, colour = NA) +
   geom_line() +
   geom_point(size = 1.5) +
@@ -404,7 +407,8 @@ top_var_prop <- top_var_long %>%
 
 ```{r top-var-prop, fig.height=9}
 ggplot(top_var_prop, aes(x = interim_prop, y = prop_sig, colour = model,
-                         ymin = prop_sig - mcse, ymax = prop_sig + mcse)) +
+                         ymin = prop_sig - qnorm(0.975) * mcse,
+                         ymax = prop_sig + qnorm(0.975) * mcse)) +
   geom_hline(yintercept = 0.05, linetype = "dashed") +
   geom_ribbon(aes(fill = model), alpha = 0.15, colour = NA) +
   geom_line() +
