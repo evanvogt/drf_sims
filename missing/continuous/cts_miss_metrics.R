@@ -20,21 +20,26 @@ metrics <- compute_metrics(
   }
 )
 
-# Relative efficiency against the complete-data reference arm.
+# Relative efficiency and relative bias against the complete-data reference arm.
 # This used to be NA for every row (bug C): the reference was selected with
 # method == "complete_data", which the collect grid did not contain. It does now.
 ref_by <- setdiff(c(study$path_cols, "run", "model"), "method")
 
 complete_ref <- metrics %>%
   filter(method == "complete_data") %>%
-  select(all_of(ref_by), mse_complete = mse)
+  select(all_of(ref_by), mse_complete = mse, bias_complete = bias)
 
 metrics <- metrics %>%
   left_join(complete_ref, by = ref_by) %>%
-  mutate(rel_efficiency = mse / mse_complete)
+  mutate(rel_efficiency = mse / mse_complete,
+         rel_bias = bias / bias_complete)
 
 if (all(is.na(metrics$rel_efficiency))) {
   warning("rel_efficiency is NA everywhere - is the complete_data arm collected?")
+}
+
+if (all(is.na(metrics$rel_bias))) {
+  warning("rel_bias is NA everywhere - is the complete_data arm collected?")
 }
 
 saveRDS(metrics, file.path(study$res_path, "cts_miss_metrics.RDS"))

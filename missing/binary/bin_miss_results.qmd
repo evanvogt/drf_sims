@@ -114,7 +114,8 @@ metrics_summary <- summarise_metrics(
   cols = c(bias = "bias", ate_bias = "ate_bias", mse = "mse", rmse = "rmse",
            mae = "mae", corr = "corr", spearman = "spearman",
            sign_acc = "sign_acc", BLP = "BLP_p", indep_cate = "indep_cate",
-           indep_po = "indep_po", rel_eff = "rel_efficiency")
+           indep_po = "indep_po", rel_eff = "rel_efficiency",
+           rel_bias = "rel_bias")
 )
 ```
 
@@ -227,6 +228,31 @@ if ("rel_efficiency" %in% names(metrics)) {
   (rel_eff_plot / rel_eff_sum_plot) + plot_layout(guides = "collect")
 } else {
   cat("rel_efficiency is not present in this metrics file.")
+}
+```
+
+## Relative bias
+
+`bias` divided by the bias of the same scenario, mechanism, run and model under
+`complete_data`. Unlike relative efficiency this is a *signed* ratio: 1 (dashed
+line) means the same bias as complete data, a negative value means the handling
+method flipped the sign of the bias, and the ratio blows up when the
+complete-data bias is near zero — read it alongside the plain Bias panel above,
+not on its own.
+
+```{r rel-bias-plot, fig.height=16}
+if ("rel_bias" %in% names(metrics)) {
+  rel_bias_plot <- miss_box_plot(metrics, "rel_bias",
+                                 "Relative bias", hline = 1,
+                                 facet_scales = "free_y")
+  rel_bias_sum_plot <- point_range_plot(metrics_summary, "rel_bias",
+                                        "Relative bias",
+                                        facet_scales = "free_y") +
+    geom_hline(yintercept = 1, linetype = "dashed")
+
+  (rel_bias_plot / rel_bias_sum_plot) + plot_layout(guides = "collect")
+} else {
+  cat("rel_bias is not present in this metrics file.")
 }
 ```
 

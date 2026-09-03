@@ -43,7 +43,8 @@ metrics_summary <- summarise_metrics(
   cols = c(bias = "bias", ate_bias = "ate_bias", mse = "mse", rmse = "rmse",
            mae = "mae", corr = "corr", spearman = "spearman",
            sign_acc = "sign_acc", BLP = "BLP_p", indep_cate = "indep_cate",
-           indep_po = "indep_po", rel_eff = "rel_efficiency")
+           indep_po = "indep_po", rel_eff = "rel_efficiency",
+           rel_bias = "rel_bias")
 )
 
 # helper: the per-run distribution behind each summary panel. distribution_plot()
@@ -127,6 +128,27 @@ if ("rel_efficiency" %in% names(metrics)) {
   save_fig("cts_miss_rel_eff_summary.png", fig_path)
 } else {
   warning("rel_efficiency absent from the metrics file - skipping those figures")
+}
+
+# --- relative bias ------------------------------------------------------------
+# bias / bias of the same (scenario, mechanism, run, model) under complete_data.
+# Unlike relative efficiency this is a SIGNED ratio: 1 means the same bias as
+# complete data, a negative value means the handling method flipped the sign of
+# the bias, and it blows up when bias_complete is near zero - read alongside the
+# plain bias panel above, not on its own.
+if ("rel_bias" %in% names(metrics)) {
+  rel_bias_plot <- miss_box_plot(metrics, "rel_bias",
+                                 "Relative bias (vs complete data)",
+                                 hline = 1, facet_scales = "free_y")
+  save_fig("cts_miss_rel_bias_all.png", fig_path)
+
+  rel_bias_sum_plot <- point_range_plot(metrics_summary, "rel_bias",
+                                        "Relative bias (vs complete data)",
+                                        facet_scales = "free_y") +
+    geom_hline(yintercept = 1, linetype = "dashed")
+  save_fig("cts_miss_rel_bias_summary.png", fig_path)
+} else {
+  warning("rel_bias absent from the metrics file - skipping those figures")
 }
 
 # --- correlation with the truth ---------------------------------------------
@@ -229,7 +251,7 @@ if (nrow(na_table) > 0) {
 headline <- metrics_summary %>%
   select(scenario, mechanism, method, model, mean_bias, mean_mse, mean_rmse,
          mean_mae, mean_sign_acc, mean_corr, any_of("mean_rel_eff"),
-         mean_BLP, mean_indep_cate, mean_indep_po) %>%
+         any_of("mean_rel_bias"), mean_BLP, mean_indep_cate, mean_indep_po) %>%
   arrange(scenario, mechanism, method, mean_mse)
 
 print(headline, n = Inf)
