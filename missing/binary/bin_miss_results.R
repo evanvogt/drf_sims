@@ -51,7 +51,8 @@ metrics_summary <- summarise_metrics(
            mae = "mae", corr = "corr", spearman = "spearman",
            sign_acc = "sign_acc", BLP = "BLP_p", indep_cate = "indep_cate",
            indep_po = "indep_po", rel_eff = "rel_efficiency",
-           rel_bias = "rel_bias")
+           rel_bias_complete = "rel_bias_complete",
+           rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate")
 )
 
 # helper: the per-run distribution behind each summary panel. distribution_plot()
@@ -137,25 +138,65 @@ if ("rel_efficiency" %in% names(metrics)) {
   warning("rel_efficiency absent from the metrics file - skipping those figures")
 }
 
-# --- relative bias ------------------------------------------------------------
+# --- relative bias (vs complete data) ----------------------------------------
 # bias / bias of the same (scenario, mechanism, run, model) under complete_data.
 # Unlike relative efficiency this is a SIGNED ratio: 1 means the same bias as
 # complete data, a negative value means the handling method flipped the sign of
 # the bias, and it blows up when bias_complete is near zero - read alongside the
-# plain bias panel above, not on its own.
-if ("rel_bias" %in% names(metrics)) {
-  rel_bias_plot <- miss_box_plot(metrics, "rel_bias",
-                                 "Relative bias (vs complete data)",
-                                 hline = 1, facet_scales = "free_y")
-  save_fig("bin_miss_rel_bias_all.png", fig_path)
+# plain bias panel above, not on its own. This is an ARM-TO-ARM ratio (like
+# relative efficiency), not a bias fraction - hence the hline = 1.
+if ("rel_bias_complete" %in% names(metrics)) {
+  rel_bias_complete_plot <- miss_box_plot(metrics, "rel_bias_complete",
+                                          "Relative bias (vs complete data)",
+                                          hline = 1, facet_scales = "free_y")
+  save_fig("bin_miss_rel_bias_complete_all.png", fig_path)
 
-  rel_bias_sum_plot <- point_range_plot(metrics_summary, "rel_bias",
-                                        "Relative bias (vs complete data)",
-                                        facet_scales = "free_y") +
+  rel_bias_complete_sum_plot <- point_range_plot(metrics_summary, "rel_bias_complete",
+                                                 "Relative bias (vs complete data)",
+                                                 facet_scales = "free_y") +
     geom_hline(yintercept = 1, linetype = "dashed")
-  save_fig("bin_miss_rel_bias_summary.png", fig_path)
+  save_fig("bin_miss_rel_bias_complete_summary.png", fig_path)
 } else {
-  warning("rel_bias absent from the metrics file - skipping those figures")
+  warning("rel_bias_complete absent from the metrics file - skipping those figures")
+}
+
+# --- relative ATE bias (vs true) ---------------------------------------------
+# (mean(est) - mean(true)) / mean(true): the ATE's bias as a fraction of the
+# true ATE - the standard parameter-level "relative bias" from the simulation
+# literature. This is a BIAS FRACTION, not an arm-to-arm ratio, so 0 (not 1) is
+# the reference line, same convention as the plain bias/ATE bias panels.
+if ("rel_ate_bias" %in% names(metrics)) {
+  rel_ate_bias_plot <- miss_box_plot(metrics, "rel_ate_bias",
+                                     "Relative ATE bias (vs true)",
+                                     hline = 0, facet_scales = "free_y")
+  save_fig("bin_miss_rel_ate_bias_all.png", fig_path)
+
+  rel_ate_bias_sum_plot <- point_range_plot(metrics_summary, "rel_ate_bias",
+                                            "Relative ATE bias (vs true)",
+                                            facet_scales = "free_y") +
+    geom_hline(yintercept = 0, linetype = "dashed")
+  save_fig("bin_miss_rel_ate_bias_summary.png", fig_path)
+} else {
+  warning("rel_ate_bias absent from the metrics file - skipping those figures")
+}
+
+# --- relative bias of individual CATEs (vs true) ------------------------------
+# mean((est - true) / true) per unit - the literal per-unit relative bias.
+# Units where true == 0 are NA'd out upstream (R/metrics.R's cate_metrics())
+# rather than contributing +/-Inf. Bias fraction, not a ratio - hline = 0.
+if ("rel_bias_cate" %in% names(metrics)) {
+  rel_bias_cate_plot <- miss_box_plot(metrics, "rel_bias_cate",
+                                      "Relative bias (vs true CATE)",
+                                      hline = 0, facet_scales = "free_y")
+  save_fig("bin_miss_rel_bias_cate_all.png", fig_path)
+
+  rel_bias_cate_sum_plot <- point_range_plot(metrics_summary, "rel_bias_cate",
+                                             "Relative bias (vs true CATE)",
+                                             facet_scales = "free_y") +
+    geom_hline(yintercept = 0, linetype = "dashed")
+  save_fig("bin_miss_rel_bias_cate_summary.png", fig_path)
+} else {
+  warning("rel_bias_cate absent from the metrics file - skipping those figures")
 }
 
 # --- correlation with the truth ---------------------------------------------
@@ -258,7 +299,9 @@ if (nrow(na_table) > 0) {
 headline <- metrics_summary %>%
   select(scenario, mechanism, method, model, mean_bias, mean_mse, mean_rmse,
          mean_mae, mean_sign_acc, mean_corr, any_of("mean_rel_eff"),
-         any_of("mean_rel_bias"), mean_BLP, mean_indep_cate, mean_indep_po) %>%
+         any_of("mean_rel_bias_complete"), any_of("mean_rel_ate_bias"),
+         any_of("mean_rel_bias_cate"),
+         mean_BLP, mean_indep_cate, mean_indep_po) %>%
   arrange(scenario, mechanism, method, mean_mse)
 
 print(headline, n = Inf)

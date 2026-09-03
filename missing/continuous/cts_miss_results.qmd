@@ -110,7 +110,8 @@ metrics_summary <- summarise_metrics(
            mae = "mae", corr = "corr", spearman = "spearman",
            sign_acc = "sign_acc", BLP = "BLP_p", indep_cate = "indep_cate",
            indep_po = "indep_po", rel_eff = "rel_efficiency",
-           rel_bias = "rel_bias")
+           rel_bias_complete = "rel_bias_complete",
+           rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate")
 )
 ```
 
@@ -226,28 +227,77 @@ if ("rel_efficiency" %in% names(metrics)) {
 }
 ```
 
-## Relative bias
+## Relative bias (vs complete data)
 
 `bias` divided by the bias of the same scenario, mechanism, run and model under
 `complete_data`. Unlike relative efficiency this is a *signed* ratio: 1 (dashed
 line) means the same bias as complete data, a negative value means the handling
 method flipped the sign of the bias, and the ratio blows up when the
 complete-data bias is near zero — read it alongside the plain Bias panel above,
-not on its own.
+not on its own. This is an arm-to-arm ratio, like relative efficiency, so 1 is
+the reference line.
 
-```{r rel-bias-plot, fig.height=16}
-if ("rel_bias" %in% names(metrics)) {
-  rel_bias_plot <- miss_box_plot(metrics, "rel_bias",
-                                 "Relative bias", hline = 1,
-                                 facet_scales = "free_y")
-  rel_bias_sum_plot <- point_range_plot(metrics_summary, "rel_bias",
-                                        "Relative bias",
-                                        facet_scales = "free_y") +
+```{r rel-bias-complete-plot, fig.height=16}
+if ("rel_bias_complete" %in% names(metrics)) {
+  rel_bias_complete_plot <- miss_box_plot(metrics, "rel_bias_complete",
+                                          "Relative bias (vs complete data)",
+                                          hline = 1, facet_scales = "free_y")
+  rel_bias_complete_sum_plot <- point_range_plot(metrics_summary, "rel_bias_complete",
+                                                 "Relative bias (vs complete data)",
+                                                 facet_scales = "free_y") +
     geom_hline(yintercept = 1, linetype = "dashed")
 
-  (rel_bias_plot / rel_bias_sum_plot) + plot_layout(guides = "collect")
+  (rel_bias_complete_plot / rel_bias_complete_sum_plot) + plot_layout(guides = "collect")
 } else {
-  cat("rel_bias is not present in this metrics file.")
+  cat("rel_bias_complete is not present in this metrics file.")
+}
+```
+
+## Relative ATE bias (vs true)
+
+`(mean(est) - mean(true)) / mean(true)`: the ATE's bias (`ate_bias`) as a
+fraction of the true ATE — the standard parameter-level "relative bias" from
+the simulation literature. Unlike the panel above, this is a *bias fraction*,
+not an arm-to-arm ratio, so the reference line is 0 (dashed), the same
+convention as the plain Bias/ATE bias panels.
+
+```{r rel-ate-bias-plot, fig.height=16}
+if ("rel_ate_bias" %in% names(metrics)) {
+  rel_ate_bias_plot <- miss_box_plot(metrics, "rel_ate_bias",
+                                     "Relative ATE bias (vs true)", hline = 0,
+                                     facet_scales = "free_y")
+  rel_ate_bias_sum_plot <- point_range_plot(metrics_summary, "rel_ate_bias",
+                                            "Relative ATE bias (vs true)",
+                                            facet_scales = "free_y") +
+    geom_hline(yintercept = 0, linetype = "dashed")
+
+  (rel_ate_bias_plot / rel_ate_bias_sum_plot) + plot_layout(guides = "collect")
+} else {
+  cat("rel_ate_bias is not present in this metrics file.")
+}
+```
+
+## Relative bias of individual CATEs (vs true)
+
+`mean((est - true) / true)` per unit — the literal per-unit relative bias.
+True CATE is heterogeneous and crosses zero in several scenarios; units where
+it is exactly 0 are set to `NA` upstream (`R/metrics.R`'s `cate_metrics()`)
+rather than contributing `Inf`. A bias fraction, not a ratio, so 0 is the
+reference line.
+
+```{r rel-bias-cate-plot, fig.height=16}
+if ("rel_bias_cate" %in% names(metrics)) {
+  rel_bias_cate_plot <- miss_box_plot(metrics, "rel_bias_cate",
+                                      "Relative bias (vs true CATE)", hline = 0,
+                                      facet_scales = "free_y")
+  rel_bias_cate_sum_plot <- point_range_plot(metrics_summary, "rel_bias_cate",
+                                             "Relative bias (vs true CATE)",
+                                             facet_scales = "free_y") +
+    geom_hline(yintercept = 0, linetype = "dashed")
+
+  (rel_bias_cate_plot / rel_bias_cate_sum_plot) + plot_layout(guides = "collect")
+} else {
+  cat("rel_bias_cate is not present in this metrics file.")
 }
 ```
 

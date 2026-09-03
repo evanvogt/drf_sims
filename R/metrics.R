@@ -30,6 +30,15 @@ BIAS_SIGN <- "est-true"
 #'   reported as 0 rather than NA - the convention the study has always used.
 #' @param bias_sign "est-true" (the convention) or "true-est" (legacy). Affects
 #'   `bias` only; `ate_bias` has always been est - true.
+#'
+#' `rel_ate_bias` and `rel_bias_cate` are "relative bias" in the conventional,
+#' vs-true-parameter sense (as opposed to `rel_efficiency`/`rel_bias_complete`
+#' in the missing-data studies, which are ratios against the complete-data
+#' arm). `rel_ate_bias` is the parameter-level version (`ate_bias` divided by
+#' the true ATE); `rel_bias_cate` is the per-unit version, `(est - true) /
+#' true` averaged over units. True CATE is heterogeneous and crosses zero in
+#' several scenarios, so both guard a zero denominator with NA rather than
+#' letting it produce Inf/NaN.
 cate_metrics <- function(est, true, scenario, bias_sign = BIAS_SIGN) {
   bias_sign <- match.arg(bias_sign, c("true-est", "est-true"))
   bias <- if (bias_sign == "est-true") {
@@ -37,10 +46,16 @@ cate_metrics <- function(est, true, scenario, bias_sign = BIAS_SIGN) {
   } else {
     mean(true - est, na.rm = TRUE)
   }
+  ate_bias <- mean(est, na.rm = TRUE) - mean(true, na.rm = TRUE)
+  true_ate <- mean(true, na.rm = TRUE)
+  cate_ratio <- (est - true) / true
+  cate_ratio[true == 0] <- NA_real_
 
   tibble(
     bias = bias,
-    ate_bias = mean(est, na.rm = TRUE) - mean(true, na.rm = TRUE),
+    ate_bias = ate_bias,
+    rel_ate_bias = if (true_ate == 0) NA_real_ else ate_bias / true_ate,
+    rel_bias_cate = mean(cate_ratio, na.rm = TRUE),
     mse = mean((est - true)^2, na.rm = TRUE),
     rmse = sqrt(mean((est - true)^2, na.rm = TRUE)),
     mae = mean(abs(est - true), na.rm = TRUE),
