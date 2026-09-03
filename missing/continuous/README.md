@@ -8,7 +8,7 @@ here).
 |---|---|
 | array | **9,900 jobs**, split across `cts_miss_1.sh` (1–5000) and `cts_miss_2.sh` (5001–9900) |
 | results | `../results/missing/continuous/scenario_<k>/<n>/<type>/<prop>/<mechanism>/<method>/` |
-| metrics | `cts_miss_metrics.RDS`, including `rel_efficiency` against the `complete_data` arm |
+| metrics | `cts_miss_metrics.RDS`, including `rel_efficiency` against the `complete_data` arm; plus `cts_miss_true_cate_tests.RDS`, the true-CATE HTE test evaluation |
 
 ## Files
 
@@ -40,6 +40,14 @@ script fits each and Rubin-combines with `combine_mi()`; only
 **The row-dropping methods drop rows from the truth too.** `complete_cases` and
 `IPW` return `retained_indices`, and `generate_and_process_data()` subsets
 `truth` to match — otherwise estimates and truth would be misaligned.
+
+**`cts_miss_true_cate_tests.RDS` runs the BLP and independence tests on the
+true CATE and true nuisances instead of an estimator's** (`truth$tau`,
+`truth$p0`, `W.hat = 0.5` — see `continuous/README.md`'s "True-CATE HTE test
+evaluation"), one row per (scenario, n, type, prop, mechanism, method, run),
+no per-model dimension. `method == "multiple_imputation"` rows are `NA`/`NA`
+there, same reason as the estimated-CATE gap below: `data` is a list of 50
+imputed data.frames, with no single covariate matrix to test against.
 
 **`dr_random_forest` used to carry no BLP or independence test in this study**,
 unlike `continuous/`, so `BLP_p` was `NA` for that one model. Copy-paste drift

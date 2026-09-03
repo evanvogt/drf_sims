@@ -52,6 +52,12 @@ Same layout as `continuous/`. `bin_models.R` sets `family = binomial()` and
 predictor, so the model code applies `plogis`. (`missing/binary/` uses the
 opposite convention; see `R/README.md`.)
 
+`bin_metrics.R` also writes `bin_true_cate_tests.RDS` — the BLP and
+independence tests run on the true CATE and true nuisances instead of an
+estimator's, one row per (scenario, n, run). See
+`continuous/README.md`'s "True-CATE HTE test evaluation" for what it means
+and why scenario 1's `BLP_p` is `NA`.
+
 ## Running it
 
 ```bash

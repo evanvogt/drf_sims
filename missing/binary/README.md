@@ -94,6 +94,17 @@ a separate and larger gap; see the multiple-imputation note in
 `missing/README.md`. The patch detects those runs and refuses them, which is why
 `check_all.R`'s `patchable_jobs` is 8,800 rather than 9,900.
 
+## True-CATE HTE test evaluation
+
+`bin_miss_metrics.R` also writes `bin_miss_true_cate_tests.RDS` — the BLP and
+independence tests run on the true CATE and true nuisances (`truth$tau`,
+`truth$p0`, `W.hat = 0.5`) instead of an estimator's fitted ones, one
+`BLP_p`/`indep_cate` row per (scenario, n, type, prop, mechanism, method,
+run). See `continuous/README.md`'s "True-CATE HTE test evaluation" for what
+it means and why scenario 1's `BLP_p` is `NA`. `method == "multiple_imputation"`
+rows are `NA`/`NA` too, for the same reason as above: `data` is a list of 50
+imputed data.frames there, with no single covariate matrix to test against.
+
 ## Running it
 
 ```bash

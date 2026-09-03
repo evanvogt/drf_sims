@@ -62,10 +62,26 @@ known propensity of 0.5; the semi-oracle knows only the propensity.
 | `cts_analysis.R` | array entry point; one row of the grid per index |
 | `cts_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cts_collect.R` | gathers per-run files into `cts_all.RDS` |
-| `cts_metrics.R` | computes `cts_metrics.RDS` |
+| `cts_metrics.R` | computes `cts_metrics.RDS`, plus `cts_true_cate_tests.RDS` — see below |
 | `results_cts.R`, `cts_results.Rmd` | summaries |
 | `cts_profile.R` | timing / memory / CPU sweep over `(n, workers, grf_threads)`, instrumented with `syrup` |
 | `cts_profile_summary.R` | turns the sweep into PBS directives and writes them into `cts_1.sh` |
+
+### True-CATE HTE test evaluation
+
+`cts_true_cate_tests.RDS` reruns the BLP and independence tests
+(`run_true_cate_tests()`, `R/cate_models.R`) against the *true* CATE and true
+nuisances (`truth$tau`, `truth$p0`, `W.hat = 0.5`) instead of an estimator's
+fitted ones — one `BLP_p`/`indep_cate` row per (scenario, n, run), with no
+per-model dimension, since nothing here is estimated. This isolates the
+tests' own size/power from any estimator's error: scenario 1 is the null
+(no heterogeneity), scenarios 2-10 the alternative.
+
+Scenario 1's true CATE is *exactly* constant (no estimation noise to give it
+apparent variance), so `BLP_p` is `NA` for every scenario-1 run — `GenericML::BLP()`
+cannot identify its interaction coefficient when tau has zero variance (the
+same degenerate-tau guard as `hte_test_metrics()`'s `BLP_whole = NULL`
+elsewhere) — while `indep_cate` still returns a real p-value there.
 
 ## Running it
 

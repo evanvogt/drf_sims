@@ -7,6 +7,7 @@
 library(here)
 source(here("binary/bin_config.R"))
 source(here("R", "metrics.R"))
+source(here("R", "cate_models.R"))
 
 all_results_df <- readRDS(file.path(study$res_path, "bin_all.RDS"))
 
@@ -21,4 +22,11 @@ metrics <- compute_metrics(
 )
 
 saveRDS(metrics, file.path(study$res_path, "bin_metrics.RDS"))
+
+# BLP and independence tests run on the true CATE instead of an estimated one
+# (true nuisances too - see run_true_cate_tests() in R/cate_models.R), to see
+# how the tests themselves perform independent of any estimator's error.
+true_cate_tests <- compute_run_metrics(study, all_results_df, true_cate_test_row)
+saveRDS(true_cate_tests, file.path(study$res_path, "bin_true_cate_tests.RDS"))
+
 print("metrics calculated!")

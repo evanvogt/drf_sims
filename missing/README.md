@@ -86,6 +86,14 @@ Until then the `NA`s are honest and should be read as "not computed", not as
 "the test failed". `R/patch_hte_tests.R` detects these runs and refuses them,
 which is why `check_all.R` reports `patchable_jobs` of 8,800 rather than 9,900.
 
+The same gap carries over to the true-CATE HTE test evaluation
+(`*_true_cate_tests.RDS`, `true_cate_test_row()` in `R/cate_models.R` — see
+`continuous/README.md`): `multiple_imputation` rows are `NA`/`NA` there too,
+for the same reason (`data` is a list of 50 imputed data.frames, not one),
+even though that evaluation needs no nuisances from `nuisances_rf` at all —
+it is the multiple-imputation *pooling* question in point 1 above, not a
+missing-nuisance problem, that is unresolved for those rows.
+
 ## Bugs fixed here
 
 **Bug B** — `cts_miss_collect.R` looked for `AUX`/`AUX-Y` where the DGM said `MNAR`/`MNAR-Y`; two mechanisms were silently collected as empty. Fixed.

@@ -630,6 +630,43 @@ run_independence_test_whole <- function(X, tau) {
   })
 }
 
+#' BLP and independence tests run on the true CATE and true nuisances
+#'
+#' The oracle counterpart of the per-estimator BLP_whole / independence_cate
+#' fields: same test functions, same call shape, but tau = true CATE,
+#' Y0.hat = true p0, W.hat = 0.5 (known exactly - see generate_scenario_data(),
+#' which draws W <- rbinom(n, 1, 0.5) unconditionally). No independence_po
+#' counterpart: dr_oracle's own independence_po already tests the true
+#' pseudo-outcome against X.
+run_true_cate_tests <- function(X, Y, W, truth) {
+  W.hat <- rep(0.5, length(W))
+  list(
+    BLP_whole = run_blp_whole(Y, W, W.hat, truth$p0, truth$tau),
+    independence_cate = run_independence_test_whole(X, truth$tau)
+  )
+}
+
+#' One row of true-CATE HTE test p-values for one run
+#'
+#' NA/NA when sim_res$data is not a single data.frame - true today only for
+#' multiple_imputation rows (missing/binary, missing/continuous), which save
+#' `data` as a list of 50 imputed data.frames with no single X to test
+#' against. Same documented gap as the estimated-CATE tests - see this file's
+#' "skipped_mi" status in R/patch_hte_tests.R and missing/binary/README.md.
+true_cate_test_row <- function(sim_res) {
+  if (!is.data.frame(sim_res$data)) {
+    return(tibble::tibble(BLP_p = NA_real_, indep_cate = NA_real_))
+  }
+  X <- as.matrix(sim_res$data[, -c(1:2)])
+  Y <- sim_res$data$Y
+  W <- sim_res$data$W
+  out <- run_true_cate_tests(X, Y, W, sim_res$truth)
+  tibble::tibble(
+    BLP_p = if (!is.null(out$BLP_whole)) out$BLP_whole[4, 2] else NA_real_,
+    indep_cate = as.numeric(out$independence_cate$p_value)
+  )
+}
+
 # ---- multiple imputation ----------------------------------------------------
 
 #' Rubin-combine CATE estimates across multiply-imputed datasets

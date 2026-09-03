@@ -114,6 +114,25 @@ normal_interval <- function(tau, variance, alpha = 0.05) {
        ub = tau + qnorm(1 - alpha / 2) * se)
 }
 
+#' One row per (run, sim_res) with this study's grouping keys attached
+#'
+#' Factored out of compute_metrics() so a driver that doesn't need a per-model
+#' loop (e.g. compute_run_metrics()) can share the same unnesting.
+#'
+#' @param study the study config (supplies path_cols)
+#' @param all_results_df output of get_results()
+#' @return list(df = one row per run with a sim_res list-column, keys = the
+#'   matching grouping-column + run data frame, row-aligned to df)
+unnest_results <- function(study, all_results_df) {
+  df <- all_results_df %>%
+    unnest_longer(results) %>%
+    mutate(run = map_int(results, ~ .x$run),
+           sim_res = map(results, ~ .x$result)) %>%
+    select(-results)
+
+  list(df = df, keys = df[, c(study$path_cols, "run"), drop = FALSE])
+}
+
 #' Turn a collected results tibble into one metrics row per (combination, run, model)
 #'
 #' Replaces seven near-identical unnest / pmap / map_dfr pipelines. The grouping
@@ -132,15 +151,9 @@ normal_interval <- function(tau, variance, alpha = 0.05) {
 compute_metrics <- function(study, all_results_df, models = CATE_MODELS,
                             per_model) {
 
-  group_cols <- study$path_cols
-
-  df <- all_results_df %>%
-    unnest_longer(results) %>%
-    mutate(run = map_int(results, ~ .x$run),
-           sim_res = map(results, ~ .x$result)) %>%
-    select(-results)
-
-  keys <- df[, c(group_cols, "run"), drop = FALSE]
+  u <- unnest_results(study, all_results_df)
+  df <- u$df
+  keys <- u$keys
 
   rows <- lapply(seq_len(nrow(df)), function(i) {
     sim_res <- df$sim_res[[i]]
@@ -154,6 +167,26 @@ compute_metrics <- function(study, all_results_df, models = CATE_MODELS,
       if (!"model" %in% names(out)) out <- bind_cols(tibble(model = m), out)
       bind_cols(key_row[rep(1, nrow(out)), , drop = FALSE], out)
     }))
+  })
+
+  bind_rows(rows)
+}
+
+#' One row per run from a callback that only needs the run's own sim_res
+#'
+#' The per-run counterpart of compute_metrics(): for metrics that aren't tied
+#' to any one fitted model (e.g. a test on the true CATE), skipping the
+#' per-model loop entirely.
+#'
+#' @param study the study config (supplies path_cols)
+#' @param all_results_df output of get_results()
+#' @param test_fn function(sim_res) returning a one-row tibble of that run's
+#'   metric columns
+compute_run_metrics <- function(study, all_results_df, test_fn) {
+  u <- unnest_results(study, all_results_df)
+
+  rows <- lapply(seq_len(nrow(u$df)), function(i) {
+    bind_cols(u$keys[i, , drop = FALSE], test_fn(u$df$sim_res[[i]]))
   })
 
   bind_rows(rows)
