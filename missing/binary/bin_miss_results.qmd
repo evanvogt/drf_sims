@@ -108,6 +108,13 @@ metrics <- metrics %>%
   mutate(n = factor(n), prop = factor(prop)) %>%
   droplevels()
 
+# derived 0/1 reject-indicators for the power summary - summarise_metrics()'s
+# binomial argument expects a real per-run column, not an inline expression
+metrics <- metrics %>%
+  mutate(BLP_reject = as.numeric(BLP_p < 0.05),
+         indep_cate_reject = as.numeric(indep_cate < 0.05),
+         indep_po_reject = as.numeric(indep_po < 0.05))
+
 metrics_summary <- summarise_metrics(
   metrics,
   c("scenario", "n", "type", "prop", "mechanism", "method", "model"),
@@ -116,7 +123,10 @@ metrics_summary <- summarise_metrics(
            sign_acc = "sign_acc", BLP = "BLP_p", indep_cate = "indep_cate",
            indep_po = "indep_po", rel_eff = "rel_efficiency",
            rel_bias_complete = "rel_bias_complete",
-           rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate")
+           rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate",
+           power_BLP = "BLP_reject", power_indep_cate = "indep_cate_reject",
+           power_indep_po = "indep_po_reject"),
+  binomial = c("power_BLP", "power_indep_cate", "power_indep_po")
 )
 ```
 
@@ -357,6 +367,69 @@ sign_acc_sum_plot <- point_range_plot(metrics_summary, "sign_acc",
 (sign_acc_plot / sign_acc_sum_plot) + plot_layout(guides = "collect")
 ```
 
+## True-CATE HTE test evaluation
+
+The BLP and independence tests re-run on the true CATE and true nuisances
+instead of an estimator's fitted ones (`bin_miss_true_cate_tests.RDS` —
+`run_true_cate_tests()`/`true_cate_test_row()`, `R/cate_models.R`) — the
+ceiling each model's own BLP/CATE-permutation test is chasing, since nothing
+here is estimated. Shown as an extra "True CATE" x-axis category alongside
+the five models in the two sections below (and in "HTE test power"); no
+true-CATE counterpart for the PO permutation test, since `dr_oracle`'s own
+`indep_po` already tests the true pseudo-outcome. `multiple_imputation` rows
+are `NA` here, same as everywhere else in this study (`data` is a list of 50
+imputed data frames there, with no single covariate matrix to test against).
+
+BLP never touches the covariates (`run_blp_whole()` takes `Y, W, Y0.hat,
+W.hat, tau` only), so its true-CATE series is identical across `method` for
+the same run — expected, not a bug. `indep_cate` *does* depend on the
+covariates, which genuinely differ by handling method (imputed values,
+dropped rows, extra `_missing` indicator columns), so its true-CATE series
+varies by method for real: it shows whether a method's reshaping of the
+covariates alone (CATE held fixed at the truth) helps or hurts the
+independence test's power.
+
+```{r true-cate-data}
+true_cate_tests <- readRDS(file.path(res_path, "bin_miss_true_cate_tests.RDS")) %>%
+  apply_labels(MISS_SCENARIO_LABELS) %>%
+  mutate(n = factor(n), prop = factor(prop)) %>%
+  droplevels()
+
+true_cate_summary <- true_cate_tests %>%
+  group_by(scenario, n, type, prop, mechanism, method) %>%
+  summarise(
+    mean_BLP = mean(BLP_p, na.rm = TRUE),
+    mcse_BLP = sd(BLP_p, na.rm = TRUE) / sqrt(sum(!is.na(BLP_p))),
+    mean_indep_cate = mean(indep_cate, na.rm = TRUE),
+    mcse_indep_cate = sd(indep_cate, na.rm = TRUE) / sqrt(sum(!is.na(indep_cate))),
+    # named mean_power_*/mcse_power_*, not power_*/mcse_power_* - matching
+    # summarise_metrics()'s own naming convention below, which always prefixes
+    # mean_/mcse_ even for its binomial columns
+    mean_power_BLP = mean(BLP_p < 0.05, na.rm = TRUE),
+    mcse_power_BLP = sqrt(mean_power_BLP * (1 - mean_power_BLP) / sum(!is.na(BLP_p))),
+    mean_power_indep_cate = mean(indep_cate < 0.05, na.rm = TRUE),
+    mcse_power_indep_cate = sqrt(mean_power_indep_cate * (1 - mean_power_indep_cate) /
+                                   sum(!is.na(indep_cate))),
+    .groups = "drop"
+  ) %>%
+  mutate(model = "True CATE")
+
+true_cate_raw <- true_cate_tests %>% mutate(model = "True CATE")
+
+model_levels_true <- c(levels(metrics$model), "True CATE")
+
+# row-bind the true-CATE reference series onto a per-run or summarised data
+# frame, extending `model`'s levels so it becomes one more x-axis category
+bind_true_cate <- function(df, true_df, extra_cols) {
+  bind_rows(
+    mutate(df, model = factor(as.character(model), levels = model_levels_true)),
+    true_df %>%
+      mutate(model = factor(model, levels = model_levels_true)) %>%
+      select(scenario, n, type, prop, mechanism, method, model, all_of(extra_cols))
+  )
+}
+```
+
 ## BLP test p-values
 
 Best linear predictor test of heterogeneity, against the nominal 5% significance
@@ -368,10 +441,11 @@ run over the results (`R/patch_hte_tests.R`); before that it carries no BLP test
 under `profile = "missing"`.
 
 ```{r blp-plot, fig.height=16}
-BLP_plot <- miss_box_plot(metrics, "BLP_p", "p-value", hline = 0.05,
-                          facet_scales = "free_x")
-BLP_sum_plot <- point_range_plot(metrics_summary, "BLP", "p-value",
-                                 facet_scales = "free_x") +
+BLP_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p"),
+                          "BLP_p", "p-value", hline = 0.05, facet_scales = "free_x")
+BLP_sum_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP", "mcse_BLP")),
+  "BLP", "p-value", facet_scales = "free_x") +
   geom_hline(yintercept = 0.05, linetype = "dashed")
 
 (BLP_plot / BLP_sum_plot) + plot_layout(guides = "collect")
@@ -382,10 +456,12 @@ BLP_sum_plot <- point_range_plot(metrics_summary, "BLP", "p-value",
 Omnibus independence test of the estimated CATEs against the covariates.
 
 ```{r indep-cate-plot, fig.height=16}
-indep_cate_plot <- miss_box_plot(metrics, "indep_cate", "p-value", hline = 0.05,
+indep_cate_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "indep_cate"),
+                                 "indep_cate", "p-value", hline = 0.05,
                                  facet_scales = "free_x")
-indep_cate_sum_plot <- point_range_plot(metrics_summary, "indep_cate", "p-value",
-                                        facet_scales = "free_x") +
+indep_cate_sum_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_indep_cate", "mcse_indep_cate")),
+  "indep_cate", "p-value", facet_scales = "free_x") +
   geom_hline(yintercept = 0.05, linetype = "dashed")
 
 (indep_cate_plot / indep_cate_sum_plot) + plot_layout(guides = "collect")
@@ -404,6 +480,36 @@ indep_po_sum_plot <- point_range_plot(metrics_summary, "indep_po", "p-value",
   geom_hline(yintercept = 0.05, linetype = "dashed")
 
 (indep_po_plot / indep_po_sum_plot) + plot_layout(guides = "collect")
+```
+
+## HTE test power
+
+Power (proportion of runs rejecting at alpha=0.05) alongside the mean p-values
+above — the rsimsum-standard measure for a hypothesis test's simulated
+behaviour, with the binomial 95% CI rather than the continuous-measure one.
+The true-CATE reference series applies to BLP and the CATE permutation test
+only, same as the p-value panels above; PO has no true-CATE counterpart
+anywhere in this evaluation (`dr_oracle`'s own `indep_po` already covers it).
+
+```{r power-plot, fig.height=16}
+BLP_power_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_power_BLP", "mcse_power_BLP")),
+  "power_BLP", "Power", facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed")
+
+indep_cate_power_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary,
+                c("mean_power_indep_cate", "mcse_power_indep_cate")),
+  "power_indep_cate", "Power", facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed")
+
+indep_po_power_plot <- point_range_plot(metrics_summary, "power_indep_po", "Power",
+                                        facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed")
+
+BLP_power_plot
+indep_cate_power_plot
+indep_po_power_plot
 ```
 
 ## Missing estimates

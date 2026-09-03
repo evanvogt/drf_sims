@@ -296,8 +296,54 @@ sign_acc_sum_plot <- summary_plot(metrics_summary, "mean_sign_acc", "mcse_sign_a
 ggsave("bin_sign_acc_summary.png", plot = sign_acc_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
+# --- true CATE test evaluation -----------------------------------------
+# BLP and independence tests run on the true CATE and true nuisances instead
+# of an estimator's (see binary/README.md's "True-CATE HTE test evaluation")
+# - the ceiling each model's own BLP/indep_cate test is chasing. No indep_po
+# counterpart: dr_oracle's own indep_po already covers that (it's the true
+# pseudo-outcome test, and dr_oracle is already one of the 5 models below).
+# Bound in as an extra "model" only where it's plotted (the BLP/indep_cate
+# panels that follow) - every other plot above/below is unaffected.
+true_cate_tests <- readRDS(file.path(res_path, "bin_true_cate_tests.RDS")) %>%
+  mutate(
+    scenario = factor(scenario, levels = names(scenario_labels) %>% as.integer(),
+                      labels = unname(scenario_labels)),
+    n = factor(n, levels = c(100, 250, 500, 1000))
+  ) %>%
+  droplevels()
+
+true_cate_summary <- true_cate_tests %>%
+  group_by(scenario, n) %>%
+  summarise(
+    mean_BLP = mean(BLP_p, na.rm = T),
+    mcse_BLP = sd(BLP_p, na.rm = T) / sqrt(sum(!is.na(BLP_p))),
+    mean_indep_cate = mean(indep_cate, na.rm = T),
+    mcse_indep_cate = sd(indep_cate, na.rm = T) / sqrt(sum(!is.na(indep_cate))),
+    power_BLP = mean(BLP_p < 0.05, na.rm = T),
+    mcse_power_BLP = sqrt(power_BLP * (1 - power_BLP) / sum(!is.na(BLP_p))),
+    power_indep_cate = mean(indep_cate < 0.05, na.rm = T),
+    mcse_power_indep_cate = sqrt(power_indep_cate * (1 - power_indep_cate) / sum(!is.na(indep_cate))),
+    .groups = "drop"
+  ) %>%
+  mutate(model = "True CATE")
+
+true_cate_raw <- true_cate_tests %>% mutate(model = "True CATE")
+
+model_levels_true <- c(levels(metrics$model), "True CATE")
+
+# row-bind the true-CATE reference series onto a per-run or summarised data
+# frame, extending `model`'s levels so it becomes one more colour/facet entry
+bind_true_cate <- function(df, true_df, extra_cols) {
+  bind_rows(
+    mutate(df, model = factor(as.character(model), levels = model_levels_true)),
+    true_df %>%
+      mutate(model = factor(model, levels = model_levels_true)) %>%
+      select(scenario, n, model, all_of(extra_cols))
+  )
+}
+
 # --- BLP test p-values --------------------------------------------------
-BLP_plot <- metrics %>%
+BLP_plot <- bind_true_cate(metrics, true_cate_raw, "BLP_p") %>%
   ggplot(aes(x = n, y = BLP_p, colour = model)) +
   geom_hline(yintercept = 0.05, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
@@ -308,13 +354,14 @@ BLP_plot <- metrics %>%
   labs(title = "BLP test p-values", y = "p-value", x = "Sample size", colour = "Model")
 ggsave("bin_blp_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
-BLP_sum_plot <- summary_plot(metrics_summary, "mean_BLP", "mcse_BLP",
-                             "Mean BLP test p-value", "Mean p-value", hline = 0.05)
+BLP_sum_plot <- summary_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP", "mcse_BLP")),
+  "mean_BLP", "mcse_BLP", "Mean BLP test p-value", "Mean p-value", hline = 0.05)
 ggsave("bin_blp_summary.png", plot = BLP_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- CATE permutation test p-values --------------------------------------
-indep_cate_plot <- metrics %>%
+indep_cate_plot <- bind_true_cate(metrics, true_cate_raw, "indep_cate") %>%
   ggplot(aes(x = n, y = indep_cate, colour = model)) +
   geom_hline(yintercept = 0.05, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
@@ -326,9 +373,10 @@ indep_cate_plot <- metrics %>%
        colour = "Model")
 ggsave("bin_indep_cate_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
-indep_cate_sum_plot <- summary_plot(metrics_summary, "mean_indep_cate", "mcse_indep_cate",
-                                    "Mean CATE permutation test p-value", "Mean p-value",
-                                    hline = 0.05)
+indep_cate_sum_plot <- summary_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_indep_cate", "mcse_indep_cate")),
+  "mean_indep_cate", "mcse_indep_cate",
+  "Mean CATE permutation test p-value", "Mean p-value", hline = 0.05)
 ggsave("bin_indep_cate_summary.png", plot = indep_cate_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
@@ -354,15 +402,17 @@ ggsave("bin_indep_po_summary.png", plot = indep_po_sum_plot, path = fig_path,
 # --- HTE test power (proportion rejecting at alpha=0.05) --------------------
 # the rsimsum-standard measure for a hypothesis test's simulated behaviour,
 # alongside the mean p-values above
-BLP_power_plot <- summary_plot(metrics_summary, "power_BLP", "mcse_power_BLP",
-                               "BLP test power", "Power", hline = 0.05)
+BLP_power_plot <- summary_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("power_BLP", "mcse_power_BLP")),
+  "power_BLP", "mcse_power_BLP", "BLP test power", "Power", hline = 0.05)
 ggsave("bin_blp_power.png", plot = BLP_power_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
-indep_cate_power_plot <- summary_plot(metrics_summary, "power_indep_cate",
-                                      "mcse_power_indep_cate",
-                                      "CATE permutation test power", "Power",
-                                      hline = 0.05)
+indep_cate_power_plot <- summary_plot(
+  bind_true_cate(metrics_summary, true_cate_summary,
+                c("power_indep_cate", "mcse_power_indep_cate")),
+  "power_indep_cate", "mcse_power_indep_cate",
+  "CATE permutation test power", "Power", hline = 0.05)
 ggsave("bin_indep_cate_power.png", plot = indep_cate_power_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 

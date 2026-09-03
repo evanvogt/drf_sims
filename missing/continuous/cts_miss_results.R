@@ -34,6 +34,14 @@ metrics <- metrics %>%
   mutate(n = factor(n), prop = factor(prop)) %>%
   droplevels()
 
+# derived 0/1 reject-indicators for the power summaries below -
+# summarise_metrics()'s binomial argument expects a real per-run column, not
+# an inline expression
+metrics <- metrics %>%
+  mutate(BLP_reject = as.numeric(BLP_p < 0.05),
+         indep_cate_reject = as.numeric(indep_cate < 0.05),
+         indep_po_reject = as.numeric(indep_po < 0.05))
+
 # per (scenario, mechanism, method, model) summaries. summarise_metrics() drops
 # any entry of `cols` the tibble does not carry, so rel_efficiency being absent
 # is not an error here.
@@ -45,7 +53,10 @@ metrics_summary <- summarise_metrics(
            sign_acc = "sign_acc", BLP = "BLP_p", indep_cate = "indep_cate",
            indep_po = "indep_po", rel_eff = "rel_efficiency",
            rel_bias_complete = "rel_bias_complete",
-           rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate")
+           rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate",
+           power_BLP = "BLP_reject", power_indep_cate = "indep_cate_reject",
+           power_indep_po = "indep_po_reject"),
+  binomial = c("power_BLP", "power_indep_cate", "power_indep_po")
 )
 
 # helper: the per-run distribution behind each summary panel. distribution_plot()
@@ -232,6 +243,61 @@ sign_acc_sum_plot <- point_range_plot(metrics_summary, "sign_acc",
   geom_hline(yintercept = 0.5, linetype = "dashed")
 save_fig("cts_miss_sign_acc_summary.png", fig_path)
 
+# --- true CATE test evaluation -----------------------------------------
+# BLP and independence tests run on the true CATE and true nuisances instead
+# of an estimator's (see missing/continuous/README.md's "True-CATE HTE test
+# evaluation") - the ceiling each model's own BLP/indep_cate test is chasing.
+# No indep_po counterpart: dr_oracle's own indep_po already covers that. Bound
+# in as an extra "model" x-axis category only where it's plotted (the BLP/
+# indep_cate panels that follow, and the new power section below) - every
+# other plot is unaffected. multiple_imputation rows are NA here, same as
+# everywhere else in this study (see true_cate_test_row(), R/cate_models.R).
+#
+# BLP never touches X (run_blp_whole() takes Y, W, Y0.hat, W.hat, tau only),
+# so it is identical across `method` for the same run - that flatness is
+# expected, not a bug. indep_cate DOES depend on X, which genuinely differs by
+# handling method, so its true-CATE series varies by method for real: it shows
+# whether a method's reshaping of X alone (CATE held fixed at the truth) helps
+# or hurts the independence test's power.
+true_cate_tests <- readRDS(file.path(res_path, "cts_miss_true_cate_tests.RDS")) %>%
+  apply_labels(MISS_SCENARIO_LABELS) %>%
+  mutate(n = factor(n), prop = factor(prop)) %>%
+  droplevels()
+
+true_cate_summary <- true_cate_tests %>%
+  group_by(scenario, n, type, prop, mechanism, method) %>%
+  summarise(
+    mean_BLP = mean(BLP_p, na.rm = TRUE),
+    mcse_BLP = sd(BLP_p, na.rm = TRUE) / sqrt(sum(!is.na(BLP_p))),
+    mean_indep_cate = mean(indep_cate, na.rm = TRUE),
+    mcse_indep_cate = sd(indep_cate, na.rm = TRUE) / sqrt(sum(!is.na(indep_cate))),
+    # named mean_power_*/mcse_power_*, not power_*/mcse_power_* - matching
+    # summarise_metrics()'s own naming convention below, which always prefixes
+    # mean_/mcse_ even for its binomial columns
+    mean_power_BLP = mean(BLP_p < 0.05, na.rm = TRUE),
+    mcse_power_BLP = sqrt(mean_power_BLP * (1 - mean_power_BLP) / sum(!is.na(BLP_p))),
+    mean_power_indep_cate = mean(indep_cate < 0.05, na.rm = TRUE),
+    mcse_power_indep_cate = sqrt(mean_power_indep_cate * (1 - mean_power_indep_cate) /
+                                   sum(!is.na(indep_cate))),
+    .groups = "drop"
+  ) %>%
+  mutate(model = "True CATE")
+
+true_cate_raw <- true_cate_tests %>% mutate(model = "True CATE")
+
+model_levels_true <- c(levels(metrics$model), "True CATE")
+
+# row-bind the true-CATE reference series onto a per-run or summarised data
+# frame, extending `model`'s levels so it becomes one more x-axis category
+bind_true_cate <- function(df, true_df, extra_cols) {
+  bind_rows(
+    mutate(df, model = factor(as.character(model), levels = model_levels_true)),
+    true_df %>%
+      mutate(model = factor(model, levels = model_levels_true)) %>%
+      select(scenario, n, type, prop, mechanism, method, model, all_of(extra_cols))
+  )
+}
+
 # --- BLP test p-values ------------------------------------------------------
 # dr_random_forest used to carry no BLP or independence test under
 # profile = "missing" (PROFILES in R/cate_models.R), so its p-values were NA
@@ -239,22 +305,25 @@ save_fig("cts_miss_sign_acc_summary.png", fig_path)
 # results were back-filled in place by R/patch_hte_tests.R rather than re-run.
 # If this model is still NA here, the patch job has not been run over these
 # results yet - check patch_status in check_all_studies.md.
-BLP_plot <- miss_box_plot(metrics, "BLP_p", "p-value", hline = 0.05,
-                          facet_scales = "free_x")
+BLP_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p"),
+                          "BLP_p", "p-value", hline = 0.05, facet_scales = "free_x")
 save_fig("cts_miss_blp_all.png", fig_path)
 
-BLP_sum_plot <- point_range_plot(metrics_summary, "BLP", "p-value",
-                                 facet_scales = "free_x") +
+BLP_sum_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP", "mcse_BLP")),
+  "BLP", "p-value", facet_scales = "free_x") +
   geom_hline(yintercept = 0.05, linetype = "dashed")
 save_fig("cts_miss_blp_summary.png", fig_path)
 
 # --- CATE permutation test p-values -----------------------------------------
-indep_cate_plot <- miss_box_plot(metrics, "indep_cate", "p-value", hline = 0.05,
+indep_cate_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "indep_cate"),
+                                 "indep_cate", "p-value", hline = 0.05,
                                  facet_scales = "free_x")
 save_fig("cts_miss_indep_cate_all.png", fig_path)
 
-indep_cate_sum_plot <- point_range_plot(metrics_summary, "indep_cate", "p-value",
-                                        facet_scales = "free_x") +
+indep_cate_sum_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_indep_cate", "mcse_indep_cate")),
+  "indep_cate", "p-value", facet_scales = "free_x") +
   geom_hline(yintercept = 0.05, linetype = "dashed")
 save_fig("cts_miss_indep_cate_summary.png", fig_path)
 
@@ -267,6 +336,30 @@ indep_po_sum_plot <- point_range_plot(metrics_summary, "indep_po", "p-value",
                                       facet_scales = "free_x") +
   geom_hline(yintercept = 0.05, linetype = "dashed")
 save_fig("cts_miss_indep_po_summary.png", fig_path)
+
+# --- HTE test power (proportion rejecting at alpha=0.05) --------------------
+# new for this study - continuous/ and binary/ already report this; power_BLP/
+# power_indep_cate/power_indep_po were added to summarise_metrics()'s cols
+# above. The true-CATE reference series applies to BLP and indep_cate only,
+# same as the p-value panels; indep_po has no true-CATE counterpart anywhere
+# in this evaluation (dr_oracle's own indep_po already covers it).
+BLP_power_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_power_BLP", "mcse_power_BLP")),
+  "power_BLP", "Power", facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed")
+save_fig("cts_miss_blp_power.png", fig_path)
+
+indep_cate_power_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary,
+                c("mean_power_indep_cate", "mcse_power_indep_cate")),
+  "power_indep_cate", "Power", facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed")
+save_fig("cts_miss_indep_cate_power.png", fig_path)
+
+indep_po_power_plot <- point_range_plot(metrics_summary, "power_indep_po", "Power",
+                                        facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed")
+save_fig("cts_miss_indep_po_power.png", fig_path)
 
 # --- missing estimates (n_na) diagnostic ------------------------------------
 # the count of NA CATE estimates within a run. A data-quality diagnostic, not a
