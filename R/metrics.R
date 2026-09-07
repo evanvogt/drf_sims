@@ -105,6 +105,38 @@ interval_metrics <- function(lb, ub, true) {
   )
 }
 
+#' Bias-eliminated coverage of an interval against a substituted reference
+#'
+#' Same construction as interval_metrics()'s coverage columns, but scored
+#' against a stand-in reference (e.g. the across-run mean of the point
+#' estimate at a fixed query point) instead of the unknown true parameter -
+#' "BE-coverage": https://joonho112.github.io/simsum-mini-course/06-metrics-inference.html#sec-becoverage
+#' Substituting the mean estimate for the truth isolates whether the
+#' interval's width is correctly calibrated, independent of whether the point
+#' estimator itself is biased.
+#'
+#' No internal na.rm, matching interval_metrics() - one NA in `be_reference`
+#' or the bounds makes the whole row NA. mean_ci_length is deliberately not
+#' recomputed here: lb/ub are whatever the caller already scored with
+#' interval_metrics(), so it would be a byte-for-byte duplicate column -
+#' callers bind_cols() this alongside that call's result on the same row.
+#'
+#' @param lb,ub the interval bounds, as passed to interval_metrics()
+#' @param be_reference the bias-eliminated reference vector (same length as
+#'   lb/ub), or NULL when none is available (e.g. this model/cell never
+#'   produced one) - returns NA columns rather than erroring, the same
+#'   graceful-absence pattern hte_test_metrics() uses for missing test objects.
+be_interval_metrics <- function(lb, ub, be_reference) {
+  if (is.null(be_reference)) {
+    return(tibble(be_marginal_coverage = NA_real_,
+                  be_simultaneous_coverage = NA_real_))
+  }
+  tibble(
+    be_marginal_coverage = mean(as.numeric(be_reference >= lb & be_reference <= ub)),
+    be_simultaneous_coverage = as.numeric(all(be_reference >= lb & be_reference <= ub))
+  )
+}
+
 #' Normal-approximation interval from a variance estimate
 #'
 #' Used for the causal forest's own variance estimates, alongside the bootstrap.
@@ -131,6 +163,74 @@ unnest_results <- function(study, all_results_df) {
     select(-results)
 
   list(df = df, keys = df[, c(study$path_cols, "run"), drop = FALSE])
+}
+
+#' Bias-eliminated grid reference: across-run mean of tau_grid at each fixed
+#' grid point, per (path_cols..., model) cell
+#'
+#' The theta_bar substitute BE-coverage uses in place of the unknown true
+#' theta - see be_interval_metrics(). Meaningful only where the grid rows
+#' apply (confidence_intervals/{continuous,binary}): the query grid
+#' (R/dgm_scenarios.R::build_query_grid()) is fixed within a (scenario, n)
+#' pair, and calibrate_bW() is a deterministic function of (params, n) that
+#' consumes no RNG, so every run of one path_cols cell targets the exact same
+#' grid_truth$tau - unlike the per-unit hb_lb/hb_ub arm, where a fresh sample
+#' of units is drawn every run and there is no fixed per-unit truth to
+#' average toward. Grouped at the full path_cols granularity (not pooled
+#' across CI_sf, even though CI_sf never enters bW/Z_query/grid_truth)
+#' because CI_sf does enter the half-sample bootstraps run between arms
+#' within one replicate, so a later arm's tau_grid cannot be assumed
+#' identical across CI_sf for the same run.
+#'
+#' `tau_grid` is present for a model in a run iff `grid_lb` is (both come
+#' from the same `!is.null(Z_query)` gate in R/cate_models.R::cate_methods()
+#' and R/bootstrap_ci.R's rf_oob_half_boot()/cf_oob_half_boot()), so
+#' filtering on tau_grid here exactly matches the `!is.null(model_res$grid_lb)`
+#' gate the *_ci_metrics.R scripts already use to decide whether to emit a
+#' "<model>_grid" row.
+#'
+#' @param study the study config (supplies path_cols)
+#' @param all_results_df output of get_results()
+#' @param models which model names to average tau_grid for
+#' @return named list keyed by "<path_cols pasted with \\r>\\r<model>", each
+#'   value a numeric vector the same length as that cell's Z_query. A
+#'   (cell, model) that never produced a tau_grid is simply absent from the
+#'   list - see be_reference_for().
+grid_be_reference <- function(study, all_results_df, models = CI_MODELS) {
+  u <- unnest_results(study, all_results_df)
+  cell_key <- do.call(paste, c(u$keys[, study$path_cols, drop = FALSE], sep = "\r"))
+
+  acc <- list()
+  for (i in seq_len(nrow(u$df))) {
+    sim_res <- u$df$sim_res[[i]]
+    for (m in intersect(names(sim_res), models)) {
+      tg <- sim_res[[m]]$tau_grid
+      if (is.null(tg)) next
+      k <- paste(cell_key[i], m, sep = "\r")
+      acc[[k]] <- c(acc[[k]], list(tg))
+    }
+  }
+
+  lapply(acc, function(vecs) rowMeans(do.call(cbind, vecs), na.rm = TRUE))
+}
+
+#' Look up one run's bias-eliminated reference vector
+#'
+#' Keys the same way grid_be_reference() built its lookup, so a per_model()
+#' closure that already has `keys` (the one-row grouping data frame
+#' compute_metrics() hands it) and `model` can fetch its cell's reference
+#' without recomputing anything.
+#'
+#' @param be_ref output of grid_be_reference()
+#' @param keys one-row keys data frame, as compute_metrics() passes to per_model()
+#' @param model model name
+#' @param path_cols study$path_cols
+#' @return numeric vector, or NULL if this (cell, model) never contributed to
+#'   be_ref (see grid_be_reference())
+be_reference_for <- function(be_ref, keys, model, path_cols) {
+  k <- paste(do.call(paste, c(keys[1, path_cols, drop = FALSE], sep = "\r")),
+             model, sep = "\r")
+  be_ref[[k]]
 }
 
 #' Turn a collected results tibble into one metrics row per (combination, run, model)

@@ -10,6 +10,14 @@ source(here("R", "metrics.R"))
 
 all_results_df <- readRDS(file.path(study$res_path, "ci_bin_all.RDS"))
 
+# Bias-eliminated (BE) reference: across-run mean of tau_grid at each fixed
+# grid point, per (scenario, n, CI_sf, model) cell - substitutes for the
+# unknown true tau in BE-coverage. Grid-only: see R/metrics.R::grid_be_reference()
+# for why the per-unit hb_lb/hb_ub arm has no analogous reference. Computed
+# once and captured by the per_model() closure below; compute_metrics() itself
+# is unchanged.
+be_ref <- grid_be_reference(study, all_results_df, models = CI_MODELS)
+
 metrics <- compute_metrics(
   study, all_results_df, models = CI_MODELS,
   per_model = function(model_res, true_tau, model, sim_res, keys) {
@@ -32,7 +40,9 @@ metrics <- compute_metrics(
     if (!is.null(model_res$grid_lb)) {
       out <- bind_rows(out, bind_cols(
         tibble(model = paste0(model, "_grid")),
-        interval_metrics(model_res$grid_lb, model_res$grid_ub, sim_res$grid_truth$tau)
+        interval_metrics(model_res$grid_lb, model_res$grid_ub, sim_res$grid_truth$tau),
+        be_interval_metrics(model_res$grid_lb, model_res$grid_ub,
+                            be_reference_for(be_ref, keys, model, study$path_cols))
       ))
     }
 

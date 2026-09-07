@@ -55,6 +55,20 @@ already dominates the runtime.
 `mean_ci_length`. Nominal is 0.95 for both coverages; simultaneous coverage is
 the one the method is constructed to control.
 
+`continuous/` and `binary/` additionally score a `"<model>_grid"` row against
+a fixed covariate query grid (`R/dgm_scenarios.R::build_query_grid()`) rather
+than the per-run sampled units. Those grid rows carry two more columns,
+`be_marginal_coverage` and `be_simultaneous_coverage` — coverage of the same
+interval against the across-run *mean* point estimate at each grid point, in
+place of the true tau ("bias-eliminated coverage"; see
+https://joonho112.github.io/simsum-mini-course/06-metrics-inference.html#sec-becoverage).
+This isolates whether interval *width* is correctly calibrated, independent
+of point-estimate bias. It's grid-only because BE-coverage needs a fixed
+estimand replicated identically across runs — the query grid points are, but
+the per-run sampled units are not (a fresh sample is drawn every run) — so
+`be_marginal_coverage`/`be_simultaneous_coverage` are `NA` on every non-`_grid`
+row (`optimal_sf/` never builds a query grid, so it has none of this).
+
 ## Status
 
 `continuous/` — unaffected by the *bug ledger*, but **needs a re-run** for
