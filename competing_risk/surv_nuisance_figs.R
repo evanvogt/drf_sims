@@ -65,7 +65,7 @@ propensity_overlap_plot <- function(indiv, censor_value) {
   ggplot(plot_df, aes(x = W.hat, fill = factor(W))) +
     geom_density(alpha = 0.5, colour = NA) +
     geom_vline(xintercept = c(0.05, 0.95), linetype = "dashed", colour = "grey40") +
-    facet_grid(scenario ~ arm_label) +
+    facet_grid(arm_label ~ scenario) +
     nuisance_fill_scale() +
     drf_theme() +
     labs(
@@ -85,8 +85,8 @@ pseudo_value_plot <- function(indiv, censor_value, estimand_value) {
     )
 
   ggplot(plot_df, aes(x = arm_label, y = value, colour = base_learner)) +
-    geom_boxplot(fill = "transparent", outlier.shape = NA) +
-    facet_grid(scenario ~ quantity, scales = "free_y") +
+    geom_boxplot(fill = "transparent") +
+    facet_grid(quantity ~ scenario, scales = "free_y") +
     drf_scale() +
     drf_theme(rotate_x = TRUE) +
     labs(
@@ -102,7 +102,7 @@ po_distribution_plot <- function(indiv, censor_value) {
   ggplot(plot_df, aes(x = arm_label, y = po, colour = arm_label)) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_boxplot(fill = "transparent", outlier.shape = NA) +
-    facet_grid(scenario ~ estimand, scales = "free_y") +
+    facet_grid(estimand ~ scenario, scales = "free_y") +
     drf_scale() +
     drf_theme(rotate_x = TRUE) +
     labs(
@@ -119,7 +119,7 @@ po_vs_what_plot <- function(indiv, censor_value, estimand_value) {
   ggplot(plot_df, aes(x = W.hat, y = po)) +
     geom_bin2d(bins = 40) +
     geom_vline(xintercept = c(0.05, 0.95), linetype = "dashed", colour = "white") +
-    facet_grid(scenario ~ arm_label) +
+    facet_grid(arm_label ~ scenario) +
     scale_fill_viridis_c() +
     drf_theme() +
     labs(
