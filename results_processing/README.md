@@ -9,7 +9,9 @@ Nothing here reads per-run simulation output directly — run the study's
 | | |
 |---|---|
 | `thesis_figures/` | the figures that go in the thesis, one script per chapter section |
+| `poster_figs/` | exploration tooling for choosing the ICTMC poster figures |
 | `LSR_figures.R` | figures for the LSR presentation |
+| `ictmc_figs.R` | figures for the ICTMC poster |
 | `results_10_25.Rmd`, `results_update.Rmd`, `bin_new_metrics.Rmd` | working notebooks, snapshots of earlier analyses |
 
 ## `thesis_figures/`
@@ -26,7 +28,10 @@ Shared presentation lives in `R/figures.R`: the display labels
 (`MODEL_LABELS`, `METHOD_LABELS`, `MECHANISM_LABELS`), the palette and theme,
 `summarise_metrics()` for mean ± Monte Carlo SE, `save_fig()` for the standard
 21×15cm size, and the plot shapes both pairs of scripts use
-(`point_range_plot`, `distribution_plot`, `make_bm_plots`).
+(`point_range_plot`, `distribution_plot`, `make_bm_plots`). `lollipop_plot`
+(added for `poster_figs/`, see below) is the rsimsum-style stick + point +
+MCSE-bracket alternative to `point_range_plot`, with facet rows/cols as
+parameters instead of a fixed mechanism/scenario grid.
 
 That module exists because the scripts had drifted into near-copies:
 `cts_ss.R` and `bin_ss.R` differed in 18 of 280 lines once the outcome prefix was
@@ -36,6 +41,19 @@ write-up used to mean editing six files.
 
 Each script still owns its paths, its filters and its choice of panels — the
 shared module handles presentation, not analysis.
+
+## `poster_figs/`
+
+Exploration tooling for the ICTMC poster (`ICTMC_poster_planning.md`): several
+panels still have an open metric/encoding choice, so rather than editing
+`ictmc_figs.R` one candidate at a time, `R/candidates.R` builds every
+candidate for a panel as a named list of plots, and both
+`explore_gallery.R` (contact-sheet PNGs via patchwork, fastest to scan) and
+`explore_options.qmd` (a full-size version per candidate, click through the
+tabs) render from that same list. Piloted on the sample-size and
+missing-data panels only, since those already have working data prep
+elsewhere; once a metric is chosen, port it into `ictmc_figs.R` and repeat the
+pattern for the remaining panels.
 
 ## Regenerate after a metrics change
 

@@ -1,0 +1,69 @@
+---
+title: "ICTMC poster - candidate plots"
+author: "Ellie Van Vogt"
+date: today
+format: html
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 10, fig.height = 7)
+library(here)
+source(here("results_processing", "poster_figs", "R", "candidates.R"))
+
+#' Emit one Quarto tab per candidate plot, inside an already-open
+#' `::: {.panel-tabset}` block
+emit_plot_tabs <- function(plots) {
+  for (nm in names(plots)) {
+    cat("\n\n#### ", nm, "\n\n")
+    print(plots[[nm]])
+    cat("\n\n")
+  }
+}
+```
+
+Full-size candidates for the two panels piloted so far - see
+`../ICTMC_poster_planning.md` for what each one is trying to settle, and
+`explore_gallery.R` for the faster-to-scan contact-sheet version of the same
+plots. Candidate-building logic lives in `R/candidates.R`; this document only
+arranges the plots it returns into tabs.
+
+## Sample size
+
+Outer tabs are the outcome-scope choice (show both outcomes, or pick one);
+inner tabs are the metric choice.
+
+```{r ss-tabs}
+#| results: asis
+outcomes <- c(both = "Both outcomes", continuous = "Continuous only",
+             binary = "Binary only")
+cat("::: {.panel-tabset}\n\n")
+for (oc in names(outcomes)) {
+  cat("\n\n### ", outcomes[[oc]], "\n\n")
+  cat("::: {.panel-tabset}\n\n")
+  emit_plot_tabs(candidate_plots_sample_size(outcome = oc))
+  cat("\n\n:::\n\n")
+}
+cat("\n\n:::\n\n")
+```
+
+## Missing data
+
+Outer tabs are the two summarisation choices raised in the planning doc
+(average over CATE model, or keep it split); inner tabs are the metric
+choice.
+
+```{r miss-tabs}
+#| results: asis
+variants <- c(FALSE, TRUE)
+names(variants) <- c("Averaged over model", "Split by model")
+cat("::: {.panel-tabset}\n\n")
+for (vn in names(variants)) {
+  cat("\n\n### ", vn, "\n\n")
+  cat("::: {.panel-tabset}\n\n")
+  emit_plot_tabs(candidate_plots_missing(by_model = variants[[vn]]))
+  cat("\n\n:::\n\n")
+}
+cat("\n\n:::\n\n")
+```
