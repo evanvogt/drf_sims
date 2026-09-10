@@ -236,7 +236,7 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alph
   p +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
-    facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
+    facet_grid(cols = vars(scenario), rows = vars(n), scales = "free_y") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +

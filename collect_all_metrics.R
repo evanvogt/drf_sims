@@ -11,11 +11,6 @@
 #   2. read them in, tag each row with study_name/category/source_file, and
 #      row-bind everything into one combined table for cross-study analysis.
 #
-# Results only exist on the HPC (too large to sync here - see check_all.R's
-# header), so like check_all.R this is written and syntax-tested locally but
-# run for real on the HPC login node, or locally after syncing results/ down.
-# Locally, every study will report "not_found" - that is expected, not a bug.
-#
 # Destination for the copies and the combined table is a sibling directory
 # next to results/ itself (file.path(dirname(here()), "collected_metrics")),
 # NOT inside the repo - same reasoning as why results/ isn't committed: this

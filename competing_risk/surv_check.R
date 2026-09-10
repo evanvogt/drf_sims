@@ -9,3 +9,4 @@ library(here)
 source(here("competing_risk/surv_config.R"))
 
 check_failed(study)
+
