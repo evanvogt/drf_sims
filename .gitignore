@@ -1,6 +1,5 @@
 # gitignore
 ssh*
-
 # ignore log files
 *.e*
 *.o*
@@ -8,20 +7,17 @@ ssh*
 *.OU
 *logs*/
 *failed_ids.txt
-
 # ignore compiled rmd files
 *.html
 *README_files/
-
 # ignore random test bits (scoped to scratch/ - the old repo-wide *test*.* rule
 # silently excluded crossfitting/cf_testing.R, the verification harness that
 # crossfitting/README.md tells you to run before submitting any job)
 scratch/*test*
-
 # regression harness baselines - machine-local, re-captured not shared
 .regression_baseline/
-
 # old things that will not be used/updated
 *deprecated*/
 *old*/
 .Rproj.user
+.Rhistory
