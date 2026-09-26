@@ -21,6 +21,5 @@ jobid=$(sed -n "${PBS_ARRAY_INDEX}p" "${PBS_O_WORKDIR}/failed_ids.txt")
 # Navigate to script directory
 cd "${PBS_O_WORKDIR}/.."
 
-# Trailing args are workers/n_cores - keep these in sync with whatever
-# me_profile_summary.R last wrote into me_1.sh.
+# Trailing args are workers/n_cores - keep these in sync with me_1.sh's.
 Rscript me_analysis.R "$jobid" 1 1

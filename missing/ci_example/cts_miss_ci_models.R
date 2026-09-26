@@ -29,9 +29,8 @@ run_all_cate_methods <- function(data, n_folds = 10, fmla_info = NULL,
 #'   step, which previously read it from the global environment
 #' @param num.threads grf thread count, forwarded to every regression_forest()/
 #'   causal_forest() call inside cate_methods(). NULL preserves the prior
-#'   behaviour (grf's own default). Added for cts_miss_ci_profile.R to be able
-#'   to control it; cts_miss_ci_analysis.R now also forwards it from its own
-#'   trailing commandArgs.
+#'   behaviour (grf's own default). cts_miss_ci_analysis.R forwards it from its
+#'   own trailing commandArgs.
 mi_boot <- function(datalist, n_folds = 10, fmla_info = NULL,
                     CI_boot = 200, CI_sf = 0.5, alpha = 0.05,
                     num.threads = NULL) {

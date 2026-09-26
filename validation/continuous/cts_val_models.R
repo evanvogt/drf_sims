@@ -108,7 +108,7 @@ run_all_cate_methods <- function(data, n_folds = 10, num.threads = NULL,
 #' @param tau full-model OOB CATE estimates
 #' @param num.threads grf thread count for each dropped-covariate refit. These
 #'   run one per worker, so leaving it NULL means every worker spawns a forest on
-#'   all visible cores at once - the oversubscription cts_val_profile.R measures.
+#'   all visible cores at once, oversubscribing whatever PBS allocated.
 get_te_vims <- function(X, po, tau, num.threads = NULL) {
   n_obs <- nrow(X)
   covariates <- colnames(X)

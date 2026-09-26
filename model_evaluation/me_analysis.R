@@ -8,8 +8,7 @@
 # CLI-argument handling mirrors crossfitting/cf_analysis.R instead: optional
 # trailing args for the resource-tuning knobs (workers, n_cores), defaulting
 # to sane values so a bare `Rscript me_analysis.R 1` still works as a local
-# smoke test. jobscripts/me_1.sh supplies real, measured values once
-# me_profile_summary.R has run - see me_profile.R/me_profile_summary.R.
+# smoke test. jobscripts/me_1.sh supplies both explicitly.
 
 library(dplyr)
 library(future)
@@ -36,10 +35,9 @@ source(here("model_evaluation", "me_config.R"))
 # simulation parameters
 args <- as.numeric(commandArgs(trailingOnly = TRUE))
 i <- args[1]
-# workers/n_cores default to the pre-profiling values so a bare
-# `Rscript me_analysis.R 1` still works as a local smoke test; me_1.sh always
-# supplies both once me_profile_summary.R has written them in - see
-# me_profile_summary.R and the note in README.md on sizing the array job.
+# workers/n_cores default to 4/5 so a bare `Rscript me_analysis.R 1` still
+# works as a local smoke test; me_1.sh supplies both explicitly - see the note
+# in README.md on sizing the array job.
 workers <- if (length(args) >= 2 && !is.na(args[2])) args[2] else 4
 n_cores <- if (length(args) >= 3 && !is.na(args[3])) args[3] else 5
 h2o_mem <- "10G"

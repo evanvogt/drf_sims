@@ -192,9 +192,9 @@ check_failed <- function(study, write = TRUE, update_rerun = TRUE, ...) {
 #' Read a jobscript without disturbing its line endings
 #'
 #' Every jobscript in this repo is CRLF, four of the rerun scripts have no
-#' trailing newline, and there is no .gitattributes. readLines()/writeLines()
-#' - the idiom the *_profile_summary.R scripts use - strips the \r from only
-#' the lines it edits when it runs on the HPC login node, and always appends a
+#' trailing newline, and there is no .gitattributes. Editing with
+#' readLines()/writeLines() strips the \r from only the lines it edits when it
+#' runs on the HPC login node, and always appends a
 #' final newline, so a three-line edit shows up as a whole-file diff. Round-trip
 #' the bytes instead and put back exactly what was there.
 read_script <- function(path) {

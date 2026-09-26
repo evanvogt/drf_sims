@@ -97,8 +97,6 @@ arms and the T-learner control are dropped.
 | `cf_models.R` | DGP wrapper, nuisance producers, stage-2 consumers, `run_all_crossfit_variants` |
 | `cf_analysis.R` | array entry point, one replicate per index |
 | `cf_testing.R` | verification checks — run before submitting anything |
-| `cf_profile.R` | timing / memory / CPU sweep over `(workers, grf_threads)`, instrumented with `syrup` |
-| `cf_profile_summary.R` | turns the sweep into PBS directives and writes them into `cf_1.sh` |
 | `cf_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cf_metrics.R` | metric definitions (functions only, no side effects) |
 | `cf_collect.R` | streams the per-run files through `cf_metrics.R` into `cf_metrics.RDS` |
@@ -106,8 +104,6 @@ arms and the T-learner control are dropped.
 | `confidence_intervals/cf_ci_analysis.R` | confidence-interval pilot, all 12 RF/CF arms — see below |
 | `confidence_intervals/cf_ci_testing.R` | verification checks for the CI pilot (`full` adds the production-parity check) |
 | `confidence_intervals/cf_ci_check.R` / `cf_ci_metrics.R` / `cf_ci_collect.R` | CI pilot's own check/metrics/collect, parallel to the files above |
-| `confidence_intervals/cf_ci_profile.R` | timing / memory / CPU sweep over `(workers, grf_threads, CI_boot)` for the CI pilot, instrumented with `syrup` |
-| `confidence_intervals/cf_ci_profile_summary.R` | turns the sweep into PBS directives (extrapolating to the pilot's real `CI_boot`) and writes them into `cf_ci_1.sh` |
 
 ## Half-sample bootstrap CI pilot
 
@@ -224,10 +220,6 @@ Rscript crossfitting/confidence_intervals/cf_ci_testing.R              # structu
 Rscript crossfitting/confidence_intervals/cf_ci_testing.R full         # adds the "identical to production" check (needs SuperLearner)
 Rscript crossfitting/confidence_intervals/cf_ci_analysis.R 1 10 2 1    # local smoke test: index 1, CI_boot=10
 
-Rscript crossfitting/confidence_intervals/cf_ci_profile.R 1            # smoke-test the CI profiler locally
-qsub crossfitting/confidence_intervals/jobscripts/cf_ci_profile.sh     # 48 profiling jobs
-Rscript crossfitting/confidence_intervals/cf_ci_profile_summary.R      # writes measured directives into cf_ci_1.sh
-
 qsub crossfitting/confidence_intervals/jobscripts/cf_ci_1.sh           # the pilot itself (150 jobs)
 Rscript crossfitting/confidence_intervals/cf_ci_check.R                # 150/150?
 qsub crossfitting/confidence_intervals/jobscripts/cf_ci_collect.sh
@@ -235,49 +227,31 @@ qsub crossfitting/confidence_intervals/jobscripts/cf_ci_collect.sh
 
 ### Sizing the CI pilot's array job
 
-`cf_ci_1.sh` shipped with **placeholder** `#PBS -l` lines (a hand-sizing step the
-pilot's original scope deferred rather than skipped). `cf_ci_profile.R` /
-`cf_ci_profile_summary.R` settle it the same way `cf_profile.R` / `cf_profile_summary.R`
-do for `cf_1.sh` — see "Sizing the array job" below for the shared mechanics
-(`syrup`, process-tree filtering, the peak-memory upper bound) — with one addition
-specific to the bootstrap: the sweep profiles `CI_boot` at **20 and 60**, not at the
-pilot's real 200. Each bootstrap draw (`future_map()` in `R/bootstrap_ci.R`) is an
-independent refit — `V` forests on a half-sample for a crossfit arm, one for an OOB
-arm — so elapsed time scales ~linearly in `CI_boot`. Profiling directly at
-`CI_boot = 200` across the sweep would cost as much as the production array it
-exists to size. `cf_ci_profile_summary.R` fits `elapsed ~ CI_boot` per
-`(workers, grf_threads)`, pooled over scenario/run so the R² is a real diagnostic,
-and warns if any configuration's fit falls below R² = 0.9 rather than trusting a bad
-extrapolation silently. It also reports a per-arm bootstrap cost breakdown over all
-12 arms, extrapolated to `CI_boot = 200` — the "why is it slow" answer, alongside
-the resource sizing.
+`cf_ci_1.sh`'s `#PBS -l` lines and trailing `CI_boot`/`workers`/`grf_threads`
+args are **placeholders** set by hand (currently 2 cores, 5gb, 1h, `200 2 1`).
+The `syrup` sweep meant to measure them didn't work for this study (see the root
+README's "Resource profiling (removed)"). Size them by hand, and check the first
+real subjobs with `qstat -fx <jobid> | grep resources_used`. What drives the
+cost:
 
-Expect the fixed cost to dominate more than it used to. The 7 OOB arms add only
-~15% to the bootstrap total (`B x 1` refit each against a crossfit arm's `B x V`),
-and `half_boot_out` adds nothing at all since it reuses the same refits — but the
-pilot now pays for the 4 nuisance objects the old trimmed orchestrator skipped, and
-`nuisance_oob_rf_manual` is a pure-R double tree loop over `num.trees x 2`
-counterfactual passes. That is likely the largest single non-bootstrap cost in a
-replicate, and it inflates the intercept of the `elapsed ~ CI_boot` fit, so the
-R² < 0.9 warning is worth reading rather than skimming.
+- **Bootstrap refits, linear in `CI_boot`.** Each bootstrap draw (`future_map()`
+  in `R/bootstrap_ci.R`) is an independent refit: `V` forests on a half-sample for
+  a crossfit arm, one for an OOB arm. So elapsed time scales roughly linearly in
+  `CI_boot`, and a timed run at a small `CI_boot` (the smoke test above uses 10)
+  extrapolates to the real 200.
+- **A large fixed cost.** The 7 OOB arms add only ~15% to the bootstrap total
+  (`B x 1` refit each against a crossfit arm's `B x V`), and `half_boot_out`
+  adds nothing since it reuses the same refits. But the pilot pays for the 4
+  nuisance objects the old trimmed orchestrator skipped, and
+  `nuisance_oob_rf_manual` is a pure-R double tree loop over `num.trees x 2`
+  counterfactual passes. That is likely the largest single non-bootstrap cost in
+  a replicate, so extrapolate with an intercept, not just a per-draw rate.
+- **Memory grows with `CI_boot` too.** `future_map()` accumulates all `CI_boot`
+  result vectors before the draws matrix is assembled, so peak memory measured at
+  a small `CI_boot` underestimates the real `CI_boot = 200`.
 
-> **Known-wrong, deferred: the memory figure.** `cf_ci_profile_summary.R`
-> extrapolates only *elapsed time* in `CI_boot`; for memory it applies a flat
-> `mem_factor = 1.5` to the peak RSS observed at `CI_boot = 20/60`. The
-> justification for that (still written in `cf_ci_profile.R`'s header) is that peak
-> memory is governed by how many draws run concurrently across `workers` rather
-> than by `CI_boot` itself. **That reasoning does not hold** — `future_map()`
-> accumulates all `CI_boot` result vectors before the draws matrix is assembled, so
-> memory does grow with `CI_boot`, and the `mem=` written into `cf_ci_1.sh` is an
-> underestimate for the real `CI_boot = 200`. Not fixed in the change that added
-> the OOB arms. Until it is, cross-check the request against
-> `qstat -fx <jobid> | grep resources_used` on the first real subjobs rather than
-> trusting the written figure.
-
-The `Rscript` line it writes carries `CI_boot`, `workers` and `grf_threads`
-together, fixing the mismatch the placeholder version had (`workers=2` on the
-Rscript line vs. `ncpus=1` in `#PBS -l select` — the same kind of drift
-`cf_profile_summary.R`'s header comment warns about for `cf_1.sh`).
+Change the trailing `workers` and the `ncpus` in `#PBS -l select` together, so
+the two can't drift apart.
 
 Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
 `collate_predictions`, `continuous/cts_dgms.R` supplies the DGP, and
@@ -334,10 +308,6 @@ working verification** until section 1 is fixed. Discovered while migrating
 Rscript crossfitting/cf_testing.R              # structure + regression checks (fast) - SEE ABOVE, currently aborts
 Rscript crossfitting/cf_testing.R full         # adds the SuperLearner family
 
-Rscript crossfitting/cf_profile.R 1         # smoke-test the profiler locally
-qsub crossfitting/jobscripts/cf_profile.sh  # 36 profiling jobs
-Rscript crossfitting/cf_profile_summary.R   # writes measured directives into cf_1.sh
-
 qsub crossfitting/jobscripts/cf_1.sh        # the study itself
 Rscript crossfitting/cf_check.R             # 2000/2000?
 qsub crossfitting/jobscripts/cf_collect.sh
@@ -348,39 +318,18 @@ Results land in `../results/crossfitting/` (a sibling of the repo, as elsewhere)
 
 ## Sizing the array job
 
-`cf_1.sh` ships with **placeholder** `#PBS -l` lines. `cf_profile.R` measures what
-one replicate actually costs across a `(workers, grf_threads)` sweep, and
-`cf_profile_summary.R` turns that into directives and writes them in.
+`cf_1.sh`'s `#PBS -l` lines and trailing `workers`/`grf_threads` args are set by
+hand (currently 1 core, 2gb, 30 minutes, `1 1`). They were meant to be measured by
+a `syrup` profiling sweep, but that didn't work for this study (see the root
+README's "Resource profiling (removed)"). When changing them:
 
-Profiling is instrumented with [`syrup`](https://simonpcouch.github.io/syrup/),
-which runs a separate R session that samples `ps` every second and reports every R
-process — so it sees the `multisession` workers, which the parent's own `gc()`
-cannot. Nothing depends on the scheduler, so `Rscript crossfitting/cf_profile.R 1`
-runs on a laptop as a smoke test of the harness (but not for the final numbers: a
-machine with fewer cores than `workers x grf_threads` self-oversubscribes, and the
-summary flags any cell where that happened).
-
-Two things to know about the memory figure:
-
-- `syrup` reports every R session `ps` can see, which on a shared node can include
-  another of your own jobs. `cf_profile.R` filters to `pid == Sys.getpid() |
-  ppid == Sys.getpid()` — `multisession` workers are PSOCK children — and warns if
-  the tracked process count is not `workers + 1`.
-- Peak memory is the summed RSS across the tree at the worst snapshot. That
-  overcounts shared library pages, so it is an upper bound — the safe direction for
-  a `mem=` request. Cross-check it once against `qstat -fx <jobid> | grep
-  resources_used` on the first real subjobs; PBS's cgroup figure counts shared
-  pages once and should sit below the request.
-
-`syrup`'s `pct_cpu` also settles the oversubscription question outright rather than
-inferring it from wall-clock differences: the summary prints observed CPU% against
-`workers x grf_threads x 100` per configuration. This matters because
-`continuous/jobscripts/cts_1.sh` asks for `ompthreads=2` alongside
-`cts_analysis.R`'s `workers <- 2`, and `num.threads` is set nowhere in the repo — so
-each worker may be claiming two threads against two allocated cores.
-
-`syrup` must be installed in the `sim-env` conda environment; `cf_profile.R` fails
-in the first second with a clear message if it is not.
+- keep `workers x grf_threads` within `ncpus`. Otherwise the grf threads
+  oversubscribe the allocated cores
+- change the trailing args and the `#PBS -l` line together, so they can't drift
+  apart
+- keep `ompthreads=ncpus` (see "Deviations" below)
+- check the memory request against `qstat -fx <jobid> | grep resources_used` on
+  the first real subjobs
 
 ## Deviations from the rest of the study, on purpose
 
@@ -400,7 +349,7 @@ in the first second with a clear message if it is not.
 - **`num.threads` is passed explicitly to grf** and `OMP_NUM_THREADS` is set before
   the `multisession` workers spawn. Elsewhere in the repo neither is set, which
   means `ompthreads=2` alongside `workers <- 2` lets each worker claim 2 threads
-  against 2 allocated cores. The profiling sweep measures whether that matters.
+  against 2 allocated cores.
 - **The select lines now request `ompthreads=ncpus`, like every other study's
   jobscripts.** PBS Pro sets `NCPUS` from `ompthreads`, and
   `parallelly::availableCores()` reads `NCPUS` — so `ompthreads` below `ncpus`
@@ -409,4 +358,4 @@ in the first second with a clear message if it is not.
   control is unaffected: it's still done in R, via the `Sys.setenv(OMP_NUM_THREADS
   = grf_threads)` call before `plan()` and via grf's `num.threads`, both of which
   run before or independently of whatever PBS put in the environment.
-  `cf_profile_summary.R` writes `ompthreads=ncpus` into `cf_1.sh` accordingly.
+  `cf_1.sh` requests `ompthreads=ncpus` accordingly.

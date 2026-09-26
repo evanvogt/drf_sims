@@ -65,8 +65,6 @@ known propensity of 0.5; the semi-oracle knows only the propensity.
 | `cts_collect.R` | gathers per-run files into `cts_all.RDS` |
 | `cts_metrics.R` | computes `cts_metrics.RDS`, plus `cts_true_cate_tests.RDS` — see below |
 | `results_cts.R`, `cts_results.Rmd` | summaries |
-| `cts_profile.R` | timing / memory / CPU sweep over `(n, workers, grf_threads)`, instrumented with `syrup` |
-| `cts_profile_summary.R` | turns the sweep into PBS directives and writes them into `cts_1.sh` |
 
 ### True-CATE HTE test evaluation
 
@@ -87,10 +85,6 @@ elsewhere) — while `indep_cate` still returns a real p-value there.
 ## Running it
 
 ```bash
-Rscript continuous/cts_profile.R 1           # smoke-test the profiler locally
-qsub continuous/jobscripts/cts_profile.sh    # 48 profiling jobs
-Rscript continuous/cts_profile_summary.R     # writes measured directives into cts_1.sh
-
 qsub continuous/jobscripts/cts_1.sh     # 1-4000
 qsub continuous/jobscripts/cts_extra.sh # 4001-10400: runs 101-500, scenarios 1, 3, 8, 9
 Rscript continuous/cts_check.R          # writes failed_ids.txt if any are missing
@@ -110,19 +104,14 @@ explicit `num.threads` argument (default `NULL`, so every other study using it
 is unaffected), and `cts_analysis.R` forwards it from an optional trailing CLI
 arg, the same pattern `crossfitting/cf_analysis.R` uses.
 
-`cts_profile.R` measures what one replicate actually costs across a
-`(n, workers, grf_threads)` sweep — `n` is swept here (unlike
-`crossfitting/cf_profile.R`, which fixes `n = 500`) because this study's single
-array job spans `n ∈ {100, 250, 500, 1000}` under one `#PBS -l` line, so sizing
-has to cover the `n = 1000` cell, not a middle value. `cts_profile_summary.R`
-turns that sweep into directives and writes them into `cts_1.sh`, exactly as
-`crossfitting/README.md`'s "Sizing the array job" section describes for that
-study — see there for the `syrup`/memory-figure caveats, which apply unchanged
-here.
-
-```bash
-Rscript continuous/cts_profile.R 1      # runs on a laptop as a smoke test
-```
+`cts_1.sh` now asks for one core and 2gb for an hour, and runs
+`cts_analysis.R <i> 1 1` (one worker, one grf thread). Those figures are set by
+hand. The `syrup` profiling sweep that was meant to measure them didn't work
+for this study (see the root README's "Resource profiling (removed)"). When
+changing them, size for the `n = 1000` cell, not a middle value: the array
+spans `n ∈ {100, 250, 500, 1000}` under one `#PBS -l` line. Keep
+`workers × grf_threads` within `ncpus`, and change the trailing args and the
+`#PBS -l` line together.
 
 ## Status
 

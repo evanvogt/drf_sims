@@ -66,10 +66,9 @@ qsub binary/jobscripts/bin_extra.sh # 4001-10400: runs 101-500, scenarios 1, 3, 
 Rscript binary/bin_check.R
 ```
 
-**TODO:** `bin_collect.sh` and `bin_metrics.sh` don't exist yet in
-`jobscripts/` (only `bin_1.sh` and `bin_profile.sh` do) — create them,
-mirroring `continuous/jobscripts/cts_collect.sh` / `cts_metrics.sh`, before
-the collect/metrics step can run on the cluster.
+**TODO:** `bin_metrics.sh` doesn't exist yet in `jobscripts/` — create it,
+mirroring `continuous/jobscripts/cts_metrics.sh`, before the metrics step can
+run on the cluster. (`bin_collect.sh` is there.)
 
 ## Status
 

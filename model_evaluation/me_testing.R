@@ -656,6 +656,6 @@ if (length(fail) > 0) {
   quit(status = 1)
 }
 cat(sprintf(
-  "\nall checks passed.%s next: submit jobscripts/me_profile.sh, then run me_profile_summary.R\n",
+  "\nall checks passed.%s next: submit jobscripts/me_1.sh\n",
   if (!full) " run with 'full' to also exercise the real nuisance pipelines, then" else ""
 ))

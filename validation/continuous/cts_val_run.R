@@ -76,8 +76,8 @@ if (length(ids) && (min(ids) < 1 || max(ids) > nrow(study$grid))) {
 }
 
 # ---- guards -----------------------------------------------------------------
-# A row asking for more cores than the session has would measure contention
-# rather than run faster - the same check cts_val_profile.R makes on its sweep.
+# A row asking for more cores than the session has would just contend for them
+# rather than run faster.
 requested <- workers * inner_workers * grf_threads
 available_cores <- as.integer(parallelly::availableCores())
 if (requested > available_cores) {
@@ -98,7 +98,7 @@ rscript <- file.path(R.home("bin"),
                      if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript")
 if (!file.exists(rscript)) stop("no Rscript at ", rscript, call. = FALSE)
 
-# beside the profiling/ directory, i.e. under res_path and outside the repo
+# under res_path, i.e. outside the repo
 log_dir <- file.path(study$res_path, "session_logs")
 dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -116,8 +116,7 @@ run_rows <- function(ids) {
   on.exit(close(pb), add = TRUE)
 
   plan(multisession, workers = workers)
-  # inside a function this does fire, unlike the top-level loop in
-  # cts_val_profile.R that has to call plan(sequential) explicitly
+  # reset the plan however run_rows() exits
   on.exit(plan(sequential), add = TRUE)
 
   start_row <- function(i) {

@@ -5,7 +5,8 @@
 # Cheaper per replicate than me_1.sh despite refitting the candidates: each
 # candidate is crossfit within the 80% once, and the nuisance is a single
 # whole-set fit on the 20% rather than a 10-fold pipeline over all n.
-# Still a PLACEHOLDER - profile before trusting it.
+# Still a PLACEHOLDER - check the first subjobs' resources_used before
+# trusting it.
 #PBS -l walltime=01:00:00
 #PBS -l select=1:ncpus=4:ompthreads=2:mem=10gb
 #PBS -J 1-240%4

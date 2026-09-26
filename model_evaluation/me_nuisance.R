@@ -6,7 +6,7 @@
 # - not to fit them. No other study in this repo needs this concept, so it
 # doesn't map onto config/dgms/models/analysis/check/collect/metrics and gets
 # its own file, the same way crossfitting/ has files beyond that 7-role
-# floor (cf_testing.R, cf_profile.R, ...)
+# floor (cf_testing.R, cf_results.R, ...)
 #
 # Two independent estimators of the same 2 nuisance targets (mu_DR, pi):
 # XGBoost with a hand-tuned CV grid, and H2O AutoML. Each runs

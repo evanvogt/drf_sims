@@ -18,12 +18,9 @@ source(here("R", "utils.R"))
 # simulation parameters
 args <- as.numeric(commandArgs(trailingOnly = T))
 i <- args[1]
-# workers/grf_threads default to the pre-profiling values so a bare
-# `Rscript cts_miss_analysis.R 1` still works as a local smoke test;
-# cts_miss_1.sh/cts_miss_2.sh always supply both once
-# cts_miss_profile_summary.R has written them in - see
-# missing/continuous/cts_miss_profile_summary.R and
-# missing/binary/bin_miss_profile_summary.R's "Sizing the array job" pattern.
+# workers/grf_threads default to 2/1 when not supplied, which is how a bare
+# `Rscript cts_miss_analysis.R 1` local smoke test runs, and how cts_miss_1.sh
+# currently calls it.
 workers <- if (length(args) >= 2 && !is.na(args[2])) args[2] else 2
 grf_threads <- if (length(args) >= 3 && !is.na(args[3])) args[3] else 1
 

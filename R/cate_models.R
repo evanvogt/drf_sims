@@ -134,8 +134,7 @@ is_binomial <- function(family) identical(family$family, "binomial")
 #' @param verbose_timing if TRUE, time each top-level block below with
 #'   R/utils.R's `timed()` and attach the elapsed seconds as `results$timings`
 #'   (a named list). Default FALSE leaves `results` exactly as before this
-#'   parameter existed - added for continuous/cts_profile.R and friends, not
-#'   meant to change production output.
+#'   parameter existed, so production output is unchanged.
 #'
 #' Each study's *_models.R is a thin shim defining `run_all_cate_methods` with
 #' that study's historical signature and forwarding to this. The shared function

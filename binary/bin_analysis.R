@@ -21,10 +21,9 @@ source(here("binary/bin_config.R"))
 # simulation parameters
 args <- as.numeric(commandArgs(trailingOnly = T))
 i <- args[1]
-# workers/grf_threads default to the pre-profiling values so a bare
-# `Rscript bin_analysis.R 1` still works as a local smoke test; bin_1.sh always
-# supplies both once bin_profile_summary.R has written them in - see
-# binary/bin_profile_summary.R and continuous/README.md's "Sizing the array job".
+# workers/grf_threads default to 2/1 so a bare `Rscript bin_analysis.R 1`
+# still works as a local smoke test; bin_1.sh supplies both explicitly - see
+# continuous/README.md's "Sizing the array job".
 workers <- if (length(args) >= 2 && !is.na(args[2])) args[2] else 2
 grf_threads <- if (length(args) >= 3 && !is.na(args[3])) args[3] else 1
 

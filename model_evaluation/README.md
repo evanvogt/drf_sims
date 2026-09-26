@@ -345,17 +345,14 @@ account for it.
 | `me_metrics.R` | computes `<prefix>_metrics.RDS` (reuses `R/metrics.R::compute_metrics()`). Same tree argument |
 | `me_results.qmd` | the results report — see below for why it derives its own quantities |
 | `me_testing.R` | verification checks — run before submitting anything |
-| `me_profile.R` | timing / memory / CPU sweep over `(workers, n_cores)`, instrumented with `syrup` |
-| `me_profile_summary.R` | turns the sweep into PBS directives and writes them into `me_1.sh` |
 
 **Why `me_nuisance.R` exists outside the `config`/`dgms`/`models`/`analysis`/
 `check`/`collect`/`metrics` shape**: no other study in this repo has a
 second, independent nuisance-estimation pipeline used purely to *score*
 candidate models rather than fit them — it doesn't map onto any of those 7
 roles. `crossfitting/` is the precedent for a study needing files beyond that
-floor (`cf_testing.R`, `cf_profile.R`, `cf_profile_summary.R`,
-`cf_diagnose_*.R`, `cf_results.R`/`.qmd`); the 7-file shape is a floor, not a
-ceiling.
+floor (`cf_testing.R`, `cf_results.R`/`.qmd`); the 7-file shape is a floor,
+not a ceiling.
 
 **Why `me_results.qmd` derives its own quantities**: every other study's
 report summarises a per-model metric straight out of its `*_metrics.RDS`
@@ -395,10 +392,6 @@ there (it should not).
 The main study (already complete — 358/360):
 
 ```bash
-Rscript model_evaluation/me_profile.R 1             # smoke-test the profiler locally
-qsub model_evaluation/jobscripts/me_profile.sh      # 16 profiling jobs
-Rscript model_evaluation/me_profile_summary.R       # writes measured directives into me_1.sh
-
 qsub model_evaluation/jobscripts/me_1.sh            # the study itself - 1-360
 Rscript model_evaluation/me_check.R                 # writes failed_ids.txt if any are missing
 qsub model_evaluation/jobscripts/me_collect.sh
@@ -460,32 +453,26 @@ the repo. The rendered `.html` is gitignored, as every other study's report is.
 
 ## Sizing the array job
 
-`me_1.sh` ships with **placeholder** `#PBS -l` lines and trailing `Rscript`
-args (`1 1`), the same way `crossfitting/jobscripts/cf_1.sh` did before it
-was profiled. `me_profile.R` / `me_profile_summary.R` settle it the same way
-`cf_profile.R` / `cf_profile_summary.R` do for `cf_1.sh` (`syrup`,
-process-tree filtering, the peak-memory upper bound — see that folder's
-README for the shared mechanics) — with two differences specific to this
-study:
+`me_1.sh`'s `#PBS -l` lines and trailing `Rscript` args (`workers`/`n_cores`,
+currently `2 2`) are **placeholders** set by hand. They were never measured:
+the `syrup` profiling sweep meant to replace them didn't work for this study
+(see the root README's "Resource profiling (removed)"). They were enough for
+the main study to complete. If you resize them, keep in mind:
 
 - **Two knobs, two sequential phases.** `workers` (the `future` multisession
   backend, controlling the 9 candidate models' single-crossfit fold-wise
   fitting) and `n_cores` (XGBoost's `nthread` / H2O's `nthreads`, controlling
   the nuisance-evaluation pipelines) parallelise two *sequential* phases of
-  one replicate, not one combined computation — `me_profile.R` times them
-  separately so the phase breakdown is visible, and every place that would
-  otherwise add the two knobs together instead takes `max(workers, n_cores)`,
-  since they're never both active at once.
-- **H2O's JVM may not be a tracked child process.** `syrup` tracks R
-  processes via `ps` parent/child relationships; whether H2O's own Java
-  process shows up in that tree is unconfirmed. `me_profile.R` prints the
-  full, unfiltered process list on every run so this is visible rather than
-  silently under-counting H2O's memory footprint — treat the peak-memory
-  recommendation with real caution (cross-check against
-  `qstat -fx <jobid> | grep resources_used`) until that's settled.
+  one replicate, not one combined computation. So `ncpus` needs to cover
+  `max(workers, n_cores)`, not the sum, since the two are never both active at
+  once.
+- **H2O's JVM is a separate Java process.** Each task starts its own H2O JVM
+  with a `mem = "10G"` heap, so `mem=` has to cover that on top of R. Check
+  the request against `qstat -fx <jobid> | grep resources_used` on the first
+  real subjobs.
 
-**The array's concurrency throttle (`-J 1-360%N`) is a separate problem the
-profiler doesn't solve.** Each concurrent task starts its own H2O JVM
+**The array's concurrency throttle (`-J 1-360%N`) is a separate problem from
+the per-task request.** Each concurrent task starts its own H2O JVM
 cluster with a `mem = "10G"` heap — nothing like `continuous/`'s `%190` or
 `crossfitting/`'s `%380` is safe here. `N` needs setting from the specific
 HPC queue's real memory/fair-share limits, which needs consulting whoever
@@ -552,9 +539,10 @@ only new fitting is the two new nuisance arms themselves, and (separately) the
 Cost, roughly: `cv_shared` re-runs the full 10-fold nuisance pipeline, about
 what the old `cv` arm cost on its own; `holdout` fits on 25–100-row blocks, so
 its cost is dominated by H2O's per-call JVM overhead across 10 blocks rather
-than by model size. Budget on the order of the original job's nuisance half —
-and re-profile rather than trusting `me_strategies.sh`'s placeholder walltime,
-since that per-call overhead is exactly what a placeholder gets wrong.
+than by model size. Budget on the order of the original job's nuisance half.
+Don't trust `me_strategies.sh`'s placeholder walltime: check the first
+subjobs' `resources_used`, since that per-call overhead is exactly what a
+placeholder gets wrong.
 
 **A second local/cluster version mismatch, found while adding the arms.**
 `run_xgb_cv()` — fixed an xgboost 3.x API location bug; now reads whichever location the installed version uses, falling back to `which.min()` on the evaluation log. Same class of problem as the `SL2` limitation below, and the same caution applies: local xgboost and cluster xgboost are not the same package.
@@ -581,5 +569,5 @@ deleting before the study is re-run.
 
 H2O AutoML has no `max_runtime_secs` cap in the current code — a real
 walltime-uncertainty risk (see "Sizing the array job" above), left alone
-since capping it would change what's being measured. Worth revisiting once
-real profiling numbers are in hand.
+since capping it would change what's being measured. Worth revisiting if it
+starts causing walltime failures.

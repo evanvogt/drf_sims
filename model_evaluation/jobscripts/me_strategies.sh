@@ -3,9 +3,9 @@
 # the main study, writing to results/model_evaluation_strategies. See
 # me_strategies.R's header for why this is a second pass rather than a rerun.
 #
-# PLACEHOLDER resources, for the same reason me_1.sh's are - re-run the
-# profiling workflow against THIS script before trusting them. The cost
-# profile is not me_1.sh's: no data generation and no candidate fitting, but
+# PLACEHOLDER resources, for the same reason me_1.sh's are - check the first
+# subjobs' resources_used before trusting them. The cost is not me_1.sh's: no
+# data generation and no candidate fitting, but
 # cv_shared re-runs the full 10-fold nuisance pipeline (about the cost of the
 # old `cv` arm on its own) and holdout adds 10 more fits per target on small
 # blocks - where H2O's per-call JVM overhead, not model size, is what

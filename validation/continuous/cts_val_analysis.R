@@ -25,7 +25,6 @@ source(here("validation/continuous/cts_val_config.R"))
 # cannot drift apart - same arrangement as continuous/cts_analysis.R. The
 # defaults reproduce what this script did before they were arguments, so a bare
 # `Rscript cts_val_analysis.R <i>` (cts_val_testing.R check 7) still works.
-# cts_val_profile.R measures what these should be.
 args <- commandArgs(trailingOnly = TRUE)
 
 i <- as.numeric(args[1])
@@ -81,9 +80,8 @@ results2$truth <- gen2$truth
 X2 <- data2[, -c(1, 2)]
 
 # "timings" is only present when run_all_cate_methods() was called with
-# verbose_timing = TRUE (cts_val_profile.R does, this script does not), but it is
-# excluded here anyway so the two call sites can never disagree about whether
-# every non-data element of `results1` is a model.
+# verbose_timing = TRUE, which this script does not do, but it is excluded here
+# anyway so every non-data element of `results1` is guaranteed to be a model.
 models <- setdiff(names(results1), c("data", "truth", "timings"))
 subgroups <- list()
 for (model in models) {

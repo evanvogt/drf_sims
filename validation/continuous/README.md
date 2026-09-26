@@ -82,8 +82,6 @@ else in the repo, so it stays in `cts_val_models.R` rather than moving into `R/`
 | `cts_val_analysis.R` | array entry point; fits both chunks, computes the four chunk comparisons |
 | `cts_val_run.R` | runs the whole grid in one RStudio session, 8 rows at a time — the no-queue alternative to `cts_val_1.sh` |
 | `cts_val_testing.R` | pre-submission verification — dependencies, grid, and the helpers above |
-| `cts_val_profile.R` | resource sweep over `(interim_prop, workers, grf_threads)` — run in an RStudio session, not a job |
-| `cts_val_profile_summary.R` | turns the sweep into PBS directives and writes them into the jobscripts |
 | `cts_val_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cts_val_collect.R` | gathers per-run files into `cts_val_all.RDS` |
 | `cts_val_metrics.R` | flattens `validations` into tidy `cts_val_metrics.RDS` |
@@ -102,14 +100,14 @@ qsub validation/continuous/jobscripts/cts_val_metrics.sh
 
 `cts_val_testing.R` runs six cheap structural checks; `full` adds one real
 replicate end to end and reports how long it took, which is the number to read
-against the jobscript's 1h walltime before submitting. It exits non-zero on any
+against the jobscript's walltime before submitting. It exits non-zero on any
 failure. Drop `full` for a quick local smoke test.
 
 ### Without the queue
 
 When the queue is slower than the work, `cts_val_run.R` runs the same 1100 rows
 inside one interactive session instead. Request an RStudio session with 8 cores
-and 64gb — the same session `cts_val_profile.R` asks for — then:
+and 64gb, then:
 
 ```r
 source(here::here("validation", "continuous", "cts_val_run.R"))
@@ -137,24 +135,11 @@ metrics run exactly as they would after an array run.
 `cts_val_1.sh`'s `ncpus=5` only ever mirrored a hardcoded `workers <- 5`; it was
 never measured, and until recently no `num.threads` reached grf at all, so each
 of those five workers spawned forests on every visible core whatever PBS had
-allocated. `cts_val_profile.R` measures the alternatives. Unlike
-`continuous/cts_profile.R` it is **not** an array job — there is no
-`cts_val_profile.sh`. Ask for an interactive RStudio session with 8 cores and
-64gb, then:
-
-```r
-source(here::here("validation", "continuous", "cts_val_profile.R"))
-source(here::here("validation", "continuous", "cts_val_profile_summary.R"))
-```
-
-The sweep is 28 cells over `(interim_prop, run, workers, grf_threads)` and writes
-one `prof_<i>.RDS` per cell as it goes, skipping any already on disk — an
-interrupted session is resumed by sourcing it again. Set `cells <- 1` at the top
-for a single trial cell first, which also gives a per-cell time to budget the
-rest against. The summary prints the observed-against-allocated CPU table (the
-direct read on whether `ncpus=5` was ever honoured) and a cost-against-`ncpus`
-table, then **edits `cts_val_1.sh` and `cts_val_rerun.sh` in place** — check
-`git diff` before submitting.
+allocated. `cts_val_1.sh` now runs one worker with one grf thread
+(`cts_val_analysis.R <i> 1 1`) on `ncpus=1`. That is set by hand. The `syrup`
+resource sweep meant to measure the alternatives didn't work for this study
+(see the root README's "Resource profiling (removed)"). Read the replicate time
+that `cts_val_testing.R full` reports against the jobscript's walltime instead.
 
 `workers` and `grf_threads` reach `cts_val_analysis.R` as trailing arguments on
 the `Rscript` line, so the PBS resource request and the R-level parallelism

@@ -1,13 +1,8 @@
 #!/bin/bash
-# PLACEHOLDER resources below - this study has never completed a run, so
-# unlike every other jobscript in this repo these numbers are not measured.
-# Run the profiling workflow first, which overwrites the #PBS -l lines and
-# the trailing Rscript args together (see me_profile_summary.R):
+# PLACEHOLDER resources below - set by hand, never measured. Confirm it runs
+# at all first:
 #
-#   Rscript model_evaluation/me_testing.R full        # confirms it runs at all, first
-#   Rscript model_evaluation/me_profile.R 1            # smoke-test the profiler locally
-#   qsub model_evaluation/jobscripts/me_profile.sh     # 16 profiling jobs
-#   Rscript model_evaluation/me_profile_summary.R      # writes measured directives below
+#   Rscript model_evaluation/me_testing.R full
 #
 # The %N array throttle also still needs setting from the HPC queue's real
 # memory/fair-share limits before the first real submission - each
@@ -32,7 +27,6 @@ conda activate sim-env
 # Navigate to script directory
 cd "${PBS_O_WORKDIR}/.."
 
-# Run R script with parameters. Trailing args are workers/n_cores -
-# placeholders here, overwritten by me_profile_summary.R alongside the
-# #PBS -l lines above.
+# Run R script with parameters. Trailing args are workers/n_cores, set by
+# hand to match ncpus above - change them together.
 Rscript me_analysis.R "$PBS_ARRAY_INDEX" 2 2

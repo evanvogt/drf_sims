@@ -15,10 +15,9 @@ source(here("R", "utils.R"))
 source(here("missing/ci_example/cts_miss_ci_config.R"))
 
 # simulation parameters. Trailing args after the array index are
-# workers[1]/workers[2]/grf_threads - written by cts_miss_ci_profile_summary.R
-# once the profiling sweep (jobscripts/cts_miss_ci_profile.sh, run via
-# cts_miss_ci_profile.R) has run. Defaults reproduce this script's
-# pre-profiling behaviour exactly, so a bare index-only invocation (as
+# workers[1]/workers[2]/grf_threads, as cts_miss_ci_1.sh passes them. Without
+# them the defaults (workers 3/3, grf's own thread default) reproduce this
+# script's original behaviour, so a bare index-only invocation (as
 # cts_miss_ci_rerun.sh still uses) is unaffected.
 args <- commandArgs(trailingOnly = TRUE)
 i <- as.numeric(args[1])

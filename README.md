@@ -211,6 +211,39 @@ so `git push` on the HPC + `git pull` locally is how progress gets checked
 from off the cluster. The registry of studies it scans lives in
 `R/study_registry.R` - add a row there for any new study.
 
+## Resource profiling (removed)
+
+Profiling with the [`syrup`](https://simonpcouch.github.io/syrup/) package is
+**not effective for this study**, and the profiling scripts have been deleted.
+Each study used to have a `<prefix>_profile.R` sweep (timing / memory / CPU over
+`workers` × `grf_threads`, instrumented with `syrup`), a `jobscripts/<prefix>_profile.sh`
+array job, and a `<prefix>_profile_summary.R` that wrote the measured `#PBS -l`
+directives into `<prefix>_1.sh`. None of it produced usable numbers:
+
+- on the cluster, `syrup()` starts its sampler with `callr::r_session$new()` and a
+  hardcoded 3 s timeout that it gives no way to raise. The profiling subjobs died
+  with `Could not start R session, timed out` — most likely because starting an R
+  session off the networked `/rds` filesystem takes longer than that
+- on cells with `workers > 1` the `future::multisession` workers never showed up
+  in the process tree `syrup` samples, so the CPU / memory figures missed them
+- locally `syrup` measures nothing useful on Windows
+
+So the `#PBS -l` lines and trailing `Rscript` arguments in the `*_1.sh`
+jobscripts are hand-set, not measured. Any that still say *placeholder* stay
+that way — adjust them by hand from how runs actually behave (the `_rerun.sh`
+resource bump above does part of this automatically). The study READMEs, code
+comments and jobscript headers have been updated to match.
+
+The deleted files (the 26 `*_profile*.R`/`.sh` scripts, plus
+`crossfitting/cf_diagnose_sampler.R`, `cf_diagnose_multisession.R` and
+`jobscripts/cf_diagnose.sh`, which diagnosed the failures above) are in git
+history:
+
+```bash
+git log --diff-filter=D --name-only -- '*_profile*' '*cf_diagnose*'   # find the deleting commit
+git checkout <commit>^ -- crossfitting/cf_profile.R                  # restore a file from its parent
+```
+
 ## Verifying a change
 
 ```bash

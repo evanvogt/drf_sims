@@ -379,5 +379,5 @@ if (length(fail) > 0) {
   quit(status = 1)
 }
 cat(
-  "\nall checks passed. next: submit jobscripts/cf_profile.sh, then run cf_profile_summary.R\n"
+  "\nall checks passed. next: submit jobscripts/cf_1.sh\n"
 )
