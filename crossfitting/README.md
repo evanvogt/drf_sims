@@ -17,7 +17,7 @@ procedure is enough and the rest of the study can be sped up 4.5x.
 
 ## Design
 
-Fixed at **n = 500, V = 10, scenarios 1 / 4 / 6 / 9, 500 runs** (2000 array jobs).
+Fixed at **n = 500, V = 10, scenarios 1 / 4 / 6 / 8, 500 runs** (2000 array jobs).
 All variants within a replicate share one fold assignment, so differences are
 attributable to the procedure rather than to the fold draw.
 
@@ -181,7 +181,7 @@ so it is at least apples-to-apples across the three.
 
 ### Scale and reproducibility
 
-It is a **pilot, not the production run**: 3 scenarios (`1, 6, 9`) × 50 runs
+It is a **pilot, not the production run**: 3 scenarios (`1, 4, 8`) × 50 runs
 = 150 replicates, `CI_boot = 200`, `CI_sf` fixed at 0.5 (grf's default
 `sample.fraction`, no sweep).
 
@@ -301,6 +301,17 @@ are unaffected in principle but currently unreachable, so **this folder has no
 working verification** until section 1 is fixed. Discovered while migrating
 `competing_risk/` onto the shared strategy; confirmed to reproduce on pristine
 `HEAD`, so it predates that work.
+
+## Status
+
+**Re-run owed** - bug O changed the continuous DGM this study generates from
+(`continuous/README.md`), and the 2026-09-26 renumbering made its scenarios
+1 / 4 / 6 / 8 (were 1 / 4 / 6 / 9; the pilot's 1 / 6 / 9 are now 1 / 4 / 8).
+The comparison's conclusions were drawn on the old DGM. Archive both old trees
+(`../results/crossfitting/`, `../results/crossfitting_ci/`) first with
+`R/archive_old_results.R` (root `README.md`, Status, step 0) - `cf_results.R`
+and `cf_ci_results.R` label the new numbers, so they would mislabel the old
+`cf_metrics.RDS` / `cf_ci_metrics.RDS`.
 
 ## Running it
 

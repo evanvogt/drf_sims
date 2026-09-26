@@ -8,7 +8,7 @@
 # 100 res_sim_*.RDS files - NOT a row of study$grid, which is what cts_miss_1.sh
 # indexes. There are 126 combinations.
 # Combinations 1-99 are the results this repair was written for. 100-126 are
-# scenario 6, run after dr_rf_tests was switched on, so they carry the tests
+# scenario 2, run after dr_rf_tests was switched on, so they carry the tests
 # already; a pass over them only writes the already_patched manifest rows
 # check_all.R counts:  qsub -J 100-126%20 jobscripts/cts_miss_patch.sh
 #

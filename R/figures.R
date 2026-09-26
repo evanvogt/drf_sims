@@ -55,23 +55,25 @@ MECHANISM_LABELS <- c(
 # the four scenarios the sample-size chapters report, by their scenario index
 SS_SCENARIO_LABELS <- c(
   `1` = "Null",
-  `3` = "Simple",
-  `8` = "Complex",
-  `9` = "Non-linear"
+  `2` = "Simple",
+  `3` = "Complex",
+  `4` = "Non-linear"
 )
 
-# the missing-data studies' renumbered six-scenario set. Was copy-pasted
-# verbatim into all three thesis_figures/miss_*.R scripts, minus scenario 3.
-# continuous/ and binary/ never run 3 (their grid is 1, 2, 4, 5, 6), so it drops
-# out of those by droplevels(); ci_example runs 1-5 and keeps it. Listed in
-# main-study order (6 is main scenario 3), which is the facet order.
+# the missing-data studies' six-scenario set, numbered as the main study's
+# scenarios 1-6. Was copy-pasted verbatim into all three thesis_figures/miss_*.R
+# scripts, minus scenario 6. continuous/ and binary/ never run 6 (their grid is
+# 1-5), so it drops out of those by droplevels(); ci_example runs 1 and 3-6 and
+# keeps it. The order here is the facet order, and it is the order these
+# figures had before the 2026-09-26 renumbering (then 1, 2, 6, 3, 4, 5), so the
+# missing-data chapter reads Null, Simple, Complex, Non-linear as it did.
 MISS_SCENARIO_LABELS <- c(
   `1` = "Null",
-  `2` = "Simple",
-  `6` = "Simple (continuous)",
-  `3` = "Two HTE vars",
-  `4` = "Complex",
-  `5` = "Non-linear"
+  `5` = "Simple",
+  `2` = "Simple (continuous)",
+  `6` = "Two HTE vars",
+  `3` = "Complex",
+  `4` = "Non-linear"
 )
 
 # the three ways combine_mi_ci() (R/bootstrap_ci.R) pools per-imputation

@@ -7,12 +7,12 @@ validation study checks and why.
 
 | | |
 |---|---|
-| scenario | 3 (continuous × binary interaction — see `R/dgm_scenarios.R`, `DESC_10`) |
+| scenario | 2 (simple HTE, continuous X4 — see `R/dgm_scenarios.R`, `DESC_10`; scenario 3 before the 2026-09-26 renumbering) |
 | n | 1000, split into two chunks of `n * interim_prop` and `n * (1 - interim_prop)` |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
 | runs | 100 — **1100 array jobs**, 1h walltime |
 | folds | 5 below n=250 per chunk, else 10 |
-| results | `../results/cts_val/scenario_3/1000/<interim_prop>/res_sim_<run>.RDS` |
+| results | `../results/cts_val/scenario_2/1000/<interim_prop>/res_sim_<run>.RDS` |
 
 `cts_val_config.R` rounds the `interim_prop` sequence to 2 dp, which is
 load-bearing rather than cosmetic: `interim_prop` is a `path_cols` entry, so its
@@ -20,7 +20,7 @@ load-bearing rather than cosmetic: `interim_prop` is a `path_cols` entry, so its
 `seq(by = 0.05)` yields values like `0.30000000000000004` that `get_results()`
 can no longer match back to their grid row.
 
-Only scenario 3 and n = 1000 are run today; both are still columns of the grid
+Only scenario 2 and n = 1000 are run today; both are still columns of the grid
 (`cts_val_config.R`) so extending to more scenarios or sizes is a one-line
 change, not a rewrite.
 
@@ -148,7 +148,10 @@ cannot drift apart. Called without them it falls back to what it did before
 
 ## Status
 
-**Needs a fresh run** — for several independent reasons. The most recent set:
+**Needs a fresh run** — for several independent reasons. Archive the old tree
+first with `R/archive_old_results.R` (root `README.md`, Status, step 0): bug O
+changed the continuous DGM, and the scenario is now numbered 2, not 3. The
+most recent set:
 
 - **`bottom_pval` was never a subgroup test.** The analysis script pulled the
   interaction p-value correctly for the top-10% group (`pvals_top[4]`) but read

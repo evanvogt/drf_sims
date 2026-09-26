@@ -19,7 +19,7 @@ dir.create(fig_path, showWarnings = F, recursive = T)
 metrics <- readRDS(file.path(res_path, "ci_cts_metrics.RDS"))
 
 metrics <- metrics %>%
-  filter(scenario %in% c(1, 3, 8, 9)) %>%
+  filter(scenario %in% c(1:4)) %>%
   apply_labels(SS_SCENARIO_LABELS) %>%
   # model labels (including causal_forest_inbuilt) come from apply_labels()
   mutate(

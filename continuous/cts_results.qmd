@@ -36,19 +36,19 @@ find the signal rather than being handed it. Full design in
 | Scenario | CATE structure |
 |---|---|
 | 1: No HTE | $b_0 + b_1 X_1 + b_2 X_2 + W b_W$ |
-| 2: Binary HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_3 X_3)$ |
-| 3: Continuous HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_4 X_4)$ |
-| 4: Two HTE vars | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4)$ |
-| 5: Cts x binary interaction | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{34} X_3 X_4)$ |
-| 6: Two vars + cts x binary | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{34} X_3 X_4)$ |
-| 7: Cts x cts interaction | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{45} X_4 X_5)$ |
-| 8: Two vars + cts x cts | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{45} X_4 X_5)$ |
-| 9: Cosine HTE | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_4 \cos(X_4))$ |
+| 2: Continuous HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_4 X_4)$ |
+| 3: Two vars + cts x cts | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{45} X_4 X_5)$ |
+| 4: Cosine HTE | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_4 \cos(X_4))$ |
+| 5: Binary HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_3 X_3)$ |
+| 6: Two HTE vars | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4)$ |
+| 7: Cts x binary interaction | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{34} X_3 X_4)$ |
+| 8: Two vars + cts x binary | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{34} X_3 X_4)$ |
+| 9: Cts x cts interaction | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_{45} X_4 X_5)$ |
 | 10: Exponential HTE | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 \exp(-\lvert X_4 \rvert))$ |
 
 **Estimators**: `causal_forest`, `dr_random_forest`, `dr_oracle`,
-`dr_semi_oracle`, `dr_superlearner` — all using double crossfitting for the
-nuisances (`R/cate_models.R`). The oracle uses the true outcome model and a
+`dr_semi_oracle`, `dr_superlearner` — each with the crossfitting scheme the
+root `README.md` gives for it (`R/cate_models.R`). The oracle uses the true outcome model and a
 known propensity of 0.5; the semi-oracle knows only the propensity. The
 SuperLearner library shrinks at `n = 100` (`SL.earth`/`SL.ranger` are
 dropped), so `dr_superlearner` is sometimes filtered out of the smallest-`n`
@@ -66,14 +66,14 @@ metrics <- readRDS(file.path(res_path, "cts_metrics.RDS"))
 # labels), so these stay inline, matching cts_results.Rmd's precedent
 scenario_labels <- c(
   `1` = "1: No HTE",
-  `2` = "2: Binary HTE",
-  `3` = "3: Continuous HTE",
-  `4` = "4: Two HTE vars",
-  `5` = "5: Cts x binary interaction",
-  `6` = "6: Two vars + cts x binary",
-  `7` = "7: Cts x cts interaction",
-  `8` = "8: Two vars + cts x cts",
-  `9` = "9: Cosine HTE",
+  `2` = "2: Continuous HTE",
+  `3` = "3: Two vars + cts x cts",
+  `4` = "4: Cosine HTE",
+  `5` = "5: Binary HTE",
+  `6` = "6: Two HTE vars",
+  `7` = "7: Cts x binary interaction",
+  `8` = "8: Two vars + cts x binary",
+  `9` = "9: Cts x cts interaction",
   `10` = "10: Exponential HTE"
 )
 
@@ -88,7 +88,7 @@ model_labels <- c(
 # tidy up
 metrics <- metrics %>%
   # temporary filter for 4 scenarios in thesis
-  filter(scenario %in% c(1,3,8,9)) %>%
+  filter(scenario %in% c(1:4)) %>%
   mutate(
     scenario = factor(scenario, levels = names(scenario_labels) %>% as.integer(),
                       labels = unname(scenario_labels)),

@@ -8,15 +8,22 @@ library(here)
 source(here("missing/binary/bin_miss_config.R"))
 source(here("R", "metrics.R"))
 source(here("R", "cate_models.R"))
-source(here("R", "dgm_scenarios.R"))
 
+# No bug N repair here any more: runs from the risk-difference DGM save the
+# MNAR-Y truth already averaged over U (bU * tanh(U) has mean zero), and the
+# logit-scale runs it repaired are superseded.
 all_results_df <- readRDS(file.path(study$res_path, "bin_miss_all.RDS"))
 
-# Bug N: runs made before the fix saved the MNAR-Y truth at U = 0 rather than
-# averaged over U. Rebuilt here from the saved p0/p1, before anything below
-# reads truth$tau - both compute_metrics() and the true-CATE tests do. Runs
-# made after the fix are recognised (they carry truth$tau_u0) and left alone.
-all_results_df <- repair_mnar_y_truth(all_results_df, "binary_missing")
+# ... so none may be in the collection. Every logit-scale run made after the
+# bug N fix carries truth$tau_u0, which no risk-difference run does.
+has_tau_u0 <- vapply(all_results_df$results, function(rs) {
+  any(vapply(rs, function(r) "tau_u0" %in% names(r$result$truth), logical(1)))
+}, logical(1))
+if (any(has_tau_u0)) {
+  stop("bin_miss_all.RDS holds logit-scale results (truth$tau_u0) in ",
+       sum(has_tau_u0), " parameter combination(s). Archive the old results ",
+       "(R/archive_old_results.R) and re-collect.", call. = FALSE)
+}
 
 metrics <- compute_metrics(
   study, all_results_df, models = CATE_MODELS,

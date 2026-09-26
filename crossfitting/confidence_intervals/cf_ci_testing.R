@@ -79,7 +79,7 @@ oob_arms <- c("scf_oob", "scf_oob_t", "oob_oob", "oob_oob_s", "oob_oob_manual",
 cat("\n=== 1. the pilot's orchestrator call ===\n")
 
 setup_rng_stream(3)
-gen <- generate_cf_replicate(scenario = 6, n = n, n_test = n_test)
+gen <- generate_cf_replicate(scenario = 8, n = n, n_test = n_test)
 
 setup_rng_stream(3)
 structured <- run_all_crossfit_variants(

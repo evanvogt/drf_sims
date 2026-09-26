@@ -8,22 +8,22 @@
 #   confidence_intervals/continuous/cts_ci_models.R
 #   confidence_intervals/binary/bin_ci_models.R
 #
-# Those copies differed on four axes, which are the four arguments below:
+# Those copies differed on four axes. Three are the arguments below:
 #
 #   family   gaussian() vs binomial(), controlling the SuperLearner outcome model
 #            (family + method.NNloglik).
-#   oracle_link  where the inverse link lives for the oracle arm. Every scenario
-#            table in R/dgm_scenarios.R returns a LINEAR PREDICTOR formula, so
-#            binary studies pass oracle_link = "logit" and the model applies
-#            plogis; continuous ones pass "identity". Not implied by `family`,
-#            which is why it is its own argument. missing/binary/ once baked
-#            plogis into its own formula strings and passed "identity";
-#            deleting that legacy table dropped the plogis but not the
-#            "identity" (bug M).
 #   ipw      sample.weights (grf) / obsWeights (SuperLearner) for the missing-data
 #            IPW arm. NULL reproduces the unweighted path exactly.
 #   ci       list(boot=, sf=, alpha=) turns on the half-sample bootstrap.
 #   profile  which historical variant's *orchestration* to reproduce - see below.
+#
+# The fourth, where the inverse link lives for the oracle arm, is gone. Every
+# oracle formula in R/dgm_scenarios.R returns the outcome MEAN - the linear
+# predictor for a continuous outcome, the risk for a binary one - so the oracle
+# arm applies no link. Until the binary DGM moved to the risk-difference scale
+# the binary formulas were linear predictors, and an `oracle_link` argument said
+# whether to apply plogis; missing/binary/ once passed "identity" to formulas
+# that no longer carried their plogis (bug M).
 #
 # `profile` exists because the variants also disagree about which post-estimation
 # tests get run, and those disagreements look like drift rather than design. They
@@ -121,8 +121,6 @@ is_binomial <- function(family) identical(family$family, "binomial")
 #' @param sl_lib SuperLearner library; NULL skips the SuperLearner arm
 #' @param fmla_info oracle formula + parameters; NULL skips the oracle arm
 #' @param family gaussian() or binomial(); controls the SuperLearner outcome model
-#' @param oracle_link "logit" if fmla_info$fmla is a linear predictor and plogis
-#'   must be applied here, "identity" if the formula already includes the link
 #' @param ipw optional length-n weights for the missing-data IPW arm
 #' @param ci NULL, or list(boot = , sf = , alpha = ) to add half-sample bootstrap CIs
 #' @param profile "base", "ci" or "missing" - see PROFILES
@@ -146,13 +144,10 @@ is_binomial <- function(family) identical(family$family, "binomial")
 #'   caller is unaffected. Adds `tau_grid` (and, with `ci`, `grid_lb`/
 #'   `grid_ub`/`grid_draws`) to each arm's result list.
 cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
-                         family = gaussian(), oracle_link = c("identity", "logit"),
-                         ipw = NULL, ci = NULL,
+                         family = gaussian(), ipw = NULL, ci = NULL,
                          profile = c("base", "ci", "missing", "ci_mi"),
                          num.threads = NULL, verbose_timing = FALSE,
                          Z_query = NULL) {
-
-  oracle_link <- match.arg(oracle_link)
 
   profile <- match.arg(profile)
   p <- PROFILES[[profile]]
@@ -221,7 +216,7 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
     cat("Running DR Oracle...\n")
     results$dr_oracle <- time_step("dr_oracle",
       run_dr_oracle(X, Y, W, fmla_info, ipw,
-                    oracle_link = oracle_link, tests = p$tests, num.threads = num.threads,
+                    tests = p$tests, num.threads = num.threads,
                     Z_query = Z_query_mat))
     if (!is.null(ci)) {
       cat("Runnings Oracle bootstrap...\n")
@@ -508,25 +503,23 @@ run_dr_random_forest <- function(X, Y, W, nuisances, ipw = NULL, tests = TRUE,
 
 #' DR-learner with the true outcome model, a known propensity of 0.5, and a
 #' whole-sample OOB second stage
-run_dr_oracle <- function(X, Y, W, fmla_info, ipw = NULL,
-                          oracle_link = c("identity", "logit"), tests = TRUE,
+#'
+#' fmla_info$fmla returns the outcome mean E[Y | X, W] itself - see the header.
+run_dr_oracle <- function(X, Y, W, fmla_info, ipw = NULL, tests = TRUE,
                           num.threads = NULL, Z_query = NULL) {
   n_obs <- nrow(X)
-  # "logit" means the formula is a linear predictor and plogis belongs here;
-  # "identity" means the formula already returns the outcome mean
-  link <- if (match.arg(oracle_link) == "logit") plogis else identity
 
   X <- as.data.frame(X)
   list2env(fmla_info$params, envir = environment())
   fmla <- parse(text = fmla_info$fmla)
 
   W_temp <- rep(1, n_obs)
-  Y1.hat <- link(eval(fmla, envir = list2env(c(list(W = W_temp), X))))
+  Y1.hat <- eval(fmla, envir = list2env(c(list(W = W_temp), X)))
 
   W_temp <- rep(0, n_obs)
-  Y0.hat <- link(eval(fmla, envir = list2env(c(list(W = W_temp), X))))
+  Y0.hat <- eval(fmla, envir = list2env(c(list(W = W_temp), X)))
 
-  Y.hat <- link(eval(fmla, envir = list2env(c(list(W = W), X))))
+  Y.hat <- eval(fmla, envir = list2env(c(list(W = W), X)))
   W.hat <- rep(0.5, n_obs)
 
   X <- as.matrix(X)
@@ -588,7 +581,7 @@ run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list,
 #
 # bug L: GenericML::BLP() regresses on beta.2 = (W - W.hat) * (tau - mean(tau)).
 # When tau is exactly constant (a degenerate/near-constant CATE fit - seen with
-# scenario 9's low-amplitude cos(X4) effect at small n, especially once
+# scenario 4's low-amplitude cos(X4) effect at small n, especially once
 # pretest_superlearner has whittled a fold's library down to 1-2 survivors),
 # beta.2 becomes identically zero, lm() marks it aliased (coef = NA), and
 # sandwich::vcovHC() drops that coefficient's row/column entirely rather than

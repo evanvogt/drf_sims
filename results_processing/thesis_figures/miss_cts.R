@@ -18,11 +18,11 @@ dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 metrics <- readRDS(file.path(res_path, "cts_miss_metrics.RDS"))
 
 # the reduced scenario set, renamed for the chapter
-MISS_SCENARIO_LABELS <- c(`1` = "Null", `2` = "Simple", `4` = "Complex",
-                          `5` = "Non-linear")
+MISS_SCENARIO_LABELS <- c(`1` = "Null", `5` = "Simple", `3` = "Complex",
+                          `4` = "Non-linear")
 
 metrics <- metrics %>%
-  filter((scenario %in% c(1, 2, 4, 5) & type == "both") | (scenario == 1)) %>%
+  filter((scenario %in% c(1, 3, 4, 5) & type == "both") | (scenario == 1)) %>%
   apply_labels(MISS_SCENARIO_LABELS) %>%
   mutate(n = factor(n), prop = factor(prop))
 

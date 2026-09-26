@@ -42,7 +42,7 @@ metrics_summary <- metrics %>%
 z <- qnorm(0.975)
 
 metrics_summary %>%
-  filter((scenario %in% c(1, 3, 5, 7, 9)) & (n == 1000) & model != "causal_forest_inbuilt") %>%
+  filter((scenario %in% c(1, 2, 4, 7, 9)) & (n == 1000) & model != "causal_forest_inbuilt") %>%
   ggplot(aes(x = CI_sf, y = mean_marg_cov, colour = model)) +
   geom_point() +
   geom_errorbar(aes(ymin = mean_marg_cov - z * mcse_marg_cov,
@@ -54,7 +54,7 @@ metrics_summary %>%
 
 
 metrics_summary %>%
-  filter((scenario %in% c(1, 3, 5, 7, 9)) & (n == 1000) & model != "causal_forest_inbuilt") %>%
+  filter((scenario %in% c(1, 2, 4, 7, 9)) & (n == 1000) & model != "causal_forest_inbuilt") %>%
   ggplot(aes(x = CI_sf, y = mean_simul_cov, colour = model)) +
   geom_point() +
   geom_errorbar(aes(ymin = mean_simul_cov - z * mcse_simul_cov,
@@ -65,7 +65,7 @@ metrics_summary %>%
   theme_minimal()
 
 metrics_summary %>%
-  filter((scenario %in% c(1, 3, 5, 7, 9)) & (n == 1000) & model != "causal_forest_inbuilt") %>%
+  filter((scenario %in% c(1, 2, 4, 7, 9)) & (n == 1000) & model != "causal_forest_inbuilt") %>%
   ggplot(aes(x = CI_sf, y = mean_ci_len, colour = model)) +
   geom_point() +
   geom_errorbar(aes(ymin = mean_ci_len - z * mcse_ci_len,

@@ -6,7 +6,7 @@ each imputation be combined?**
 
 | | |
 |---|---|
-| scenarios | 1–5 (the reduced set) |
+| scenarios | 1, 3, 4, 5, 6 (of the missing-data set, which uses the main study's numbers; 1–5 before 2026-09-26) |
 | n | 500, MAR, `prop = 0.3`, `type = both` |
 | method | `multiple_imputation` only |
 | runs | 100 |
@@ -82,6 +82,8 @@ intervals look oddly narrow, this is why.
 
 **Needs a re-run** — the crossfitting strategy change to `R/cate_models.R`
 (see root README Methods/Status) affects the estimators used here even
-though there's no SuperLearner arm. Unaffected by the *bug ledger* itself:
-bug F does not apply (no SuperLearner arm), and the DGM is the continuous
-one, so neither of those is a separate reason to re-run.
+though there's no SuperLearner arm. Bug F does not apply (no SuperLearner
+arm), but bug O does: it changed the `continuous_missing` baseline and `bW`
+this study generates from (`missing/continuous/README.md`). Archive any old
+tree first with `R/archive_old_results.R` (root `README.md`, Status, step 0) -
+it would use the pre-2026-09-26 scenario numbers (1-5, now 1 and 3-6).

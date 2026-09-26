@@ -51,7 +51,7 @@ cat("\n=== 1. regression check: dcf against cts_models.R ===\n")
 # unless a propensity leaves [0.05, 0.95].
 
 setup_rng_stream(7)
-gen <- generate_cf_replicate(scenario = 6, n = 500, n_test = 1000)
+gen <- generate_cf_replicate(scenario = 8, n = 500, n_test = 1000)
 X <- as.matrix(gen$data[, -c(1:2)])
 Y <- gen$data$Y
 W <- gen$data$W
@@ -119,7 +119,7 @@ sl_lib <- if (full) {
 }
 
 setup_rng_stream(1)
-gen1 <- generate_cf_replicate(scenario = 6, n = n, n_test = n_test)
+gen1 <- generate_cf_replicate(scenario = 8, n = n, n_test = n_test)
 
 t0 <- Sys.time()
 res <- run_all_crossfit_variants(
@@ -304,7 +304,7 @@ m <- run_metrics(
     truth_test_tau = gen1$truth_test_tau,
     run = 1
   ),
-  scenario = 6
+  scenario = 8
 )
 
 mse_tbl <- m %>%
@@ -314,7 +314,7 @@ mse_tbl <- m %>%
 
 print(as.data.frame(mse_tbl), digits = 3, row.names = FALSE)
 
-# 4a. test predictions must track the test truth. scenario 6 has strong
+# 4a. test predictions must track the test truth. scenario 8 has strong
 # heterogeneity, so a misaligned X_test or truth_test shows up as ~0 correlation.
 tracking <- c("dcf", "scf_scf", "scf_oob", "cf_dcf")
 cors <- vapply(

@@ -43,22 +43,31 @@ cmb <- combos(study)
 # verify run's failure output (69 runs, all automl/holdout, none from xgb or
 # cv_shared). If the strategies tree is ever rerun, regenerate this by
 # re-running verify with the anyNA branch below temporarily reporting instead
-# of suppressing, and diffing the new failure list against this one.
+# of suppressing, and diffing the new failure list against this one. Scenario
+# ids are the post-2026-09-26 numbering (R/dgm_scenarios.R); the verify run
+# that produced this list called scenarios 6, 8 and 4 by their old numbers 4, 6
+# and 9.
+#
+# STALE UNTIL REGENERATED: the list comes from the pre-bug-O DGM. The study
+# re-runs on the current one (its old trees are archived by
+# R/archive_old_results.R), which changes every dataset, so which blocks
+# degenerate will change too. Expect verify to fail on this list after the
+# re-run, and regenerate it as above - including the 69 in the stopifnot().
 known_holdout_na <- tibble::tribble(
   ~scenario, ~n, ~run,
-  4,  250,  21,  4,  250,  23,  4,  250,  26,
-  6,  250,   1,  6,  250,  10,  6,  250,  12,  6,  250,  13,  6,  250,  14,  6,  250,  26,
-  9,  250,   3,  9,  250,   4,  9,  250,   6,  9,  250,  17,  9,  250,  19,  9,  250,  25,
+  6,  250,  21,  6,  250,  23,  6,  250,  26,
+  8,  250,   1,  8,  250,  10,  8,  250,  12,  8,  250,  13,  8,  250,  14,  8,  250,  26,
+  4,  250,   3,  4,  250,   4,  4,  250,   6,  4,  250,  17,  4,  250,  19,  4,  250,  25,
   1,  500,   2,  1,  500,   3,  1,  500,   9,  1,  500,  11,  1,  500,  13,  1,  500,  27,
-  4,  500,   1,  4,  500,   5,  4,  500,  12,  4,  500,  13,  4,  500,  23,  4,  500,  28,
-  6,  500,   7,  6,  500,  10,  6,  500,  15,  6,  500,  18,  6,  500,  20,  6,  500,  29,  6,  500,  30,
-  9,  500,   5,  9,  500,  10,  9,  500,  20,
+  6,  500,   1,  6,  500,   5,  6,  500,  12,  6,  500,  13,  6,  500,  23,  6,  500,  28,
+  8,  500,   7,  8,  500,  10,  8,  500,  15,  8,  500,  18,  8,  500,  20,  8,  500,  29,  8,  500,  30,
+  4,  500,   5,  4,  500,  10,  4,  500,  20,
   1, 1000,   5,  1, 1000,  10,  1, 1000,  11,  1, 1000,  25,  1, 1000,  29,
-  4, 1000,   1,  4, 1000,   6,  4, 1000,   8,  4, 1000,  17,  4, 1000,  19,
-  4, 1000,  21,  4, 1000,  23,  4, 1000,  28,  4, 1000,  29,  4, 1000,  30,
-  6, 1000,   3,  6, 1000,   4,  6, 1000,  14,  6, 1000,  15,  6, 1000,  17,
-  6, 1000,  21,  6, 1000,  24,  6, 1000,  25,  6, 1000,  26,  6, 1000,  27,  6, 1000,  28,
-  9, 1000,   4,  9, 1000,   9,  9, 1000,  10,  9, 1000,  13,  9, 1000,  18,  9, 1000,  20
+  6, 1000,   1,  6, 1000,   6,  6, 1000,   8,  6, 1000,  17,  6, 1000,  19,
+  6, 1000,  21,  6, 1000,  23,  6, 1000,  28,  6, 1000,  29,  6, 1000,  30,
+  8, 1000,   3,  8, 1000,   4,  8, 1000,  14,  8, 1000,  15,  8, 1000,  17,
+  8, 1000,  21,  8, 1000,  24,  8, 1000,  25,  8, 1000,  26,  8, 1000,  27,  8, 1000,  28,
+  4, 1000,   4,  4, 1000,   9,  4, 1000,  10,  4, 1000,  13,  4, 1000,  18,  4, 1000,  20
 )
 known_holdout_na_key <- with(known_holdout_na, paste(scenario, n, run))
 stopifnot(nrow(known_holdout_na) == 69L)

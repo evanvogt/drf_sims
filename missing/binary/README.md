@@ -1,11 +1,13 @@
 # Missing covariates — binary outcome
 
-The `missing/continuous` design on a logit scale. See `missing/README.md` for the
-mechanisms, handling methods and the shared bug fixes.
+The `missing/continuous` design with a binary outcome, on `binary/`'s
+risk-difference DGM (`binary/README.md`, "Outcome model and `bW` calibration").
+See `missing/README.md` for the mechanisms, handling methods and the shared bug
+fixes.
 
 | | |
 |---|---|
-| array | **12,600 jobs**: `bin_miss_1.sh` (1–9900, scenarios 1, 2, 4, 5) and `bin_miss_extra.sh` (9901–12600, scenario 6) |
+| array | **12,600 jobs**: `bin_miss_1.sh` (1–9900, scenarios 1, 3, 4, 5) and `bin_miss_extra.sh` (9901–12600, scenario 2) |
 | results | `../results/missing/binary/scenario_<k>/<n>/<type>/<prop>/<mechanism>/<method>/` |
 | figures | `bin_miss_results.R` / `.qmd` — every metric, to `results/all_figures/`; the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_bin.R` |
 
@@ -13,33 +15,42 @@ mechanisms, handling methods and the shared bug fixes.
 
 `bin_miss_dgms.R` was copied from the continuous version and only partly converted to a binary outcome, carrying three related defects (continuous coefficient table, wrong power-test calibration, un-plogis'd truth) — all fixed together; the code now always uses the corrected values. Its oracle link convention broke later, when the fix flags were removed — see bug M below.
 
-### The corrected coefficients
+### The coefficients
 
-`b0`, `b1`, `b2` come straight from the binary table. `b3`/`b4`/`b45` are
-taken from the binary scenario each reduced scenario corresponds to (1→1, 2→2,
-3→4, 4→8, 5→9). **That mapping is an inference from the scenario descriptions,
-not something the original code recorded** — worth a sanity check before
-committing cluster time. Scenario 6 (→3) was added later specifically as binary
-scenario 3, so its coefficients are copied, not inferred.
+The `binary_missing` table is built from `binary`'s scenarios 1–6 in
+`R/dgm_scenarios.R`, so scenario k here is scenario k there by construction
+(scenario numbers in this README are the post-2026-09-26 ones;
+`missing/README.md` has the old numbering). Until the risk-difference DGM this
+table carried its own copy of the coefficients, and for scenarios 1 and 3–6 the
+correspondence had been inferred from the scenario descriptions.
 
-### Bug P — the `bW` calibration and the modifier signs
+### Bug P and the risk-difference DGM
 
-The binary calibration and coefficients changed with bug P; `binary/README.md`'s
-"Outcome model and `bW` calibration" has the design. Here it means:
+The binary calibration changed with bug P, and the whole binary DGM with the
+move to the risk-difference scale; `binary/README.md`'s "Outcome model and `bW`
+calibration" has the design. Here it means:
 
-- **Signs.** Scenarios 2, 3 and 6 carry the sign flips of main-study scenarios
-  2, 4 and 3: `b3 = 0.4` (was −0.4) in 2 and 3, `b4 = −0.3` (was 0.3) in 3, and
-  `b4 = −0.2` (was 0.2) in 6. `b5`, which no treatment effect used, is gone.
-- **`bW`** now differs by scenario, so that the true ATE is the same marginal
-  RD in all six: at n = 500, −0.55, −0.84, −0.85, −0.75, −0.86 and −0.56 for
-  scenarios 1–6 (−0.50 in every scenario before). The true RD is −0.122 and
-  the power 0.80.
-- **MNAR-Y** is calibrated without U, as in `missing/continuous`, so every
-  mechanism shares one `bW` and one truth per scenario. Averaging the treated
-  risk over U pulls it towards 0.5, so under MNAR-Y the RD shrinks to about
-  −0.10 and the power to 0.61–0.63.
+- **The effect is on the risk-difference scale.** `P(Y = 1) = m0(x) + W·τ(x)`,
+  with the control risk m0 bounded in [0.34, 0.70] and a 40% control event
+  rate. The modifiers are the continuous ones sign-reversed and scaled by
+  `RD_SCALE`, with X4 and X5 through `tanh`. That makes X1 and X2 purely
+  prognostic, and only **weakly** prognostic: m0's SD is 0.048. So amputating
+  X1 and X2 (they are two of the `both` covariates) costs an estimator less
+  than it did under the logit design.
+- **`bW`** is set so that the true ATE is the same marginal RD in all six
+  scenarios. At n = 500 it is −0.118, −0.118, −0.047, 0.005, 0.073 and −0.103
+  for scenarios 1–6; the true RD is −0.118 and the power 0.80.
+- **MNAR-Y.** U enters the treatment effect as `bU·tanh(U)`, with bU = 0.08.
+  That term is bounded, so every treated risk stays inside [0.01, 0.99].
+  `RD_SCALE` allows for it, and it binds scenario 4's. It has mean zero, so
+  MNAR-Y leaves the RD and the power as they are. Under the logit design,
+  averaging over U pulled the treated risk towards 0.5 and shrank the RD to
+  about −0.10, and the power to 0.61–0.63. MNAR-Y is still calibrated without
+  U, as in `missing/continuous`, so every mechanism shares one `bW` and one
+  truth per scenario.
 
-`Rscript R/calibration_report.R` prints this table.
+`Rscript R/calibration_report.R` prints this table, with the MNAR-Y
+treated-risk floor and ceiling.
 
 ## Bug M — `dr_oracle` on the log-odds scale (fixed; no finished result affected)
 
@@ -57,7 +68,9 @@ variance 4–6× the true oracle's, and on single runs a CATE that could correla
 
 **Fix:** `bin_miss_models.R` passes `oracle_link = "logit"`, as `binary/` does.
 The oracle's outcome model now reproduces the true `p0`/`p1` exactly, and
-scenario 6's `dr_oracle` is identical to `binary/` scenario 3's from the same seed.
+scenario 2's `dr_oracle` is identical to `binary/` scenario 2's from the same seed.
+*(Since the risk-difference DGM every oracle formula returns the outcome mean
+and the `oracle_link` argument is gone, so there is no link left to mismatch.)*
 
 **Nothing re-runs for it.** `check_all_studies.md` had this study at
 9,900/9,900, HTE back-fill complete, at 11:50 on 2026-09-03 — before `6b06db3`
@@ -65,9 +78,11 @@ existed. And the fix restores the old behaviour exactly: grid rows 5, 15, 64 and
 91 (null + complete cases, mean imputation, MNAR-Y + IPW, complete data) run
 through `0df4a9b`, the last commit before the bug, and through the fixed code
 give byte-identical `truth`, `tau` for all five arms, and `dr_oracle$po`. So rows
-1–9900 stay valid and directly comparable with scenario 6 run now. The only way
+1–9900 stay valid and directly comparable with scenario 2 run now. The only way
 that could be wrong is a result file written from code at or after `6b06db3`,
-which the file times would show — on the cluster, from the repo root:
+which the file times would show — on the cluster, from the repo root (those
+results predate the renumbering, so scenario 2's directory is still
+`scenario_6`):
 
 ```bash
 find ../results/missing/binary -path '*scenario_6*' -prune -o \
@@ -75,6 +90,12 @@ find ../results/missing/binary -path '*scenario_6*' -prune -o \
 ```
 
 ## Bug N — the MNAR-Y truth was taken at U = 0 (repaired at metrics time; no re-run)
+
+**Moot since the risk-difference DGM.** U now enters the treated risk as
+`bU·tanh(U)`, which has mean zero, so the U-free truth *is* the average over U,
+as on the continuous scale. `mnar_y_truth()` and `repair_mnar_y_truth()` are
+deleted, `bin_miss_metrics.R` no longer repairs anything, and truths no longer
+carry `tau_u0`. The account below is of the logit-scale design.
 
 Under MNAR-Y the unobserved `U` enters the treated arm's linear predictor,
 `lp = base + W·(te + bU·U)`. The truth removed it by evaluating at U = 0,
@@ -86,14 +107,14 @@ the risk averaged over U, `E_U[plogis(base + te + bU·U)]`, which sits closer to
 
 | scenario | mean τ at U = 0 | mean τ averaged over U | mean \|gap\| | max \|gap\| |
 |---|---|---|---|---|
-| 2 | −0.165 | −0.137 | 0.029 | 0.039 |
-| 4 | −0.066 | −0.052 | 0.024 | 0.039 |
-| 5 | −0.044 | −0.030 | 0.021 | 0.039 |
-| 6 | −0.110 | −0.087 | 0.025 | 0.039 |
+| 2 | −0.110 | −0.087 | 0.025 | 0.039 |
+| 3 | −0.066 | −0.052 | 0.024 | 0.039 |
+| 4 | −0.044 | −0.030 | 0.021 | 0.039 |
+| 5 | −0.165 | −0.137 | 0.029 | 0.039 |
 
 The data agree. Pooling 4,000 generated datasets (2M rows), the treated-minus-
-control difference in means matches the averaged truth (scenario 2: −0.1383 vs
-−0.1383) and is 42 standard errors from the U = 0 one (−0.1667); scenario 6
+control difference in means matches the averaged truth (scenario 5: −0.1383 vs
+−0.1383) and is 42 standard errors from the U = 0 one (−0.1667); scenario 2
 likewise (32 SE). So every binary MNAR-Y result so far — every arm,
 `complete_data` included — carries about +0.02 to +0.03 of bias that belongs to
 the truth, not the estimator, and the other CATE metrics and the true-CATE tests
@@ -114,10 +135,11 @@ Re-run `bin_miss_metrics.sh` and the figures; no simulation jobs. Checked:
 repaired pre-fix truths equal the fixed generator's (differences ~1e-16), and
 with and without the repair every MAR and MNAR metric row is byte-identical.
 
-**Not changed:** `dr_oracle`'s outcome model under MNAR-Y is still the U = 0 one.
-With the propensity known its pseudo-outcome is unbiased for the averaged CATE
-regardless; it is only slightly noisier than a true oracle's. Making it exact
-would change `dr_oracle` and mean redoing these runs.
+**Not changed at the time:** `dr_oracle`'s outcome model under MNAR-Y was
+still the U = 0 one. With the propensity known its pseudo-outcome was unbiased
+for the averaged CATE regardless, only slightly noisier than a true oracle's.
+Under the risk-difference DGM the U-free outcome model *is* the one averaged
+over U, so `dr_oracle` is an exact oracle under MNAR-Y too.
 
 ## Patched: every model now carries the HTE tests
 
@@ -207,7 +229,7 @@ imputed data.frames there, with no single covariate matrix to test against.
 
 ```bash
 qsub missing/binary/jobscripts/bin_miss_1.sh        # 1-9900
-qsub missing/binary/jobscripts/bin_miss_extra.sh    # 9901-12600, scenario 6
+qsub missing/binary/jobscripts/bin_miss_extra.sh    # 9901-12600, scenario 2
 Rscript missing/binary/bin_miss_check.R
 qsub missing/binary/jobscripts/bin_miss_patch.sh    # 1-99, the HTE back-fill
 Rscript missing/binary/bin_miss_patch_check.R       # did the back-fill land?
@@ -268,27 +290,31 @@ quarto render missing/binary/bin_miss_results.qmd   # the same, as a browsable r
 
 ## Status
 
-**Full re-run owed for bug P** — the `bW` calibration and the signs in
-scenarios 2, 3 and 6 changed (see "Bug P" above), which moves every dataset's
-outcome and the truth in all six scenarios. That supersedes the complete rows
-1–9900 described below: all 12,600 rows (`bin_miss_1.sh`, `bin_miss_extra.sh`)
-re-run, then collect and metrics. New runs carry the `dr_random_forest` HTE
-tests (`PROFILES$missing`) and the averaged MNAR-Y truth, so nothing needs
-back-filling and the bug N repair leaves them alone. `check_all.R`'s
-`patch_status` still counts manifest rows, though, so, as for scenario 6 in
+**Full re-run owed for bug P and the risk-difference DGM.** Bug P changed the
+`bW` calibration, and the risk-difference DGM then changed the outcome model and
+every modifier (see "Bug P and the risk-difference DGM" above). Together they
+move every dataset's outcome and the truth in all six scenarios. That supersedes
+the complete rows 1–9900 described below: all 12,600 rows (`bin_miss_1.sh`,
+`bin_miss_extra.sh`) re-run on the risk-difference code, then collect and
+metrics. Any rows already re-run on the logit-scale DGM are superseded too. New
+runs carry the `dr_random_forest` HTE tests (`PROFILES$missing`) and a truth
+that needs no bug N repair, so nothing needs back-filling. `check_all.R`'s
+`patch_status` still counts manifest rows, though, so, as in
 `missing/README.md`'s Status, a bookkeeping pass over every combination
 (`qsub -J 1-126%20 jobscripts/bin_miss_patch.sh`) is what makes it read
-complete. Archive the old `bin_miss_hte_patch/` manifests with the old results
-first.
+complete. Archive the old tree first, `bin_miss_hte_patch/` manifests and all,
+with `R/archive_old_results.R` (root `README.md`, Status, step 0): it uses the
+pre-2026-09-26 numbers, so the new scenario 2 would otherwise land on the old
+scenario 2's paths.
 
-**Scenario 6 owed** — `bin_miss_extra.sh` (rows 9901–12600), then the
+**Scenario 2 owed** — `bin_miss_extra.sh` (rows 9901–12600), then the
 bookkeeping patch pass over combinations 100–126 (see `missing/README.md`
 Status) and collect/metrics. Rows 1–9900 are unchanged. *(Folded into the bug P
 re-run above.)*
 
-**Metrics owed (bug N)** — re-run `bin_miss_metrics.sh` so the MNAR-Y rows are
-scored against the averaged truth. No simulation jobs; doing it once, after
-scenario 6's collect, covers both.
+**Metrics owed (bug N)** — *superseded by the full re-run above, which needs no
+repair.* Was: re-run `bin_miss_metrics.sh` so the MNAR-Y rows are scored against
+the averaged truth.
 
 **Rows 1–9900 were re-run** for the three DGM fixes, bug F and the crossfitting
 change, and are complete — 9,900/9,900 with the HTE back-fill done, per

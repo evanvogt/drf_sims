@@ -100,6 +100,22 @@ combos <- function(study) {
   unique(study$grid[, study$path_cols, drop = FALSE])
 }
 
+#' The runs the grid holds for each parameter combination
+#'
+#' Not seq_len(study$n_sims): binary, continuous and
+#' confidence_intervals/{binary,continuous} take scenarios 1-4 to 500 runs
+#' while the rest stay at 100. Shared by check_failed(), which reports the
+#' missing ones, and get_results(), which reads only these.
+#'
+#' @return list with one vector of run numbers per row of combos(study), in
+#'   that order
+expected_runs <- function(study) {
+  cmb_key <- do.call(paste, c(combos(study), sep = "\r"))
+  row_key <- do.call(paste, c(study$grid[, study$path_cols, drop = FALSE],
+                              sep = "\r"))
+  unname(split(study$grid$run, factor(row_key, levels = cmb_key)))
+}
+
 #' Directory holding the per-run files for one parameter combination
 combo_dir <- function(study, combo) {
   parts <- vapply(study$path_cols, function(cl) {
@@ -130,7 +146,7 @@ run_numbers <- function(files) {
 #' The runs expected for each combination are the `run` values the grid holds
 #' for it, not seq_len(study$n_sims). The two agree for a rectangular grid, but
 #' binary, continuous and confidence_intervals/{binary,continuous} append rows
-#' taking scenarios 1, 3, 8 and 9 to 500 runs while the rest stay at 100, and a
+#' taking scenarios 1-4 to 500 runs while the rest stay at 100, and a
 #' flat n_sims would either miss runs 101-500 or report them missing for the
 #' scenarios that never had them.
 #'
@@ -141,12 +157,7 @@ run_numbers <- function(files) {
 check_failed <- function(study, write = TRUE, update_rerun = TRUE, ...) {
 
   cmb <- combos(study)
-
-  # the grid's runs for each combination, in the same order as the rows of cmb
-  cmb_key  <- do.call(paste, c(cmb, sep = "\r"))
-  row_key  <- do.call(paste, c(study$grid[, study$path_cols, drop = FALSE],
-                               sep = "\r"))
-  expected <- split(study$grid$run, factor(row_key, levels = cmb_key))
+  expected <- expected_runs(study)
 
   failed <- bind_rows(lapply(seq_len(nrow(cmb)), function(i) {
     combo <- cmb[i, , drop = FALSE]
@@ -399,14 +410,29 @@ update_rerun_script <- function(study, n_failed, cpu_add = 1, mem_factor = 1.2,
 #'
 #' One row per parameter combination, with a list-column of
 #' list(run = , result = ) entries - the shape the *_metrics.R scripts unnest.
+#'
+#' Reads only the runs the grid holds for each combination (expected_runs()).
+#' Any other res_sim_*.RDS in the directory is left out, with a warning: it
+#' can only be left over from an older grid, DGM or scenario numbering - e.g.
+#' runs 101-500 of a scenario that now runs to 100 - and would otherwise be
+#' collected with the current runs, with nothing to tell them apart.
 get_results <- function(study, workers = 2) {
 
   cmb <- combos(study)
+  expected <- expected_runs(study)
 
   read_combo <- function(i) {
     combo <- cmb[i, , drop = FALSE]
     files <- list.files(combo_dir(study, combo), pattern = RES_PATTERN,
                         full.names = TRUE)
+    stray <- !run_numbers(files) %in% expected[[i]]
+    if (any(stray)) {
+      warning(sum(stray), " file(s) in ", combo_dir(study, combo),
+              " are runs the grid does not hold for this combination - not ",
+              "collected. Old results? See R/archive_old_results.R.",
+              call. = FALSE)
+      files <- files[!stray]
+    }
     if (length(files) == 0) return(NULL)
 
     temp <- map(files, function(f) {

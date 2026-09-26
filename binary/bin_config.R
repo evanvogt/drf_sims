@@ -19,7 +19,8 @@
 #
 # Anything already under ../results/binary was produced by the old mapping.
 # The study re-runs anyway (bug F, bug P), on the grid below: all ten
-# scenarios at 100 runs, with 1, 3, 8 and 9 taken to 500.
+# scenarios at 100 runs, with 1-4 taken to 500. (Scenario numbers above are
+# the pre-2026-09-26 ones; old 1, 3, 8, 9 are now 1-4 - see R/dgm_scenarios.R.)
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -28,7 +29,7 @@ study <- study_config(
   name     = "binary",
   prefix   = "bin",
   res_path = file.path(dirname(here()), "results", "binary"),
-  # Scenarios 1, 3, 8 and 9 go to 500 runs. Their runs 101-500 are appended as
+  # Scenarios 1-4 go to 500 runs. Their runs 101-500 are appended as
   # a second block rather than widening `run` above, so rows 1-4000 keep the
   # meaning they were submitted under and the new rows are one contiguous range,
   # 4001-10400, for jobscripts/bin_extra.sh.
@@ -40,7 +41,7 @@ study <- study_config(
       stringsAsFactors = FALSE
     ),
     expand.grid(
-      scenario = c(1, 3, 8, 9),
+      scenario = c(1:4),
       n = c(100, 250, 500, 1000),
       run = c(101:500),
       stringsAsFactors = FALSE

@@ -44,24 +44,24 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 # intercept, which is bW). Must match SCENARIO_SETS$continuous$te_expr
 # (R/dgm_scenarios.R TE_10) exactly, dropping bW and any b* parameter this
 # scenario's te_expr does not actually use (the scenario table holds NA for
-# those, e.g. b3 and b4 in scenario 7).
+# those, e.g. b3 and b4 in scenario 9).
 OLS_TERMS <- c(
   "1",                       # 1  no HTE
-  "X3",                      # 2
-  "X4",                      # 3
-  "X3 + X4",                 # 4
-  "X3:X4",                   # 5  interaction only, no main effects
-  "X3 * X4",                 # 6  main effects + interaction
-  "X4:X5",                   # 7  interaction only, no main effects
-  "X3 + X4 + X4:X5",         # 8  X3, X4 main effects + X4:X5, no plain X5
-  "cos(X4)",                 # 9
+  "X4",                      # 2
+  "X3 + X4 + X4:X5",         # 3  X3, X4 main effects + X4:X5, no plain X5
+  "cos(X4)",                 # 4
+  "X3",                      # 5
+  "X3 + X4",                 # 6
+  "X3:X4",                   # 7  interaction only, no main effects
+  "X3 * X4",                 # 8  main effects + interaction
+  "X4:X5",                   # 9  interaction only, no main effects
   "X3 + I(exp(-abs(X4)))"    # 10
 )
 
 # ---- helpers --------------------------------------------------------------
 
 #' Byte-for-byte mirror of run_dr_oracle()'s stage-1 computation
-#' (R/cate_models.R:529-546), kept separate only so stage1 (nuisances/po) and
+#' (R/cate_models.R), kept separate only so stage1 (nuisances/po) and
 #' stage2 (the forest) can be measured independently. If this ever needs to
 #' diverge from run_dr_oracle to keep passing the exact-match check below,
 #' that divergence is itself the finding.
@@ -74,17 +74,16 @@ OLS_TERMS <- c(
 #' breaks the oracle formula with "object 'X' not found" (confirmed while
 #' writing this script), which is itself a live demonstration of how fragile
 #' that scoping trick is. See the header comment in R/cate_models.R.
-compute_oracle_nuisances <- function(X, W, Y, fmla_info, oracle_link = "identity") {
-  link <- if (oracle_link == "logit") plogis else identity
+compute_oracle_nuisances <- function(X, W, Y, fmla_info) {
   n_obs <- nrow(X)
   list2env(fmla_info$params, envir = environment())
   fmla <- parse(text = fmla_info$fmla)
 
   W_temp <- rep(1, n_obs)
-  Y1.hat <- link(eval(fmla, envir = list2env(c(list(W = W_temp), X))))
+  Y1.hat <- eval(fmla, envir = list2env(c(list(W = W_temp), X)))
   W_temp <- rep(0, n_obs)
-  Y0.hat <- link(eval(fmla, envir = list2env(c(list(W = W_temp), X))))
-  Y.hat  <- link(eval(fmla, envir = list2env(c(list(W = W), X))))
+  Y0.hat <- eval(fmla, envir = list2env(c(list(W = W_temp), X)))
+  Y.hat  <- eval(fmla, envir = list2env(c(list(W = W), X)))
   W.hat  <- rep(0.5, n_obs)
 
   po <- (Y1.hat - Y0.hat) + (Y - Y.hat) * (W - W.hat) / (W.hat * (1 - W.hat))
@@ -93,9 +92,9 @@ compute_oracle_nuisances <- function(X, W, Y, fmla_info, oracle_link = "identity
 
 # ---- one-off sanity check: is the X$X1-via-parent-frame eval trick robust? -
 # (see R/cate_models.R header note on run_dr_oracle's formula scoping)
-cat("\nChecking oracle formula eval/scoping (scenario 6, n = 500)...\n")
-gen_chk <- generate_scenario_data(6, 500, set = set)
-fmla_chk <- get_oracle_info(6, gen_chk$bW, set = set)
+cat("\nChecking oracle formula eval/scoping (scenario 8, n = 500)...\n")
+gen_chk <- generate_scenario_data(8, 500, set = set)
+fmla_chk <- get_oracle_info(8, gen_chk$bW, set = set)
 X_chk <- as.data.frame(as.matrix(gen_chk$dataset[, -c(1, 2)]))
 W_chk <- gen_chk$dataset$W
 Y_chk <- gen_chk$dataset$Y
@@ -191,7 +190,8 @@ summary_df <- bind_rows(cell_results)
 # ---- interpretation flag ---------------------------------------------------
 # Bias not distinguishable from 0 given its MCSE -> fine either way. Bias that
 # IS distinguishable from 0 and does not shrink towards the largest n tested
-# is flagged for follow-up; shrinking bias (typically scenarios 5-10, small n)
+# is flagged for follow-up; shrinking bias (typically scenarios 3, 4 and 7-10,
+# small n)
 # reads as expected regression-forest smoothing of a nonlinear/interacting
 # CATE surface, not a defect.
 summary_df <- summary_df %>%

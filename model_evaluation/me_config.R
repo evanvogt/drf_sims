@@ -11,7 +11,7 @@
 # Scenario set is deliberately 4, not all 10: this study's research question
 # (do cheap proxy losses rank 9 candidate models the way true PEHE would?)
 # doesn't need every CATE-structure re-litigated, the same reasoning
-# crossfitting/cf_analysis.R uses for its own scenario = c(1, 4, 6, 9).
+# crossfitting/cf_analysis.R uses for its own scenario = c(1, 4, 6, 8).
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -21,7 +21,7 @@ study <- study_config(
   prefix   = "me",
   res_path = file.path(dirname(here()), "results", "model_evaluation"),
   grid = expand.grid(
-    scenario = c(1, 4, 6, 9),
+    scenario = c(1, 4, 6, 8),
     n = c(250, 500, 1000),
     run = c(1:30),
     stringsAsFactors = FALSE
@@ -128,7 +128,7 @@ study_split <- study_config(
   prefix   = "me_split",
   res_path = file.path(dirname(here()), "results", "model_evaluation_split"),
   grid = expand.grid(
-    scenario = c(1, 4, 6, 9),
+    scenario = c(1, 4, 6, 8),
     n = c(500, 1000),
     run = c(1:30),
     stringsAsFactors = FALSE

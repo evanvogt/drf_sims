@@ -5,7 +5,7 @@ bootstrap and what the metrics mean.
 
 | | |
 |---|---|
-| array | **20,000 jobs** (`cts_ci_1.sh` 1–10000, `cts_ci_2.sh` 10001–20000), plus **32,000** taking scenarios 1, 3, 8, 9 to 500 runs (`cts_ci_extra_1.sh`–`cts_ci_extra_4.sh`, 20001–52000) |
+| array | **20,000 jobs** (`cts_ci_1.sh` 1–10000, `cts_ci_2.sh` 10001–20000), plus **32,000** taking scenarios 1–4 to 500 runs (`cts_ci_extra_1.sh`–`cts_ci_extra_4.sh`, 20001–52000) |
 | results | `../results/confidence_intervals/continuous/scenario_<k>/<n>/<CI_sf>/` |
 | metrics | `ci_cts_metrics.RDS` — coverage and width, no point metrics |
 
@@ -39,7 +39,14 @@ with the rest of the `ci` profile.
 
 ## Status
 
-Unaffected by the bug ledger. Bug A is binary-only; bug F needs an `sl_lib`,
-which this study never passes. **No re-run needed** — this is one of the two
-studies that must stay bit-identical, and the regression harness treats it as
-such.
+**Re-run** — bug O changed the continuous DGM's baseline and `bW` (see
+`continuous/README.md`), which moves every dataset, on top of the crossfitting
+strategy change (`confidence_intervals/README.md`). Archive the old tree first
+(`R/archive_old_results.R`; root `README.md`, Status, step 0): it uses the
+pre-2026-09-26 scenario numbers, and scenarios 1–4 now take runs 101–500 where
+old scenarios 1, 3, 8 and 9 did.
+
+Otherwise unaffected by the bug ledger: bug A is binary-only, and bug F needs an
+`sl_lib`, which this study never passes. The regression harness still treats
+its *estimators* as ones that must stay bit-identical under refactoring; that is
+a claim about the code, not about the finished results.

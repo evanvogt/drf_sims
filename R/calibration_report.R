@@ -3,9 +3,10 @@
 ##########
 # Prints, for every scenario at every n a study generates at, the calibrated
 # bW, the true ATE, and the ATE's planned and realised power, for both outcome
-# types. The design is in the "Outcome model and bW calibration" sections of
-# continuous/README.md and binary/README.md: each trial is planned for
-# TARGET_POWER under homogeneity, and the true ATE equals the planned effect.
+# types - and for binary outcomes the worst-case treated risks. The design is
+# in the "Outcome model and bW calibration" sections of continuous/README.md
+# and binary/README.md: each trial is planned for TARGET_POWER under
+# homogeneity, and the true ATE equals the planned effect.
 #
 #   Rscript R/calibration_report.R
 #
@@ -26,8 +27,14 @@
 # Binary power is for a two-proportion test with n / 2 per arm, on the true
 # marginal risks. Heterogeneity cannot lower it - each arm's variance is fixed
 # by its marginal risk - so planned and realised are one column, which differs
-# from TARGET_POWER only through bW's rounding. Under MNAR-Y the treated risk
-# is also averaged over U, which pulls it towards 0.5 and shrinks the RD.
+# from TARGET_POWER only through bW's rounding. The effect is on the
+# risk-difference scale and MNAR-Y's bU * tanh(U) has mean zero, so MNAR-Y
+# leaves the RD and the power alone; it only widens the treated-risk bounds.
+#
+# Binary floor / ceiling: the lowest and highest treated risk over the whole
+# covariate support (treated_risk_bounds()). RD_SCALE keeps them inside
+# [RD_EPS, 1 - RD_EPS], give or take bW's 3-dp rounding (5e-4);
+# binary/bin_verify_hte.R checks that, and re-derives RD_SCALE.
 
 suppressPackageStartupMessages(library(here))
 suppressMessages(source(here("R", "dgm_scenarios.R")))
@@ -35,7 +42,7 @@ suppressMessages(source(here("R", "dgm_scenarios.R")))
 MAIN_NS <- c(100, 250, 500, 1000)
 MISSING_N <- 500
 # validation/continuous/ splits n = 1000 at interim_prop 0.25-0.75
-VALIDATION_SCENARIO <- 3
+VALIDATION_SCENARIO <- 2
 VALIDATION_NS <- seq(250, 750, by = 50)
 
 #' bW, true ATE and t-test powers for one continuous scenario row at one n
@@ -52,24 +59,18 @@ continuous_row <- function(p, n) {
     mnar_y = if (is.na(u_var)) NA_real_ else power_at(g$var + u_var))
 }
 
-#' bW, true RD and two-proportion-test powers for one binary scenario row at one n
+#' bW, true RD, two-proportion-test power and worst-case treated risks for one
+#' binary scenario row at one n
 binary_row <- function(p, n) {
   bW <- calibrate_bW(p, n, "prop")
-  base <- baseline_grid(p)
-  tg <- te_grid(p)
-  p0 <- marginal_risk(base, list(g = 0, w = 1))
-  rd <- marginal_risk(base, tg, bW) - p0
-  rd_y <- NA_real_
-  if (!is.null(p$bU)) {
-    # bU * U enters the treated arm's linear predictor alongside b2 * X2, both
-    # normal and independent, so averaging over U just widens that term
-    wide <- p
-    wide$s2 <- sqrt(p$s2^2 + (p$bU * p$sU / p$b2)^2)
-    rd_y <- marginal_risk(baseline_grid(wide), tg, bW) - p0
-  }
-  power_at <- function(d) power.prop.test(n = n / 2, p1 = p0, p2 = p0 + d)$power
-  c(bW = bW, p0 = p0, ate = rd, power = power_at(rd),
-    rd_mnar_y = rd_y, mnar_y = if (is.na(rd_y)) NA_real_ else power_at(rd_y))
+  p0 <- control_event_rate(p)
+  ate <- bW + te_moments(p)$mean
+  b <- treated_risk_bounds(p, bW)
+  b_y <- if (is.null(p$bU)) c(NA_real_, NA_real_) else treated_risk_bounds(p, bW, p$bU)
+  c(bW = bW, p0 = p0, ate = ate,
+    power = power.prop.test(n = n / 2, p1 = p0, p2 = p0 + ate)$power,
+    floor = b[1], ceiling = b[2],
+    floor_mnar_y = b_y[1], ceiling_mnar_y = b_y[2])
 }
 
 #' One row function over every scenario of a table at every n in MAIN_NS
@@ -88,12 +89,12 @@ show <- function(rows, tbl, set, what, label, digits) {
 }
 
 #' One table's rows at MISSING_N, scenario 1 without MNAR-Y (not in the grid)
-missing_table <- function(tbl, row_fn, cols, labels) {
+missing_table <- function(tbl, row_fn, cols, labels, bW_digits = 2) {
   m <- t(vapply(tbl$scenario, function(s) {
     row_fn(tbl[tbl$scenario == s, ], MISSING_N)[cols]
   }, numeric(length(cols))))
   dimnames(m) <- list(paste("scenario", tbl$scenario), labels)
-  m[, 1] <- round(m[, 1], 2)
+  m[, 1] <- round(m[, 1], bW_digits)
   m[, -1] <- round(m[, -1], 3)
   m[1, grepl("MNAR-Y", labels)] <- NA
   m
@@ -112,8 +113,8 @@ show(rows, tbl, "continuous", "realised", "realised power", 3)
 
 cat(sprintf("\n=== continuous scenario %d: bW at the validation study's stage sizes ===\n",
             VALIDATION_SCENARIO))
-p3 <- tbl[tbl$scenario == VALIDATION_SCENARIO, ]
-v <- vapply(VALIDATION_NS, function(n) calibrate_bW(p3, n, "t"), numeric(1))
+pv <- tbl[tbl$scenario == VALIDATION_SCENARIO, ]
+v <- vapply(VALIDATION_NS, function(n) calibrate_bW(pv, n, "t"), numeric(1))
 names(v) <- paste0("n=", VALIDATION_NS)
 print(v)
 
@@ -127,14 +128,19 @@ print(missing_table(resolve_set("continuous_missing"), continuous_row,
 
 tbl <- resolve_set("binary")
 rows <- run_table(tbl, binary_row)
-cat(sprintf("\nbinary control-arm risk p0 = E[plogis(b0 + b1 X1 + b2 X2)] = %.3f in every scenario\n",
+cat(sprintf(paste0("\nbinary control risk m0 = %.2f + %.2f * plogis(b0 + b1 X1 + b2 X2), ",
+                   "in [%.2f, %.2f]; control event rate E[m0] = %.3f in every scenario\n"),
+            tbl$p0_lo[1], tbl$p0_hi[1] - tbl$p0_lo[1], tbl$p0_lo[1], tbl$p0_hi[1],
             rows[[1]]["p0", 1]))
-show(rows, tbl, "binary", "bW", "bW", 2)
+show(rows, tbl, "binary", "bW", "bW", 3)
 show(rows, tbl, "binary", "ate", "true ATE (marginal risk difference)", 3)
 show(rows, tbl, "binary", "power", "power (planned = realised)", 3)
+show(rows, tbl, "binary", "floor", sprintf("treated-risk floor (>= %.2f)", RD_EPS), 3)
+show(rows, tbl, "binary", "ceiling", sprintf("treated-risk ceiling (<= %.2f)", 1 - RD_EPS), 3)
 
 cat(sprintf("\n=== binary_missing at n = %d (scenario 1 has no MNAR-Y) ===\n",
             MISSING_N))
 print(missing_table(resolve_set("binary_missing"), binary_row,
-                    c("bW", "ate", "power", "rd_mnar_y", "mnar_y"),
-                    c("bW", "true RD", "power", "MNAR-Y RD", "MNAR-Y power")))
+                    c("bW", "ate", "power", "floor_mnar_y", "ceiling_mnar_y"),
+                    c("bW", "true RD", "power", "MNAR-Y floor", "MNAR-Y ceiling"),
+                    bW_digits = 3))

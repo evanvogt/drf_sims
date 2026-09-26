@@ -9,14 +9,14 @@ studies are all variations on it.
 ## Design
 
 Ten scenarios varying the structure of the CATE, crossed with four sample sizes,
-100 runs each — **4,000 array jobs** — plus runs 101–500 for scenarios 1, 3, 8
-and 9, another 6,400 appended as grid rows 4001–10400.
+100 runs each — **4,000 array jobs** — plus runs 101–500 for scenarios 1–4,
+another 6,400 appended as grid rows 4001–10400.
 
 | | |
 |---|---|
 | scenarios | 1–10 (see `R/dgm_scenarios.R`, `DESC_10`) |
 | n | 100, 250, 500, 1000 |
-| runs | 100; **500 for scenarios 1, 3, 8, 9** |
+| runs | 100; **500 for scenarios 1–4** |
 | folds | 4 at n=100, 5 at n=250, else 10 |
 | results | `../results/continuous/scenario_<k>/<n>/res_sim_<run>.RDS` |
 
@@ -33,15 +33,19 @@ figures.
 | # | CATE structure |
 |---|---|
 | 1 | no HTE (ATE only) |
-| 2 | simple, binary variable (X3) |
-| 3 | simple, continuous variable (X4) |
-| 4 | two variables, additive |
-| 5 | continuous × binary interaction |
-| 6 | single effects + interaction |
-| 7 | continuous × continuous interaction |
-| 8 | single effects + a different interaction |
-| 9 | cosine |
+| 2 | simple, continuous variable (X4) |
+| 3 | single effects + a different interaction |
+| 4 | cosine |
+| 5 | simple, binary variable (X3) |
+| 6 | two variables, additive |
+| 7 | continuous × binary interaction |
+| 8 | single effects + interaction |
+| 9 | continuous × continuous interaction |
 | 10 | exponential |
+
+Scenarios 1–4 are the ones the chapter reports: null, simple, complex and
+non-linear. They were 1, 3, 8 and 9 before 2026-09-26; the root README has the
+full old → new table.
 
 Each dataset also carries five deliberately unrelated covariates (`X01`–`X05`),
 so the estimators have to find the signal rather than being handed it.
@@ -76,15 +80,15 @@ around it, which makes the treated arm noisier by Var(g). So only scenario 1
 realises the planned 80%; the others realise less, falling as heterogeneity
 grows:
 
-| scenario | 1, 10 | 7, 9 | 5 | 2, 3, 4, 6 | 8 |
+| scenario | 1, 10 | 4, 9 | 7 | 2, 5, 6, 8 | 3 |
 |---|---|---|---|---|---|
 | realised power | 0.78–0.81 | 0.75–0.77 | 0.69–0.71 | 0.65–0.69 | 0.61–0.63 |
 
 **Before bug O** (root README), the baseline varied by scenario: b0 ran from 0.2
-to 1, b1 was −0.05, and b2 was 1 in scenario 9 and 2 elsewhere. The calibration
+to 1, b1 was −0.05, and b2 was 1 in scenario 4 and 2 elsewhere. The calibration
 used `sd = s_err + s2 = 1.5`, which adds SDs and ignores b1 and b2, and it set
 `bW` rather than the ATE to the planned effect. The true ATE drifted by E[g]
-(to a *positive* value in scenarios 2, 6 and 8), and power ran from 3% to 100%.
+(to a *positive* value in scenarios 3, 5 and 8), and power ran from 3% to 100%.
 Each scenario's heterogeneity around its mean, g(x) − E[g], is unchanged; the
 level of the true CATE moved, so `sign_acc` and the relative metrics are not
 comparable with earlier results.
@@ -137,7 +141,7 @@ elsewhere) — while `indep_cate` still returns a real p-value there.
 
 ```bash
 qsub continuous/jobscripts/cts_1.sh     # 1-4000
-qsub continuous/jobscripts/cts_extra.sh # 4001-10400: runs 101-500, scenarios 1, 3, 8, 9
+qsub continuous/jobscripts/cts_extra.sh # 4001-10400: runs 101-500, scenarios 1-4
 Rscript continuous/cts_check.R          # writes failed_ids.txt if any are missing
 qsub continuous/jobscripts/cts_collect.sh
 qsub continuous/jobscripts/cts_metrics.sh
@@ -165,6 +169,8 @@ spans `n ∈ {100, 250, 500, 1000}` under one `#PBS -l` line. Keep
 `#PBS -l` line together.
 
 ## Status
+
+**Archive the old results first** - `R/archive_old_results.R` (root `README.md`, Status, step 0). They predate the current DGM and use the pre-2026-09-26 scenario numbers, so running into that tree would mix old and new results.
 
 **Re-runs required** — for the crossfitting strategy change to
 `R/cate_models.R` (see root README Methods/Status), which moves all five

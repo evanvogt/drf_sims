@@ -22,6 +22,28 @@
 # X3/X4/X5 are drawn only when the scenario needs them, U only for the MNAR
 # mechanisms, and err only for continuous outcomes. R/regression_check.R
 # fingerprints the generated dataset precisely to catch a change here.
+#
+# SCENARIO NUMBERING. The four scenarios the chapters report come first:
+# 1 null, 2 simple, 3 complex, 4 non-linear, then the other six. Before
+# 2026-09-26 the ten were numbered differently; old -> new is
+#   1 -> 1, 3 -> 2, 8 -> 3, 9 -> 4, 2 -> 5, 4 -> 6, 5 -> 7, 6 -> 8, 7 -> 9, 10 -> 10
+# and the missing-data set moved with them (see TE_MISS). Only the numbering
+# changed: each scenario generates exactly the data it did under its old number.
+# Anything saved before then - collected metrics, figures, results_processing/
+# notebooks - uses the old numbers.
+#
+# BINARY OUTCOMES ARE ON THE RISK-DIFFERENCE SCALE. Every binary set generates
+#     P(Y = 1 | x, W) = m0(x) + W * tau(x)
+# so the treatment effect adds to the risk, with the control risk m0 bounded in
+# [p0_lo, p0_hi] to keep the treated risk inside [0, 1] (control_mean(),
+# RD_SCALE). The CATE the binary studies estimate is a risk difference, and it
+# is now exactly the scenario's te_expr: X1 and X2 are purely prognostic. Until
+# 2026-09-26 the effect was on the logit scale, so the link made X1 and X2
+# effect modifiers on the RD scale, scenario 1 was not an RD null, and the HTE
+# changed with n (binary/README.md). Both outcomes are now one model,
+# E[Y | x, W] = m0(x) + W * tau(x), differing in m0, the noise, and the scale and
+# sign of the modifiers. Binary scenario 10 now draws X3, which it did not
+# before.
 
 require(dplyr)
 
@@ -31,80 +53,131 @@ require(dplyr)
 # scope alongside the scenario's b* parameters
 TE_10 <- c(
   "rep(bW, n)",
-  "bW + b3 * X3",
   "bW + b4 * X4",
+  "bW + b3 * X3 + b4 * X4 + b45 * X4 * X5",
+  "bW + b4 * cos(X4)",
+  "bW + b3 * X3",
   "bW + b3 * X3 + b4 * X4",
   "bW + b34 * X3 * X4",
   "bW + b3 * X3 + b4 * X4 + b34 * X3 * X4",
   "bW + b45 * X4 * X5",
-  "bW + b3 * X3 + b4 * X4 + b45 * X4 * X5",
-  "bW + b4 * cos(X4)",
-  "bW + b3 * X3 + b4 * exp(-abs(X4))"     # binary differs here only
+  "bW + b3 * X3 + b4 * exp(-abs(X4))"
 )
 
-# oracle formulas. Every table here returns a LINEAR PREDICTOR; for binary
-# outcomes the model code applies plogis (oracle_link = "logit"). The binary
-# missing-data table shares these strings with the continuous one, so
-# missing/binary/bin_miss_models.R must pass "logit" too - it passed "identity"
-# until bug M. See the header of R/cate_models.R.
+# oracle formulas. Every oracle formula in this file returns the outcome MEAN
+# E[Y | X, W] - the linear predictor here, the risk in ORACLE_RD - so the model
+# code applies no link. Until the risk-difference DGM the binary formulas were
+# linear predictors and the binary studies passed oracle_link = "logit" for the
+# model code to apply plogis; a mismatch there was bug M. See the header of
+# R/cate_models.R.
 ORACLE_10 <- c(
   "b0 + b1*X$X1 + b2*X$X2 + W*bW",
-  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*X$X4)",
+  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4 + b45*X$X4*X$X5)",
+  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*cos(X$X4))",
+  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4)",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b34*X$X3*X$X4)",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4 + b34*X$X3*X$X4)",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b45*X$X4*X$X5)",
-  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4 + b45*X$X4*X$X5)",
-  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*cos(X$X4))",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*exp(-abs(X$X4)))"
 )
 
+# binary treatment effects, on the RISK-DIFFERENCE scale: TE_10's shapes with X4
+# and X5 entering through tanh - bounded, monotone and close to linear within
+# +-1 SD - so every treated risk stays in [0, 1] without changing the
+# covariates' distributions. cos(X4) and exp(-|X4|) are bounded already.
+# Scenario 10 takes the continuous form; it was b4 * exp(X4), unbounded.
+TE_RD <- c(
+  "rep(bW, n)",
+  "bW + b4 * tanh(X4)",
+  "bW + b3 * X3 + b4 * tanh(X4) + b45 * tanh(X4) * tanh(X5)",
+  "bW + b4 * cos(X4)",
+  "bW + b3 * X3",
+  "bW + b3 * X3 + b4 * tanh(X4)",
+  "bW + b34 * X3 * tanh(X4)",
+  "bW + b3 * X3 + b4 * tanh(X4) + b34 * X3 * tanh(X4)",
+  "bW + b45 * tanh(X4) * tanh(X5)",
+  "bW + b3 * X3 + b4 * exp(-abs(X4))"
+)
+
+# binary oracle formulas: the bounded control risk m0 plus W times the treatment
+# effect - the risk itself (see control_mean())
+RD_CONTROL <- "p0_lo + (p0_hi - p0_lo)*plogis(b0 + b1*X$X1 + b2*X$X2)"
+ORACLE_RD <- paste0(RD_CONTROL, c(
+  " + W*bW",
+  " + W*(bW + b4*tanh(X$X4))",
+  " + W*(bW + b3*X$X3 + b4*tanh(X$X4) + b45*tanh(X$X4)*tanh(X$X5))",
+  " + W*(bW + b4*cos(X$X4))",
+  " + W*(bW + b3*X$X3)",
+  " + W*(bW + b3*X$X3 + b4*tanh(X$X4))",
+  " + W*(bW + b34*X$X3*tanh(X$X4))",
+  " + W*(bW + b3*X$X3 + b4*tanh(X$X4) + b34*X$X3*tanh(X$X4))",
+  " + W*(bW + b45*tanh(X$X4)*tanh(X$X5))",
+  " + W*(bW + b3*X$X3 + b4*exp(-abs(X$X4)))"
+))
+
+# The binary modifiers are the continuous ones with the SIGNS REVERSED, scaled
+# onto the risk-difference scale: b = -RD_SCALE[k] * (continuous b). Each
+# RD_SCALE[k] is the largest value, floored to 3 dp, that keeps every treated
+# risk inside [RD_EPS, 1 - RD_EPS]:
+#   - at n = 100, where the planned RD (-0.248) is largest: the floor, which
+#     binds in every scenario but 4
+#   - at n = 1000, where it is smallest: the ceiling
+#   - for scenarios 2-6, also under the missing study's MNAR-Y at n = 500,
+#     with bU * tanh(U) added: its ceiling binds scenario 4
+# Reversing the signs points each asymmetric scenario's larger swing towards
+# LESS benefit, where the bounds leave room - with the continuous signs,
+# scenarios 3, 4, 5, 8 and 10 would have to be much smaller. The price is that
+# the opposite subgroup benefits more than in continuous/, undoing bug P's sign
+# harmonisation. binary/bin_verify_hte.R re-derives RD_SCALE from the tables
+# and fails if it drifts: change p0_lo, p0_hi, b0-b2, bU, RD_EPS or the binary
+# studies' n, and it must be recomputed.
+RD_SCALE <- c(NA, 0.082, 0.051, 0.204, 0.137, 0.075, 0.082, 0.137, 0.164, 0.596)
+RD_EPS <- 0.01
+
 DESC_10 <- c(
   "No HTE",
-  "Simple HTE - binary variable",
   "Simple HTE - continuous variable",
+  "Single effects + different interaction (X3 + X4 + X4*X5)",
+  "Cosine HTE",
+  "Simple HTE - binary variable",
   "Two HTE variables",
   "Continuous-binary interaction (X3*X4)",
   "Single effects + interaction (X3 + X4 + X3*X4)",
   "Continuous-continuous interaction (X4*X5)",
-  "Single effects + different interaction (X3 + X4 + X4*X5)",
-  "Cosine HTE",
   "Exponential HTE"
 )
 
-# the missing-data studies use a reduced, RENUMBERED set of six scenarios.
-# scenario k here is NOT scenario k above; the correspondence is
-#   1 -> 1 (no HTE), 2 -> 2, 3 -> 4, 4 -> 8, 5 -> 9, 6 -> 3
-# Scenario 6 was added after the first five had been run, so it goes at the end
-# rather than in main-study order: renumbering would change what the existing
-# results/missing/*/scenario_<k>/ directories mean.
+# the missing-data studies use the first six scenarios above: scenario k here
+# is scenario k of the main study. The missing grids run 1-5 (ci_example: 1 and
+# 3-6), not all six.
 # U_term carries the unobserved-confounder contribution under MNAR-Y.
 TE_MISS <- c(
   "rep(bW, n)",
-  "bW + b3 * X3 + U_term",
-  "bW + b3 * X3 + b4 * X4 + U_term",
+  "bW + b4 * X4 + U_term",
   "bW + b3 * X3 + b4 * X4 + b45 * X4 * X5 + U_term",
   "bW + b4 * cos(X4) + U_term",
-  "bW + b4 * X4 + U_term"
+  "bW + b3 * X3 + U_term",
+  "bW + b3 * X3 + b4 * X4 + U_term"
 )
 
 ORACLE_MISS <- c(
   "b0 + b1*X$X1 + b2*X$X2 + W*bW",
-  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)",
-  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4)",
+  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*X$X4)",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4 + b45*X$X4*X$X5)",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*cos(X$X4))",
-  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*X$X4)"
+  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)",
+  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4)"
 )
 
 DESC_MISS <- c(
   "No HTE",
-  "Simple HTE - binary variable (X3)",
-  "Two HTE variables (X3 + X4)",
+  "Simple HTE - continuous variable (X4)",
   "Single effects + interaction (X3 + X4 + X4*X5)",
   "Non-linear HTE (cos(X4))",
-  "Simple HTE - continuous variable (X4)"
+  "Simple HTE - binary variable (X3)",
+  "Two HTE variables (X3 + X4)"
 )
 
 scenario_table <- function(...) data.frame(..., stringsAsFactors = FALSE)
@@ -119,37 +192,15 @@ SCENARIO_SETS <- list(
     # b1 = -0.05 leaving X1 all but unprognostic
     b0 = 0.4, b1 = -0.5, b2 = 1,
     # NA wherever the scenario's te_expr doesn't use the coefficient
-    b3 = c(NA, 2, NA, 0.3, NA, 2, NA, 2, NA, 0.3),
-    b4 = c(NA, NA, -1, -1, NA, 0.5, NA, 0.5, 1, 0.1),
-    b34 = c(NA, NA, NA, NA, 1, -0.5, NA, NA, NA, NA),
-    b45 = c(NA, NA, NA, NA, NA, NA, -0.5, -0.5, NA, NA),
+    b3 = c(NA, NA, 2, NA, 2, 0.3, NA, 2, NA, 0.3),
+    b4 = c(NA, -1, 0.5, 1, NA, -1, NA, 0.5, NA, 0.1),
+    b34 = c(NA, NA, NA, NA, NA, NA, 1, -0.5, NA, NA),
+    b45 = c(NA, NA, -0.5, NA, NA, NA, NA, NA, -0.5, NA),
     s2 = 1, s4 = 1, s5 = 1, s_err = 0.5,
-    needs_X3 = c(FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, TRUE),
-    needs_X4 = c(FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE),
-    needs_X5 = c(FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE),
+    needs_X3 = c(FALSE, FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE),
+    needs_X4 = c(FALSE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE),
+    needs_X5 = c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE),
     te_expr = TE_10, oracle_expr = ORACLE_10
-  ),
-
-  binary = scenario_table(
-    scenario = 1:10, description = DESC_10,
-    X1_prob = 0.4, X3_prob = 0.7,
-    b0 = -0.4, b1 = 0.5, b2 = 0.5,
-    # the modifiers take the continuous table's signs, so the same subgroup
-    # benefits more under either outcome (scenarios 2-5 had them flipped before
-    # bug P); the magnitudes stay smaller because they are log-odds
-    b3 = c(NA, 0.4, NA, 0.4, NA, 0.2, NA, 0.2, NA, NA),
-    b4 = c(NA, NA, -0.2, -0.3, NA, 0.5, NA, 0.5, 0.5, -0.1),
-    b34 = c(NA, NA, NA, NA, 0.5, -0.5, NA, NA, NA, NA),
-    b45 = c(NA, NA, NA, NA, NA, NA, -0.5, -0.5, NA, NA),
-    # the binary DGM drew X2/X4/X5 with a literal sd of 1 rather than via these
-    # columns; the values are the same, so one code path serves both outcomes
-    s2 = 1, s4 = 1, s5 = 1, s_err = NA,
-    needs_X3 = c(FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE),
-    needs_X4 = c(FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE),
-    needs_X5 = c(FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE),
-    te_expr = c(TE_10[1:9], "bW + b4 * exp(X4)"),
-    oracle_expr = c(ORACLE_10[1:9],
-                    "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*exp(X$X4))")
   ),
 
   continuous_missing = scenario_table(
@@ -157,33 +208,54 @@ SCENARIO_SETS <- list(
     X1_prob = 0.4, X3_prob = 0.7,
     # the same shared baseline as the main continuous table (bug O)
     b0 = 0.4, b1 = -0.5, b2 = 1,
-    b3 = c(NA, 2, 0.3, 2, NA, NA),
-    b4 = c(NA, NA, -1, 0.5, 1, -1),
+    b3 = c(NA, NA, 2, NA, 2, 0.3),
+    b4 = c(NA, -1, 0.5, 1, NA, -1),
     b34 = NA,
-    b45 = c(NA, NA, NA, -0.5, NA, NA),
+    b45 = c(NA, NA, -0.5, NA, NA, NA),
     s2 = 1, s4 = 1, s5 = 1, s_err = 0.5,
-    bU = 1, sU = 1,
-    needs_X3 = c(FALSE, TRUE, TRUE, TRUE, FALSE, FALSE),
-    needs_X4 = c(FALSE, FALSE, TRUE, TRUE, TRUE, TRUE),
-    needs_X5 = c(FALSE, FALSE, FALSE, TRUE, FALSE, FALSE),
+    # under MNAR-Y, U_term = eval(u_expr)
+    bU = 1, sU = 1, u_expr = "bU * U",
+    needs_X3 = c(FALSE, FALSE, TRUE, FALSE, TRUE, TRUE),
+    needs_X4 = c(FALSE, TRUE, TRUE, TRUE, FALSE, TRUE),
+    needs_X5 = c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE),
     te_expr = TE_MISS, oracle_expr = ORACLE_MISS
   )
 
 )
 
-# The corrected binary missing-data coefficients. b0/b1/b2 come straight from the
-# binary table. b3/b4/b45 are taken from the binary scenario each reduced
-# scenario corresponds to (1->1, 2->2, 3->4, 4->8, 5->9) - an inference from the
-# scenario descriptions, not something the original code recorded, so worth a
-# sanity check before the re-run. Scenario 6 was added later specifically as
-# binary scenario 3, so its values are copied from there, not inferred. The
-# sign flips of bug P carry over with them (scenarios 2, 3 and 6).
+# The binary table is the continuous one on the risk-difference scale (see the
+# file header and RD_SCALE): the same covariates, needs_* flags and
+# descriptions, the modifiers sign-reversed and scaled by RD_SCALE, and the
+# control risk m0 = p0_lo + (p0_hi - p0_lo) * plogis(b0 + b1 X1 + b2 X2). b1 and
+# b2 are continuous's, and b0 = -1.72 puts the control event rate at
+# E[m0] = 0.400. m0 lies in [0.34, 0.70] (5-95%: 0.35-0.50, SD 0.048), so X1
+# and X2 are only weakly prognostic: at n = 100 the planned RD is -0.248, and
+# every control risk has to clear that plus the HTE's extra benefit. The event
+# is harmful; treatment lowers its risk.
+SCENARIO_SETS$binary <- transform(
+  SCENARIO_SETS$continuous,
+  b0 = -1.72,
+  b3 = -RD_SCALE * b3, b4 = -RD_SCALE * b4,
+  b34 = -RD_SCALE * b34, b45 = -RD_SCALE * b45,
+  s_err = NA,
+  te_expr = TE_RD, oracle_expr = ORACLE_RD,
+  p0_lo = 0.34, p0_hi = 0.70
+)
+
+# The binary missing-data table: the binary table's scenarios 1-6, as scenario
+# k of continuous_missing is scenario k of continuous. Under MNAR-Y the
+# unobserved U enters the treatment effect as bU * tanh(U): bounded, so the
+# treated risk stays inside [RD_EPS, 1 - RD_EPS] (RD_SCALE allows for it), and
+# mean zero, so the truth given the observed covariates - the U-free
+# m0 + tau - is exactly the average over U, as it is for continuous_missing's
+# bU * U. bU = 0.08 gives U's contribution an SD of 0.050, the size of
+# scenario 2's HTE. (Until the risk-difference DGM U entered a logit, and that
+# average needed quadrature - bug N.)
 SCENARIO_SETS$binary_missing_fixed <- transform(
-  SCENARIO_SETS$continuous_missing,
-  b0 = -0.4, b1 = 0.5, b2 = 0.5,
-  b3 = c(NA, 0.4, 0.4, 0.2, NA, NA),
-  b4 = c(NA, NA, -0.3, 0.5, 0.5, -0.2),
-  b45 = c(NA, NA, NA, -0.5, NA, NA)
+  SCENARIO_SETS$binary[1:6, ],
+  description = DESC_MISS,
+  bU = 0.08, sU = 1, u_expr = "bU * tanh(U)",
+  te_expr = c(TE_RD[1], paste(TE_RD[2:6], "+ U_term"))
 )
 
 # which sets produce a binary outcome
@@ -193,7 +265,7 @@ BINARY_SETS <- c("binary", "binary_missing")
 #'
 #' @param set one of names(SCENARIO_SETS), or "binary_ci" for the binary CI study,
 #'   or "binary_missing" for the missing/binary study (resolves to the
-#'   corrected `binary_missing_fixed` table)
+#'   `binary_missing_fixed` table)
 resolve_set <- function(set) {
   if (set == "binary_ci") {
     return(SCENARIO_SETS$binary)
@@ -231,29 +303,37 @@ GH_NODES <- local({
   list(x = e$values, w = e$vectors[1, ]^2)
 })
 
+#' Does a scenario's treatment effect use covariate v?
+#'
+#' Drawn (needs_<v>) and named in te_expr. A covariate the scenario draws but
+#' te_expr never mentions (X3 in scenario 9) gets no quadrature or range axis.
+te_uses <- function(params, v) {
+  params[[paste0("needs_", v)]] && grepl(paste0("\\b", v, "\\b"), params$te_expr)
+}
+
 #' Quadrature grid for a scenario's heterogeneity term g
 #'
 #' g is the treatment effect with bW = 0 and U_term = 0, so te = bW + g.
 #' Evaluated from params$te_expr itself, so it cannot drift from the generator:
-#' exactly over X3's two points, by Gauss-Hermite over X4 and X5. A covariate
-#' the scenario draws but te_expr never mentions (X3 in scenario 7) gets no
-#' axis. Deterministic - it consumes no RNG, so it is safe inside calibrate_bW()
-#' (see DRAW ORDER in the file header).
+#' exactly over X3's two points, by Gauss-Hermite over X4 and X5.
+#' Deterministic - it consumes no RNG, so it is safe inside calibrate_bW()
+#' (see DRAW ORDER in the file header). Gauss-Hermite is inexact at the kink
+#' of scenario 10's exp(-|X4|): E[exp(-|X4|)] comes out 0.5191 against 0.5232,
+#' which moves E[g] by 4e-4 at continuous's b4 = 0.1 and 2e-4 at binary's -
+#' below bW's rounding either way. RD_SCALE is derived against this E[g], the
+#' one the generator uses.
 #'
 #' @param params one-row scenario params
 #' @return list(g = values of g, w = their weights, summing to 1)
 te_grid <- function(params) {
-  uses <- function(v) {
-    params[[paste0("needs_", v)]] && grepl(paste0("\\b", v, "\\b"), params$te_expr)
-  }
   axes <- list()
   weights <- list()
-  if (uses("X3")) {
+  if (te_uses(params, "X3")) {
     axes$X3 <- c(0, 1)
     weights$X3 <- c(1 - params$X3_prob, params$X3_prob)
   }
   for (v in c("X4", "X5")) {
-    if (uses(v)) {
+    if (te_uses(params, v)) {
       axes[[v]] <- sqrt(2) * params[[sub("X", "s", v)]] * GH_NODES$x
       weights[[v]] <- GH_NODES$w
     }
@@ -277,8 +357,8 @@ te_grid <- function(params) {
 
 #' Mean and variance of a scenario's heterogeneity term g
 #'
-#' The continuous calibration uses the mean; the variance is what
-#' R/calibration_report.R uses to report each scenario's realised power.
+#' calibrate_bW() uses the mean; the variance is what R/calibration_report.R
+#' uses to report each continuous scenario's realised power.
 #'
 #' @param params one-row scenario params
 #' @return list(mean = E[g], var = Var(g))
@@ -288,33 +368,85 @@ te_moments <- function(params) {
   list(mean = m, var = sum(tg$w * (tg$g - m)^2))
 }
 
-#' Quadrature grid for the baseline linear predictor b0 + b1 X1 + b2 X2
+#' Range of a scenario's heterogeneity term g over the covariate support
+#'
+#' X3 at both levels, X4 and X5 over +-6 SD in steps of 0.02 SD - wide and fine
+#' enough for every te_expr here: tanh is within 1e-5 of +-1 at 6, a grid point
+#' falls within 0.002 of pi for cos(X4), and exp(-|X4|) peaks on the grid at 0.
+#' Deterministic, like te_grid().
+#'
+#' @param params one-row scenario params
+#' @return c(min, max) of g
+te_range <- function(params) {
+  pts <- seq(-6, 6, by = 0.02)
+  axes <- list()
+  if (te_uses(params, "X3")) axes$X3 <- c(0, 1)
+  for (v in c("X4", "X5")) {
+    if (te_uses(params, v)) axes[[v]] <- params[[sub("X", "s", v)]] * pts
+  }
+  grid <- if (length(axes) > 0) expand.grid(axes, KEEP.OUT.ATTRS = FALSE) else list()
+  g <- eval(
+    parse(text = params$te_expr),
+    envir = list(bW = 0, n = max(1, NROW(grid)), X3 = grid$X3, X4 = grid$X4,
+                 X5 = grid$X5, U_term = 0, b3 = params$b3, b4 = params$b4,
+                 b34 = params$b34, b45 = params$b45)
+  )
+  range(g)
+}
+
+#' Quadrature grid over the prognostic covariates X1 and X2
 #'
 #' Exact over X1's two points, Gauss-Hermite over X2.
 #'
 #' @param params one-row scenario params
-#' @return list(eta = linear predictor values, w = their weights, summing to 1)
+#' @return list(X1, X2 = covariate values, w = their weights, summing to 1)
 baseline_grid <- function(params) {
-  x2 <- params$b2 * sqrt(2) * params$s2 * GH_NODES$x
-  list(eta = params$b0 + c(x2, params$b1 + x2),
+  x2 <- sqrt(2) * params$s2 * GH_NODES$x
+  list(X1 = rep(c(0, 1), each = length(x2)), X2 = c(x2, x2),
        w = c((1 - params$X1_prob) * GH_NODES$w, params$X1_prob * GH_NODES$w))
 }
 
-#' Marginal risk E[plogis(b0 + b1 X1 + b2 X2 + shift + g)] for a binary outcome
+#' Control-arm outcome mean m0(x) = E[Y | x, W = 0]
 #'
-#' Nodes with weight below 1e-16 are skipped. Many of the 80 Gauss-Hermite
-#' weights are that small or underflow to 0, so in the X4 x X5 scenarios this
-#' makes calibrate_bW() about five times faster, for a change in the risk
-#' below 1e-14.
+#' Continuous: the linear predictor b0 + b1 X1 + b2 X2. Binary: that predictor
+#' through a logistic scaled into [p0_lo, p0_hi] - the control RISK. Bounding it
+#' is what lets the treatment effect add on the risk-difference scale: m0 + tau
+#' stays inside [0, 1] however X1 and X2 fall, provided tau stays inside
+#' [-p0_lo, 1 - p0_hi] (see RD_SCALE and treated_risk_bounds()).
 #'
-#' @param base baseline_grid(params)
-#' @param tg te_grid(params), or list(g = 0, w = 1) for the control arm
-#' @param shift added to every linear predictor - bW for the treated arm
-marginal_risk <- function(base, tg, shift = 0) {
-  kb <- base$w > 1e-16
-  kg <- tg$w > 1e-16
-  drop(base$w[kb] %*% plogis(outer(base$eta[kb], tg$g[kg] + shift, "+")) %*%
-         tg$w[kg])
+#' @param params one-row scenario params
+#' @param X1,X2 numeric vectors, same length
+#' @param binary TRUE for a binary scenario set (is_binary_set())
+control_mean <- function(params, X1, X2, binary) {
+  eta <- params$b0 + params$b1 * X1 + params$b2 * X2
+  if (binary) params$p0_lo + (params$p0_hi - params$p0_lo) * plogis(eta) else eta
+}
+
+#' Control event rate E[m0] of a binary scenario
+#'
+#' Exact over X1, Gauss-Hermite over X2 (baseline_grid()). The p0 the binary
+#' power calculation plans from.
+#'
+#' @param params one-row binary scenario params
+control_event_rate <- function(params) {
+  base <- baseline_grid(params)
+  sum(base$w * control_mean(params, base$X1, base$X2, binary = TRUE))
+}
+
+#' Worst-case treated risk over the covariate support, for a binary scenario
+#'
+#' The treated risk is m0 + bW + g, plus bU * tanh(U) under MNAR-Y. m0 depends
+#' only on X1 and X2 and g only on the modifiers, so the extremes add: m0 tends
+#' to p0_lo and p0_hi as X2 goes to -/+ infinity, g's range is te_range(), and
+#' |tanh(U)| < 1. Every generated risk lies inside these bounds.
+#'
+#' @param params one-row binary scenario params
+#' @param bW calibrated treatment coefficient
+#' @param bU the MNAR-Y coefficient; 0 outside MNAR-Y
+#' @return c(floor, ceiling)
+treated_risk_bounds <- function(params, bW, bU = 0) {
+  g <- te_range(params)
+  c(params$p0_lo + bW + g[1] - abs(bU), params$p0_hi + bW + g[2] + abs(bU))
 }
 
 # ---- generation -------------------------------------------------------------
@@ -326,52 +458,49 @@ TARGET_POWER <- 0.80
 #'
 #' Each simulated RCT is planned the way a trial usually is - to detect an
 #' ATE, assuming the effect is homogeneous - and bW is then set so the true
-#' ATE equals the planned effect: the plan gets the average effect right but
-#' knows nothing of the heterogeneity g around it. g enters only that second
-#' step, where it has to: the data are heterogeneous, so the bW that delivers
-#' the planned ATE depends on g. MNAR-Y's U_term is left out, which keeps one
-#' bW and one truth per scenario across every missingness mechanism.
+#' ATE equals the planned effect delta: bW + E[g] = delta. The plan gets the
+#' average effect right but knows nothing of the heterogeneity g around it; g
+#' enters only through E[g], where it has to. MNAR-Y's U_term is left out, which
+#' keeps one bW and one truth per scenario across every missingness mechanism.
 #'
-#' Continuous outcomes: the planned effect delta gives TARGET_POWER in an
-#' unadjusted two-sample t-test with n / 2 per arm, using the outcome SD with
-#' no heterogeneity: sqrt(b1^2 p(1 - p) + b2^2 s2^2 + s_err^2). bW is set so
-#' the true ATE, bW + E[g], equals -delta. Var(g) is left out on purpose, so
+#' Continuous outcomes: -delta gives TARGET_POWER in an unadjusted two-sample
+#' t-test with n / 2 per arm, using the outcome SD with no heterogeneity:
+#' sqrt(b1^2 p(1 - p) + b2^2 s2^2 + s_err^2). Var(g) is left out on purpose, so
 #' realised power falls below TARGET_POWER as heterogeneity grows (61-80%
 #' across scenarios 1-10), just as a real trial planned under homogeneity would.
 #'
-#' Binary outcomes: the ATE is a marginal risk difference. The plan takes the
-#' control-arm risk p0 = E[plogis(b0 + b1 X1 + b2 X2)] and the treated-arm
-#' risk p1 that gives TARGET_POWER in a two-proportion test with n / 2 per arm.
-#' bW solves E[plogis(b0 + b1 X1 + b2 X2 + bW + g)] = p1 - the logit-link
-#' counterpart of bW = -delta - E[g] - so the true RD is p1 - p0 in every
-#' scenario. Realised power equals planned: each arm's variance is fixed by its
-#' marginal risk, so heterogeneity has no variance to add.
+#' Binary outcomes: the effect is a risk difference (control_mean()). The plan
+#' takes the control event rate p0 = E[m0] and the treated rate p1 that gives
+#' TARGET_POWER in a two-proportion test with n / 2 per arm, and
+#' delta = p1 - p0. Realised power equals planned: each arm's variance is fixed
+#' by its marginal risk, so heterogeneity has no variance to add.
 #'
 #' Before bug O the continuous branch used sd = s_err + s2 (adding SDs, and
 #' ignoring b1 and b2) and set bW rather than the ATE to the planned effect, so
-#' the true ATE drifted by E[g] - to the opposite sign in scenarios 2, 6 and 8 -
+#' the true ATE drifted by E[g] - to the opposite sign in scenarios 3, 5 and 8 -
 #' and realised power ran from 3% to 100%. Before bug P the binary branch
 #' planned at 75% power at the risk plogis(b0), ignoring X1 and X2, and set bW
 #' to the planned log-odds ratio, so the true RD drifted the same way and
-#' realised power ran from 5% to 99%.
+#' realised power ran from 5% to 99%. Between bug P and the risk-difference
+#' DGM the binary effect was on the logit scale, and bW solved
+#' E[plogis(b0 + b1 X1 + b2 X2 + bW + g)] = p1 by uniroot.
 #'
-#' Neither branch consumes RNG. bW is rounded to 2 dp.
+#' Neither branch consumes RNG. bW is rounded to 2 dp for a continuous outcome
+#' and 3 dp for a binary one: on the risk-difference scale 2 dp would move the
+#' RD by up to 0.005, and the power by several percentage points at n = 1000.
 calibrate_bW <- function(params, n, calibration = c("t", "prop")) {
   if (match.arg(calibration) == "prop") {
-    base <- baseline_grid(params)
-    tg <- te_grid(params)
-    p0 <- marginal_risk(base, list(g = 0, w = 1))
-    p1 <- power.prop.test(n = n / 2, p2 = p0, power = TARGET_POWER)$p1
-    bW <- uniroot(function(b) marginal_risk(base, tg, b) - p1,
-                  interval = c(-10, 10), tol = 1e-8)$root
-    round(bW, digits = 2)
+    p0 <- control_event_rate(params)
+    delta <- power.prop.test(n = n / 2, p2 = p0, power = TARGET_POWER)$p1 - p0
+    digits <- 3
   } else {
     sd_planned <- sqrt(params$b1^2 * params$X1_prob * (1 - params$X1_prob) +
                          params$b2^2 * params$s2^2 + params$s_err^2)
-    delta <- power.t.test(n = n / 2, delta = NULL, sd = sd_planned,
-                          power = TARGET_POWER)$delta
-    round(-delta - te_moments(params)$mean, digits = 2)
+    delta <- -power.t.test(n = n / 2, delta = NULL, sd = sd_planned,
+                           power = TARGET_POWER)$delta
+    digits <- 2
   }
+  round(delta - te_moments(params)$mean, digits = digits)
 }
 
 #' Generate one simulated dataset
@@ -419,8 +548,13 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
 
   err <- if (!binary) rnorm(n, 0, params$s_err) else NULL
 
-  # the unobserved confounder enters the treatment effect only under MNAR-Y
-  U_term <- if (!is.null(mech) && mech == "MNAR-Y") params$bU * U else 0
+  # the unobserved confounder enters the treatment effect only under MNAR-Y, as
+  # the set's u_expr: bU * U, or bU * tanh(U) for binary
+  U_term <- if (!is.null(mech) && mech == "MNAR-Y") {
+    eval(parse(text = params$u_expr), envir = list(bU = params$bU, U = U))
+  } else {
+    0
+  }
 
   treatment_effect <- eval(
     parse(text = params$te_expr),
@@ -429,8 +563,22 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
                  b34 = params$b34, b45 = params$b45)
   )
 
-  lp <- params$b0 + params$b1 * X1 + params$b2 * X2 + W * treatment_effect
-  Y <- if (binary) rbinom(n, 1, plogis(lp)) else lp + err
+  m0 <- control_mean(params, X1, X2, binary)
+  mu <- m0 + W * treatment_effect
+  if (binary) {
+    # rbinom() returns NA, with only a warning, for a risk outside [0, 1].
+    # RD_SCALE keeps every risk inside at the studies' n; this catches any
+    # other n, or a table changed without re-deriving it
+    if (any(mu < 0 | mu > 1)) {
+      stop("scenario ", scenario, " of set '", set, "' at n = ", n,
+           " generated a risk outside [0, 1]: range ",
+           paste(signif(range(mu), 3), collapse = " to "),
+           ". See RD_SCALE and treated_risk_bounds().")
+    }
+    Y <- rbinom(n, 1, mu)
+  } else {
+    Y <- mu + err
+  }
 
   # unrelated covariates, always drawn so the fold structure is comparable
   X01 <- rnorm(n, 0, 1)
@@ -450,32 +598,20 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
   result <- list(dataset = as.data.frame(dataset_vars), bW = bW)
 
   if (return_truth) {
-    # the missing-data studies remove U so that tau is the CATE given the
-    # observed covariates, averaged over U (U is independent of X). With an
-    # identity link that is the U = 0 value, since E[U] = 0; with a logit link
-    # it is not, so binary MNAR-Y goes through mnar_y_truth() (bug N)
-    reduced <- !is.null(mech)
-    link_truth <- binary
-
-    if (!reduced) {
-      # the non-MNAR path is shared with build_query_grid_truth() below, via
-      # truth_at() - kept as one implementation so the query-grid truth cannot
-      # drift from the observed-sample truth
-      truth <- truth_at(params, bW, link_truth, X1, X2, X3, X4, X5)
+    if (is.null(mech)) {
+      # shared with build_query_grid_truth() below, via truth_at() - kept as one
+      # implementation so the query-grid truth cannot drift from the
+      # observed-sample truth
+      truth <- truth_at(params, bW, binary, X1, X2, X3, X4, X5)
     } else {
-      base <- params$b0 + params$b1 * X1 + params$b2 * X2
-      if (link_truth && mech == "MNAR-Y") {
-        truth <- mnar_y_truth(plogis(base), base + treatment_effect - U_term, params)
-      } else {
-        if (link_truth) {
-          p0 <- plogis(base)
-          p1 <- plogis(base + treatment_effect - U_term)
-        } else {
-          p0 <- base
-          p1 <- base + treatment_effect - U_term
-        }
-        truth <- data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
-      }
+      # the missing-data studies remove U, so that tau is the CATE given the
+      # observed covariates, averaged over U (U is independent of X). Every
+      # U_term has mean zero - bU * U, or bU * tanh(U) for binary - and enters
+      # the outcome mean additively, so that average is the U-free mean on
+      # either outcome scale
+      p0 <- m0
+      p1 <- m0 + treatment_effect - U_term
+      truth <- data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
     }
 
     if (needs_U) truth$U <- U
@@ -487,22 +623,23 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
 
 #' True p0/p1/tau at an arbitrary set of covariate rows
 #'
-#' Factored out of generate_scenario_data()'s non-MNAR (reduced == FALSE)
-#' truth block so that build_query_grid_truth() below cannot silently diverge
-#' from what generate_scenario_data() itself reports as ground truth. The MNAR
-#' branch (mech != NULL, subtracting U_term) is NOT reproduced here - it stays
-#' inline in generate_scenario_data(), since the query grid is only used by
-#' the non-missing CI studies, which never pass mech.
+#' Factored out of generate_scenario_data()'s non-MNAR truth block so that
+#' build_query_grid_truth() below cannot silently diverge from what
+#' generate_scenario_data() itself reports as ground truth. The MNAR branch
+#' (mech != NULL, subtracting U_term) is NOT reproduced here - it stays inline
+#' in generate_scenario_data(), since the query grid is only used by the
+#' non-missing CI studies, which never pass mech.
 #'
 #' @param params one-row scenario params, already subset to `scenario` (as
 #'   resolve_set(set) then filtered - see get_oracle_info for the pattern)
 #' @param bW calibrated treatment coefficient
-#' @param link_truth TRUE to report p0/p1 on the plogis scale (binary outcomes)
+#' @param binary TRUE for a binary set: p0 is then the bounded control risk
+#'   (control_mean())
 #' @param X1,X2 numeric vectors, same length, the two covariates that always
 #'   exist
 #' @param X3,X4,X5 numeric vectors (same length as X1) or NULL, matching that
 #'   scenario's needs_X3/X4/X5 flags
-truth_at <- function(params, bW, link_truth, X1, X2, X3 = NULL, X4 = NULL, X5 = NULL) {
+truth_at <- function(params, bW, binary, X1, X2, X3 = NULL, X4 = NULL, X5 = NULL) {
   treatment_effect <- eval(
     parse(text = params$te_expr),
     envir = list(bW = bW, n = length(X1), X3 = X3, X4 = X4, X5 = X5, U_term = 0,
@@ -510,90 +647,10 @@ truth_at <- function(params, bW, link_truth, X1, X2, X3 = NULL, X4 = NULL, X5 = 
                  b34 = params$b34, b45 = params$b45)
   )
 
-  base <- params$b0 + params$b1 * X1 + params$b2 * X2
-
-  if (link_truth) {
-    p0 <- plogis(base)
-    p1 <- plogis(base + treatment_effect)
-  } else {
-    p0 <- base
-    p1 <- base + treatment_effect
-  }
+  p0 <- control_mean(params, X1, X2, binary)
+  p1 <- p0 + treatment_effect
 
   data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
-}
-
-# ---- MNAR-Y truth on the logit scale (bug N) ---------------------------------
-# Under MNAR-Y the unobserved U enters the treated arm's linear predictor, so the
-# CATE given the observed covariates - what every estimator targets, U being
-# unobserved - averages the treated-arm risk over U:
-#   p1 = E_U[plogis(eta1 + bU * U)],  U ~ N(0, sU^2),  eta1 = base + te without U
-# With an identity link that is eta1 itself, since E[U] = 0, which is why the
-# continuous studies need nothing here. With a logit link it is not: the U = 0
-# value plogis(eta1) sits further from 0.5 than the average does. The quadrature
-# uses GH_NODES, defined above the generation section.
-
-#' E[plogis(eta + s * Z)] for Z ~ N(0, 1), by Gauss-Hermite quadrature
-#'
-#' Deterministic - it consumes no RNG, so it is safe inside
-#' generate_scenario_data() (see DRAW ORDER in the file header).
-#'
-#' @param eta numeric vector of linear predictors
-#' @param s standard deviation of the normal term added to each; 0 returns
-#'   plogis(eta) exactly
-logistic_normal_mean <- function(eta, s) {
-  if (s == 0) return(plogis(eta))
-  drop(plogis(outer(eta, sqrt(2) * s * GH_NODES$x, "+")) %*% GH_NODES$w)
-}
-
-#' True p0/p1/tau under MNAR-Y for a binary outcome
-#'
-#' One implementation shared by generate_scenario_data() and
-#' repair_mnar_y_truth(), so new runs and repaired old ones cannot disagree.
-#' `tau_u0` keeps the old, U = 0 definition - for comparison, and as the marker
-#' repair_mnar_y_truth() uses to leave an already-averaged truth alone.
-#'
-#' @param p0 control-arm risk, plogis(base) - U never enters the control arm
-#' @param eta1 treated-arm linear predictor with U removed, base + te
-#' @param params one-row scenario params (supplies bU and sU)
-mnar_y_truth <- function(p0, eta1, params) {
-  p1 <- logistic_normal_mean(eta1, abs(params$bU) * params$sU)
-  data.frame(p0 = p0, p1 = p1, tau = p1 - p0, tau_u0 = plogis(eta1) - p0)
-}
-
-#' Rebuild binary MNAR-Y truths saved at U = 0, in a collected results tibble
-#'
-#' Runs made before the bug N fix saved p1 = plogis(eta1), the U = 0 value. p0
-#' is still right and eta1 = qlogis(p1), so the averaged truth is recoverable
-#' exactly, with no re-run. A truth already carrying `tau_u0` came from the
-#' fixed generator and is left alone, so this is safe over a collection holding
-#' runs from either side of the fix, and applying it twice changes nothing.
-#'
-#' @param all_results_df output of get_results(): one row per parameter
-#'   combination, `results` a list of list(run, result)
-#' @param set the scenario set the study generated from. Supplies bU / sU, and
-#'   makes this a no-op for a continuous set.
-repair_mnar_y_truth <- function(all_results_df, set) {
-  if (!is_binary_set(set) || !"mechanism" %in% names(all_results_df)) {
-    return(all_results_df)
-  }
-  tbl <- resolve_set(set)
-
-  for (i in which(all_results_df$mechanism == "MNAR-Y")) {
-    params <- tbl[tbl$scenario == all_results_df$scenario[i], ]
-    all_results_df$results[[i]] <- lapply(all_results_df$results[[i]], function(r) {
-      truth <- r$result$truth
-      if (is.null(truth) || "tau_u0" %in% names(truth)) return(r)
-      fixed <- mnar_y_truth(truth$p0, qlogis(truth$p1), params)
-      if (!is.null(truth$U)) fixed$U <- truth$U
-      # verbatim, not row.names<-, which would turn a row subset's integer
-      # row names (complete_cases / IPW) into character ones
-      attr(fixed, "row.names") <- attr(truth, "row.names")
-      r$result$truth <- fixed
-      r
-    })
-  }
-  all_results_df
 }
 
 #' Oracle formula and parameter values for a scenario
@@ -604,7 +661,7 @@ get_oracle_info <- function(scenario, bW, set) {
   params <- params[params$scenario == scenario, ]
 
   param_list <- list(b0 = params$b0, b1 = params$b1, b2 = params$b2, bW = bW)
-  for (nm in c("b3", "b4", "b34", "b45")) {
+  for (nm in c("b3", "b4", "b34", "b45", "p0_lo", "p0_hi")) {
     v <- params[[nm]]
     if (!is.null(v) && !is.na(v)) param_list[[nm]] <- v
   }
@@ -616,13 +673,11 @@ get_oracle_info <- function(scenario, bW, set) {
 
 # Fixed reference value for covariates the query grid holds constant (X1, X2,
 # any of X3/X4/X5 this scenario doesn't need, and the unrelated X01..X05).
-# Not a neutral choice for binary scenarios: true tau at a grid point is
-# plogis(base + treatment_effect) - plogis(base) where
-# base = b0 + b1*X1 + b2*X2, so this reference shifts every binary grid
-# point's true CATE (through the nonlinear link), even though it has no
-# bearing on how honest the estimators are about hitting whatever that target
-# is. For continuous scenarios truth is exactly treatment_effect, which never
-# involves X1/X2 at all, so the choice is provably inert there.
+# Inert for the true CATE on either outcome: tau at a grid point is exactly the
+# scenario's treatment effect, which never involves X1 or X2. It still sets the
+# grid's p0/p1, through m0. (Until the risk-difference DGM the binary CATE was
+# plogis(base + te) - plogis(base), so this reference shifted every binary grid
+# point's true CATE through the link.)
 GRID_REFERENCE_VALUE <- 0
 
 #' Fixed covariate-grid query points for a scenario's active HTE covariates
@@ -678,10 +733,8 @@ build_query_grid <- function(scenario, set, covariate_names) {
 build_query_grid_truth <- function(scenario, set, bW, grid_df) {
   params <- resolve_set(set)
   params <- params[params$scenario == scenario, ]
-  binary <- is_binary_set(set)
-  link_truth <- binary
 
-  truth_at(params, bW, link_truth,
+  truth_at(params, bW, is_binary_set(set),
            X1 = grid_df$X1, X2 = grid_df$X2,
            X3 = if (isTRUE(params$needs_X3)) grid_df$X3 else NULL,
            X4 = if (isTRUE(params$needs_X4)) grid_df$X4 else NULL,

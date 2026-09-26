@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs 101-500 for scenarios 1, 3, 8 and 9 - grid rows 20001-52000 of
+# Runs 101-500 for scenarios 1-4 - grid rows 20001-52000 of
 # cts_ci_config.R, split over cts_ci_extra_{1..4}.sh to stay within the
 # 10,000-subjob array limit. This is part 3: rows 40001-50000.
 # Resources are cts_ci_1.sh's. Needs logs_extra/ to exist.
