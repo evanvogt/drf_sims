@@ -89,8 +89,12 @@ Each scenario's heterogeneity around its mean, g(x) − E[g], is unchanged; the
 level of the true CATE moved, so `sign_acc` and the relative metrics are not
 comparable with earlier results.
 
-`Rscript R/calibration_check.R c195a51` verifies all of this against the
-pre-change version of `R/dgm_scenarios.R`.
+`Rscript R/calibration_report.R` prints `bW`, the true ATE, and the planned and
+realised power for every continuous scenario at every n a study uses, including
+the missing-data and validation studies. It takes seconds and needs no
+simulation. After any change to the scenario tables or `calibrate_bW()`, run it
+on the cluster too: its `bW` tables should match a local run exactly, since
+R 4.3.2 there could round a borderline value differently from 4.5.3 here.
 
 ## Estimators
 

@@ -237,7 +237,7 @@ GH_NODES <- local({
 #' exactly over X3's two points, by Gauss-Hermite over X4 and X5. Deterministic -
 #' it consumes no RNG, so it is safe inside calibrate_bW() (see DRAW ORDER in
 #' the file header). calibrate_bW() uses only the mean; the variance is what
-#' R/calibration_check.R uses to predict each scenario's realised power.
+#' R/calibration_report.R uses to report each scenario's realised power.
 #'
 #' @param params one-row scenario params
 #' @return list(mean = E[g], var = Var(g))
