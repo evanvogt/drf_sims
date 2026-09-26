@@ -1,8 +1,8 @@
 #!/bin/bash
 # Runs 101-500 for scenarios 1, 3, 8 and 9 - grid rows 4001-10400 of
 # bin_config.R. Resources are bin_1.sh's. Needs logs_extra/ to exist.
-#PBS -l walltime=01:00:00
-#PBS -l select=1:ncpus=1:ompthreads=1:mem=5gb
+#PBS -l walltime=00:10:00
+#PBS -l select=1:ncpus=1:ompthreads=1:mem=2gb
 #PBS -J 4001-10400%380
 #PBS -N bin_extra
 #PBS -o logs_extra/
