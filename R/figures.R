@@ -60,13 +60,15 @@ SS_SCENARIO_LABELS <- c(
   `9` = "Non-linear"
 )
 
-# the missing-data studies' renumbered five-scenario set. Was copy-pasted
+# the missing-data studies' renumbered six-scenario set. Was copy-pasted
 # verbatim into all three thesis_figures/miss_*.R scripts, minus scenario 3.
-# continuous/ and binary/ never run 3 (their grid is 1, 2, 4, 5), so it drops out
-# of those by droplevels(); ci_example runs all five and keeps it.
+# continuous/ and binary/ never run 3 (their grid is 1, 2, 4, 5, 6), so it drops
+# out of those by droplevels(); ci_example runs 1-5 and keeps it. Listed in
+# main-study order (6 is main scenario 3), which is the facet order.
 MISS_SCENARIO_LABELS <- c(
   `1` = "Null",
   `2` = "Simple",
+  `6` = "Simple (continuous)",
   `3` = "Two HTE vars",
   `4` = "Complex",
   `5` = "Non-linear"

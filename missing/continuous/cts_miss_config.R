@@ -45,6 +45,21 @@ grid <- expand.grid(
 # through U is not defined for it. Applied at construction, before any row
 # numbers are handed out.
 grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-Y"), ]
+
+# Scenario 6 (main-study scenario 3) was added after rows 1-9900 had run. It is
+# appended as a second block rather than added to `scenario` above, so rows
+# 1-9900 keep the meaning they were submitted under and the new rows are one
+# contiguous range, 9901-12600, for jobscripts/cts_miss_extra.sh.
+grid <- rbind(grid, expand.grid(
+  scenario  = 6,
+  n         = c(500),
+  type      = c("both"),
+  prop      = c(0.3),
+  mechanism = c("MAR", "MNAR", "MNAR-Y"),
+  method    = MISS_METHODS_STUDY,
+  run       = c(1:100),
+  stringsAsFactors = FALSE
+))
 rownames(grid) <- NULL
 
 study <- study_config(

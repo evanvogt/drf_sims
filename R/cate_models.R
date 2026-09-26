@@ -12,16 +12,14 @@
 #
 #   family   gaussian() vs binomial(), controlling the SuperLearner outcome model
 #            (family + method.NNloglik).
-#   oracle_link  where the inverse link lives for the oracle arm. The repo has
-#            TWO conventions and they must not be conflated with `family`:
-#              binary/, confidence_intervals/binary/  -> get_binary_oracle_info
-#                returns a LINEAR PREDICTOR formula and the model code applies
-#                plogis. oracle_link = "logit".
-#              missing/binary/  -> bin_miss_dgms.R bakes plogis(...) into the
-#                formula string itself and the model applies none.
-#                oracle_link = "identity".
-#            Both give the same answer; applying plogis to a formula that already
-#            contains it does not. Worth harmonising when the DGMs are unified.
+#   oracle_link  where the inverse link lives for the oracle arm. Every scenario
+#            table in R/dgm_scenarios.R returns a LINEAR PREDICTOR formula, so
+#            binary studies pass oracle_link = "logit" and the model applies
+#            plogis; continuous ones pass "identity". Not implied by `family`,
+#            which is why it is its own argument. missing/binary/ once baked
+#            plogis into its own formula strings and passed "identity";
+#            deleting that legacy table dropped the plogis but not the
+#            "identity" (bug M).
 #   ipw      sample.weights (grf) / obsWeights (SuperLearner) for the missing-data
 #            IPW arm. NULL reproduces the unweighted path exactly.
 #   ci       list(boot=, sf=, alpha=) turns on the half-sample bootstrap.

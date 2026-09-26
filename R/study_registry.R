@@ -92,8 +92,8 @@ study_registry <- data.frame(
     "crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README)",
     "own comparison arms unchanged; only the production consumers of R/cate_models.R moved",
     "own comparison arms unchanged; pilot study, not part of the production rerun",
-    "crossfitting strategy change; also bug F (dr_superlearner); plus the dr_random_forest HTE back-fill, patched in place - no re-run",
-    "crossfitting strategy change; also the DGM was wrong three ways; plus the dr_random_forest HTE back-fill, patched in place - no re-run",
+    "crossfitting strategy change; also bug F (dr_superlearner); plus the dr_random_forest HTE back-fill, patched in place - no re-run; plus scenario 6 (main-study 3), rows 9901-12600",
+    "crossfitting strategy change; also the DGM was wrong three ways; plus the dr_random_forest HTE back-fill, patched in place - no re-run; plus scenario 6 (main-study 3), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run",
     "crossfitting strategy change",
     "first run, not a re-run - its own 9 candidates moved off double crossfitting (me_models.R); the 16 pre-change res_sim_*.RDS have been deleted, so the count restarts from zero",
     "crossfitting strategy change"

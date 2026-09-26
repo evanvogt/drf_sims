@@ -5,13 +5,13 @@ mechanisms, handling methods and the shared bug fixes.
 
 | | |
 |---|---|
-| array | **9,900 jobs** |
+| array | **12,600 jobs**: `bin_miss_1.sh` (1–9900, scenarios 1, 2, 4, 5) and `bin_miss_extra.sh` (9901–12600, scenario 6) |
 | results | `../results/missing/binary/scenario_<k>/<n>/<type>/<prop>/<mechanism>/<method>/` |
 | figures | `bin_miss_results.R` / `.qmd` — every metric, to `results/all_figures/`; the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_bin.R` |
 
 ## ⚠ This file was a half-converted fork
 
-`bin_miss_dgms.R` was copied from the continuous version and only partly converted to a binary outcome, carrying three related defects (continuous coefficient table, wrong power-test calibration, un-plogis'd truth) — all fixed together; the code now always uses the corrected values. The oracle formula here already contains `plogis(...)`, so `bin_miss_models.R` passes `oracle_link = "identity"` — the opposite convention to `binary/bin_dgms.R`, which is correct.
+`bin_miss_dgms.R` was copied from the continuous version and only partly converted to a binary outcome, carrying three related defects (continuous coefficient table, wrong power-test calibration, un-plogis'd truth) — all fixed together; the code now always uses the corrected values. Its oracle link convention broke later, when the fix flags were removed — see bug M below.
 
 ### The corrected coefficients
 
@@ -19,7 +19,86 @@ mechanisms, handling methods and the shared bug fixes.
 taken from the binary scenario each reduced scenario corresponds to (1→1, 2→2,
 3→4, 4→8, 5→9). **That mapping is an inference from the scenario descriptions,
 not something the original code recorded** — worth a sanity check before
-committing cluster time.
+committing cluster time. Scenario 6 (→3) was added later specifically as binary
+scenario 3, so its coefficients are copied, not inferred.
+
+## Bug M — `dr_oracle` on the log-odds scale (fixed; no finished result affected)
+
+`dr_oracle` is the DR-learner handed the *true* outcome model. This study used
+to keep its own copy of the oracle formulas, wrapped in `plogis(...)` (the legacy
+`binary_missing` table), and passed `oracle_link = "identity"` to match.
+`6b06db3` ("remove historical bug flags", 2026-09-03 13:32) deleted that table and
+rebuilt `binary_missing_fixed` on `continuous_missing`, whose formulas are plain
+linear predictors, but left the link at `"identity"`. From then on the oracle's
+outcome predictions for a 0/1 outcome were log-odds. The propensity (0.5) is
+known, so the pseudo-outcome stayed unbiased whatever outcome model it was given
+— the arm was not biased, it just stopped being an oracle: pseudo-outcome
+variance 4–6× the true oracle's, and on single runs a CATE that could correlate
+*negatively* with the truth (−0.23 and −0.15 on grid rows 9901 and 9918).
+
+**Fix:** `bin_miss_models.R` passes `oracle_link = "logit"`, as `binary/` does.
+The oracle's outcome model now reproduces the true `p0`/`p1` exactly, and
+scenario 6's `dr_oracle` is identical to `binary/` scenario 3's from the same seed.
+
+**Nothing re-runs for it.** `check_all_studies.md` had this study at
+9,900/9,900, HTE back-fill complete, at 11:50 on 2026-09-03 — before `6b06db3`
+existed. And the fix restores the old behaviour exactly: grid rows 5, 15, 64 and
+91 (null + complete cases, mean imputation, MNAR-Y + IPW, complete data) run
+through `0df4a9b`, the last commit before the bug, and through the fixed code
+give byte-identical `truth`, `tau` for all five arms, and `dr_oracle$po`. So rows
+1–9900 stay valid and directly comparable with scenario 6 run now. The only way
+that could be wrong is a result file written from code at or after `6b06db3`,
+which the file times would show — on the cluster, from the repo root:
+
+```bash
+find ../results/missing/binary -path '*scenario_6*' -prune -o \
+  -name 'res_sim_*.RDS' -newermt '2026-09-03 13:32' -print | wc -l    # expect 0
+```
+
+## Bug N — the MNAR-Y truth was taken at U = 0 (repaired at metrics time; no re-run)
+
+Under MNAR-Y the unobserved `U` enters the treated arm's linear predictor,
+`lp = base + W·(te + bU·U)`. The truth removed it by evaluating at U = 0,
+`p1 = plogis(base + te)`, on the reasoning that E[U] = 0. That holds on the
+identity scale (`missing/continuous` is fine) but not on the logit scale. What
+the data identify, and what every estimator targets since U is unobserved, is
+the risk averaged over U, `E_U[plogis(base + te + bU·U)]`, which sits closer to
+0.5. At n = 500:
+
+| scenario | mean τ at U = 0 | mean τ averaged over U | mean \|gap\| | max \|gap\| |
+|---|---|---|---|---|
+| 2 | −0.165 | −0.137 | 0.029 | 0.039 |
+| 4 | −0.066 | −0.052 | 0.024 | 0.039 |
+| 5 | −0.044 | −0.030 | 0.021 | 0.039 |
+| 6 | −0.110 | −0.087 | 0.025 | 0.039 |
+
+The data agree. Pooling 4,000 generated datasets (2M rows), the treated-minus-
+control difference in means matches the averaged truth (scenario 2: −0.1383 vs
+−0.1383) and is 42 standard errors from the U = 0 one (−0.1667); scenario 6
+likewise (32 SE). So every binary MNAR-Y result so far — every arm,
+`complete_data` included — carries about +0.02 to +0.03 of bias that belongs to
+the truth, not the estimator, and the other CATE metrics and the true-CATE tests
+were scored against the same wrong target.
+
+**Fix:** `generate_scenario_data()` builds the binary MNAR-Y truth through
+`mnar_y_truth()` (`R/dgm_scenarios.R`), which averages over U by Gauss–Hermite
+quadrature (80 nodes, within 5e-12 of `integrate()`). It draws no random
+numbers, so the generated data and every fit are unchanged. The old U = 0 value
+is kept as `truth$tau_u0`.
+
+**No re-run.** The saved truth still pins down the right one: `p0` is unaffected
+(U never enters the control arm) and `qlogis(p1)` is the U-free linear predictor,
+so `repair_mnar_y_truth()` rebuilds it exactly. `bin_miss_metrics.R` applies it
+to the collected results before computing anything. It skips truths that already
+carry `tau_u0`, so a collection mixing runs from both sides of the fix is fine.
+Re-run `bin_miss_metrics.sh` and the figures; no simulation jobs. Checked:
+repaired pre-fix truths equal the fixed generator's (differences ~1e-16), and
+with and without the repair every MAR and MNAR metric row is byte-identical.
+
+**Not changed:** `dr_oracle`'s outcome model under MNAR-Y is still the U = 0 one.
+With the propensity known its pseudo-outcome is unbiased for the averaged CATE
+regardless; it is only slightly noisier than a true oracle's. Making it exact
+would change `dr_oracle` and mean redoing these runs.
 
 ## Patched: every model now carries the HTE tests
 
@@ -92,7 +171,7 @@ is recorded rather than hidden.
 **The `multiple_imputation` arm still has no HTE tests, for any model.** That is
 a separate and larger gap; see the multiple-imputation note in
 `missing/README.md`. The patch detects those runs and refuses them, which is why
-`check_all.R`'s `patchable_jobs` is 8,800 rather than 9,900.
+`check_all.R`'s `patchable_jobs` is 11,200 rather than 12,600.
 
 ## True-CATE HTE test evaluation
 
@@ -109,6 +188,7 @@ imputed data.frames there, with no single covariate matrix to test against.
 
 ```bash
 qsub missing/binary/jobscripts/bin_miss_1.sh        # 1-9900
+qsub missing/binary/jobscripts/bin_miss_extra.sh    # 9901-12600, scenario 6
 Rscript missing/binary/bin_miss_check.R
 qsub missing/binary/jobscripts/bin_miss_patch.sh    # 1-99, the HTE back-fill
 Rscript missing/binary/bin_miss_patch_check.R       # did the back-fill land?
@@ -169,10 +249,17 @@ quarto render missing/binary/bin_miss_results.qmd   # the same, as a browsable r
 
 ## Status
 
-**Everything under `../results/missing/binary/` is superseded.** All three fixes
-change the generated data or the target, so the whole study re-runs. Bug F
-affects `dr_superlearner` here as elsewhere, but that is moot given the DGM
-changes.
+**Scenario 6 owed** — `bin_miss_extra.sh` (rows 9901–12600), then the
+bookkeeping patch pass over combinations 100–126 (see `missing/README.md`
+Status) and collect/metrics. Rows 1–9900 are unchanged.
+
+**Metrics owed (bug N)** — re-run `bin_miss_metrics.sh` so the MNAR-Y rows are
+scored against the averaged truth. No simulation jobs; doing it once, after
+scenario 6's collect, covers both.
+
+**Rows 1–9900 were re-run** for the three DGM fixes, bug F and the crossfitting
+change, and are complete — 9,900/9,900 with the HTE back-fill done, per
+`check_all_studies.md` (2026-09-03). Bug M does not touch them; see above.
 
 ## Known issue found while profiling (fixed — see below)
 

@@ -148,6 +148,8 @@ Found during the de-duplication. Each is written up in the relevant folder READM
 | J | stale comments and filenames | various | yes |
 | K | `pretest_superlearner()` could return an empty SL library, crashing `nuisance_sl`/`stage_2_sl` | shared | yes |
 | L | `run_blp_whole()` had no `tryCatch`, crashed on a constant/degenerate CATE | shared | yes |
+| M | `dr_oracle` handed log-odds as outcome predictions — `6b06db3` dropped the `plogis` from the oracle formulas but not `oracle_link = "identity"` | `missing/binary` | yes — no re-run: every finished result predates it |
+| N | binary MNAR-Y truth evaluated at U = 0 rather than averaged over U — equal on the identity scale, not the logit one | `missing/binary` | yes — repaired at metrics time from the saved truth; no re-run |
 
 Three more surfaced along the way:
 

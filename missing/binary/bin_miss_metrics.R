@@ -8,8 +8,15 @@ library(here)
 source(here("missing/binary/bin_miss_config.R"))
 source(here("R", "metrics.R"))
 source(here("R", "cate_models.R"))
+source(here("R", "dgm_scenarios.R"))
 
 all_results_df <- readRDS(file.path(study$res_path, "bin_miss_all.RDS"))
+
+# Bug N: runs made before the fix saved the MNAR-Y truth at U = 0 rather than
+# averaged over U. Rebuilt here from the saved p0/p1, before anything below
+# reads truth$tau - both compute_metrics() and the true-CATE tests do. Runs
+# made after the fix are recognised (they carry truth$tau_u0) and left alone.
+all_results_df <- repair_mnar_y_truth(all_results_df, "binary_missing")
 
 metrics <- compute_metrics(
   study, all_results_df, models = CATE_MODELS,

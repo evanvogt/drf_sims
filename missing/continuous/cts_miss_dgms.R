@@ -3,8 +3,8 @@
 ###############
 # Scenarios in R/dgm_scenarios.R, missingness machinery in R/missingness.R.
 #
-# Five renumbered scenarios, NOT a subset of the main study's ten: scenario k
-# here corresponds to 1, 2, 4, 8, 9 there.
+# Six renumbered scenarios, NOT a subset of the main study's ten: scenario k
+# here corresponds to 1, 2, 4, 8, 9, 3 there.
 
 source(here::here("R", "missingness.R"))
 

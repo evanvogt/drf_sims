@@ -73,7 +73,7 @@ sample_interval <- 1   # seconds between syrup snapshots
 
 # outer grid: one PBS array index each - the expensive, workers/grf_threads-
 # independent data generation + missingness handling happens once per row.
-# scenario 1/4 are the fewest/most-covariates extremes within {1,2,4,5} (the
+# scenario 1/4 are the fewest/most-covariates extremes within {1,2,4,5,6} (the
 # study's actual scenario set), per R/dgm_scenarios.R's continuous_missing table
 # (scenario 1: no X3/X4/X5; scenario 4: X3+X4+X5). mechanism drops MNAR-Y -
 # mechanistically closest to MNAR for a resource sweep, and excluded for

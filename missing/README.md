@@ -15,18 +15,22 @@ Three studies:
 
 | | |
 |---|---|
-| scenarios | 1, 2, 4, 5 — a **renumbered** five-scenario set, not a subset of the main ten |
+| scenarios | 1, 2, 4, 5, 6 — a **renumbered** six-scenario set, not a subset of the main ten |
 | n | 500 |
 | type | `both` (prognostic and predictive covariates amputated) |
 | prop | 0.3 |
 | mechanism | MAR, MNAR, MNAR-Y |
 | method | 8 handling methods + `complete_data` reference |
 | runs | 100 |
-| array | **9,900 jobs** (scenario 1 has no MNAR-Y, so 100 rows are dropped) |
+| array | **12,600 jobs** — rows 1–9,900 are scenarios 1, 2, 4, 5 (scenario 1 has no MNAR-Y, so 900 rows are dropped); rows 9,901–12,600 are scenario 6 |
 
 Scenario numbering here is **not** the main study's. Scenario `k` corresponds to
-main-study scenario 1, 2, 4, 8, 9 respectively — so "scenario 4" means something
-different in this folder than in `continuous/`.
+main-study scenario 1, 2, 4, 8, 9, 3 respectively — so "scenario 4" means something
+different in this folder than in `continuous/`. Scenario 6 (main-study 3, simple
+HTE on the continuous `X4`) was added after 1–5 had been run, so it sits at the
+end of both the scenario table and the grid rather than in main-study order;
+renumbering would have changed what the existing `scenario_<k>/` results mean.
+The main study's scenarios of interest, 1, 3, 8 and 9, are 1, 6, 4 and 5 here.
 
 ## Results files
 
@@ -70,7 +74,7 @@ fit each of the 50 imputed datasets and Rubin-combine with `combine_mi()`
 (`R/cate_models.R`), which returns only `tau` and `variance`. The analysis
 scripts then build `results` from those combined objects alone, so
 `nuisances_rf` is never saved. Consequently `BLP_p`, `indep_cate` and
-`indep_po` are `NA` for **every** model on all 1,100 MI runs per study.
+`indep_po` are `NA` for **every** model on all 1,400 MI runs per study.
 
 Unlike the `dr_random_forest` gap, this one **cannot** be patched: there is
 nothing on disk to recompute a BLP from. Closing it needs two things:
@@ -79,12 +83,12 @@ nothing on disk to recompute a BLP from. Closing it needs two things:
    imputations? Rubin-combine the BLP coefficients and their standard errors,
    combine the per-imputation p-values (Fisher, Stouffer), or something else.
    Each answers a slightly different question and none is the obvious default.
-2. **A re-run** of the MI arm — 1,100 runs per study, the most expensive method
+2. **A re-run** of the MI arm — 1,400 runs per study, the most expensive method
    in the grid.
 
 Until then the `NA`s are honest and should be read as "not computed", not as
 "the test failed". `R/patch_hte_tests.R` detects these runs and refuses them,
-which is why `check_all.R` reports `patchable_jobs` of 8,800 rather than 9,900.
+which is why `check_all.R` reports `patchable_jobs` of 11,200 rather than 12,600.
 
 The same gap carries over to the true-CATE HTE test evaluation
 (`*_true_cate_tests.RDS`, `true_cate_test_row()` in `R/cate_models.R` — see
@@ -102,7 +106,18 @@ missing-nuisance problem, that is unresolved for those rows.
 
 **Bug D** — the array index meant two different things: both analysis scripts filtered `method == "complete_data"` *after* `expand.grid`, renumbering every row. A `failed_ids.txt` would have resubmitted the wrong parameters. The grid now lives in `<prefix>_config.R` and is never filtered. Fixed.
 
+**Bug M** — `missing/binary`'s `dr_oracle` was handed log-odds as outcome predictions: `6b06db3` dropped the `plogis` from its oracle formulas but kept `oracle_link = "identity"`. Fixed; no finished result was affected — see `missing/binary/README.md`.
+
+**Bug N** — `missing/binary`'s MNAR-Y truth was evaluated at U = 0 rather than averaged over U. The two agree on the identity scale, not the logit one, so about 0.02–0.03 of every binary MNAR-Y arm's bias was the truth's. Fixed in the generator, and repaired from the saved `p0`/`p1` when `bin_miss_metrics.R` runs — no re-run. See `missing/binary/README.md`.
+
 ## Status
+
+**Both** owe scenario 6 (rows 9,901–12,600): `jobscripts/{cts,bin}_miss_extra.sh`,
+then the usual check/collect/metrics. Rows 1–9,900 are untouched and need
+nothing. Scenario 6 runs with `dr_rf_tests = TRUE`, so it needs no back-fill —
+but `check_all.R`'s `patch_status` counts manifest rows, so it reads 8,800 /
+11,200 until a bookkeeping pass over combinations 100–126 writes
+`already_patched` rows: `qsub -J 100-126%20 jobscripts/{cts,bin}_miss_patch.sh`.
 
 `missing/continuous` — re-runs for the crossfitting strategy change (all five
 arms) and separately for bug F (`dr_superlearner` only).

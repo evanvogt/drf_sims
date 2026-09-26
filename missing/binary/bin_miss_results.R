@@ -13,9 +13,8 @@
 # Structurally identical to missing/continuous/cts_miss_results.R - the design,
 # the metric set and the extra factors are the same. The outcome is binary, so
 # every effect below is a RISK DIFFERENCE, and the truth is on the probability
-# scale: get_binary_oracle_info() wraps its formula in plogis(), which is why
-# bin_miss_models.R passes oracle_link = "identity" (the opposite convention to
-# binary/).
+# scale. The oracle formula is a linear predictor and bin_miss_models.R applies
+# plogis (oracle_link = "logit"), as binary/ does - see README.md, bug M.
 
 rm(list = ls())
 # libraries

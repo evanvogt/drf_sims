@@ -7,7 +7,7 @@
 #   family = binomial()      SuperLearner outcome model + method.NNloglik
 #   oracle_link = "logit"    bin_dgms.R's get_binary_oracle_info returns a linear
 #                            predictor, so plogis is applied by the model code.
-#                            (missing/binary/ uses the opposite convention.)
+#                            (missing/binary/ now does the same.)
 
 source(here::here("R", "cate_models.R"))
 

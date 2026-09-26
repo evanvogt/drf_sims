@@ -78,12 +78,15 @@ stopifnot(which_study %in% c("continuous", "binary"))
 # path does not, so verifying one verifies the other. Both are offered anyway -
 # missing/binary is the study that is already 100% run.
 cfg <- list(
-  continuous = list(config = "missing/continuous/cts_miss_config.R",
-                    set    = "continuous_missing",
-                    family = gaussian()),
-  binary     = list(config = "missing/binary/bin_miss_config.R",
-                    set    = "binary_missing",
-                    family = binomial())
+  continuous = list(config      = "missing/continuous/cts_miss_config.R",
+                    set         = "continuous_missing",
+                    family      = gaussian(),
+                    oracle_link = "identity"),
+  # "logit" as in bin_miss_models.R - "identity" there was bug M
+  binary     = list(config      = "missing/binary/bin_miss_config.R",
+                    set         = "binary_missing",
+                    family      = binomial(),
+                    oracle_link = "logit")
 )[[which_study]]
 
 env <- new.env()
@@ -94,9 +97,6 @@ param <- study$grid[grid_row, ]
 cat("study:", which_study, " grid row:", grid_row, "\n")
 print(param)
 
-# Both missing-data studies bake the inverse link into the oracle formula
-# string, so the model must not apply it again - see missing/binary/bin_miss_models.R.
-ORACLE_LINK <- "identity"
 sl_lib <- if (use_sl) {
   c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.ranger")
 } else NULL
@@ -131,7 +131,7 @@ run_once <- function(dr_rf_tests) {
     fmla_info <- get_oracle_info(param$scenario, gen$bW, set = cfg$set)
     out <- cate_methods(
       gen$dataset, n_folds = 10, sl_lib = sl_lib, fmla_info = fmla_info,
-      family = cfg$family, oracle_link = ORACLE_LINK,
+      family = cfg$family, oracle_link = cfg$oracle_link,
       ipw = if (param$method == "IPW") gen$ipw else NULL,
       profile = "missing", num.threads = 1)
     out$data <- gen$dataset

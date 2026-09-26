@@ -42,10 +42,11 @@ TE_10 <- c(
   "bW + b3 * X3 + b4 * exp(-abs(X4))"     # binary differs here only
 )
 
-# oracle formulas. NOTE the two link conventions in this repo: the non-missing
-# tables return a LINEAR PREDICTOR and the model code applies plogis for binary
-# outcomes (oracle_link = "logit"); the missing tables bake plogis into the
-# string (oracle_link = "identity"). See the header of R/cate_models.R.
+# oracle formulas. Every table here returns a LINEAR PREDICTOR; for binary
+# outcomes the model code applies plogis (oracle_link = "logit"). The binary
+# missing-data table shares these strings with the continuous one, so
+# missing/binary/bin_miss_models.R must pass "logit" too - it passed "identity"
+# until bug M. See the header of R/cate_models.R.
 ORACLE_10 <- c(
   "b0 + b1*X$X1 + b2*X$X2 + W*bW",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)",
@@ -72,32 +73,38 @@ DESC_10 <- c(
   "Exponential HTE"
 )
 
-# the missing-data studies use a reduced, RENUMBERED set of five scenarios.
+# the missing-data studies use a reduced, RENUMBERED set of six scenarios.
 # scenario k here is NOT scenario k above; the correspondence is
-#   1 -> 1 (no HTE), 2 -> 2, 3 -> 4, 4 -> 8, 5 -> 9
+#   1 -> 1 (no HTE), 2 -> 2, 3 -> 4, 4 -> 8, 5 -> 9, 6 -> 3
+# Scenario 6 was added after the first five had been run, so it goes at the end
+# rather than in main-study order: renumbering would change what the existing
+# results/missing/*/scenario_<k>/ directories mean.
 # U_term carries the unobserved-confounder contribution under MNAR-Y.
-TE_5 <- c(
+TE_MISS <- c(
   "rep(bW, n)",
   "bW + b3 * X3 + U_term",
   "bW + b3 * X3 + b4 * X4 + U_term",
   "bW + b3 * X3 + b4 * X4 + b45 * X4 * X5 + U_term",
-  "bW + b4 * cos(X4) + U_term"
+  "bW + b4 * cos(X4) + U_term",
+  "bW + b4 * X4 + U_term"
 )
 
-ORACLE_5 <- c(
+ORACLE_MISS <- c(
   "b0 + b1*X$X1 + b2*X$X2 + W*bW",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3)",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4)",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*X$X4 + b45*X$X4*X$X5)",
-  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*cos(X$X4))"
+  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*cos(X$X4))",
+  "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*X$X4)"
 )
 
-DESC_5 <- c(
+DESC_MISS <- c(
   "No HTE",
   "Simple HTE - binary variable (X3)",
   "Two HTE variables (X3 + X4)",
   "Single effects + interaction (X3 + X4 + X4*X5)",
-  "Non-linear HTE (cos(X4))"
+  "Non-linear HTE (cos(X4))",
+  "Simple HTE - continuous variable (X4)"
 )
 
 scenario_table <- function(...) data.frame(..., stringsAsFactors = FALSE)
@@ -143,22 +150,22 @@ SCENARIO_SETS <- list(
   ),
 
   continuous_missing = scenario_table(
-    scenario = 1:5, description = DESC_5,
+    scenario = 1:6, description = DESC_MISS,
     X1_prob = 0.4, X3_prob = 0.7,
-    b0 = c(0.4, 0.2, 0.4, 1, 0.4),
+    b0 = c(0.4, 0.2, 0.4, 1, 0.4, 0.3),
     b1 = -0.05,
-    b2 = c(2, 2, 2, 2, 1),
-    b3 = c(NA, 2, 0.3, 2, NA),
-    b4 = c(NA, NA, -1, 0.5, 1),
-    b5 = c(NA, NA, NA, -0.5, NA),
+    b2 = c(2, 2, 2, 2, 1, 2),
+    b3 = c(NA, 2, 0.3, 2, NA, NA),
+    b4 = c(NA, NA, -1, 0.5, 1, -1),
+    b5 = c(NA, NA, NA, -0.5, NA, NA),
     b34 = NA,
-    b45 = c(NA, NA, NA, -0.5, NA),
+    b45 = c(NA, NA, NA, -0.5, NA, NA),
     s2 = 1, s4 = 1, s5 = 1, s_err = 0.5,
     bU = 1, sU = 1,
-    needs_X3 = c(FALSE, TRUE, TRUE, TRUE, FALSE),
-    needs_X4 = c(FALSE, FALSE, TRUE, TRUE, TRUE),
-    needs_X5 = c(FALSE, FALSE, FALSE, TRUE, FALSE),
-    te_expr = TE_5, oracle_expr = ORACLE_5
+    needs_X3 = c(FALSE, TRUE, TRUE, TRUE, FALSE, FALSE),
+    needs_X4 = c(FALSE, FALSE, TRUE, TRUE, TRUE, TRUE),
+    needs_X5 = c(FALSE, FALSE, FALSE, TRUE, FALSE, FALSE),
+    te_expr = TE_MISS, oracle_expr = ORACLE_MISS
   )
 
 )
@@ -167,14 +174,15 @@ SCENARIO_SETS <- list(
 # binary table. b3/b4/b5/b45 are taken from the binary scenario each reduced
 # scenario corresponds to (1->1, 2->2, 3->4, 4->8, 5->9) - an inference from the
 # scenario descriptions, not something the original code recorded, so worth a
-# sanity check before the re-run.
+# sanity check before the re-run. Scenario 6 was added later specifically as
+# binary scenario 3, so its values are copied from there, not inferred.
 SCENARIO_SETS$binary_missing_fixed <- transform(
   SCENARIO_SETS$continuous_missing,
   b0 = -0.4, b1 = 0.5, b2 = 0.5,
-  b3 = c(NA, -0.4, -0.4, 0.2, 0.2),
-  b4 = c(NA, NA, 0.3, 0.5, 0.5),
-  b5 = c(NA, NA, NA, -0.5, NA),
-  b45 = c(NA, NA, NA, -0.5, NA)
+  b3 = c(NA, -0.4, -0.4, 0.2, 0.2, NA),
+  b4 = c(NA, NA, 0.3, 0.5, 0.5, 0.2),
+  b5 = c(NA, NA, NA, -0.5, NA, NA),
+  b45 = c(NA, NA, NA, -0.5, NA, NA)
 )
 
 # which sets produce a binary outcome
@@ -303,8 +311,10 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
   result <- list(dataset = as.data.frame(dataset_vars), bW = bW)
 
   if (return_truth) {
-    # the missing-data studies subtract the U contribution so that tau is the
-    # marginal treatment effect (U is independent of X, so E[U] = 0)
+    # the missing-data studies remove U so that tau is the CATE given the
+    # observed covariates, averaged over U (U is independent of X). With an
+    # identity link that is the U = 0 value, since E[U] = 0; with a logit link
+    # it is not, so binary MNAR-Y goes through mnar_y_truth() (bug N)
     reduced <- !is.null(mech)
     link_truth <- binary
 
@@ -315,14 +325,18 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
       truth <- truth_at(params, bW, link_truth, X1, X2, X3, X4, X5)
     } else {
       base <- params$b0 + params$b1 * X1 + params$b2 * X2
-      if (link_truth) {
-        p0 <- plogis(base)
-        p1 <- plogis(base + treatment_effect - U_term)
+      if (link_truth && mech == "MNAR-Y") {
+        truth <- mnar_y_truth(plogis(base), base + treatment_effect - U_term, params)
       } else {
-        p0 <- base
-        p1 <- base + treatment_effect - U_term
+        if (link_truth) {
+          p0 <- plogis(base)
+          p1 <- plogis(base + treatment_effect - U_term)
+        } else {
+          p0 <- base
+          p1 <- base + treatment_effect - U_term
+        }
+        truth <- data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
       }
-      truth <- data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
     }
 
     if (needs_U) truth$U <- U
@@ -368,6 +382,89 @@ truth_at <- function(params, bW, link_truth, X1, X2, X3 = NULL, X4 = NULL, X5 = 
   }
 
   data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
+}
+
+# ---- MNAR-Y truth on the logit scale (bug N) ---------------------------------
+# Under MNAR-Y the unobserved U enters the treated arm's linear predictor, so the
+# CATE given the observed covariates - what every estimator targets, U being
+# unobserved - averages the treated-arm risk over U:
+#   p1 = E_U[plogis(eta1 + bU * U)],  U ~ N(0, sU^2),  eta1 = base + te without U
+# With an identity link that is eta1 itself, since E[U] = 0, which is why the
+# continuous studies need nothing here. With a logit link it is not: the U = 0
+# value plogis(eta1) sits further from 0.5 than the average does.
+
+# Gauss-Hermite nodes and weights (Golub-Welsch), built once at source time.
+# The weights are normalised to sum to 1, so sum(w * f(sqrt(2) * x)) = E[f(Z)].
+GH_NODES <- local({
+  k <- 80
+  i <- seq_len(k - 1)
+  J <- matrix(0, k, k)
+  J[cbind(i, i + 1)] <- J[cbind(i + 1, i)] <- sqrt(i / 2)
+  e <- eigen(J, symmetric = TRUE)
+  list(x = e$values, w = e$vectors[1, ]^2)
+})
+
+#' E[plogis(eta + s * Z)] for Z ~ N(0, 1), by Gauss-Hermite quadrature
+#'
+#' Deterministic - it consumes no RNG, so it is safe inside
+#' generate_scenario_data() (see DRAW ORDER in the file header).
+#'
+#' @param eta numeric vector of linear predictors
+#' @param s standard deviation of the normal term added to each; 0 returns
+#'   plogis(eta) exactly
+logistic_normal_mean <- function(eta, s) {
+  if (s == 0) return(plogis(eta))
+  drop(plogis(outer(eta, sqrt(2) * s * GH_NODES$x, "+")) %*% GH_NODES$w)
+}
+
+#' True p0/p1/tau under MNAR-Y for a binary outcome
+#'
+#' One implementation shared by generate_scenario_data() and
+#' repair_mnar_y_truth(), so new runs and repaired old ones cannot disagree.
+#' `tau_u0` keeps the old, U = 0 definition - for comparison, and as the marker
+#' repair_mnar_y_truth() uses to leave an already-averaged truth alone.
+#'
+#' @param p0 control-arm risk, plogis(base) - U never enters the control arm
+#' @param eta1 treated-arm linear predictor with U removed, base + te
+#' @param params one-row scenario params (supplies bU and sU)
+mnar_y_truth <- function(p0, eta1, params) {
+  p1 <- logistic_normal_mean(eta1, abs(params$bU) * params$sU)
+  data.frame(p0 = p0, p1 = p1, tau = p1 - p0, tau_u0 = plogis(eta1) - p0)
+}
+
+#' Rebuild binary MNAR-Y truths saved at U = 0, in a collected results tibble
+#'
+#' Runs made before the bug N fix saved p1 = plogis(eta1), the U = 0 value. p0
+#' is still right and eta1 = qlogis(p1), so the averaged truth is recoverable
+#' exactly, with no re-run. A truth already carrying `tau_u0` came from the
+#' fixed generator and is left alone, so this is safe over a collection holding
+#' runs from either side of the fix, and applying it twice changes nothing.
+#'
+#' @param all_results_df output of get_results(): one row per parameter
+#'   combination, `results` a list of list(run, result)
+#' @param set the scenario set the study generated from. Supplies bU / sU, and
+#'   makes this a no-op for a continuous set.
+repair_mnar_y_truth <- function(all_results_df, set) {
+  if (!is_binary_set(set) || !"mechanism" %in% names(all_results_df)) {
+    return(all_results_df)
+  }
+  tbl <- resolve_set(set)
+
+  for (i in which(all_results_df$mechanism == "MNAR-Y")) {
+    params <- tbl[tbl$scenario == all_results_df$scenario[i], ]
+    all_results_df$results[[i]] <- lapply(all_results_df$results[[i]], function(r) {
+      truth <- r$result$truth
+      if (is.null(truth) || "tau_u0" %in% names(truth)) return(r)
+      fixed <- mnar_y_truth(truth$p0, qlogis(truth$p1), params)
+      if (!is.null(truth$U)) fixed$U <- truth$U
+      # verbatim, not row.names<-, which would turn a row subset's integer
+      # row names (complete_cases / IPW) into character ones
+      attr(fixed, "row.names") <- attr(truth, "row.names")
+      r$result$truth <- fixed
+      r
+    })
+  }
+  all_results_df
 }
 
 #' Oracle formula and parameter values for a scenario

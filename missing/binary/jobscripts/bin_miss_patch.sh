@@ -4,8 +4,12 @@
 #
 # The array index is a row of combos(study), i.e. one parameter combination and
 # its 100 res_sim_*.RDS files - NOT a row of study$grid, which is what
-# bin_miss_1.sh indexes. There are 99 combinations:
+# bin_miss_1.sh indexes. There are 126 combinations:
 #   nrow(combos(study))  after sourcing bin_miss_config.R
+# Combinations 1-99 are the results this repair was written for. 100-126 are
+# scenario 6, run after dr_rf_tests was switched on, so they carry the tests
+# already; a pass over them only writes the already_patched manifest rows
+# check_all.R counts:  qsub -J 100-126%20 jobscripts/bin_miss_patch.sh
 #
 # Each element reads 100 files, runs one OLS and two asymptotic permutation
 # tests per file at n = 500, and rewrites them; ~30-60 s in total. The walltime

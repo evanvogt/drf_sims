@@ -6,7 +6,7 @@ here).
 
 | | |
 |---|---|
-| array | **9,900 jobs**, split across `cts_miss_1.sh` (1–5000) and `cts_miss_2.sh` (5001–9900) |
+| array | **12,600 jobs**: `cts_miss_1.sh` (1–9900, scenarios 1, 2, 4, 5) and `cts_miss_extra.sh` (9901–12600, scenario 6) |
 | results | `../results/missing/continuous/scenario_<k>/<n>/<type>/<prop>/<mechanism>/<method>/` |
 | metrics | `cts_miss_metrics.RDS`, including `rel_efficiency` against the `complete_data` arm; plus `cts_miss_true_cate_tests.RDS`, the true-CATE HTE test evaluation |
 
@@ -31,7 +31,8 @@ The `ipw` argument is the only thing separating this study's estimators from
 ## Gotchas
 
 **Scenario numbers are not the main study's.** Scenario `k` here maps to
-main-study scenario 1, 2, 4, 8, 9.
+main-study scenario 1, 2, 4, 8, 9, 3. Scenario 6 was appended later, as a
+second block in `cts_miss_config.R`, so rows 1–9900 kept their meaning.
 
 **`multiple_imputation` returns a list of 50 datasets, not one.** The analysis
 script fits each and Rubin-combines with `combine_mi()`; only
@@ -77,8 +78,8 @@ landed" in `missing/binary/README.md`.
 ## Running it
 
 ```bash
-qsub missing/continuous/jobscripts/cts_miss_1.sh   # 1-5000
-qsub missing/continuous/jobscripts/cts_miss_2.sh   # 5001-9900
+qsub missing/continuous/jobscripts/cts_miss_1.sh       # 1-9900
+qsub missing/continuous/jobscripts/cts_miss_extra.sh   # 9901-12600, scenario 6
 Rscript missing/continuous/cts_miss_check.R
 qsub missing/continuous/jobscripts/cts_miss_patch.sh    # 1-99, the HTE back-fill
 qsub missing/continuous/jobscripts/cts_miss_collect.sh
@@ -103,6 +104,10 @@ To run only the `complete_data` reference arm, take
 — do **not** filter the grid.
 
 ## Status
+
+**Scenario 6 owed** — `cts_miss_extra.sh` (rows 9901–12600), then the
+bookkeeping patch pass over combinations 100–126 (see `missing/README.md`
+Status) and collect/metrics. Nothing else in the grid changed.
 
 **Re-runs required** — for the crossfitting strategy change to
 `R/cate_models.R` (see root README Methods/Status), which moves all five

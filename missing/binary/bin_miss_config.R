@@ -27,6 +27,20 @@ grid <- expand.grid(
 )
 
 grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-Y"), ]
+
+# Scenario 6 (main-study scenario 3) appended as a second block so rows 1-9900
+# keep their meaning - see missing/continuous/cts_miss_config.R. The new rows
+# are 9901-12600, for jobscripts/bin_miss_extra.sh.
+grid <- rbind(grid, expand.grid(
+  scenario  = 6,
+  n         = c(500),
+  type      = c("both"),
+  prop      = c(0.3),
+  mechanism = c("MAR", "MNAR", "MNAR-Y"),
+  method    = MISS_METHODS_STUDY,
+  run       = c(1:100),
+  stringsAsFactors = FALSE
+))
 rownames(grid) <- NULL
 
 study <- study_config(

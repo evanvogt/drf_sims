@@ -6,7 +6,7 @@
 # in scenario 10's treatment effect (exp(X4) rather than exp(-abs(X4))).
 #
 # The oracle formula here is a LINEAR PREDICTOR and bin_models.R applies plogis
-# (oracle_link = "logit"). missing/binary/ uses the opposite convention.
+# (oracle_link = "logit"), as missing/binary/ now does too.
 
 source(here::here("R", "dgm_scenarios.R"))
 
