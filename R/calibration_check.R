@@ -10,8 +10,9 @@
 #   1. both continuous tables share one baseline (b0, b1, b2)
 #   2. te_moments() agrees with a large Monte Carlo draw
 #   3. every continuous scenario at every n a study uses: the ATE has
-#      CTS_POWER analytically, the mean true tau is -delta, and a simulated
-#      Welch t-test on generated data gets close to CTS_POWER
+#      CTS_POWER analytically (to within bW's 2 dp rounding), the mean true tau
+#      is -delta, and a simulated Welch t-test on generated data gets close to
+#      CTS_POWER
 #   4. calibrate_bW() and te_moments() consume no RNG
 #   5. draw order: for a fixed seed, W, every covariate, U and the error term
 #      match the reference version - only Y, the truth and bW move
@@ -109,7 +110,10 @@ for (set in CTS_SETS) {
 # =============================================================================
 cat("\n=== 3. power and ATE at every study n ===\n")
 # analytic power uses the MC moments and a variance written out here, not
-# te_moments() or calibrate_bW()'s own arithmetic, so it is an independent check
+# te_moments() or calibrate_bW()'s own arithmetic, so it is an independent check.
+# bW is rounded to 2 dp, which moves the ATE by up to 0.005 - at n = 1000 that
+# is about 0.02 of power, hence the +-0.02 tolerance rather than +-0.01. The
+# ATE check below is the tighter one: the rounding alone bounds it at 0.005
 
 n_truth <- 1e6
 sim_reps <- 4000
@@ -137,7 +141,7 @@ for (set in CTS_SETS) {
                           if (p$needs_X5) mc$X5[1:n_truth])$tau
       ate_gap[i] <- mean(tau) + delta
     }
-    report(all(abs(pow - new$CTS_POWER) <= 0.01),
+    report(all(abs(pow - new$CTS_POWER) <= 0.02),
            sprintf("%s %d: analytic power %.3f-%.3f over n = %s", set, s,
                    min(pow), max(pow), paste(range(ns), collapse = "-")))
     report(all(abs(ate_gap) < 0.01),
