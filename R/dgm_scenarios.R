@@ -118,9 +118,9 @@ SCENARIO_SETS <- list(
     # the outcome's noise, not the CATE; they varied by scenario before, with
     # b1 = -0.05 leaving X1 all but unprognostic
     b0 = 0.4, b1 = -0.5, b2 = 1,
-    b3 = c(NA, 2, NA, 0.3, NA, 2, 2, 2, NA, 0.3),
-    b4 = c(NA, NA, -1, -1, NA, 0.5, 0.5, 0.5, 1, 0.1),
-    b5 = c(NA, NA, NA, NA, NA, NA, -0.5, -0.5, NA, NA),
+    # NA wherever the scenario's te_expr doesn't use the coefficient
+    b3 = c(NA, 2, NA, 0.3, NA, 2, NA, 2, NA, 0.3),
+    b4 = c(NA, NA, -1, -1, NA, 0.5, NA, 0.5, 1, 0.1),
     b34 = c(NA, NA, NA, NA, 1, -0.5, NA, NA, NA, NA),
     b45 = c(NA, NA, NA, NA, NA, NA, -0.5, -0.5, NA, NA),
     s2 = 1, s4 = 1, s5 = 1, s_err = 0.5,
@@ -134,10 +134,12 @@ SCENARIO_SETS <- list(
     scenario = 1:10, description = DESC_10,
     X1_prob = 0.4, X3_prob = 0.7,
     b0 = -0.4, b1 = 0.5, b2 = 0.5,
-    b3 = c(NA, -0.4, NA, -0.4, NA, 0.2, 0.2, 0.2, 0.2, 0.2),
-    b4 = c(NA, NA, 0.2, 0.3, NA, 0.5, 0.5, 0.5, 0.5, -0.1),
-    b5 = c(NA, NA, NA, NA, NA, NA, -0.5, -0.5, NA, NA),
-    b34 = c(NA, NA, NA, NA, -0.5, -0.5, NA, NA, NA, NA),
+    # the modifiers take the continuous table's signs, so the same subgroup
+    # benefits more under either outcome (scenarios 2-5 had them flipped before
+    # bug P); the magnitudes stay smaller because they are log-odds
+    b3 = c(NA, 0.4, NA, 0.4, NA, 0.2, NA, 0.2, NA, NA),
+    b4 = c(NA, NA, -0.2, -0.3, NA, 0.5, NA, 0.5, 0.5, -0.1),
+    b34 = c(NA, NA, NA, NA, 0.5, -0.5, NA, NA, NA, NA),
     b45 = c(NA, NA, NA, NA, NA, NA, -0.5, -0.5, NA, NA),
     # the binary DGM drew X2/X4/X5 with a literal sd of 1 rather than via these
     # columns; the values are the same, so one code path serves both outcomes
@@ -157,7 +159,6 @@ SCENARIO_SETS <- list(
     b0 = 0.4, b1 = -0.5, b2 = 1,
     b3 = c(NA, 2, 0.3, 2, NA, NA),
     b4 = c(NA, NA, -1, 0.5, 1, -1),
-    b5 = c(NA, NA, NA, -0.5, NA, NA),
     b34 = NA,
     b45 = c(NA, NA, NA, -0.5, NA, NA),
     s2 = 1, s4 = 1, s5 = 1, s_err = 0.5,
@@ -171,17 +172,17 @@ SCENARIO_SETS <- list(
 )
 
 # The corrected binary missing-data coefficients. b0/b1/b2 come straight from the
-# binary table. b3/b4/b5/b45 are taken from the binary scenario each reduced
+# binary table. b3/b4/b45 are taken from the binary scenario each reduced
 # scenario corresponds to (1->1, 2->2, 3->4, 4->8, 5->9) - an inference from the
 # scenario descriptions, not something the original code recorded, so worth a
 # sanity check before the re-run. Scenario 6 was added later specifically as
-# binary scenario 3, so its values are copied from there, not inferred.
+# binary scenario 3, so its values are copied from there, not inferred. The
+# sign flips of bug P carry over with them (scenarios 2, 3 and 6).
 SCENARIO_SETS$binary_missing_fixed <- transform(
   SCENARIO_SETS$continuous_missing,
   b0 = -0.4, b1 = 0.5, b2 = 0.5,
-  b3 = c(NA, -0.4, -0.4, 0.2, 0.2, NA),
-  b4 = c(NA, NA, 0.3, 0.5, 0.5, 0.2),
-  b5 = c(NA, NA, NA, -0.5, NA, NA),
+  b3 = c(NA, 0.4, 0.4, 0.2, NA, NA),
+  b4 = c(NA, NA, -0.3, 0.5, 0.5, -0.2),
   b45 = c(NA, NA, NA, -0.5, NA, NA)
 )
 
@@ -230,83 +231,145 @@ GH_NODES <- local({
   list(x = e$values, w = e$vectors[1, ]^2)
 })
 
-#' Mean and variance of a scenario's heterogeneity term g
+#' Quadrature grid for a scenario's heterogeneity term g
 #'
 #' g is the treatment effect with bW = 0 and U_term = 0, so te = bW + g.
 #' Evaluated from params$te_expr itself, so it cannot drift from the generator:
-#' exactly over X3's two points, by Gauss-Hermite over X4 and X5. Deterministic -
-#' it consumes no RNG, so it is safe inside calibrate_bW() (see DRAW ORDER in
-#' the file header). calibrate_bW() uses only the mean; the variance is what
+#' exactly over X3's two points, by Gauss-Hermite over X4 and X5. A covariate
+#' the scenario draws but te_expr never mentions (X3 in scenario 7) gets no
+#' axis. Deterministic - it consumes no RNG, so it is safe inside calibrate_bW()
+#' (see DRAW ORDER in the file header).
+#'
+#' @param params one-row scenario params
+#' @return list(g = values of g, w = their weights, summing to 1)
+te_grid <- function(params) {
+  uses <- function(v) {
+    params[[paste0("needs_", v)]] && grepl(paste0("\\b", v, "\\b"), params$te_expr)
+  }
+  axes <- list()
+  weights <- list()
+  if (uses("X3")) {
+    axes$X3 <- c(0, 1)
+    weights$X3 <- c(1 - params$X3_prob, params$X3_prob)
+  }
+  for (v in c("X4", "X5")) {
+    if (uses(v)) {
+      axes[[v]] <- sqrt(2) * params[[sub("X", "s", v)]] * GH_NODES$x
+      weights[[v]] <- GH_NODES$w
+    }
+  }
+
+  if (length(axes) == 0) {
+    grid <- list()
+    w <- 1
+  } else {
+    grid <- expand.grid(axes, KEEP.OUT.ATTRS = FALSE)
+    w <- Reduce(`*`, expand.grid(weights, KEEP.OUT.ATTRS = FALSE))
+  }
+  g <- eval(
+    parse(text = params$te_expr),
+    envir = list(bW = 0, n = length(w), X3 = grid$X3, X4 = grid$X4, X5 = grid$X5,
+                 U_term = 0, b3 = params$b3, b4 = params$b4,
+                 b34 = params$b34, b45 = params$b45)
+  )
+  list(g = g, w = w)
+}
+
+#' Mean and variance of a scenario's heterogeneity term g
+#'
+#' The continuous calibration uses the mean; the variance is what
 #' R/calibration_report.R uses to report each scenario's realised power.
 #'
 #' @param params one-row scenario params
 #' @return list(mean = E[g], var = Var(g))
 te_moments <- function(params) {
-  axes <- list()
-  weights <- list()
-  if (params$needs_X3) {
-    axes$X3 <- c(0, 1)
-    weights$X3 <- c(1 - params$X3_prob, params$X3_prob)
-  }
-  for (v in c("X4", "X5")) {
-    if (params[[paste0("needs_", v)]]) {
-      axes[[v]] <- sqrt(2) * params[[sub("X", "s", v)]] * GH_NODES$x
-      weights[[v]] <- GH_NODES$w
-    }
-  }
-  if (length(axes) == 0) return(list(mean = 0, var = 0))
+  tg <- te_grid(params)
+  m <- sum(tg$w * tg$g)
+  list(mean = m, var = sum(tg$w * (tg$g - m)^2))
+}
 
-  grid <- expand.grid(axes, KEEP.OUT.ATTRS = FALSE)
-  w <- Reduce(`*`, expand.grid(weights, KEEP.OUT.ATTRS = FALSE))
-  g <- eval(
-    parse(text = params$te_expr),
-    envir = list(bW = 0, n = nrow(grid), X3 = grid$X3, X4 = grid$X4, X5 = grid$X5,
-                 U_term = 0, b3 = params$b3, b4 = params$b4, b5 = params$b5,
-                 b34 = params$b34, b45 = params$b45)
-  )
-  m <- sum(w * g)
-  list(mean = m, var = sum(w * (g - m)^2))
+#' Quadrature grid for the baseline linear predictor b0 + b1 X1 + b2 X2
+#'
+#' Exact over X1's two points, Gauss-Hermite over X2.
+#'
+#' @param params one-row scenario params
+#' @return list(eta = linear predictor values, w = their weights, summing to 1)
+baseline_grid <- function(params) {
+  x2 <- params$b2 * sqrt(2) * params$s2 * GH_NODES$x
+  list(eta = params$b0 + c(x2, params$b1 + x2),
+       w = c((1 - params$X1_prob) * GH_NODES$w, params$X1_prob * GH_NODES$w))
+}
+
+#' Marginal risk E[plogis(b0 + b1 X1 + b2 X2 + shift + g)] for a binary outcome
+#'
+#' Nodes with weight below 1e-16 are skipped. Many of the 80 Gauss-Hermite
+#' weights are that small or underflow to 0, so in the X4 x X5 scenarios this
+#' makes calibrate_bW() about five times faster, for a change in the risk
+#' below 1e-14.
+#'
+#' @param base baseline_grid(params)
+#' @param tg te_grid(params), or list(g = 0, w = 1) for the control arm
+#' @param shift added to every linear predictor - bW for the treated arm
+marginal_risk <- function(base, tg, shift = 0) {
+  kb <- base$w > 1e-16
+  kg <- tg$w > 1e-16
+  drop(base$w[kb] %*% plogis(outer(base$eta[kb], tg$g[kg] + shift, "+")) %*%
+         tg$w[kg])
 }
 
 # ---- generation -------------------------------------------------------------
 
-# power the continuous trials are planned for; the binary branch stays at 0.75
-CTS_POWER <- 0.80
+# power every simulated trial is planned for, continuous and binary
+TARGET_POWER <- 0.80
 
 #' Calibrate the treatment effect to a fixed power
 #'
-#' Continuous outcomes: each simulated RCT is planned the way a trial usually
-#' is - to detect an ATE, assuming the effect is homogeneous. The planned
-#' effect delta gives CTS_POWER in an unadjusted two-sample t-test with n / 2
-#' per arm, using the outcome SD with no heterogeneity:
-#' sqrt(b1^2 p(1 - p) + b2^2 s2^2 + s_err^2). bW is then set so the true ATE,
-#' bW + E[g], equals -delta: the plan gets the average effect right but knows
-#' nothing of the heterogeneity around it. Var(g) is left out on purpose, so
-#' realised power falls below CTS_POWER as heterogeneity grows (61-80% across
-#' scenarios 1-10), just as a real trial planned under homogeneity would. MNAR-Y's
-#' U_term is left out for the same reason, which also keeps one bW and one
-#' truth per scenario across every missingness mechanism.
+#' Each simulated RCT is planned the way a trial usually is - to detect an
+#' ATE, assuming the effect is homogeneous - and bW is then set so the true
+#' ATE equals the planned effect: the plan gets the average effect right but
+#' knows nothing of the heterogeneity g around it. g enters only that second
+#' step, where it has to: the data are heterogeneous, so the bW that delivers
+#' the planned ATE depends on g. MNAR-Y's U_term is left out, which keeps one
+#' bW and one truth per scenario across every missingness mechanism.
 #'
-#' Before bug O this used sd = s_err + s2 (adding SDs, and ignoring b1 and b2)
-#' and set bW rather than the ATE to the planned effect, so the true ATE drifted
-#' by E[g] - to the opposite sign in scenarios 2, 6 and 8 - and realised power
-#' ran from 3% to 100%.
+#' Continuous outcomes: the planned effect delta gives TARGET_POWER in an
+#' unadjusted two-sample t-test with n / 2 per arm, using the outcome SD with
+#' no heterogeneity: sqrt(b1^2 p(1 - p) + b2^2 s2^2 + s_err^2). bW is set so
+#' the true ATE, bW + E[g], equals -delta. Var(g) is left out on purpose, so
+#' realised power falls below TARGET_POWER as heterogeneity grows (61-80%
+#' across scenarios 1-10), just as a real trial planned under homogeneity would.
 #'
-#' Binary outcomes: a two-proportion test at 75% power on bW at the baseline
-#' risk plogis(b0). Unchanged, so still subject to the ATE drift above - see
-#' binary/README.md.
+#' Binary outcomes: the ATE is a marginal risk difference. The plan takes the
+#' control-arm risk p0 = E[plogis(b0 + b1 X1 + b2 X2)] and the treated-arm
+#' risk p1 that gives TARGET_POWER in a two-proportion test with n / 2 per arm.
+#' bW solves E[plogis(b0 + b1 X1 + b2 X2 + bW + g)] = p1 - the logit-link
+#' counterpart of bW = -delta - E[g] - so the true RD is p1 - p0 in every
+#' scenario. Realised power equals planned: each arm's variance is fixed by its
+#' marginal risk, so heterogeneity has no variance to add.
 #'
-#' Neither branch consumes RNG.
+#' Before bug O the continuous branch used sd = s_err + s2 (adding SDs, and
+#' ignoring b1 and b2) and set bW rather than the ATE to the planned effect, so
+#' the true ATE drifted by E[g] - to the opposite sign in scenarios 2, 6 and 8 -
+#' and realised power ran from 3% to 100%. Before bug P the binary branch
+#' planned at 75% power at the risk plogis(b0), ignoring X1 and X2, and set bW
+#' to the planned log-odds ratio, so the true RD drifted the same way and
+#' realised power ran from 5% to 99%.
+#'
+#' Neither branch consumes RNG. bW is rounded to 2 dp.
 calibrate_bW <- function(params, n, calibration = c("t", "prop")) {
   if (match.arg(calibration) == "prop") {
-    p1_base <- plogis(params$b0)
-    p2 <- power.prop.test(n / 2, p2 = p1_base, power = 0.75)$p1
-    round(qlogis(p2) - params$b0, digits = 2)
+    base <- baseline_grid(params)
+    tg <- te_grid(params)
+    p0 <- marginal_risk(base, list(g = 0, w = 1))
+    p1 <- power.prop.test(n = n / 2, p2 = p0, power = TARGET_POWER)$p1
+    bW <- uniroot(function(b) marginal_risk(base, tg, b) - p1,
+                  interval = c(-10, 10), tol = 1e-8)$root
+    round(bW, digits = 2)
   } else {
     sd_planned <- sqrt(params$b1^2 * params$X1_prob * (1 - params$X1_prob) +
                          params$b2^2 * params$s2^2 + params$s_err^2)
     delta <- power.t.test(n = n / 2, delta = NULL, sd = sd_planned,
-                          power = CTS_POWER)$delta
+                          power = TARGET_POWER)$delta
     round(-delta - te_moments(params)$mean, digits = 2)
   }
 }
@@ -362,7 +425,7 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
   treatment_effect <- eval(
     parse(text = params$te_expr),
     envir = list(bW = bW, n = n, X3 = X3, X4 = X4, X5 = X5, U_term = U_term,
-                 b3 = params$b3, b4 = params$b4, b5 = params$b5,
+                 b3 = params$b3, b4 = params$b4,
                  b34 = params$b34, b45 = params$b45)
   )
 
@@ -443,7 +506,7 @@ truth_at <- function(params, bW, link_truth, X1, X2, X3 = NULL, X4 = NULL, X5 = 
   treatment_effect <- eval(
     parse(text = params$te_expr),
     envir = list(bW = bW, n = length(X1), X3 = X3, X4 = X4, X5 = X5, U_term = 0,
-                 b3 = params$b3, b4 = params$b4, b5 = params$b5,
+                 b3 = params$b3, b4 = params$b4,
                  b34 = params$b34, b45 = params$b45)
   )
 
@@ -541,7 +604,7 @@ get_oracle_info <- function(scenario, bW, set) {
   params <- params[params$scenario == scenario, ]
 
   param_list <- list(b0 = params$b0, b1 = params$b1, b2 = params$b2, bW = bW)
-  for (nm in c("b3", "b4", "b5", "b34", "b45")) {
+  for (nm in c("b3", "b4", "b34", "b45")) {
     v <- params[[nm]]
     if (!is.null(v) && !is.na(v)) param_list[[nm]] <- v
   }

@@ -14,7 +14,7 @@
 #      E[tau | X3, X4, X5], the share explained by the prognostic covariates,
 #      E[tau | X1, X2], and the remainder (their interaction via the link)
 #   3. risk range, and the power the marginal risks actually give against the
-#      75% bW was calibrated for
+#      80% (TARGET_POWER) bW is calibrated for
 #
 # Writes nothing. Run from binary/:  Rscript bin_verify_hte.R
 

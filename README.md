@@ -151,15 +151,17 @@ Found during the de-duplication. Each is written up in the relevant folder READM
 | M | `dr_oracle` handed log-odds as outcome predictions — `6b06db3` dropped the `plogis` from the oracle formulas but not `oracle_link = "identity"` | `missing/binary` | yes — no re-run: every finished result predates it |
 | N | binary MNAR-Y truth evaluated at U = 0 rather than averaged over U — equal on the identity scale, not the logit one | `missing/binary` | yes — repaired at metrics time from the saved truth; no re-run |
 | O | continuous `bW` calibration used `sd = s_err + s2` (ignoring b1, b2 and the heterogeneity variance, and adding SDs) and set `bW` rather than the ATE, so realised power ran 3–100% and scenarios 2, 6, 8 had a positive ATE; b0, b1, b2 also varied by scenario. Now one baseline (0.4, −0.5, 1), and each trial planned for 80% power under homogeneity with the true ATE equal to the planned effect — realised power 61–80% as heterogeneity grows | `R/dgm_scenarios.R` — every continuous study | yes — re-run |
+| P | binary `bW` calibration planned at 75% power at the risk plogis(b0), ignoring X1 and X2 (0.401 against a population risk of 0.453), and set `bW` rather than the ATE (a marginal risk difference), so `bW` was the same in every scenario and realised power ran 5–99%; the modifiers in scenarios 2–5 also had the opposite sign to the continuous ones, and `b5` was a column no scenario used. Now each trial is planned for 80% power under homogeneity with the true RD equal to the planned effect in every scenario (realised power 79–81%), the signs match `continuous/`, and `b5` is gone | `R/dgm_scenarios.R` — every binary study | yes — re-run |
 
 Three more surfaced along the way:
 
 - `missing/binary` was a **half-converted fork**: continuous coefficients, a
   continuous power calculation, and truth on the **log-odds** scale while every
   estimator targets a risk difference
-- `binary`'s grid was declared three ways and they disagreed. The runs
-  themselves used the intended four-scenario design, so the results are sound;
-  the stale `c(1:10)` in the analysis script was simply out of step
+- `binary`'s grid was declared three ways and they disagreed. Submitting
+  indices 1–1600 against the analysis script's ten-scenario grid ran runs 1–40
+  of all ten scenarios, so the results on disk have 40 replicates per cell,
+  not 100 (see `binary/bin_config.R`). The study re-runs in full anyway
 - `combine_mi()` in `missing/ci_example` read `alpha` as a **free variable** from
   the global environment
 
@@ -174,6 +176,7 @@ Three more surfaced along the way:
 | `missing/binary` | also re-run — the DGM was wrong three ways |
 | `confidence_intervals/binary`, `confidence_intervals/optimal_sf` (bin) | also re-run — the DGM was wrong |
 | every continuous study: `continuous`, `missing/continuous`, `missing/ci_example`, `confidence_intervals/continuous`, `confidence_intervals/optimal_sf` (cts), `validation/continuous`, `model_evaluation`, `crossfitting`, `crossfitting/confidence_intervals` | also re-run for bug O — the shared baseline and `bW` changed, which moves every dataset and the level of the true CATE. For `crossfitting`, `crossfitting/confidence_intervals` and `model_evaluation` this is new: any finished results they hold are stale. See `continuous/README.md`'s "Outcome model and `bW` calibration" |
+| every binary study: `binary`, `missing/binary`, `confidence_intervals/binary`, `confidence_intervals/optimal_sf` (bin) | also re-run for bug P — the `bW` calibration and the modifier signs in scenarios 2–5 changed, which moves every dataset's outcome and the level of the true CATE. For `missing/binary` this is new: its finished rows 1–9,900 are superseded, so all 12,600 rows re-run. See `binary/README.md`'s "Outcome model and `bW` calibration" |
 | `competing_risk` | **first run under the new strategy** — it has now adopted the crossfitting change (it was the last production study still double-crossfitting) and runs clean end-to-end. Its pseudo-value and SuperLearner frameworks each ship in several arms, because it also crosses a second factor — whole-sample vs crossfit pseudo-values. See its README |
 | `model_evaluation` | **first run, not a re-run** — independent estimator/nuisance code (see its README). Its own 9 candidates did move off double crossfitting onto the shared single-crossfit strategy; the 16 res_sim_*.RDS produced before that change have been deleted, so the count restarts from zero |
 

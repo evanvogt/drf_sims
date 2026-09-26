@@ -8,22 +8,67 @@ a **risk difference**.
 
 | | |
 |---|---|
-| scenarios | **1, 3, 8, 9** — a subset, not all ten |
+| scenarios | 1–10 |
 | n | 100, 250, 500, 1000 |
 | runs | 100; **500 for scenarios 1, 3, 8, 9** (runs 101–500 are grid rows 4001–10400, `jobscripts/bin_extra.sh`) |
-| array | **1,600 jobs** |
+| array | **4,000 jobs** (`bin_1.sh`), plus **6,400** (`bin_extra.sh`) |
 | results | `../results/binary/scenario_<k>/<n>/res_sim_<run>.RDS` |
 
-The four scenarios are the ones the chapter reports: null, simple, complex and
-non-linear (`SS_SCENARIO_LABELS` in `R/figures.R`).
+Scenarios 1, 3, 8 and 9 are the ones the chapter reports: null, simple, complex
+and non-linear (`SS_SCENARIO_LABELS` in `R/figures.R`).
 
-The coefficient table differs from the continuous study — `b0 = -0.4`,
-`b1 = 0.5`, `b2 = 0.5` rather than the continuous values — because the same
-numbers on a logit scale would saturate `plogis`. Scenario 10's treatment effect
-also differs (`exp(X4)` rather than `exp(-abs(X4))`), and `bW` is calibrated with
-`power.prop.test` rather than `power.t.test`. The power targets differ too: here
-`bW` is calibrated to 75%, while since bug O the continuous studies plan the ATE
-for 80% power under homogeneity. Those are the only differences from `continuous/`.
+### Outcome model and `bW` calibration
+
+Every scenario shares one outcome model and differs only in its treatment
+effect, which is on the logit scale:
+
+`P(Y = 1) = plogis(b0 + b1·X1 + b2·X2 + W·(bW + g(x)))`, with
+`X1 ~ Bernoulli(0.4)` and `X2 ~ N(0, 1)`.
+
+| | |
+|---|---|
+| baseline | `b0 = −0.4`, `b1 = 0.5`, `b2 = 0.5`, in every scenario |
+| `g(x)` | the scenario's heterogeneity term, in log-odds: its `te_expr` in `R/dgm_scenarios.R`, with `bW = 0` |
+| `bW` | set so the true **ATE**, a marginal risk difference, equals the effect the trial was planned to detect |
+
+The trial is planned as in `continuous/`: to detect an ATE, assuming the effect
+is the same for everyone. The control-arm event rate is
+p̄0 = E[plogis(b0 + b1·X1 + b2·X2)] = 0.453, and the planned treated-arm rate p̄1
+gives 80% power (`TARGET_POWER`) in a two-proportion test with n/2 per arm.
+`bW` then solves E[plogis(b0 + b1·X1 + b2·X2 + bW + g)] = p̄1, the logit-link
+counterpart of the continuous `bW = −δ − E[g]`. g enters only that second step:
+the plan assumes homogeneity, but the data aren't homogeneous, so the `bW` that
+delivers the planned RD depends on g. Both steps use quadrature
+(`baseline_grid()`, `te_grid()`, `marginal_risk()`), with no random draws, so
+the draw order is untouched.
+
+| n | 100 | 250 | 500 | 1000 |
+|---|---|---|---|---|
+| true ATE (RD), every scenario | −0.26 | −0.17 | −0.12 | −0.09 |
+
+Unlike `continuous/`, every scenario realises the planned 80% (0.79–0.81, from
+rounding `bW`). A binary outcome's variance in each arm is p̄(1 − p̄), fixed by
+the marginal risks, so the heterogeneity has no variance to add.
+
+The effect modifiers point the same way as in `continuous/`, so the same
+subgroups benefit more. Their magnitudes are smaller because they are log-odds:
+the continuous `b3 = 2` would be an odds ratio of 7.4. The other differences
+from `continuous/` are the baseline, for the same reason, and scenario 10's
+treatment effect, `b4·exp(X4)` rather than `b3·X3 + b4·exp(−|X4|)`.
+
+**Before bug P** (root README), `bW` was calibrated for 75% power at the risk
+plogis(b0) = 0.401 — the risk at X1 = X2 = 0, not the population's 0.453 — and
+set to the planned log-odds ratio rather than the ATE. So `bW` was the same in
+every scenario, the true RD drifted with g, and power ran from 5% (scenario 9 at
+n = 1000, RD −0.010) to 99% (scenarios 2 and 4). The modifiers in scenarios 2–5
+also had the opposite sign to the continuous ones (`b3 = −0.4` in 2 and 4,
+`b4 = 0.2` in 3 and 0.3 in 4, `b34 = −0.5` in 5); only the signs changed. The
+level of the true CATE moved in every scenario, so the metrics are not
+comparable with earlier results.
+
+`Rscript R/calibration_report.R` prints `bW`, the true RD and the power for every
+binary scenario at every n, and for `missing/binary/`. See `continuous/README.md`
+for when to run it.
 
 ## The grid was declared three ways
 
@@ -36,15 +81,16 @@ did not agree:
 | `bin_check.R` / `bin_collect.R` | `scenario = c(1, 3, 8, 9)` |
 | `jobscripts/bin_1.sh` | `#PBS -J 1-1600` |
 
-4 scenarios × 4 sample sizes × 100 runs is exactly 1,600, so `c(1, 3, 8, 9)` is
-the design and the analysis script's `c(1:10)` was the stale line.
+4 scenarios × 4 sample sizes × 100 runs is exactly 1,600, which made
+`c(1, 3, 8, 9)` look like the design. But `expand.grid` varies the first column
+fastest, so submitting indices 1–1600 against the analysis script's 4,000-row
+`c(1:10)` grid ran runs 1–40 of **all ten** scenarios. `bin_collect.R` then
+looked for scenarios 1, 3, 8 and 9 and found 40 runs in each, so the results on
+disk have 40 replicates per cell, not 100 (see `bin_config.R`'s header).
 
-**The results on disk are the intended ones** — four scenarios, 100 runs each.
-The stale `c(1:10)` did not corrupt them; it was simply out of step with the
-grid the runs were actually launched from.
-
-`bin_config.R` now declares `c(1, 3, 8, 9)` once and every script reads it from
-there, so the three-way drift cannot recur.
+`bin_config.R` now declares the grid once and every script reads it from there,
+so the drift cannot recur. The grid is all ten scenarios at 100 runs, with 1, 3,
+8 and 9 taken to 500. The study re-runs in full anyway.
 
 ## Files
 
@@ -62,7 +108,7 @@ and why scenario 1's `BLP_p` is `NA`.
 ## Running it
 
 ```bash
-qsub binary/jobscripts/bin_1.sh     # 1-1600
+qsub binary/jobscripts/bin_1.sh     # 1-4000
 qsub binary/jobscripts/bin_extra.sh # 4001-10400: runs 101-500, scenarios 1, 3, 8, 9
 Rscript binary/bin_check.R
 ```
@@ -79,13 +125,17 @@ estimator arms, and separately for bug F, which changes `dr_superlearner` as
 in `continuous/`. Only the `dr_superlearner` arm moves for bug F specifically;
 the harness can confirm the other four are unchanged there.
 
-The DGM is unaffected by the bug ledger — bug A is the *confidence-interval*
-binary study, not this one. `bias` also flips sign when the metrics are
-regenerated (bug G), but that needs no cluster time.
+**Also re-run for bug P** — the `bW` calibration and the modifier signs in
+scenarios 2–5 changed (see "Outcome model and `bW` calibration" above), which
+moves every dataset's outcome and the level of the true CATE in all ten
+scenarios. Bug A is the *confidence-interval* binary study, not this one.
+`bias` also flips sign when the metrics are regenerated (bug G), but that needs
+no cluster time.
 
 ## Open idea: HTE on the risk-difference scale
 
-*Parked 2026-09-26 for later exploration. Nothing implemented.*
+*Parked 2026-09-26 for later exploration. Nothing implemented. Numbers updated
+for bug P.*
 
 ### The problem
 
@@ -98,28 +148,30 @@ explained by the described modifiers (X3/X4/X5) and the part explained by X1/X2:
 
 | scenario | n | SD of true RD CATE | from described modifiers | from X1, X2 | ATE (RD) | marginal power |
 |---|---|---|---|---|---|---|
-| 1 Null | 100 | 0.044 | — | 100% | −0.24 | 0.74 |
-| 1 Null | 1000 | 0.009 | — | 100% | −0.08 | 0.72 |
-| 3 Simple | 100 | 0.055 | 34% | 63% | −0.24 | 0.73 |
-| 3 Simple | 1000 | 0.045 | 94% | 5% | −0.08 | 0.71 |
-| 8 Complex | 100 | 0.126 | 85% | 10% | −0.20 | 0.57 |
-| 8 Complex | 1000 | 0.140 | 97% | 1% | −0.04 | 0.25 |
-| 9 Non-linear | 100 | 0.050 | 59% | 37% | −0.19 | 0.51 |
-| 9 Non-linear | 1000 | 0.050 | 99% | 0% | −0.01 | 0.05 |
+| 1 Null | 100 | 0.048 | — | 100% | −0.26 | 0.80 |
+| 1 Null | 1000 | 0.011 | — | 100% | −0.09 | 0.81 |
+| 3 Simple | 100 | 0.057 | 27% | 71% | −0.26 | 0.80 |
+| 3 Simple | 1000 | 0.045 | 93% | 6% | −0.09 | 0.80 |
+| 8 Complex | 100 | 0.120 | 75% | 20% | −0.26 | 0.80 |
+| 8 Complex | 1000 | 0.138 | 95% | 2% | −0.09 | 0.79 |
+| 9 Non-linear | 100 | 0.058 | 27% | 70% | −0.26 | 0.80 |
+| 9 Non-linear | 1000 | 0.048 | 92% | 6% | −0.09 | 0.81 |
 
 The remainder (≤ 6% everywhere) is the modifier × X1/X2 interaction the link
-creates. Three consequences:
+creates. Two consequences:
 
 - **Scenario 1 is not an RD null**, so its true-CATE test rejections in
   `bin_true_cate_tests.RDS` are not type I error, and `BLP_p` is not `NA` there
   as it is for continuous scenario 1.
 - **The HTE structure changes with n.** `bW` is recalibrated per n and is
-  larger at small n (−1.21 at n = 100, −0.35 at n = 1000), so link-induced HTE
-  dominates small samples. Scenarios 2 and 10 are the extreme: 18% from the
-  described modifiers at n = 100.
-- **75% power only holds when the modifier terms average zero.** In scenario 9,
-  E[0.5·cos(X4)] ≈ +0.30 almost cancels `bW` at n = 1000. Scenarios 6 and 8
-  fall to 31% and 25%; scenario 2 rises to 99%.
+  larger at small n (−1.31 at n = 100, −0.39 at n = 1000 in scenario 1), so
+  link-induced HTE dominates small samples. Scenarios 10 and 2 are the extreme:
+  20% and 22% from the described modifiers at n = 100.
+
+Before bug P there was a third: `bW` was calibrated on the log-odds scale, so
+the modifiers moved the ATE and the power (5% in scenario 9 at n = 1000). The
+calibration now targets the marginal RD, so the ATE and power are the same in
+every scenario (see "Outcome model and `bW` calibration").
 
 The shape of the described HTE survives in direction: E[tau | modifiers] is a
 monotone transform of the logit-scale effect, though not a linear one.
@@ -135,19 +187,19 @@ p1 <- p0 + delta                                      # tau = delta for every x
 Y  <- rbinom(n, 1, ifelse(W == 1, p1, p0))
 
 # calibrate on the RD scale; p0_bar by quadrature over X1, X2 (GH_NODES, no RNG)
-delta <- power.prop.test(n = n / 2, p2 = p0_bar, power = 0.75)$p1 - p0_bar
+delta <- power.prop.test(n = n / 2, p2 = p0_bar, power = TARGET_POWER)$p1 - p0_bar
 ```
 
-This needs L ≥ |δ|. With the current `b0`/`b1`/`b2`, **L = 0.3, U = 0.95**:
+This needs L ≥ |δ|. With the current `b0`/`b1`/`b2`, **L = 0.3, U = 0.95**
+(p̄0 = 0.595):
 
 | n | 100 | 250 | 500 | 1000 |
 |---|---|---|---|---|
-| δ | −0.26 | −0.17 | −0.12 | −0.08 |
+| δ | −0.276 | −0.176 | −0.125 | −0.088 |
 
-Treated risk is then ≥ 0.04 for every x — a bound, not an empirical check.
-L = 0.25 looks fine in 200,000 draws but its bound is L + δ = −0.01 at n = 100.
-Simulated two-proportion-test power was 0.69–0.74 (the n = 100 shortfall is
-`power.prop.test`'s normal approximation and random arm sizes).
+Treated risk is then ≥ 0.02 for every x — a bound, not an empirical check.
+L = 0.25 is not enough: its bound is L + δ = −0.03 at n = 100. Simulated power,
+2,000 datasets per n with an uncorrected two-proportion test, was 0.79–0.81.
 
 Costs: control-risk SD drops from 0.13 to 0.08 (scaling `b1`, `b2` by about 1.6
 restores it — recheck L + δ ≥ 0 afterwards), and the control-arm model is a

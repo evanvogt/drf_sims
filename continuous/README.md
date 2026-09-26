@@ -62,7 +62,7 @@ effect:
 
 Each simulated RCT is planned the way trials usually are: to detect an ATE,
 assuming the effect is the same for everyone. The planned effect δ gives 80%
-power (`CTS_POWER`) in an unadjusted two-sample t-test with n/2 per arm, using
+power (`TARGET_POWER`) in an unadjusted two-sample t-test with n/2 per arm, using
 the outcome SD with no heterogeneity: sqrt(b1²·0.4·0.6 + b2² + 0.5²) = 1.145.
 `bW` is then set to −δ − E[g], so the true ATE is −δ. `te_moments()` computes
 E[g] by quadrature, with no random draws, so the draw order is untouched.
@@ -91,7 +91,8 @@ comparable with earlier results.
 
 `Rscript R/calibration_report.R` prints `bW`, the true ATE, and the planned and
 realised power for every continuous scenario at every n a study uses, including
-the missing-data and validation studies. It takes seconds and needs no
+the missing-data and validation studies, then the same for the binary scenarios
+(see `binary/README.md`). It takes seconds and needs no
 simulation. After any change to the scenario tables or `calibrate_bW()`, run it
 on the cluster too: its `bW` tables should match a local run exactly, since
 R 4.3.2 there could round a borderline value differently from 4.5.3 here.

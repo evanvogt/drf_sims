@@ -123,7 +123,9 @@ but `check_all.R`'s `patch_status` counts manifest rows, so it reads 8,800 /
 arms) and separately for bug F (`dr_superlearner` only).
 
 `missing/binary` — re-runs entirely; see its own README, it had three further
-defects plus a `pretest_superlearner()` crash (bug K), now fixed.
+defects plus a `pretest_superlearner()` crash (bug K), now fixed. Bug P (the
+binary `bW` calibration and modifier signs) supersedes its finished rows
+1–9,900 too, so all 12,600 rows re-run.
 
 **Both** additionally owe the `dr_random_forest` HTE back-fill — a one-off
 in-place repair of finished results, not a re-run. Track it in

@@ -3,8 +3,8 @@
 ##########
 # Sourced by bin_analysis.R, bin_check.R, bin_collect.R and bin_metrics.R.
 #
-# GRID DISAGREEMENT, now resolved in favour of c(1, 3, 8, 9). Before this file
-# existed the grid was declared three times and they did not agree:
+# GRID DISAGREEMENT, since resolved. Before this file existed the grid was
+# declared three times and they did not agree:
 #
 #   bin_analysis.R          scenario = c(1:10)      -> 4000 rows
 #   bin_check/bin_collect   scenario = c(1, 3, 8, 9) -> 1600 rows
@@ -18,7 +18,8 @@
 # quietly has 40 replicates per cell rather than the intended 100.
 #
 # Anything already under ../results/binary was produced by the old mapping.
-# The study re-runs anyway for bug F, and this grid gives the intended design.
+# The study re-runs anyway (bug F, bug P), on the grid below: all ten
+# scenarios at 100 runs, with 1, 3, 8 and 9 taken to 500.
 
 library(here)
 source(here("R", "pipeline.R"))

@@ -15,7 +15,9 @@ This study initially ran on the continuous coefficient table instead of the bina
 ## Status
 
 **Everything under `../results/confidence_intervals/binary/` is superseded** —
-different data, so every number moves.
+different data, so every number moves. Bug P (the binary `bW` calibration and
+the modifier signs in scenarios 2–5; see `binary/README.md`) changes the data
+again, so run the re-run below on the bug P code, not before it.
 
 `confidence_intervals/optimal_sf/bin_ci_sf_analysis.R` sources this same DGM, so
 its 2,000 jobs re-run too. Together that is about 22,000 array jobs, the largest

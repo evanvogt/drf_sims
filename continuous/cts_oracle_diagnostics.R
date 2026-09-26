@@ -43,8 +43,8 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 # correctly-specified stage-2 formula per scenario (RHS only; lm() adds the
 # intercept, which is bW). Must match SCENARIO_SETS$continuous$te_expr
 # (R/dgm_scenarios.R TE_10) exactly, dropping bW and any b* parameter this
-# scenario's te_expr does not actually use (e.g. b5 is a live column in the
-# scenario table but TE_10 never references it).
+# scenario's te_expr does not actually use (the scenario table holds NA for
+# those, e.g. b3 and b4 in scenario 7).
 OLS_TERMS <- c(
   "1",                       # 1  no HTE
   "X3",                      # 2

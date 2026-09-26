@@ -15,12 +15,31 @@ mechanisms, handling methods and the shared bug fixes.
 
 ### The corrected coefficients
 
-`b0`, `b1`, `b2` come straight from the binary table. `b3`/`b4`/`b5`/`b45` are
+`b0`, `b1`, `b2` come straight from the binary table. `b3`/`b4`/`b45` are
 taken from the binary scenario each reduced scenario corresponds to (1→1, 2→2,
 3→4, 4→8, 5→9). **That mapping is an inference from the scenario descriptions,
 not something the original code recorded** — worth a sanity check before
 committing cluster time. Scenario 6 (→3) was added later specifically as binary
 scenario 3, so its coefficients are copied, not inferred.
+
+### Bug P — the `bW` calibration and the modifier signs
+
+The binary calibration and coefficients changed with bug P; `binary/README.md`'s
+"Outcome model and `bW` calibration" has the design. Here it means:
+
+- **Signs.** Scenarios 2, 3 and 6 carry the sign flips of main-study scenarios
+  2, 4 and 3: `b3 = 0.4` (was −0.4) in 2 and 3, `b4 = −0.3` (was 0.3) in 3, and
+  `b4 = −0.2` (was 0.2) in 6. `b5`, which no treatment effect used, is gone.
+- **`bW`** now differs by scenario, so that the true ATE is the same marginal
+  RD in all six: at n = 500, −0.55, −0.84, −0.85, −0.75, −0.86 and −0.56 for
+  scenarios 1–6 (−0.50 in every scenario before). The true RD is −0.122 and
+  the power 0.80.
+- **MNAR-Y** is calibrated without U, as in `missing/continuous`, so every
+  mechanism shares one `bW` and one truth per scenario. Averaging the treated
+  risk over U pulls it towards 0.5, so under MNAR-Y the RD shrinks to about
+  −0.10 and the power to 0.61–0.63.
+
+`Rscript R/calibration_report.R` prints this table.
 
 ## Bug M — `dr_oracle` on the log-odds scale (fixed; no finished result affected)
 
@@ -249,9 +268,23 @@ quarto render missing/binary/bin_miss_results.qmd   # the same, as a browsable r
 
 ## Status
 
+**Full re-run owed for bug P** — the `bW` calibration and the signs in
+scenarios 2, 3 and 6 changed (see "Bug P" above), which moves every dataset's
+outcome and the truth in all six scenarios. That supersedes the complete rows
+1–9900 described below: all 12,600 rows (`bin_miss_1.sh`, `bin_miss_extra.sh`)
+re-run, then collect and metrics. New runs carry the `dr_random_forest` HTE
+tests (`PROFILES$missing`) and the averaged MNAR-Y truth, so nothing needs
+back-filling and the bug N repair leaves them alone. `check_all.R`'s
+`patch_status` still counts manifest rows, though, so, as for scenario 6 in
+`missing/README.md`'s Status, a bookkeeping pass over every combination
+(`qsub -J 1-126%20 jobscripts/bin_miss_patch.sh`) is what makes it read
+complete. Archive the old `bin_miss_hte_patch/` manifests with the old results
+first.
+
 **Scenario 6 owed** — `bin_miss_extra.sh` (rows 9901–12600), then the
 bookkeeping patch pass over combinations 100–126 (see `missing/README.md`
-Status) and collect/metrics. Rows 1–9900 are unchanged.
+Status) and collect/metrics. Rows 1–9900 are unchanged. *(Folded into the bug P
+re-run above.)*
 
 **Metrics owed (bug N)** — re-run `bin_miss_metrics.sh` so the MNAR-Y rows are
 scored against the averaged truth. No simulation jobs; doing it once, after
