@@ -21,8 +21,9 @@ The coefficient table differs from the continuous study — `b0 = -0.4`,
 `b1 = 0.5`, `b2 = 0.5` rather than the continuous values — because the same
 numbers on a logit scale would saturate `plogis`. Scenario 10's treatment effect
 also differs (`exp(X4)` rather than `exp(-abs(X4))`), and `bW` is calibrated with
-`power.prop.test` rather than `power.t.test`. Those are the only differences from
-`continuous/`.
+`power.prop.test` rather than `power.t.test`. The power targets differ too: here
+`bW` is calibrated to 75%, while since bug O the continuous studies calibrate the
+ATE to 80%. Those are the only differences from `continuous/`.
 
 ## The grid was declared three ways
 

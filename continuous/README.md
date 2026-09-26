@@ -46,6 +46,36 @@ figures.
 Each dataset also carries five deliberately unrelated covariates (`X01`–`X05`),
 so the estimators have to find the signal rather than being handed it.
 
+### Outcome model and `bW` calibration
+
+Every scenario shares one outcome model and differs only in its treatment
+effect:
+
+`Y = b0 + b1·X1 + b2·X2 + W·(bW + g(x)) + ε`, with `X1 ~ Bernoulli(0.4)`,
+`X2 ~ N(0, 1)` and `ε ~ N(0, 0.5²)`.
+
+| | |
+|---|---|
+| baseline | `b0 = 0.4`, `b1 = −0.5`, `b2 = 1`, in every scenario |
+| `g(x)` | the scenario's heterogeneity term: its `te_expr` in `R/dgm_scenarios.R`, with `bW = 0` |
+| `bW` | set so the **ATE**, `bW + E[g]`, has 80% power (`CTS_POWER`) in an unadjusted two-sample t-test with n/2 per arm |
+
+The t-test SD pools the two arms. The control arm's outcome variance is
+b1²·0.4·0.6 + b2² + 0.5² = 1.31, and the treated arm adds Var(g).
+`te_moments()` computes E[g] and Var(g) by quadrature, with no random draws, so
+the draw order is untouched.
+
+**Before bug O** (root README), the baseline varied by scenario: b0 ran from 0.2
+to 1, b1 was −0.05, and b2 was 1 in scenario 9 and 2 elsewhere. The calibration
+used `sd = s_err + s2 = 1.5` and set `bW` rather than the ATE. Realised power
+ran from 3% to 100%, and scenarios 2, 6 and 8 had a *positive* ATE. Each
+scenario's heterogeneity around its mean, g(x) − E[g], is unchanged; the level
+of the true CATE moved, so `sign_acc` and the relative metrics are not
+comparable with earlier results.
+
+`Rscript R/calibration_check.R` verifies all of this against the previous
+version of `R/dgm_scenarios.R`.
+
 ## Estimators
 
 `causal_forest`, `dr_random_forest`, `dr_oracle`, `dr_semi_oracle`,
@@ -122,6 +152,10 @@ estimator arms, and separately for bug F, now fixed permanently, which changes
 the result discarded, so failing algorithms were never dropped. Only the
 `dr_superlearner` arm moves for bug F specifically — the harness can confirm
 the other four are unchanged there.
+
+**Also re-run for bug O** — the shared baseline and the `bW` calibration
+changed (see "Outcome model and `bW` calibration" above), which moves every
+dataset and the level of the true CATE in all ten scenarios.
 
 Nothing else in this study was affected by the *bug ledger*. `bias` also
 changes sign when the metrics are regenerated (bug G), but that needs no

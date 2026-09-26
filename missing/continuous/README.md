@@ -111,8 +111,19 @@ Status) and collect/metrics. Nothing else in the grid changed.
 
 **Re-runs required** — for the crossfitting strategy change to
 `R/cate_models.R` (see root README Methods/Status), which moves all five
-estimator arms, and separately for bug F (`dr_superlearner` only). The DGM is
-unaffected by the *bug ledger*. Bugs B and C were collection/metrics
-problems, so re-running `cts_miss_collect.R` and `cts_miss_metrics.R` over
-the existing per-run files recovers the mechanisms that were being missed
-and populates `rel_efficiency` — no cluster time needed for those two.
+estimator arms, and separately for bug F (`dr_superlearner` only). Bugs B and C
+were collection/metrics problems, so re-running `cts_miss_collect.R` and
+`cts_miss_metrics.R` over the existing per-run files recovers the mechanisms
+that were being missed and populates `rel_efficiency` — no cluster time needed
+for those two.
+
+**Also re-run for bug O** — the `continuous_missing` table now shares the main
+study's baseline (`b0 = 0.4`, `b1 = −0.5`, `b2 = 1`; scenario 5 alone had
+`b2 = 1` before) and its `bW` calibration: the ATE has 80% power at n = 500.
+See `continuous/README.md`'s "Outcome model and `bW` calibration". MNAR-Y's
+`U` term is left out of the calibration on purpose, so every mechanism shares
+one `bW` and one truth per scenario. The price is that under MNAR-Y the
+treated arm is noisier, and the ATE's power there is 66–70%. With
+`PROFILES$missing` already set, re-run results carry the `dr_random_forest`
+tests, so the back-fill patch above only matters for results made before
+bug O.

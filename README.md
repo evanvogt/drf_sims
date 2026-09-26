@@ -150,6 +150,7 @@ Found during the de-duplication. Each is written up in the relevant folder READM
 | L | `run_blp_whole()` had no `tryCatch`, crashed on a constant/degenerate CATE | shared | yes |
 | M | `dr_oracle` handed log-odds as outcome predictions — `6b06db3` dropped the `plogis` from the oracle formulas but not `oracle_link = "identity"` | `missing/binary` | yes — no re-run: every finished result predates it |
 | N | binary MNAR-Y truth evaluated at U = 0 rather than averaged over U — equal on the identity scale, not the logit one | `missing/binary` | yes — repaired at metrics time from the saved truth; no re-run |
+| O | continuous `bW` calibration used `sd = s_err + s2` (ignoring b1, b2 and the heterogeneity variance, and adding SDs) and set `bW` rather than the ATE, so realised power ran 3–100% and scenarios 2, 6, 8 had a positive ATE; b0, b1, b2 also varied by scenario. Now one baseline (0.4, −0.5, 1) and the ATE calibrated to 80% power | `R/dgm_scenarios.R` — every continuous study | yes — re-run |
 
 Three more surfaced along the way:
 
@@ -172,6 +173,7 @@ Three more surfaced along the way:
 | `binary` | also re-run for bug F (`dr_superlearner` only) |
 | `missing/binary` | also re-run — the DGM was wrong three ways |
 | `confidence_intervals/binary`, `confidence_intervals/optimal_sf` (bin) | also re-run — the DGM was wrong |
+| every continuous study: `continuous`, `missing/continuous`, `missing/ci_example`, `confidence_intervals/continuous`, `confidence_intervals/optimal_sf` (cts), `validation/continuous`, `model_evaluation`, `crossfitting`, `crossfitting/confidence_intervals` | also re-run for bug O — the shared baseline and `bW` changed, which moves every dataset and the level of the true CATE. For `crossfitting`, `crossfitting/confidence_intervals` and `model_evaluation` this is new: any finished results they hold are stale. See `continuous/README.md`'s "Outcome model and `bW` calibration" |
 | `competing_risk` | **first run under the new strategy** — it has now adopted the crossfitting change (it was the last production study still double-crossfitting) and runs clean end-to-end. Its pseudo-value and SuperLearner frameworks each ship in several arms, because it also crosses a second factor — whole-sample vs crossfit pseudo-values. See its README |
 | `model_evaluation` | **first run, not a re-run** — independent estimator/nuisance code (see its README). Its own 9 candidates did move off double crossfitting onto the shared single-crossfit strategy; the 16 res_sim_*.RDS produced before that change have been deleted, so the count restarts from zero |
 
