@@ -29,9 +29,8 @@ source(here("R", "cate_models.R"))
 
 #' Draw a training sample and an independent test sample from the same DGP
 #'
-#' bW is derived from n inside generate_continuous_scenario_data (calibrate_bW()
-#' in R/dgm_scenarios.R), so the test sample is built by stacking n_test/n draws
-#' at the same n rather
+#' bW is derived from n inside generate_continuous_scenario_data (cts_dgms.R:67),
+#' so the test sample is built by stacking n_test/n draws at the same n rather
 #' than by asking for a bigger sample - that keeps the true CATE surface identical.
 #'
 #' @param scenario scenario index passed to generate_continuous_scenario_data

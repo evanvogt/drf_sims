@@ -114,10 +114,9 @@ SCENARIO_SETS <- list(
   continuous = scenario_table(
     scenario = 1:10, description = DESC_10,
     X1_prob = 0.4, X3_prob = 0.7,
-    # one baseline for every scenario (bug O). With the identity link these set
-    # the outcome's noise, not the CATE; they varied by scenario before, with
-    # b1 = -0.05 leaving X1 all but unprognostic
-    b0 = 0.4, b1 = -0.5, b2 = 1,
+    b0 = c(0.4, 0.2, 0.3, 0.4, 0.4, 1, 1, 1, 0.4, 0.4),
+    b1 = -0.05,
+    b2 = c(2, 2, 2, 2, 2, 2, 2, 2, 1, 2),
     b3 = c(NA, 2, NA, 0.3, NA, 2, 2, 2, NA, 0.3),
     b4 = c(NA, NA, -1, -1, NA, 0.5, 0.5, 0.5, 1, 0.1),
     b5 = c(NA, NA, NA, NA, NA, NA, -0.5, -0.5, NA, NA),
@@ -153,8 +152,9 @@ SCENARIO_SETS <- list(
   continuous_missing = scenario_table(
     scenario = 1:6, description = DESC_MISS,
     X1_prob = 0.4, X3_prob = 0.7,
-    # the same shared baseline as the main continuous table (bug O)
-    b0 = 0.4, b1 = -0.5, b2 = 1,
+    b0 = c(0.4, 0.2, 0.4, 1, 0.4, 0.3),
+    b1 = -0.05,
+    b2 = c(2, 2, 2, 2, 1, 2),
     b3 = c(NA, 2, 0.3, 2, NA, NA),
     b4 = c(NA, NA, -1, 0.5, 1, -1),
     b5 = c(NA, NA, NA, -0.5, NA, NA),
@@ -217,91 +217,21 @@ calibration_for <- function(set) {
   if (is_binary_set(set)) "prop" else "t"
 }
 
-# ---- quadrature -------------------------------------------------------------
-
-# Gauss-Hermite nodes and weights (Golub-Welsch), built once at source time.
-# The weights are normalised to sum to 1, so sum(w * f(sqrt(2) * x)) = E[f(Z)].
-GH_NODES <- local({
-  k <- 80
-  i <- seq_len(k - 1)
-  J <- matrix(0, k, k)
-  J[cbind(i, i + 1)] <- J[cbind(i + 1, i)] <- sqrt(i / 2)
-  e <- eigen(J, symmetric = TRUE)
-  list(x = e$values, w = e$vectors[1, ]^2)
-})
-
-#' Mean and variance of a scenario's heterogeneity term g
-#'
-#' g is the treatment effect with bW = 0 and U_term = 0, so te = bW + g.
-#' Evaluated from params$te_expr itself, so it cannot drift from the generator:
-#' exactly over X3's two points, by Gauss-Hermite over X4 and X5. Deterministic -
-#' it consumes no RNG, so it is safe inside calibrate_bW() (see DRAW ORDER in
-#' the file header).
-#'
-#' @param params one-row scenario params
-#' @return list(mean = E[g], var = Var(g))
-te_moments <- function(params) {
-  axes <- list()
-  weights <- list()
-  if (params$needs_X3) {
-    axes$X3 <- c(0, 1)
-    weights$X3 <- c(1 - params$X3_prob, params$X3_prob)
-  }
-  for (v in c("X4", "X5")) {
-    if (params[[paste0("needs_", v)]]) {
-      axes[[v]] <- sqrt(2) * params[[sub("X", "s", v)]] * GH_NODES$x
-      weights[[v]] <- GH_NODES$w
-    }
-  }
-  if (length(axes) == 0) return(list(mean = 0, var = 0))
-
-  grid <- expand.grid(axes, KEEP.OUT.ATTRS = FALSE)
-  w <- Reduce(`*`, expand.grid(weights, KEEP.OUT.ATTRS = FALSE))
-  g <- eval(
-    parse(text = params$te_expr),
-    envir = list(bW = 0, n = nrow(grid), X3 = grid$X3, X4 = grid$X4, X5 = grid$X5,
-                 U_term = 0, b3 = params$b3, b4 = params$b4, b5 = params$b5,
-                 b34 = params$b34, b45 = params$b45)
-  )
-  m <- sum(w * g)
-  list(mean = m, var = sum(w * (g - m)^2))
-}
-
 # ---- generation -------------------------------------------------------------
-
-# target power for the continuous studies' ATE; the binary branch stays at 0.75
-CTS_POWER <- 0.80
 
 #' Calibrate the treatment effect to a fixed power
 #'
-#' Continuous outcomes: bW is set so that the ATE, bW + E[g], has CTS_POWER in
-#' an unadjusted two-sample t-test with n / 2 per arm. The SD pools the two
-#' arms' outcome variances - control b1^2 p(1 - p) + b2^2 s2^2 + s_err^2,
-#' treated that plus Var(g) - so the prognostic coefficients and the
-#' heterogeneity both count. Before bug O this used sd = s_err + s2, which
-#' ignored b1, b2 and Var(g) and added SDs, and it calibrated bW rather than
-#' the ATE, so realised power ran from 3% to 100% across scenarios. MNAR-Y's
-#' U_term is left out on purpose, so every missingness mechanism shares one bW
-#' and one truth per scenario.
-#'
-#' Binary outcomes: a two-proportion test at 75% power on bW at the baseline
-#' risk plogis(b0). Unchanged, so still subject to the ATE drift above - see
-#' binary/README.md.
-#'
-#' Neither branch consumes RNG.
+#' Continuous outcomes use a two-sample t-test, binary outcomes a two-proportion
+#' test, both at 75% power. Neither consumes RNG.
 calibrate_bW <- function(params, n, calibration = c("t", "prop")) {
   if (match.arg(calibration) == "prop") {
     p1_base <- plogis(params$b0)
     p2 <- power.prop.test(n / 2, p2 = p1_base, power = 0.75)$p1
     round(qlogis(p2) - params$b0, digits = 2)
   } else {
-    g <- te_moments(params)
-    var0 <- params$b1^2 * params$X1_prob * (1 - params$X1_prob) +
-      params$b2^2 * params$s2^2 + params$s_err^2
-    sd_pooled <- sqrt(var0 + g$var / 2)
-    delta <- power.t.test(n = n / 2, delta = NULL, sd = sd_pooled,
-                          power = CTS_POWER)$delta
-    round(-delta - g$mean, digits = 2)
+    s_total <- params$s_err + params$s2
+    diff <- power.t.test(n = n / 2, delta = NULL, sd = s_total, power = 0.75)$delta
+    round(-diff, digits = 2)
   }
 }
 
@@ -461,8 +391,18 @@ truth_at <- function(params, bW, link_truth, X1, X2, X3 = NULL, X4 = NULL, X5 = 
 #   p1 = E_U[plogis(eta1 + bU * U)],  U ~ N(0, sU^2),  eta1 = base + te without U
 # With an identity link that is eta1 itself, since E[U] = 0, which is why the
 # continuous studies need nothing here. With a logit link it is not: the U = 0
-# value plogis(eta1) sits further from 0.5 than the average does. The quadrature
-# uses GH_NODES, defined above the generation section.
+# value plogis(eta1) sits further from 0.5 than the average does.
+
+# Gauss-Hermite nodes and weights (Golub-Welsch), built once at source time.
+# The weights are normalised to sum to 1, so sum(w * f(sqrt(2) * x)) = E[f(Z)].
+GH_NODES <- local({
+  k <- 80
+  i <- seq_len(k - 1)
+  J <- matrix(0, k, k)
+  J[cbind(i, i + 1)] <- J[cbind(i + 1, i)] <- sqrt(i / 2)
+  e <- eigen(J, symmetric = TRUE)
+  list(x = e$values, w = e$vectors[1, ]^2)
+})
 
 #' E[plogis(eta + s * Z)] for Z ~ N(0, 1), by Gauss-Hermite quadrature
 #'
