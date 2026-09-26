@@ -236,7 +236,8 @@ GH_NODES <- local({
 #' Evaluated from params$te_expr itself, so it cannot drift from the generator:
 #' exactly over X3's two points, by Gauss-Hermite over X4 and X5. Deterministic -
 #' it consumes no RNG, so it is safe inside calibrate_bW() (see DRAW ORDER in
-#' the file header).
+#' the file header). calibrate_bW() uses only the mean; the variance is what
+#' R/calibration_check.R uses to predict each scenario's realised power.
 #'
 #' @param params one-row scenario params
 #' @return list(mean = E[g], var = Var(g))
@@ -269,20 +270,27 @@ te_moments <- function(params) {
 
 # ---- generation -------------------------------------------------------------
 
-# target power for the continuous studies' ATE; the binary branch stays at 0.75
+# power the continuous trials are planned for; the binary branch stays at 0.75
 CTS_POWER <- 0.80
 
 #' Calibrate the treatment effect to a fixed power
 #'
-#' Continuous outcomes: bW is set so that the ATE, bW + E[g], has CTS_POWER in
-#' an unadjusted two-sample t-test with n / 2 per arm. The SD pools the two
-#' arms' outcome variances - control b1^2 p(1 - p) + b2^2 s2^2 + s_err^2,
-#' treated that plus Var(g) - so the prognostic coefficients and the
-#' heterogeneity both count. Before bug O this used sd = s_err + s2, which
-#' ignored b1, b2 and Var(g) and added SDs, and it calibrated bW rather than
-#' the ATE, so realised power ran from 3% to 100% across scenarios. MNAR-Y's
-#' U_term is left out on purpose, so every missingness mechanism shares one bW
-#' and one truth per scenario.
+#' Continuous outcomes: each simulated RCT is planned the way a trial usually
+#' is - to detect an ATE, assuming the effect is homogeneous. The planned
+#' effect delta gives CTS_POWER in an unadjusted two-sample t-test with n / 2
+#' per arm, using the outcome SD with no heterogeneity:
+#' sqrt(b1^2 p(1 - p) + b2^2 s2^2 + s_err^2). bW is then set so the true ATE,
+#' bW + E[g], equals -delta: the plan gets the average effect right but knows
+#' nothing of the heterogeneity around it. Var(g) is left out on purpose, so
+#' realised power falls below CTS_POWER as heterogeneity grows (61-80% across
+#' scenarios 1-10), just as a real trial planned under homogeneity would. MNAR-Y's
+#' U_term is left out for the same reason, which also keeps one bW and one
+#' truth per scenario across every missingness mechanism.
+#'
+#' Before bug O this used sd = s_err + s2 (adding SDs, and ignoring b1 and b2)
+#' and set bW rather than the ATE to the planned effect, so the true ATE drifted
+#' by E[g] - to the opposite sign in scenarios 2, 6 and 8 - and realised power
+#' ran from 3% to 100%.
 #'
 #' Binary outcomes: a two-proportion test at 75% power on bW at the baseline
 #' risk plogis(b0). Unchanged, so still subject to the ATE drift above - see
@@ -295,13 +303,11 @@ calibrate_bW <- function(params, n, calibration = c("t", "prop")) {
     p2 <- power.prop.test(n / 2, p2 = p1_base, power = 0.75)$p1
     round(qlogis(p2) - params$b0, digits = 2)
   } else {
-    g <- te_moments(params)
-    var0 <- params$b1^2 * params$X1_prob * (1 - params$X1_prob) +
-      params$b2^2 * params$s2^2 + params$s_err^2
-    sd_pooled <- sqrt(var0 + g$var / 2)
-    delta <- power.t.test(n = n / 2, delta = NULL, sd = sd_pooled,
+    sd_planned <- sqrt(params$b1^2 * params$X1_prob * (1 - params$X1_prob) +
+                         params$b2^2 * params$s2^2 + params$s_err^2)
+    delta <- power.t.test(n = n / 2, delta = NULL, sd = sd_planned,
                           power = CTS_POWER)$delta
-    round(-delta - g$mean, digits = 2)
+    round(-delta - te_moments(params)$mean, digits = 2)
   }
 }
 

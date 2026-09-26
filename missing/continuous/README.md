@@ -119,11 +119,13 @@ for those two.
 
 **Also re-run for bug O** — the `continuous_missing` table now shares the main
 study's baseline (`b0 = 0.4`, `b1 = −0.5`, `b2 = 1`; scenario 5 alone had
-`b2 = 1` before) and its `bW` calibration: the ATE has 80% power at n = 500.
-See `continuous/README.md`'s "Outcome model and `bW` calibration". MNAR-Y's
-`U` term is left out of the calibration on purpose, so every mechanism shares
-one `bW` and one truth per scenario. The price is that under MNAR-Y the
-treated arm is noisier, and the ATE's power there is 66–70%. With
-`PROFILES$missing` already set, re-run results carry the `dr_random_forest`
-tests, so the back-fill patch above only matters for results made before
-bug O.
+`b2 = 1` before) and its `bW` calibration: every trial is planned for 80% power
+under homogeneity, so every scenario has a true ATE of −0.29 at n = 500. See
+`continuous/README.md`'s "Outcome model and `bW` calibration". With complete
+data, realised power is 0.81 in scenario 1 and 0.63–0.76 elsewhere. MNAR-Y's `U`
+term is heterogeneity the plan knows nothing about, like the rest, so it is
+left out of the calibration too. That keeps one `bW` and one truth per scenario
+across every mechanism, and lowers realised power under MNAR-Y to 0.54–0.67.
+With `PROFILES$missing` already set, re-run results carry the
+`dr_random_forest` tests, so the back-fill patch above only matters for results
+made before bug O.

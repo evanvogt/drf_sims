@@ -9,10 +9,11 @@
 # Checks, in order:
 #   1. both continuous tables share one baseline (b0, b1, b2)
 #   2. te_moments() agrees with a large Monte Carlo draw
-#   3. every continuous scenario at every n a study uses: the ATE has
-#      CTS_POWER analytically (to within bW's 2 dp rounding), the mean true tau
-#      is -delta, and a simulated Welch t-test on generated data gets close to
-#      CTS_POWER
+#   3. every continuous scenario at every n a study uses: the trial as planned
+#      (homogeneous effect) has CTS_POWER to within bW's 2 dp rounding, the
+#      true ATE is the planned -delta and is shared by every scenario, and a
+#      simulated Welch t-test on generated data matches the realised power the
+#      heterogeneity predicts - below CTS_POWER wherever Var(g) > 0
 #   4. calibrate_bW() and te_moments() consume no RNG
 #   5. draw order: for a fixed seed, W, every covariate, U and the error term
 #      match the reference version - only Y, the truth and bW move
@@ -108,15 +109,22 @@ for (set in CTS_SETS) {
 }
 
 # =============================================================================
-cat("\n=== 3. power and ATE at every study n ===\n")
-# analytic power uses the MC moments and a variance written out here, not
-# te_moments() or calibrate_bW()'s own arithmetic, so it is an independent check.
-# bW is rounded to 2 dp, which moves the ATE by up to 0.005 - at n = 1000 that
-# is about 0.02 of power, hence the +-0.02 tolerance rather than +-0.01. The
-# ATE check below is the tighter one: the rounding alone bounds it at 0.005
+cat("\n=== 3. planned power, true ATE and realised power at every study n ===\n")
+# Each trial is planned under homogeneity: delta gives CTS_POWER with the
+# outcome SD of the control arm (no heterogeneity), and the true ATE is set to
+# -delta. The heterogeneity the plan ignores adds Var(g) to the treated arm, so
+# realised power is predicted with the pooled SD sqrt(var0 + Var(g) / 2) and
+# falls below CTS_POWER as Var(g) grows - only scenario 1 should realise it.
+#
+# The moments are the MC ones and var0 is written out here, not taken from
+# te_moments() or calibrate_bW(), so this is an independent check. bW is
+# rounded to 2 dp, which moves the ATE by up to 0.005 - about 0.02 of power at
+# n = 1000, hence +-0.02 on planned power. The ATE check is the tighter one.
 
 n_truth <- 1e6
 sim_reps <- 4000
+realised <- list()
+ate <- list()
 
 for (set in CTS_SETS) {
   tbl <- new$resolve_set(set)
@@ -124,33 +132,48 @@ for (set in CTS_SETS) {
     p <- tbl[tbl$scenario == s, ]
     m <- mc_g[[paste(set, s)]]
     var0 <- p$b1^2 * p$X1_prob * (1 - p$X1_prob) + p$b2^2 * p$s2^2 + p$s_err^2
-    sd_pooled <- sqrt(var0 + m[["var"]] / 2)
+    sd_planned <- sqrt(var0)
+    sd_true <- sqrt(var0 + m[["var"]] / 2)
 
     ns <- study_ns(set)
     if (set == "continuous" && s != 3) ns <- intersect(ns, c(100, 250, 500, 1000))
-    pow <- ate_gap <- numeric(length(ns))
+    planned <- ate_gap <- real <- numeric(length(ns))
     for (i in seq_along(ns)) {
       n <- ns[i]
       bW <- new$calibrate_bW(p, n, "t")
-      delta <- power.t.test(n = n / 2, sd = sd_pooled, power = new$CTS_POWER)$delta
-      pow[i] <- power.t.test(n = n / 2, delta = abs(bW + m[["mean"]]),
-                             sd = sd_pooled)$power
+      delta <- power.t.test(n = n / 2, sd = sd_planned, power = new$CTS_POWER)$delta
+      planned[i] <- power.t.test(n = n / 2, delta = abs(bW + m[["mean"]]),
+                                 sd = sd_planned)$power
+      real[i] <- power.t.test(n = n / 2, delta = abs(bW + m[["mean"]]),
+                              sd = sd_true)$power
       tau <- new$truth_at(p, bW, FALSE, mc$X1[1:n_truth], mc$X2[1:n_truth],
                           if (p$needs_X3) mc$X3[1:n_truth],
                           if (p$needs_X4) mc$X4[1:n_truth],
                           if (p$needs_X5) mc$X5[1:n_truth])$tau
       ate_gap[i] <- mean(tau) + delta
+      realised[[paste(set, s, n)]] <- real[i]
+      ate[[paste(set, n)]] <- c(ate[[paste(set, n)]], mean(tau))
     }
-    report(all(abs(pow - new$CTS_POWER) <= 0.02),
-           sprintf("%s %d: analytic power %.3f-%.3f over n = %s", set, s,
-                   min(pow), max(pow), paste(range(ns), collapse = "-")))
+    report(all(abs(planned - new$CTS_POWER) <= 0.02),
+           sprintf("%s %d: planned power %.3f-%.3f over n = %s", set, s,
+                   min(planned), max(planned), paste(range(ns), collapse = "-")))
     report(all(abs(ate_gap) < 0.01),
-           sprintf("%s %d: mean true tau within %.4f of -delta", set, s,
-                   max(abs(ate_gap))))
+           sprintf("%s %d: true ATE within %.4f of the planned -delta; realised power %.3f-%.3f",
+                   set, s, max(abs(ate_gap)), min(real), max(real)))
   }
 }
 
-cat(sprintf("\n  simulated Welch t-test, %d generated datasets per cell\n", sim_reps))
+# the planned effect uses no scenario-specific quantity, so every scenario at a
+# given n should share one true ATE
+for (key in names(ate)) {
+  if (length(ate[[key]]) < 2) next
+  report(diff(range(ate[[key]])) < 0.01,
+         sprintf("%s: true ATE %.3f to %.3f across scenarios", key,
+                 min(ate[[key]]), max(ate[[key]])))
+}
+
+cat(sprintf("\n  simulated Welch t-test, %d generated datasets per cell, against realised power\n",
+            sim_reps))
 for (set in CTS_SETS) {
   tbl <- new$resolve_set(set)
   sim_ns <- if (set == "continuous") c(100, 250, 500, 1000) else 500
@@ -161,9 +184,11 @@ for (set in CTS_SETS) {
         t.test(d$Y[d$W == 1], d$Y[d$W == 0])$p.value < 0.05
       }))
     }, numeric(1))
-    report(all(abs(sim_pow - new$CTS_POWER) <= 0.03),
-           sprintf("%s %d: simulated power %s at n = %s", set, s,
+    expected <- vapply(sim_ns, function(n) realised[[paste(set, s, n)]], numeric(1))
+    report(all(abs(sim_pow - expected) <= 0.03),
+           sprintf("%s %d: simulated power %s vs realised %s at n = %s", set, s,
                    paste(sprintf("%.3f", sim_pow), collapse = " / "),
+                   paste(sprintf("%.3f", expected), collapse = " / "),
                    paste(sim_ns, collapse = " / ")))
   }
 }

@@ -58,23 +58,39 @@ effect:
 |---|---|
 | baseline | `b0 = 0.4`, `b1 = −0.5`, `b2 = 1`, in every scenario |
 | `g(x)` | the scenario's heterogeneity term: its `te_expr` in `R/dgm_scenarios.R`, with `bW = 0` |
-| `bW` | set so the **ATE**, `bW + E[g]`, has 80% power (`CTS_POWER`) in an unadjusted two-sample t-test with n/2 per arm |
+| `bW` | set so the true **ATE**, `bW + E[g]`, equals the effect the trial was planned to detect |
 
-The t-test SD pools the two arms. The control arm's outcome variance is
-b1²·0.4·0.6 + b2² + 0.5² = 1.31, and the treated arm adds Var(g).
-`te_moments()` computes E[g] and Var(g) by quadrature, with no random draws, so
-the draw order is untouched.
+Each simulated RCT is planned the way trials usually are: to detect an ATE,
+assuming the effect is the same for everyone. The planned effect δ gives 80%
+power (`CTS_POWER`) in an unadjusted two-sample t-test with n/2 per arm, using
+the outcome SD with no heterogeneity: sqrt(b1²·0.4·0.6 + b2² + 0.5²) = 1.145.
+`bW` is then set to −δ − E[g], so the true ATE is −δ. `te_moments()` computes
+E[g] by quadrature, with no random draws, so the draw order is untouched.
+
+| n | 100 | 250 | 500 | 1000 |
+|---|---|---|---|---|
+| true ATE, every scenario | −0.65 | −0.41 | −0.29 | −0.20 |
+
+The plan gets the average effect right but knows nothing of the heterogeneity
+around it, which makes the treated arm noisier by Var(g). So only scenario 1
+realises the planned 80%; the others realise less, falling as heterogeneity
+grows:
+
+| scenario | 1, 10 | 7, 9 | 5 | 2, 3, 4, 6 | 8 |
+|---|---|---|---|---|---|
+| realised power | 0.78–0.81 | 0.75–0.77 | 0.69–0.71 | 0.65–0.69 | 0.61–0.63 |
 
 **Before bug O** (root README), the baseline varied by scenario: b0 ran from 0.2
 to 1, b1 was −0.05, and b2 was 1 in scenario 9 and 2 elsewhere. The calibration
-used `sd = s_err + s2 = 1.5` and set `bW` rather than the ATE. Realised power
-ran from 3% to 100%, and scenarios 2, 6 and 8 had a *positive* ATE. Each
-scenario's heterogeneity around its mean, g(x) − E[g], is unchanged; the level
-of the true CATE moved, so `sign_acc` and the relative metrics are not
+used `sd = s_err + s2 = 1.5`, which adds SDs and ignores b1 and b2, and it set
+`bW` rather than the ATE to the planned effect. The true ATE drifted by E[g]
+(to a *positive* value in scenarios 2, 6 and 8), and power ran from 3% to 100%.
+Each scenario's heterogeneity around its mean, g(x) − E[g], is unchanged; the
+level of the true CATE moved, so `sign_acc` and the relative metrics are not
 comparable with earlier results.
 
-`Rscript R/calibration_check.R` verifies all of this against the previous
-version of `R/dgm_scenarios.R`.
+`Rscript R/calibration_check.R c195a51` verifies all of this against the
+pre-change version of `R/dgm_scenarios.R`.
 
 ## Estimators
 
