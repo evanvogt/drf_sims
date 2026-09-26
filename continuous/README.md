@@ -9,13 +9,14 @@ studies are all variations on it.
 ## Design
 
 Ten scenarios varying the structure of the CATE, crossed with four sample sizes,
-100 runs each — **4,000 array jobs**.
+100 runs each — **4,000 array jobs** — plus runs 101–500 for scenarios 1, 3, 8
+and 9, another 6,400 appended as grid rows 4001–10400.
 
 | | |
 |---|---|
 | scenarios | 1–10 (see `R/dgm_scenarios.R`, `DESC_10`) |
 | n | 100, 250, 500, 1000 |
-| runs | 100 |
+| runs | 100; **500 for scenarios 1, 3, 8, 9** |
 | folds | 4 at n=100, 5 at n=250, else 10 |
 | results | `../results/continuous/scenario_<k>/<n>/res_sim_<run>.RDS` |
 
@@ -91,6 +92,7 @@ qsub continuous/jobscripts/cts_profile.sh    # 48 profiling jobs
 Rscript continuous/cts_profile_summary.R     # writes measured directives into cts_1.sh
 
 qsub continuous/jobscripts/cts_1.sh     # 1-4000
+qsub continuous/jobscripts/cts_extra.sh # 4001-10400: runs 101-500, scenarios 1, 3, 8, 9
 Rscript continuous/cts_check.R          # writes failed_ids.txt if any are missing
 qsub continuous/jobscripts/cts_collect.sh
 qsub continuous/jobscripts/cts_metrics.sh

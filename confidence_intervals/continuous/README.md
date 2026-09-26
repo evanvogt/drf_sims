@@ -5,7 +5,7 @@ bootstrap and what the metrics mean.
 
 | | |
 |---|---|
-| array | **20,000 jobs** (`cts_ci_1.sh` 1–10000, `cts_ci_2.sh` 10001–20000) |
+| array | **20,000 jobs** (`cts_ci_1.sh` 1–10000, `cts_ci_2.sh` 10001–20000), plus **32,000** taking scenarios 1, 3, 8, 9 to 500 runs (`cts_ci_extra_1.sh`–`cts_ci_extra_4.sh`, 20001–52000) |
 | results | `../results/confidence_intervals/continuous/scenario_<k>/<n>/<CI_sf>/` |
 | metrics | `ci_cts_metrics.RDS` — coverage and width, no point metrics |
 

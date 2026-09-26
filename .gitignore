@@ -21,3 +21,4 @@ scratch/*test*
 *old*/
 .Rproj.user
 .Rhistory
+*.pdf

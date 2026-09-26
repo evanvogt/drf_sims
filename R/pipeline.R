@@ -42,7 +42,9 @@ require(tibble)
 #' @param path_prefix named character vector of directory-name prefixes, e.g.
 #'   c(scenario = "scenario_", censoring = "censor_"). Columns not named here
 #'   are rendered as-is. Defaults to prefixing `scenario`, which every study does.
-#' @param n_sims runs per parameter combination
+#' @param n_sims nominal runs per parameter combination. check_failed() takes
+#'   the runs it expects from `grid` itself, not from this, so a study can run
+#'   more replicates for some combinations than others - see check_failed().
 #' @param failed_file where check_failed() writes the resubmission list
 study_config <- function(name, prefix, res_path, grid, path_cols, n_sims = 100,
                          failed_file = NULL,
@@ -125,6 +127,13 @@ run_numbers <- function(files) {
 #' line count silently drops the tail of the list, and -J above it feeds the
 #' analysis script an empty index.
 #'
+#' The runs expected for each combination are the `run` values the grid holds
+#' for it, not seq_len(study$n_sims). The two agree for a rectangular grid, but
+#' binary, continuous and confidence_intervals/{binary,continuous} append rows
+#' taking scenarios 1, 3, 8 and 9 to 500 runs while the rest stay at 100, and a
+#' flat n_sims would either miss runs 101-500 or report them missing for the
+#' scenarios that never had them.
+#'
 #' @param write write the index list to study$failed_file
 #' @param update_rerun also rewrite the rerun jobscript. Only consulted when
 #'   `write` is TRUE, so check_failed(study, write = FALSE) touches nothing.
@@ -133,12 +142,17 @@ check_failed <- function(study, write = TRUE, update_rerun = TRUE, ...) {
 
   cmb <- combos(study)
 
+  # the grid's runs for each combination, in the same order as the rows of cmb
+  cmb_key  <- do.call(paste, c(cmb, sep = "\r"))
+  row_key  <- do.call(paste, c(study$grid[, study$path_cols, drop = FALSE],
+                               sep = "\r"))
+  expected <- split(study$grid$run, factor(row_key, levels = cmb_key))
+
   failed <- bind_rows(lapply(seq_len(nrow(cmb)), function(i) {
     combo <- cmb[i, , drop = FALSE]
     files <- list.files(combo_dir(study, combo), pattern = RES_PATTERN,
                         full.names = TRUE)
-    if (length(files) >= study$n_sims) return(NULL)
-    missing_runs <- setdiff(seq_len(study$n_sims), run_numbers(files))
+    missing_runs <- setdiff(expected[[i]], run_numbers(files))
     if (!length(missing_runs)) return(NULL)
     combo[rep(1, length(missing_runs)), , drop = FALSE] %>%
       mutate(run = missing_runs)

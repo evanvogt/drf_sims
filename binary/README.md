@@ -10,7 +10,7 @@ a **risk difference**.
 |---|---|
 | scenarios | **1, 3, 8, 9** — a subset, not all ten |
 | n | 100, 250, 500, 1000 |
-| runs | 100 |
+| runs | 100; **500 for scenarios 1, 3, 8, 9** (runs 101–500 are grid rows 4001–10400, `jobscripts/bin_extra.sh`) |
 | array | **1,600 jobs** |
 | results | `../results/binary/scenario_<k>/<n>/res_sim_<run>.RDS` |
 
@@ -62,6 +62,7 @@ and why scenario 1's `BLP_p` is `NA`.
 
 ```bash
 qsub binary/jobscripts/bin_1.sh     # 1-1600
+qsub binary/jobscripts/bin_extra.sh # 4001-10400: runs 101-500, scenarios 1, 3, 8, 9
 Rscript binary/bin_check.R
 ```
 
