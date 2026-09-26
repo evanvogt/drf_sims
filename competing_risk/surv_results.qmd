@@ -225,9 +225,11 @@ metrics_summary <- metrics %>%
     mean_ate_bias = mean(ate_bias, na.rm = T),
     mcse_ate_bias = sd(ate_bias, na.rm = T) / sqrt(sum(!is.na(ate_bias))),
     mean_rel_ate_bias = mean(rel_ate_bias, na.rm = T),
-    mcse_rel_ate_bias = sd(rel_ate_bias, na.rm = T) / sqrt(sum(!is.na(rel_ate_bias))),
+    mcse_rel_ate_bias = sd(rel_ate_bias, na.rm = T) /
+      sqrt(sum(!is.na(rel_ate_bias))),
     mean_rel_bias_cate = mean(rel_bias_cate, na.rm = T),
-    mcse_rel_bias_cate = sd(rel_bias_cate, na.rm = T) / sqrt(sum(!is.na(rel_bias_cate))),
+    mcse_rel_bias_cate = sd(rel_bias_cate, na.rm = T) /
+      sqrt(sum(!is.na(rel_bias_cate))),
     mean_mse = mean(mse, na.rm = T),
     mcse_mse = sd(mse, na.rm = T) / sqrt(sum(!is.na(mse))),
     mean_rmse = mean(rmse, na.rm = T),
@@ -278,7 +280,15 @@ kable(
 # (not facet_grid) because variant is family-specific, same reasoning as
 # cf_results.qmd. See continuous/cts_results.R's summary_plot for why this
 # isn't a raw +/- 1x MCSE (~68% coverage, not 95%).
-summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05) {
+summary_plot <- function(
+  df,
+  mean_col,
+  mcse_col,
+  title,
+  ylab,
+  hline = 0,
+  alpha = 0.05
+) {
   z <- qnorm(1 - alpha / 2)
   df %>%
     mutate(
@@ -286,7 +296,14 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha =
       lo = .data[[mean_col]] - z * .data[[mcse_col]],
       hi = .data[[mean_col]] + z * .data[[mcse_col]]
     ) %>%
-    ggplot(aes(x = family, y = est, ymin = lo, ymax = hi, colour = variant, shape = censoring)) +
+    ggplot(aes(
+      x = family,
+      y = est,
+      ymin = lo,
+      ymax = hi,
+      colour = variant,
+      shape = censoring
+    )) +
     geom_hline(yintercept = hline, linetype = "dashed") +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(
@@ -303,7 +320,13 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha =
       strip.background = element_rect(fill = "white"),
       strip.text = element_text(colour = "black")
     ) +
-    labs(title = title, y = ylab, x = "Model", colour = "Approach", shape = "censoring")
+    labs(
+      title = title,
+      y = ylab,
+      x = "Model",
+      colour = "Approach",
+      shape = "censoring"
+    )
 }
 ```
 
@@ -339,7 +362,13 @@ summary_plot(
   "Mean bias in the ATE",
   "Mean ATE bias"
 )
-ggsave("surv_ate_bias.png", path = figdir, height = 20, width = 30, units = "cm")
+ggsave(
+  "surv_ate_bias.png",
+  path = figdir,
+  height = 20,
+  width = 30,
+  units = "cm"
+)
 
 summary_plot(
   metrics_summary,
@@ -348,7 +377,13 @@ summary_plot(
   "Mean relative bias in the ATE",
   "Mean relative ATE bias"
 )
-ggsave("surv_rel_ate_bias.png", path = figdir, height = 20, width = 30, units = "cm")
+ggsave(
+  "surv_rel_ate_bias.png",
+  path = figdir,
+  height = 20,
+  width = 30,
+  units = "cm"
+)
 
 summary_plot(
   metrics_summary,
@@ -357,7 +392,13 @@ summary_plot(
   "Mean relative bias in the CATE",
   "Mean relative CATE bias"
 )
-ggsave("surv_rel_bias_cate.png", path = figdir, height = 20, width = 30, units = "cm")
+ggsave(
+  "surv_rel_bias_cate.png",
+  path = figdir,
+  height = 20,
+  width = 30,
+  units = "cm"
+)
 ```
 
 ## MSE of CATE estimates
