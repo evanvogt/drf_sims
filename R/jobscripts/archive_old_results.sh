@@ -17,6 +17,6 @@ module add R/4.3.2-gfbf-2023a
 eval "$(~/miniforge3/bin/conda shell.bash hook)"
 conda activate sim-env
 
-cd "${PBS_O_WORKDIR}"
+cd "${PBS_O_WORKDIR}/.."
 
-Rscript R/archive_old_results.R --apply
+Rscript archive_old_results.R --apply
