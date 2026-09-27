@@ -119,7 +119,7 @@ known propensity of 0.5; the semi-oracle knows only the propensity.
 | `cts_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cts_collect.R` | gathers per-run files into `cts_all.RDS` |
 | `cts_metrics.R` | computes `cts_metrics.RDS`, plus `cts_true_cate_tests.RDS` — see below |
-| `results_cts.R`, `cts_results.Rmd` | summaries |
+| `results_cts.R` | summaries |
 
 ### True-CATE HTE test evaluation
 
