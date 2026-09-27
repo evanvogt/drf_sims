@@ -10,8 +10,13 @@ format:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
-                       fig.width = 11, fig.height = 8)
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 11,
+  fig.height = 8
+)
 ```
 
 ```{r libraries, include=FALSE}
@@ -113,15 +118,27 @@ metrics <- readRDS(file.path(res_path, "cf_metrics.RDS"))
 metrics <- metrics %>%
   mutate(
     scenario = factor(
-      case_when(scenario == 1 ~ "Null",
-                scenario == 6 ~ "Simple",
-                scenario == 8 ~ "Interaction",
-                scenario == 4 ~ "Non-linear"),
-      levels = c("Null", "Simple", "Interaction", "Non-linear")),
-    family = factor(recode(family, !!!family_labels), levels = unname(family_labels)),
-    variant = factor(recode(variant, !!!variant_labels),
-                     levels = unname(variant_labels[variant_levels])),
-    set = factor(set, levels = c("train", "test"), labels = c("Training sample", "Test sample"))
+      case_when(
+        scenario == 1 ~ "Null",
+        scenario == 6 ~ "Simple",
+        scenario == 8 ~ "Interaction",
+        scenario == 4 ~ "Non-linear"
+      ),
+      levels = c("Null", "Simple", "Interaction", "Non-linear")
+    ),
+    family = factor(
+      recode(family, !!!family_labels),
+      levels = unname(family_labels)
+    ),
+    variant = factor(
+      recode(variant, !!!variant_labels),
+      levels = unname(variant_labels[variant_levels])
+    ),
+    set = factor(
+      set,
+      levels = c("train", "test"),
+      labels = c("Training sample", "Test sample")
+    )
   ) %>%
   droplevels()
 
@@ -138,9 +155,11 @@ metrics_summary <- metrics %>%
     mean_ate_bias = mean(ate_bias, na.rm = T),
     mcse_ate_bias = sd(ate_bias, na.rm = T) / sqrt(sum(!is.na(ate_bias))),
     mean_rel_ate_bias = mean(rel_ate_bias, na.rm = T),
-    mcse_rel_ate_bias = sd(rel_ate_bias, na.rm = T) / sqrt(sum(!is.na(rel_ate_bias))),
+    mcse_rel_ate_bias = sd(rel_ate_bias, na.rm = T) /
+      sqrt(sum(!is.na(rel_ate_bias))),
     mean_rel_bias_cate = mean(rel_bias_cate, na.rm = T),
-    mcse_rel_bias_cate = sd(rel_bias_cate, na.rm = T) / sqrt(sum(!is.na(rel_bias_cate))),
+    mcse_rel_bias_cate = sd(rel_bias_cate, na.rm = T) /
+      sqrt(sum(!is.na(rel_bias_cate))),
     mean_mse = mean(mse, na.rm = T),
     mcse_mse = sd(mse, na.rm = T) / sqrt(sum(!is.na(mse))),
     mean_corr = mean(corr, na.rm = T),
@@ -148,7 +167,8 @@ metrics_summary <- metrics %>%
     mean_sign_acc = mean(sign_acc, na.rm = T),
     mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(sum(!is.na(sign_acc))),
     mean_mse_single = mean(mse_test_single, na.rm = T),
-    mcse_mse_single = sd(mse_test_single, na.rm = T) / sqrt(sum(!is.na(mse_test_single))),
+    mcse_mse_single = sd(mse_test_single, na.rm = T) /
+      sqrt(sum(!is.na(mse_test_single))),
     mean_time = mean(time_total, na.rm = T),
     mean_time_nuisance = mean(time_nuisance, na.rm = T),
     mean_time_stage2 = mean(time_stage2, na.rm = T),
@@ -166,22 +186,42 @@ metrics_summary <- metrics %>%
 # panel all 11 categories. facet_wrap frees per panel, dropping the ones
 # absent from that family's arms.
 # hline = NULL omits the reference line.
-summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05) {
+summary_plot <- function(
+  df,
+  mean_col,
+  mcse_col,
+  title,
+  ylab,
+  hline = 0,
+  alpha = 0.05
+) {
   z <- qnorm(1 - alpha / 2)
   df %>%
-    mutate(est = .data[[mean_col]],
-           lo = .data[[mean_col]] - z * .data[[mcse_col]],
-           hi = .data[[mean_col]] + z * .data[[mcse_col]]) %>%
+    mutate(
+      est = .data[[mean_col]],
+      lo = .data[[mean_col]] - z * .data[[mcse_col]],
+      hi = .data[[mean_col]] + z * .data[[mcse_col]]
+    ) %>%
     ggplot(aes(x = set, y = est, colour = variant, ymin = lo, ymax = hi)) +
     (if (!is.null(hline)) geom_hline(yintercept = hline, linetype = "dashed")) +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
-    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
-    facet_wrap(vars(family, scenario), nrow = n_distinct(df$family), scales = "free") +
+    geom_errorbar(
+      position = position_dodge(width = 0.5),
+      linewidth = 0.3,
+      width = 0.3
+    ) +
+    facet_wrap(
+      vars(family, scenario),
+      nrow = n_distinct(df$family),
+      scales = "free"
+    ) +
     scale_colour_paletteer_d("rcartocolor::Safe") +
     theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(colour = "black")
+    ) +
     labs(title = title, y = ylab, x = "Evaluation set", colour = "Variant")
 }
 ```
@@ -195,17 +235,32 @@ known truth, on both samples, for every arm.
 mse_plot <- metrics %>%
   ggplot(aes(x = variant, y = mse, colour = set)) +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
+  facet_wrap(
+    vars(family, scenario),
+    nrow = n_distinct(metrics$family),
+    scales = "free"
+  ) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
-  labs(title = "MSE of CATE estimates by crossfitting procedure",
-       y = "MSE", x = "Crossfitting procedure", colour = "Scored on")
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "MSE of CATE estimates by crossfitting procedure",
+    y = "MSE",
+    x = "Crossfitting procedure",
+    colour = "Scored on"
+  )
 
-mse_sum_plot <- summary_plot(metrics_summary, "mean_mse", "mcse_mse",
-                             "Mean MSE of CATE estimates", "Mean MSE")
+mse_sum_plot <- summary_plot(
+  metrics_summary,
+  "mean_mse",
+  "mcse_mse",
+  "Mean MSE of CATE estimates",
+  "Mean MSE"
+)
 
 #(mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
 mse_sum_plot
@@ -218,9 +273,14 @@ to 0, in the Null scenario since there's no heterogeneity to correlate with —
 excluded from these plots).
 
 ```{r corr-plot, fig.height=16}
-corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != "Null"),
-                              "mean_corr", "mcse_corr",
-                              "Mean correlation with the true CATE", "Mean correlation", hline = NULL)
+corr_sum_plot <- summary_plot(
+  filter(metrics_summary, scenario != "Null"),
+  "mean_corr",
+  "mcse_corr",
+  "Mean correlation with the true CATE",
+  "Mean correlation",
+  hline = NULL
+)
 
 corr_df <- filter(metrics, scenario != "Null")
 
@@ -229,14 +289,24 @@ corr_plot <- corr_df %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   # free_x only: correlation is already on a bounded, comparable -1..1 scale,
   # so y stays shared - only the sparse variant axis needs freeing per panel
-  facet_wrap(vars(family, scenario), nrow = n_distinct(corr_df$family), scales = "free_x") +
+  facet_wrap(
+    vars(family, scenario),
+    nrow = n_distinct(corr_df$family),
+    scales = "free_x"
+  ) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
-  labs(title = "Correlation between estimated and true CATEs",
-       y = "Pearson correlation", x = "Crossfitting procedure", colour = "Scored on")
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "Correlation between estimated and true CATEs",
+    y = "Pearson correlation",
+    x = "Crossfitting procedure",
+    colour = "Scored on"
+  )
 
 #(corr_sum_plot / corr_plot) + plot_layout(guides = "collect")
 corr_sum_plot
@@ -261,15 +331,25 @@ gap_plot <- gap %>%
   ggplot(aes(x = variant, y = gap, colour = family)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(vars(family, scenario), nrow = n_distinct(gap$family), scales = "free") +
+  facet_wrap(
+    vars(family, scenario),
+    nrow = n_distinct(gap$family),
+    scales = "free"
+  ) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none",
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
-  labs(title = "Generalisation gap: test MSE minus training MSE",
-       subtitle = "How far each fitted surface degrades on fresh covariate draws",
-       y = "Test MSE - training MSE", x = "Crossfitting procedure")
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none",
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "Generalisation gap: test MSE minus training MSE",
+    subtitle = "How far each fitted surface degrades on fresh covariate draws",
+    y = "Test MSE - training MSE",
+    x = "Crossfitting procedure"
+  )
 
 gap_plot
 ```
@@ -288,24 +368,41 @@ procedure itself buys.
 ensemble_df <- metrics_summary %>%
   filter(set == "Test sample") %>%
   select(scenario, family, variant, mean_mse, mean_mse_single) %>%
-  pivot_longer(c(mean_mse, mean_mse_single),
-               names_to = "scoring", values_to = "mse") %>%
-  mutate(scoring = recode(scoring,
-                          mean_mse = "Averaged fold models (deployed)",
-                          mean_mse_single = "Single fold model (like-for-like)"))
+  pivot_longer(
+    c(mean_mse, mean_mse_single),
+    names_to = "scoring",
+    values_to = "mse"
+  ) %>%
+  mutate(
+    scoring = recode(
+      scoring,
+      mean_mse = "Averaged fold models (deployed)",
+      mean_mse_single = "Single fold model (like-for-like)"
+    )
+  )
 
 ensemble_plot <- ensemble_df %>%
   ggplot(aes(x = variant, y = mse, colour = scoring)) +
   geom_point(position = position_dodge(width = 0.5), size = 2) +
-  facet_wrap(vars(family, scenario), nrow = n_distinct(ensemble_df$family), scales = "free") +
+  facet_wrap(
+    vars(family, scenario),
+    nrow = n_distinct(ensemble_df$family),
+    scales = "free"
+  ) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
-  labs(title = "Test MSE: ensemble of fold models against a single fold model",
-       subtitle = "Identical for whole-sample arms; the gap on crossfit arms is the ensembling effect",
-       y = "Mean test MSE", x = "Crossfitting procedure", colour = "Scoring")
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "Test MSE: ensemble of fold models against a single fold model",
+    subtitle = "Identical for whole-sample arms; the gap on crossfit arms is the ensembling effect",
+    y = "Mean test MSE",
+    x = "Crossfitting procedure",
+    colour = "Scoring"
+  )
 
 ensemble_plot
 ```
@@ -317,18 +414,32 @@ bias_plot <- metrics %>%
   ggplot(aes(x = variant, y = bias, colour = set)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
+  facet_wrap(
+    vars(family, scenario),
+    nrow = n_distinct(metrics$family),
+    scales = "free"
+  ) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
-  labs(title = "Bias of CATE estimates by crossfitting procedure",
-       y = "Average bias (estimate - truth)", x = "Crossfitting procedure",
-       colour = "Scored on")
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "Bias of CATE estimates by crossfitting procedure",
+    y = "Average bias (estimate - truth)",
+    x = "Crossfitting procedure",
+    colour = "Scored on"
+  )
 
-bias_sum_plot <- summary_plot(metrics_summary, "mean_bias", "mcse_bias",
-                              "Mean bias of CATE estimates", "Mean bias")
+bias_sum_plot <- summary_plot(
+  metrics_summary,
+  "mean_bias",
+  "mcse_bias",
+  "Mean bias of CATE estimates",
+  "Mean bias"
+)
 
 bias_sum_plot
 ```
@@ -341,14 +452,20 @@ averaged over units (undefined and set to `NA` wherever the true CATE is
 exactly 0 for a unit — see `R/metrics.R::cate_metrics()`).
 
 ```{r rel-bias-plot, fig.height=16}
-rel_ate_bias_sum_plot <- summary_plot(metrics_summary, "mean_rel_ate_bias",
-                                      "mcse_rel_ate_bias",
-                                      "Mean relative bias in the ATE",
-                                      "Mean relative ATE bias")
-rel_bias_cate_sum_plot <- summary_plot(metrics_summary, "mean_rel_bias_cate",
-                                       "mcse_rel_bias_cate",
-                                       "Mean relative bias in the CATE",
-                                       "Mean relative CATE bias")
+rel_ate_bias_sum_plot <- summary_plot(
+  metrics_summary,
+  "mean_rel_ate_bias",
+  "mcse_rel_ate_bias",
+  "Mean relative bias in the ATE",
+  "Mean relative ATE bias"
+)
+rel_bias_cate_sum_plot <- summary_plot(
+  metrics_summary,
+  "mean_rel_bias_cate",
+  "mcse_rel_bias_cate",
+  "Mean relative bias in the CATE",
+  "Mean relative CATE bias"
+)
 
 rel_ate_bias_sum_plot
 rel_bias_cate_sum_plot
@@ -362,23 +479,40 @@ What the extra fold pairs actually buy, in seconds.
 time_df <- metrics_summary %>%
   filter(set == "Test sample") %>%
   select(scenario, family, variant, mean_time_nuisance, mean_time_stage2) %>%
-  pivot_longer(c(mean_time_nuisance, mean_time_stage2),
-               names_to = "stage", values_to = "seconds") %>%
-  mutate(stage = recode(stage,
-                        mean_time_nuisance = "Stage 1 (nuisances)",
-                        mean_time_stage2 = "Stage 2 (final model)"))
+  pivot_longer(
+    c(mean_time_nuisance, mean_time_stage2),
+    names_to = "stage",
+    values_to = "seconds"
+  ) %>%
+  mutate(
+    stage = recode(
+      stage,
+      mean_time_nuisance = "Stage 1 (nuisances)",
+      mean_time_stage2 = "Stage 2 (final model)"
+    )
+  )
 
 time_plot <- time_df %>%
   ggplot(aes(x = variant, y = seconds, fill = stage)) +
   geom_col() +
-  facet_wrap(vars(family, scenario), nrow = n_distinct(time_df$family), scales = "free") +
+  facet_wrap(
+    vars(family, scenario),
+    nrow = n_distinct(time_df$family),
+    scales = "free"
+  ) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
-  labs(title = "Mean runtime per replicate",
-       y = "Seconds", x = "Crossfitting procedure", fill = "Stage")
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "Mean runtime per replicate",
+    y = "Seconds",
+    x = "Crossfitting procedure",
+    fill = "Stage"
+  )
 
 time_plot
 ```
@@ -399,29 +533,263 @@ frontier_plot <- metrics_summary %>%
   scale_x_log10() +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
-  theme(strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
-  labs(title = "Test-sample MSE against runtime",
-       subtitle = "Down and to the left is better",
-       y = "Mean test MSE", x = "Mean runtime per replicate (s, log scale)",
-       colour = "Procedure", shape = "Estimator")
+  theme(
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "Test-sample MSE against runtime",
+    subtitle = "Down and to the left is better",
+    y = "Mean test MSE",
+    x = "Mean runtime per replicate (s, log scale)",
+    colour = "Procedure",
+    shape = "Estimator"
+  )
 
 frontier_plot
 ```
 
 ## Headline table
 
-Test-sample only, arranged by family, scenario, and mean MSE (best arm
-first within each scenario).
+Test-sample only, one table per estimator family, arranged by scenario and
+mean MSE (best arm first within each scenario).
 
-```{r headline-table}
-headline <- metrics_summary %>%
+```{r headline-table-helper}
+headline_table <- function(fam) {
+  metrics_summary %>%
+    filter(set == "Test sample", family == fam) %>%
+    select(
+      scenario,
+      variant,
+      mean_mse,
+      mcse_mse,
+      mean_mse_single,
+      mean_corr,
+      mean_time
+    ) %>%
+    arrange(scenario, mean_mse) %>%
+    kable(
+      digits = 4,
+      col.names = c(
+        "Scenario",
+        "Procedure",
+        "Mean MSE",
+        "MCSE (MSE)",
+        "Mean MSE (single fold)",
+        "Mean correlation",
+        "Mean runtime (s)"
+      )
+    )
+}
+```
+
+### Causal forest
+
+```{r headline-table-cf}
+headline_table(family_labels[["causal_forest"]])
+```
+
+### DR-learner (RF)
+
+```{r headline-table-dr-rf}
+headline_table(family_labels[["dr_rf"]])
+```
+
+### DR-learner (SuperLearner)
+
+```{r headline-table-dr-sl}
+headline_table(family_labels[["dr_sl"]])
+```
+
+## Decision
+
+The MCSEs above are marginal — they treat each arm's 100 replicates as
+independent. But every arm is fit to the same simulated dataset within a
+replicate, so dataset-to-dataset noise is shared across arms and cancels in a
+per-run difference. Comparing arms on the paired difference
+`mse[arm] - mse[reference]` within each run gives a much tighter (and correct)
+MCSE than eyeballing overlapping error bars.
+
+**Decision rule** (fixed before reading the results): within each family, use
+the **cheapest arm that is non-inferior to the best arm in all four
+scenarios**, where non-inferior means the upper 95% bound of its paired
+relative test-MSE difference against the best arm in that scenario is below
+`ni_margin`. Correlation and bias (above) are guardrails: a picked arm
+shouldn't be visibly worse on either.
+
+```{r paired-helper}
+ni_margin <- 0.05 # 5% relative test-MSE margin
+
+status_quo <- setNames(
+  variant_labels[c("cf_dcf", "dcf", "dcf")],
+  family_labels[c("causal_forest", "dr_rf", "dr_sl")]
+)
+
+# paired per-run MSE differences against a reference arm
+# ref: one row per scenario x family, naming the reference arm in ref_variant
+# eval_set: switch to "Training sample" if the main study scores CATEs
+# in-sample rather than on fresh draws
+paired_diff <- function(ref, eval_set = "Test sample", alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
+  scored <- filter(metrics, set == eval_set)
+
+  ref_mse <- scored %>%
+    inner_join(ref, by = c("scenario", "family")) %>%
+    filter(variant == ref_variant) %>%
+    select(scenario, family, run, ref_variant, ref_mse = mse)
+
+  # relative difference is a ratio of means, mean(diff) / mean(ref_mse), not
+  # mean(diff / ref_mse) - the per-run ratio is heavy-tailed whenever a run's
+  # reference MSE is small (Null especially). its MCSE is the delta-method
+  # (ratio estimator) linearisation sd(diff - rel * ref_mse) / (sqrt(n) * mean(ref_mse))
+  scored %>%
+    inner_join(ref_mse, by = c("scenario", "family", "run")) %>%
+    mutate(diff = mse - ref_mse) %>%
+    filter(!is.na(diff)) %>%
+    group_by(scenario, family, variant, ref_variant) %>%
+    summarise(
+      n_runs = n(),
+      mean_diff = mean(diff),
+      mcse_diff = sd(diff) / sqrt(n_runs),
+      mean_rel_diff = mean_diff / mean(ref_mse),
+      mcse_rel_diff = sd(diff - mean_rel_diff * ref_mse) /
+        (sqrt(n_runs) * mean(ref_mse)),
+      p_better = mean(diff < 0), # share of runs where this arm beats the reference
+      .groups = "drop"
+    ) %>%
+    mutate(
+      lo_rel = mean_rel_diff - z * mcse_rel_diff,
+      hi_rel = mean_rel_diff + z * mcse_rel_diff
+    )
+}
+
+ref_status_quo <- metrics %>%
+  distinct(scenario, family) %>%
+  mutate(ref_variant = unname(status_quo[as.character(family)]))
+
+ref_best <- metrics_summary %>%
   filter(set == "Test sample") %>%
-  select(scenario, family, variant, mean_mse, mcse_mse, mean_mse_single,
-         mean_corr, mean_time) %>%
-  arrange(family, scenario, mean_mse)
+  group_by(scenario, family) %>%
+  slice_min(mean_mse, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  transmute(scenario, family, ref_variant = as.character(variant))
 
-kable(headline, digits = 4,
-      col.names = c("Scenario", "Family", "Procedure", "Mean MSE", "MCSE (MSE)",
-                    "Mean MSE (single fold)", "Mean correlation", "Mean runtime (s)"))
+vs_status_quo <- paired_diff(ref_status_quo)
+vs_best <- paired_diff(ref_best)
+```
+
+### Against the status quo
+
+Paired relative difference in test MSE against double crossfitting (`dcf` /
+`cf_dcf`), with a 95% CI. Left of zero means the arm beats the status quo;
+the dotted line is the non-inferiority margin.
+
+```{r paired-plot, fig.height=9}
+paired_plot <- vs_status_quo %>%
+  filter(variant != ref_variant) %>%
+  ggplot(aes(
+    x = 100 * mean_rel_diff,
+    y = variant,
+    xmin = 100 * lo_rel,
+    xmax = 100 * hi_rel
+  )) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 100 * ni_margin, linetype = "dotted") +
+  geom_pointrange(size = 0.3) +
+  # free_y + space so each family row only shows its own arms
+  facet_grid(family ~ scenario, scales = "free", space = "free_y") +
+  theme_bw() +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  ) +
+  labs(
+    title = "Test MSE relative to double crossfitting (paired by run)",
+    subtitle = "Left of zero is better than the status quo; dotted line is the non-inferiority margin",
+    x = "Relative difference in test MSE (%)",
+    y = NULL
+  )
+
+paired_plot
+```
+
+### Decision tables
+
+One row per arm, cheapest first. *Worst upper bound* is the largest upper 95%
+bound of the paired relative MSE difference against the best arm across the
+four scenarios; *Worst P(beats status quo)* is the lowest share of runs, across
+scenarios, in which the arm beat double crossfitting. The pick is the cheapest
+arm non-inferior in all four scenarios.
+
+```{r decision-table-helper}
+decision_table <- function(fam) {
+  # kable formats on the call, so the NA placeholder only needs to hold in here
+  op <- options(knitr.kable.NA = "—")
+  on.exit(options(op))
+
+  runtime <- metrics_summary %>%
+    filter(set == "Test sample", family == fam) %>%
+    group_by(variant) %>%
+    summarise(mean_time = mean(mean_time), .groups = "drop")
+
+  # the status quo arm itself is left out, so its row reads as blank
+  sq <- vs_status_quo %>%
+    filter(family == fam, variant != ref_variant) %>%
+    group_by(variant) %>%
+    summarise(worst_p_better = min(p_better), .groups = "drop")
+
+  vs_best %>%
+    filter(family == fam) %>%
+    group_by(variant) %>%
+    summarise(
+      worst_hi_rel = max(hi_rel),
+      n_ni = sum(hi_rel < ni_margin),
+      n_scen = n(),
+      .groups = "drop"
+    ) %>%
+    left_join(sq, by = "variant") %>%
+    left_join(runtime, by = "variant") %>%
+    arrange(mean_time) %>%
+    mutate(
+      # the T-learner control is reported but never eligible for the pick
+      eligible = n_ni == n_scen & variant != variant_labels[["scf_oob_t"]],
+      pick = ifelse(eligible & cumsum(eligible) == 1, "✓", ""),
+      worst_hi_rel = 100 * worst_hi_rel,
+      ni = paste0(n_ni, "/", n_scen)
+    ) %>%
+    select(variant, mean_time, worst_hi_rel, ni, worst_p_better, pick) %>%
+    kable(
+      digits = c(0, 2, 1, 0, 2, 0),
+      col.names = c(
+        "Procedure",
+        "Mean runtime (s)",
+        "Worst upper bound vs best (%)",
+        "Non-inferior in",
+        "Worst P(beats status quo)",
+        "Pick"
+      )
+    )
+}
+```
+
+#### Causal forest
+
+```{r decision-table-cf}
+decision_table(family_labels[["causal_forest"]])
+```
+
+#### DR-learner (RF)
+
+```{r decision-table-dr-rf}
+decision_table(family_labels[["dr_rf"]])
+```
+
+If the pick is `OOB+OOB (S)`, check it agrees with `OOB+OOB (S, manual)` —
+that agreement is what justifies the unsupported `X.orig` shortcut.
+`CF+OOB (T)` is a control, not a candidate.
+
+#### DR-learner (SuperLearner)
+
+```{r decision-table-dr-sl}
+decision_table(family_labels[["dr_sl"]])
 ```
