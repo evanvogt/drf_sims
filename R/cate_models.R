@@ -73,15 +73,9 @@ source(here::here("R", "bootstrap_ci.R")) # cf_half_boot, rf_half_boot
 # missing/ was forked from, not a decision. The decision was then taken that
 # every model should carry the tests where possible, and this is it.
 #
-# The existing ../results/missing/{binary,continuous} files were NOT re-run for
-# it. Both tests are deterministic (GenericML::BLP is an OLS with a sandwich
-# vcov; coin::independence_test is asymptotic under teststat = "quadratic"), and
-# the saved results retain nuisances_rf, data and tau, so the three fields were
-# recomputed exactly in place by R/patch_hte_tests.R. One asymmetry follows and
-# is deliberate: run_dr_random_forest also returns `variance`, which the inline
-# branch dropped and which cannot be recovered post hoc, so patched files have
-# no dr_random_forest$variance while newly-run ones do. Nothing in those studies
-# reads it - their metrics call only cate_metrics() and hte_test_metrics().
+# Results made before the change were back-filled in place by a one-off patch
+# script (removed after commit e7b1d59; the results it patched are archived,
+# and patched files lack dr_random_forest$variance). The re-run needs no patch.
 #
 # The CI profiles keep tests off; that one IS deliberate (see
 # confidence_intervals/README.md).
@@ -576,8 +570,13 @@ run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list,
 
 # ---- post-estimation heterogeneity tests ------------------------------------
 
-# Best Linear Predictor of the CATE (GenericML). Row 4, column 2 of the returned
-# coefficient block is the p-value the metrics scripts read.
+# Best Linear Predictor of the CATE (GenericML). Returns the whole coefficient
+# block - Estimate, Std. Error, t value, Pr(>|t|) - with the residual df as
+# attr(, "df"); beta.2's p-value, blp["beta.2", ncol(blp)], is what the metrics
+# scripts read. It used to keep only columns 1 and 4, which dropped the standard
+# error a multiple-imputation pooling rule needs (mi_test_table() below). Reading
+# the p-value by row name and last column works on both shapes, so results
+# saved before the change still read correctly.
 #
 # bug L: GenericML::BLP() regresses on beta.2 = (W - W.hat) * (tau - mean(tau)).
 # When tau is exactly constant (a degenerate/near-constant CATE fit - seen with
@@ -592,7 +591,9 @@ run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list,
 # coefficient to attach a p-value to when tau has zero variance.
 run_blp_whole <- function(Y, W, W.hat, Y0.hat, tau) {
   tryCatch(
-    BLP(Y, W, W.hat, Y0.hat, tau)$coefficients[, c(1, 4)],
+    # unclass: a plain matrix, so reading it back needs no lmtest; the df
+    # attribute survives
+    unclass(BLP(Y, W, W.hat, Y0.hat, tau)$coefficients),
     error = function(e) {
       warning("run_blp_whole: BLP() failed (likely a constant/degenerate tau); ",
               "returning NULL. ", conditionMessage(e))
@@ -613,10 +614,14 @@ run_independence_test_whole <- function(X, tau) {
     list(
       p_value = coin::pvalue(test_result),
       statistic = coin::statistic(test_result),
+      # the asymptotic chi-square df - what a pooling rule on the statistic
+      # (e.g. D2) needs alongside it; see mi_test_table()
+      df = test_result@statistic@df,
       method = "independence_test"
     )
   }, error = function(e) {
-    list(p_value = 1, statistic = 0, method = "independence_test_failed")
+    list(p_value = 1, statistic = 0, df = NA_real_,
+         method = "independence_test_failed")
   })
 }
 
@@ -641,8 +646,8 @@ run_true_cate_tests <- function(X, Y, W, truth) {
 #' NA/NA when sim_res$data is not a single data.frame - true today only for
 #' multiple_imputation rows (missing/binary, missing/continuous), which save
 #' `data` as a list of 50 imputed data.frames with no single X to test
-#' against. Same documented gap as the estimated-CATE tests - see this file's
-#' "skipped_mi" status in R/patch_hte_tests.R and missing/binary/README.md.
+#' against. Same open pooling question as the estimated-CATE tests - see
+#' mi_test_table() and missing/README.md.
 true_cate_test_row <- function(sim_res) {
   if (!is.data.frame(sim_res$data)) {
     return(tibble::tibble(BLP_p = NA_real_, indep_cate = NA_real_))
@@ -652,7 +657,9 @@ true_cate_test_row <- function(sim_res) {
   W <- sim_res$data$W
   out <- run_true_cate_tests(X, Y, W, sim_res$truth)
   tibble::tibble(
-    BLP_p = if (!is.null(out$BLP_whole)) out$BLP_whole[4, 2] else NA_real_,
+    BLP_p = if (!is.null(out$BLP_whole)) {
+      out$BLP_whole["beta.2", ncol(out$BLP_whole)]
+    } else NA_real_,
     indep_cate = as.numeric(out$independence_cate$p_value)
   )
 }
@@ -679,4 +686,55 @@ combine_mi <- function(res_list, model) {
   }
 
   res
+}
+
+#' Per-imputation HTE test results for one model, unpooled
+#'
+#' Every imputation's fit already runs the BLP and independence tests (profile
+#' "missing" has tests on), but combine_mi() pools only tau and variance, so
+#' they used to be discarded - which is why the multiple_imputation arm had no
+#' HTE tests. This keeps what any candidate pooling rule needs, one row per
+#' imputation: beta.2's estimate, SE and residual df (Rubin's rules), each
+#' independence test's chi-square statistic and df (D2), and every p-value (a
+#' p-value combination rule).
+#'
+#' No rule is applied. Which one is still an open decision (missing/README.md),
+#' and saving the rows means it can be made at metrics time without a re-run.
+#' Until then the arm has no BLP_whole / independence_* fields, so
+#' hte_test_metrics() still reports NA for it.
+#'
+#' @param res_list one run_all_cate_methods result per imputation
+#' @param model which model's tests to extract
+mi_test_table <- function(res_list, model) {
+  bind_rows(lapply(seq_along(res_list), function(k) {
+    m <- res_list[[k]][[model]]
+    blp <- m$BLP_whole
+    # NULL is bug L's degenerate-tau fallback (run_blp_whole) - kept as an NA
+    # row rather than dropped, so the table always has one row per imputation
+    # by position, not name: a coeftest block is always Estimate, Std. Error,
+    # statistic, p-value, but the last two are named t or z depending on the
+    # vcov, and a name lookup failing here would lose the whole 50-imputation run
+    blp_col <- function(col) if (is.null(blp)) NA_real_ else unname(blp["beta.2", col])
+    # a failed independence test comes back as p = 1, statistic = 0 (see
+    # run_independence_test_whole); its df = NA is what marks it
+    indep <- function(test, field) {
+      v <- test[[field]]
+      if (is.null(v)) NA_real_ else as.numeric(v)
+    }
+    tibble::tibble(
+      imputation      = k,
+      blp_estimate    = blp_col(1),
+      blp_se          = blp_col(2),
+      blp_df          = if (is.null(blp) || is.null(attr(blp, "df"))) {
+        NA_real_
+      } else as.numeric(attr(blp, "df")),
+      blp_p           = blp_col(4),
+      indep_cate_stat = indep(m$independence_cate, "statistic"),
+      indep_cate_df   = indep(m$independence_cate, "df"),
+      indep_cate_p    = indep(m$independence_cate, "p_value"),
+      indep_po_stat   = indep(m$independence_po, "statistic"),
+      indep_po_df     = indep(m$independence_po, "df"),
+      indep_po_p      = indep(m$independence_po, "p_value")
+    )
+  }))
 }

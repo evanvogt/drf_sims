@@ -305,12 +305,9 @@ bind_true_cate <- function(df, true_df, extra_cols) {
 }
 
 # --- BLP test p-values ------------------------------------------------------
-# dr_random_forest used to carry no BLP or independence test under
-# profile = "missing" (PROFILES in R/cate_models.R), so its p-values were NA
-# throughout. Fixed: the flag is now dr_rf_tests = TRUE, and the finished
-# results were back-filled in place by R/patch_hte_tests.R rather than re-run.
-# If this model is still NA here, the patch job has not been run over these
-# results yet - check patch_status in check_all_studies.md.
+# Every model carries the tests natively (PROFILES$missing in R/cate_models.R).
+# The multiple_imputation arm is NA until a pooling rule for its per-imputation
+# tests (mi_tests) is chosen - see missing/README.md.
 BLP_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p"),
                           "BLP_p", "p-value", hline = 0.05, facet_scales = "free_x")
 save_fig("bin_miss_blp_all.png", fig_path)

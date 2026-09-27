@@ -72,36 +72,46 @@ handle it), plus `complete_data` — a reference arm with **no missingness
 introduced at all**, so the others can be scored against complete-data
 performance via `rel_efficiency`.
 
-## Open gap: the `multiple_imputation` arm has no HTE tests, for any model
+## Open decision: pooling the `multiple_imputation` arm's HTE tests
 
-Not a defect in one estimator — a hole in the arm. `multiple_imputation` runs
-fit each of the 50 imputed datasets and Rubin-combine with `combine_mi()`
-(`R/cate_models.R`), which returns only `tau` and `variance`. The analysis
-scripts then build `results` from those combined objects alone, so
-`nuisances_rf` is never saved. Consequently `BLP_p`, `indep_cate` and
-`indep_po` are `NA` for **every** model on all 1,400 MI runs per study.
+`multiple_imputation` runs fit each of the 50 imputed datasets and
+Rubin-combine with `combine_mi()` (`R/cate_models.R`), which pools only `tau`
+and `variance`. Each imputation's fit runs the BLP and independence tests, but
+until 2026-09-27 the analysis scripts threw them away, so `BLP_p`, `indep_cate`
+and `indep_po` were `NA` for **every** model on all 1,400 MI runs per study.
+Those runs kept no nuisances either, so the gap could not be patched.
 
-Unlike the `dr_random_forest` gap, this one **cannot** be patched: there is
-nothing on disk to recompute a BLP from. Closing it needs two things:
+**From the re-run on, the per-imputation tests are saved.** Each MI arm
+(`causal_forest`, `dr_random_forest`, `dr_semi_oracle`) carries `mi_tests`, a
+50-row table from `mi_test_table()` with the ingredients any candidate pooling
+rule needs:
 
-1. **A methodological decision.** What is "the" heterogeneity test across 50
-   imputations? Rubin-combine the BLP coefficients and their standard errors,
-   combine the per-imputation p-values (Fisher, Stouffer), or something else.
-   Each answers a slightly different question and none is the obvious default.
-2. **A re-run** of the MI arm — 1,400 runs per study, the most expensive method
-   in the grid.
+| columns | for |
+|---|---|
+| `blp_estimate`, `blp_se`, `blp_df` (β₂ and its residual df) | Rubin's rules on the BLP coefficient |
+| `indep_{cate,po}_stat`, `indep_{cate,po}_df` (chi-square) | a statistic-pooling rule such as D2 |
+| `blp_p`, `indep_cate_p`, `indep_po_p` | a p-value combination rule (Fisher, Stouffer, median p) |
 
-Until then the `NA`s are honest and should be read as "not computed", not as
-"the test failed". `R/patch_hte_tests.R` detects these runs and refuses them,
-which is why `check_all.R` reports `patchable_jobs` of 11,200 rather than 12,600.
+A `NA` BLP row is bug L's degenerate-tau fallback. A failed independence test
+reads `p = 1`, `stat = 0`, `df = NA`.
+
+**No pooling rule is applied yet.** What "the" heterogeneity test across 50
+imputations should be is still a methodological decision. The options answer
+slightly different questions and none is the obvious default. It will be made
+at metrics time, reading `mi_tests` from the collected results, with no
+re-run. Until then `hte_test_metrics()` sees no `BLP_whole` /
+`independence_*` on MI arms and reports `NA`, which means "not pooled yet",
+not "the test failed".
 
 The same gap carries over to the true-CATE HTE test evaluation
 (`*_true_cate_tests.RDS`, `true_cate_test_row()` in `R/cate_models.R` — see
 `continuous/README.md`): `multiple_imputation` rows are `NA`/`NA` there too,
 for the same reason (`data` is a list of 50 imputed data.frames, not one),
-even though that evaluation needs no nuisances from `nuisances_rf` at all —
-it is the multiple-imputation *pooling* question in point 1 above, not a
-missing-nuisance problem, that is unresolved for those rows.
+even though that evaluation needs no nuisances from `nuisances_rf` at all.
+It is the same pooling question as above, not a missing-nuisance problem, that
+is unresolved for those rows. Its BLP half does not need X, and Y and W are
+never imputed, so that half could be filled in from the saved results once
+the question is settled.
 
 ## Bugs fixed here
 
@@ -140,12 +150,11 @@ qsub missing/binary/jobscripts/bin_miss_1.sh
 qsub missing/binary/jobscripts/bin_miss_extra.sh
 ```
 
-Nothing needs the `dr_random_forest` HTE back-fill any more: new runs carry the
-tests natively (`PROFILES$missing`). `check_all.R`'s `patch_status` still counts
-manifest rows, though, and the old manifests are archived with the old results,
-so a bookkeeping pass over every combination
-(`qsub -J 1-126%20 jobscripts/{cts,bin}_miss_patch.sh`) is what makes it read
-complete. See "Patched: every model now carries the HTE tests" in
-`missing/binary/README.md` for what the back-fill was.
+Then check, collect and metrics as usual. **There is no patch step.** New runs
+carry every model's HTE tests natively (`PROFILES$missing`), and the MI arm
+saves its per-imputation tests (above). The back-fill applied to the archived
+results, and the scripts that did it (removed after commit `e7b1d59`), are
+summarised under "Every model carries the HTE tests" in
+`missing/binary/README.md`.
 
 `missing/ci_example` — see its own README.

@@ -68,16 +68,14 @@ The `dr_random_forest` row used to be the odd one: `missing` alone set
 studies. Nothing marked it as deliberate, and the decision has been taken —
 every model carries the tests where possible.
 
-The 19,800 results already on disk were **not** re-run for it. Both tests are
-deterministic (`GenericML::BLP` is an OLS with a sandwich vcov;
-`coin::independence_test` is asymptotic under `teststat = "quadratic"`), and the
-saved files retain `nuisances_rf`, `data` and `tau`, so `R/patch_hte_tests.R`
-recomputed the three fields in place. `missing/patch_hte_verify.R` is the proof:
-it runs the same row twice from one seed, with the flag off and on, and checks
-that every arm's `tau` is byte-identical and that the patch reproduces the
-re-run's test values exactly. One field is not recoverable —
-`dr_random_forest$variance`, which the old inline branch discarded — so patched
-files lack it and newly run ones have it. Nothing reads it.
+The results made before that were back-filled in place by a one-off patch
+rather than re-run. Those results are now archived, the re-run carries the
+tests natively, and the patch scripts were removed after commit `e7b1d59` (see
+`missing/binary/README.md` for the history).
+
+`multiple_imputation` runs keep each imputation's tests unpooled, in `mi_tests`
+(`mi_test_table()`). The pooling rule is still to be decided; see
+`missing/README.md`.
 
 The CI profiles keep the tests off; that one **is** deliberate.
 

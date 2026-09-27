@@ -24,15 +24,6 @@
 # current config uses "study", but the column exists so a future config that
 # doesn't can still be added without changing check_all.R.
 #
-# patch_manifest names a one-off repair a study owes on top of being run, as the
-# directory (relative to the study's res_path) that the repair writes its
-# manifest into; NA for a study that owes none. It exists because "run" and
-# "correct" are not the same state: missing/binary is 9,900/9,900 complete and
-# was still owed the dr_random_forest HTE back-fill (R/patch_hte_tests.R), which
-# the file counts alone report as "complete" and so hide. check_all.R reads the
-# manifest rather than the result files - counting by opening 9,900 RDS objects
-# would take half an hour a study and make the tracker too slow to run casually.
-#
 # To add a new study: add one row. To retire a study: delete its row.
 
 study_registry <- data.frame(
@@ -95,18 +86,11 @@ study_registry <- data.frame(
     "crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README); also bug P and the risk-difference DGM (binary/README.md)",
     "own comparison arms unchanged by the crossfitting change, but bug O changed the continuous DGM it runs on, and the 2026-09-26 renumbering its scenario ids (1/4/6/9 -> 1/4/6/8); old results archived",
     "pilot study, not part of the production rerun; re-run because bug O changed the continuous DGM and the 2026-09-26 renumbering its scenario ids (1/6/9 -> 1/4/8); old results archived",
-    "crossfitting strategy change; also bug F (dr_superlearner); plus the dr_random_forest HTE back-fill, patched in place - no re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600",
-    "crossfitting strategy change; also the DGM was wrong three ways; plus the dr_random_forest HTE back-fill, patched in place - no re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run; plus bug P and the risk-difference DGM - all 12,600 rows re-run, which also makes bug N moot",
+    "crossfitting strategy change; also bug F (dr_superlearner); plus bug O (continuous DGM) - all 12,600 rows re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600",
+    "crossfitting strategy change; also the DGM was wrong three ways; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run; plus bug P and the risk-difference DGM - all 12,600 rows re-run, which also makes bug N moot",
     "crossfitting strategy change",
     "its 358/360 runs (the first under single crossfitting, me_models.R) predate bug O, which changed the continuous DGM, and the 2026-09-26 renumbering (1/4/6/9 -> 1/4/6/8); archived with the strategies and split trees, so the count restarts from zero",
     "crossfitting strategy change"
-  ),
-  # Only the two studies that ran under PROFILES$missing's old dr_rf_tests =
-  # FALSE owe a patch. missing/ci_example is profile = "ci_mi" (tests off by
-  # design) and has not started, so it will be born correct.
-  patch_manifest = c(
-    NA, NA, NA, NA, NA, NA, NA,
-    NA, NA, "cts_miss_hte_patch", "bin_miss_hte_patch", NA, NA, NA
   ),
   blocked = c(
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,

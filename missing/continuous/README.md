@@ -18,8 +18,6 @@ here).
 | `cts_miss_dgms.R` | names the `continuous_missing` scenario set + the missingness machinery |
 | `cts_miss_models.R` | `family = gaussian()`, `profile = "missing"`, `ipw` threaded through |
 | `cts_miss_analysis.R` | array entry point |
-| `cts_miss_patch.R` | one-off: back-fills the `dr_random_forest` HTE tests into finished results (`R/patch_hte_tests.R`). Array entry point for `jobscripts/cts_miss_patch.sh` |
-| `cts_miss_patch_check.R` | audits that back-fill — which combinations it failed on and why. See `missing/binary/README.md`, where the failure it was written for happened; this study's patch is complete, so a run here should report nothing to re-run |
 | `cts_miss_results.R` / `.qmd` | every metric, to `results/all_figures/` — the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts.R` |
 | `mi_scratch.R` | exploratory, unmaintained |
 | `results_cts_miss.{R,Rmd,html}` | **superseded** by `cts_miss_results.R`/`.qmd` — kept for reference, renamed to the repo's legacy convention (cf. `continuous/results_cts.R`). Points at the old HPC path `/rds/general/...` and at `results/new_format/metrics_cts_miss_df.RDS`, neither of which exists any more; scenarios are `"scenario_5"` strings, and only bias and MSE are plotted. It was called `cts_miss_results.*`, so its `.html` was being clobbered by the new `.qmd`'s render output. |
@@ -36,7 +34,10 @@ second block in `cts_miss_config.R`, so rows 1–9900 kept their meaning.
 
 **`multiple_imputation` returns a list of 50 datasets, not one.** The analysis
 script fits each and Rubin-combines with `combine_mi()`; only
-`causal_forest`, `dr_random_forest` and `dr_semi_oracle` are combined.
+`causal_forest`, `dr_random_forest` and `dr_semi_oracle` are combined. Each of
+those arms also saves `mi_tests`, the 50 imputations' HTE tests, unpooled: the
+pooling rule is still to be decided (`missing/README.md`), so the arm's
+`BLP_p`/`indep_*` metrics stay `NA` until it is.
 
 **The row-dropping methods drop rows from the truth too.** `complete_cases` and
 `IPW` return `retained_indices`, and `generate_and_process_data()` subsets
@@ -47,33 +48,18 @@ true CATE and true nuisances instead of an estimator's** (`truth$tau`,
 `truth$p0`, `W.hat = 0.5` — see `continuous/README.md`'s "True-CATE HTE test
 evaluation"), one row per (scenario, n, type, prop, mechanism, method, run),
 no per-model dimension. `method == "multiple_imputation"` rows are `NA`/`NA`
-there, same reason as the estimated-CATE gap below: `data` is a list of 50
-imputed data.frames, with no single covariate matrix to test against.
+there, the same pooling question as the estimated-CATE tests above: `data` is a
+list of 50 imputed data.frames, with no single covariate matrix to test against.
 
 **`dr_random_forest` used to carry no BLP or independence test in this study**,
 unlike `continuous/`, so `BLP_p` was `NA` for that one model. Copy-paste drift
 rather than a decision, and the decision has been taken: every model carries the
 tests where possible. `PROFILES$missing` (`R/cate_models.R`) now sets
-`dr_rf_tests = TRUE`, and the finished results were back-filled in place by
-`R/patch_hte_tests.R` rather than re-run — the tests are deterministic and every
-input survives in the saved files. Written up once, in
-`missing/binary/README.md`, since `profile = "missing"` covers both studies;
-that write-up also covers the one field the patch cannot recover
-(`dr_random_forest$variance`, which nothing reads).
-
-Patch this study only after `cts_miss_rerun.sh` has cleared the outstanding runs
-and `cts_miss_check.R` reports 9,900/9,900, so it is one clean pass:
-
-```bash
-Rscript cts_miss_patch.R dry                       # report only, writes nothing
-qsub    jobscripts/cts_miss_patch.sh               # 1-99, one combination each
-Rscript cts_miss_patch_check.R                     # did every element land?
-```
-
-That last step is not ceremony: the binary study's patch job lost ten of its 99
-array elements silently, because a manifest is only written once a combination
-finishes and `check_all.R` counts manifest rows. See "Checking the back-fill
-landed" in `missing/binary/README.md`.
+`dr_rf_tests = TRUE`, so the re-run writes them natively. The results made
+before that were back-filled in place by a one-off patch rather than re-run,
+and are now archived; that history is written up once, in
+`missing/binary/README.md`, since `profile = "missing"` covers both studies.
+The re-run has no patch step.
 
 ## Running it
 
@@ -81,16 +67,9 @@ landed" in `missing/binary/README.md`.
 qsub missing/continuous/jobscripts/cts_miss_1.sh       # 1-9900
 qsub missing/continuous/jobscripts/cts_miss_extra.sh   # 9901-12600, scenario 2
 Rscript missing/continuous/cts_miss_check.R
-qsub missing/continuous/jobscripts/cts_miss_patch.sh    # 1-99, the HTE back-fill
 qsub missing/continuous/jobscripts/cts_miss_collect.sh
 qsub missing/continuous/jobscripts/cts_miss_metrics.sh
 ```
-
-The patch step goes **before** collect: collect reads the per-run files into
-`cts_miss_all.RDS`, so patching afterwards would leave the collected copy
-carrying the old, testless `dr_random_forest`. It is a one-off — once these
-results are patched and `PROFILES$missing` is set, future runs need only the
-usual steps.
 
 Then, for the figures:
 
@@ -109,8 +88,8 @@ To run only the `complete_data` reference arm, take
 scenario 2), after archiving the old tree with `R/archive_old_results.R` (root
 `README.md`, Status, step 0). Bug O, below, supersedes rows 1–9900. The old
 tree uses the pre-2026-09-26 numbers, so running into it would put the new
-scenario 2 on top of the old scenario 2 (now 5). Then the bookkeeping patch
-pass and collect/metrics - see `missing/README.md` Status.
+scenario 2 on top of the old scenario 2 (now 5). Then collect/metrics - no
+patch step, see `missing/README.md` Status.
 
 **Re-runs required** — for the crossfitting strategy change to
 `R/cate_models.R` (see root README Methods/Status), which moves all five
@@ -130,5 +109,5 @@ term is heterogeneity the plan knows nothing about, like the rest, so it is
 left out of the calibration too. That keeps one `bW` and one truth per scenario
 across every mechanism, and lowers realised power under MNAR-Y to 0.54–0.67.
 With `PROFILES$missing` already set, re-run results carry the
-`dr_random_forest` tests, so the back-fill patch above only matters for results
+`dr_random_forest` tests, so the back-fill patch only ever mattered for results
 made before bug O.

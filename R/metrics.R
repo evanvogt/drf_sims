@@ -62,7 +62,9 @@ cate_metrics <- function(est, true, scenario) {
 hte_test_metrics <- function(model_res) {
   tibble(
     BLP_p = if (!is.null(model_res$BLP_whole)) {
-      model_res$BLP_whole[4, 2]
+      # by name and last column: newer results keep the whole coefficient
+      # block, older ones only Estimate and Pr(>|t|) - see run_blp_whole()
+      model_res$BLP_whole["beta.2", ncol(model_res$BLP_whole)]
     } else NA_real_,
     indep_cate = if (!is.null(model_res$independence_cate)) {
       as.numeric(model_res$independence_cate$p_value)

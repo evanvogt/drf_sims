@@ -10,11 +10,6 @@
 # for every study in R/study_registry.R, how many res_sim_*.RDS files exist
 # against how many the grid expects.
 #
-# It also reports any one-off repair a study owes on top of being run, from the
-# registry's patch_manifest column. Being run and being correct are different
-# states: missing/binary sat at 9,900/9,900 "complete" while still owing the
-# dr_random_forest HTE back-fill, and a file count cannot see that.
-#
 # Results only exist on the HPC (too large to sync here), so this is written
 # and syntax-tested locally but run for real on the HPC login node - same
 # split as the existing per-study check scripts. See study_registry.R and
@@ -51,38 +46,6 @@ status_of <- function(found, expected) {
   else "in_progress"
 }
 
-#' How far through its one-off repair a study is
-#'
-#' Counted from the manifest R/patch_hte_tests.R writes (one small CSV per
-#' parameter combination), NOT by opening the result files - reading 9,900 RDS
-#' objects to look for one field would take about half an hour per study, which
-#' is far too slow for a script meant to be run casually on a login node.
-#'
-#' Returns patchable (the denominator), patched, and NA/NA for a study that owes
-#' no repair. The denominator excludes the multiple_imputation runs: those carry
-#' no saved nuisances, so there is nothing to compute a BLP from and the patch
-#' rightly refuses them (see the multiple-imputation note in missing/README.md).
-#' Counting them would leave a fully repaired study stuck at 88.9% for ever.
-count_patched <- function(study, manifest_dir) {
-  if (is.na(manifest_dir)) return(list(patchable = NA_integer_, patched = NA_integer_))
-
-  mi_rows <- if ("method" %in% names(study$grid)) {
-    length(grid_indices(study, method = "multiple_imputation"))
-  } else 0L
-  patchable <- nrow(study$grid) - mi_rows
-
-  files <- list.files(file.path(study$res_path, manifest_dir),
-                      pattern = "\\.csv$", full.names = TRUE)
-  if (length(files) == 0) return(list(patchable = patchable, patched = 0L))
-
-  rows <- bind_rows(lapply(files, read.csv, stringsAsFactors = FALSE))
-  # "already_patched" counts: a second pass over a file that was done in the
-  # first is still a patched file, and the manifest is per-pass.
-  done <- sum(rows$status %in% c("patched", "already_patched"))
-
-  list(patchable = patchable, patched = done)
-}
-
 check_one <- function(row) {
   if (isTRUE(row$blocked)) {
     return(data.frame(
@@ -90,8 +53,6 @@ check_one <- function(row) {
       expected_jobs = NA_integer_, found_jobs = NA_integer_,
       missing_jobs = NA_integer_, pct_complete = NA_real_,
       status = "blocked",
-      patchable_jobs = NA_integer_, patched_jobs = NA_integer_,
-      patch_status = "not_applicable",
       reason = row$reason, stringsAsFactors = FALSE
     ))
   }
@@ -101,17 +62,11 @@ check_one <- function(row) {
   found <- count_found(study)
   missing <- max(expected - found, 0)
 
-  patch <- count_patched(study, row$patch_manifest)
-
   data.frame(
     study_name = row$study_name, category = row$category,
     expected_jobs = expected, found_jobs = found, missing_jobs = missing,
     pct_complete = round(100 * found / expected, 1),
     status = status_of(found, expected),
-    patchable_jobs = patch$patchable, patched_jobs = patch$patched,
-    patch_status = if (is.na(patch$patchable)) "not_applicable" else {
-      status_of(patch$patched, patch$patchable)
-    },
     reason = row$reason,
     stringsAsFactors = FALSE
   )
@@ -127,8 +82,6 @@ results <- bind_rows(lapply(seq_len(nrow(study_registry)), function(i) {
         expected_jobs = NA_integer_, found_jobs = NA_integer_,
         missing_jobs = NA_integer_, pct_complete = NA_real_,
         status = paste("ERROR:", conditionMessage(e)),
-        patchable_jobs = NA_integer_, patched_jobs = NA_integer_,
-        patch_status = "not_applicable",
         reason = row$reason,
         stringsAsFactors = FALSE
       )
@@ -149,15 +102,6 @@ cat("\nBy status:\n")
 print(table(results$status))
 cat("\nBy category:\n")
 print(table(results$category))
-
-# Reported separately from the run counts because a study can be 100% run and
-# still owe its repair - which is the whole reason these columns exist.
-owed <- results[results$patch_status != "not_applicable", ]
-if (nrow(owed)) {
-  cat("\nOne-off repairs (R/patch_hte_tests.R):\n")
-  print(owed[, c("study_name", "patchable_jobs", "patched_jobs", "patch_status")],
-        row.names = FALSE)
-}
 
 # ---- csv / markdown ----
 
@@ -201,28 +145,10 @@ md_lines <- c(
   "- **expected_jobs**: n_sims x number of parameter combinations in the study's grid",
   "- **found_jobs**: res_sim_*.RDS files actually present under the study's results directory",
   "- **status**: not_started (0 found), in_progress (0 < found < expected), complete (all found), blocked (currently fails to run, not scanned)",
-  "- **patchable_jobs / patched_jobs / patch_status**: progress of a one-off",
-  "  repair the study owes on top of being run, counted from the manifest the",
-  "  repair writes. `not_applicable` means the study owes none. Right now the",
-  "  only repair is the dr_random_forest HTE back-fill (`R/patch_hte_tests.R`),",
-  "  owed by the two missing-covariate studies. **A study can be `complete` and",
-  "  its patch `not_started`** - that is exactly the state these columns exist",
-  "  to make visible.",
-  "- **patchable_jobs excludes the `multiple_imputation` runs** (1,100 per",
-  "  study). Those keep no nuisances, so there is nothing to recompute a BLP",
-  "  from and the patch refuses them by design; counting them would peg a fully",
-  "  repaired study at 88.9%. See the multiple-imputation note in",
-  "  `missing/README.md`.",
   "",
   "Generated by `Rscript check_all.R`. For resubmitting a specific study's",
   "missing runs, use its own `<prefix>_check.R` -> `jobscripts/failed_ids.txt`",
-  "-> `qsub jobscripts/<prefix>_rerun.sh` loop; this script only reports.",
-  "",
-  "A `patch_status` short of complete says only that manifest rows are missing,",
-  "which a killed array element and one that was never submitted both produce.",
-  "`<prefix>_patch_check.R` -> `jobscripts/failed_patch_ids.txt` ->",
-  "`qsub jobscripts/<prefix>_patch_rerun.sh` is the same loop for the repair,",
-  "and tells the two apart by reading the result files themselves."
+  "-> `qsub jobscripts/<prefix>_rerun.sh` loop; this script only reports."
 )
 writeLines(md_lines, md_path)
 
