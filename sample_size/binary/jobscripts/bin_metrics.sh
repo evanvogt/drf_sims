@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -l walltime=01:00:00  
 #PBS -l select=1:ncpus=1:ompthreads=1:mem=10gb
-#PBS -N cts_metrics
+#PBS -N bin_metrics
 #PBS -j oe
 
 
@@ -16,4 +16,4 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 # Run the R script for the assigned scenario and sample size
-Rscript cts_metrics.R
+Rscript bin_metrics.R

@@ -5,7 +5,7 @@
 #PBS -J 1-6%100
 #PBS -N ci_sf_bin_rerun
 #PBS -o logs_bin_rerun/
-#PBS -e logs_bin_rerun/
+#PBS -j oe
 
 module purge
 module add tools/prod

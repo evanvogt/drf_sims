@@ -4,7 +4,7 @@
 #PBS -J 1-4000%380
 #PBS -N bin_1
 #PBS -o logs_1/
-#PBS -e logs_1/
+#PBS -j oe
 
 
 module purge

@@ -102,9 +102,8 @@ combos <- function(study) {
 
 #' The runs the grid holds for each parameter combination
 #'
-#' Not seq_len(study$n_sims): binary, continuous and
-#' confidence_intervals/{binary,continuous} take scenarios 1-4 to 500 runs
-#' while the rest stay at 100. Shared by check_failed(), which reports the
+#' Not seq_len(study$n_sims): binary and continuous take scenarios 1-4 to 500
+#' runs while the rest stay at 100. Shared by check_failed(), which reports the
 #' missing ones, and get_results(), which reads only these.
 #'
 #' @return list with one vector of run numbers per row of combos(study), in
@@ -145,8 +144,7 @@ run_numbers <- function(files) {
 #'
 #' The runs expected for each combination are the `run` values the grid holds
 #' for it, not seq_len(study$n_sims). The two agree for a rectangular grid, but
-#' binary, continuous and confidence_intervals/{binary,continuous} append rows
-#' taking scenarios 1-4 to 500 runs while the rest stay at 100, and a
+#' binary and continuous append rows taking scenarios 1-4 to 500 runs while the rest stay at 100, and a
 #' flat n_sims would either miss runs 101-500 or report them missing for the
 #' scenarios that never had them.
 #'

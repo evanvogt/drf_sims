@@ -4,7 +4,7 @@
 #PBS -J 1-83
 #PBS -N ci_bin_rerun
 #PBS -o logs_rerun/
-#PBS -e logs_rerun/
+#PBS -j oe
 
 module purge
 module add tools/prod

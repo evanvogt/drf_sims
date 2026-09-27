@@ -1,10 +1,10 @@
 #!/bin/bash
 #PBS -l walltime=02:00:00  
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=5gb
-#PBS -J 11-10000%100
+#PBS -J 1-10000%100
 #PBS -N ci_cts_1
 #PBS -o logs_1/
-#PBS -e logs_1/
+#PBS -j oe
 
 module purge
 module add tools/prod

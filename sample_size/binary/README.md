@@ -201,12 +201,10 @@ test rejected there.
 ```bash
 qsub sample_size/binary/jobscripts/bin_1.sh     # 1-4000
 qsub sample_size/binary/jobscripts/bin_extra.sh # 4001-10400: runs 101-500, scenarios 1-4
-Rscript sample_size/binary/bin_check.R
+Rscript sample_size/binary/bin_check.R          # writes failed_ids.txt if any are missing
+qsub sample_size/binary/jobscripts/bin_collect.sh
+qsub sample_size/binary/jobscripts/bin_metrics.sh
 ```
-
-**TODO:** `bin_metrics.sh` doesn't exist yet in `jobscripts/` — create it,
-mirroring `continuous/jobscripts/cts_metrics.sh`, before the metrics step can
-run on the cluster. (`bin_collect.sh` is there.)
 
 ## Status
 

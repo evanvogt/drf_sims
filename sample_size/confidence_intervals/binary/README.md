@@ -7,7 +7,7 @@ The `confidence_intervals/continuous` design with a binary outcome, on the
 
 | | |
 |---|---|
-| array | **20,000 jobs** (`bin_ci_1.sh` 1–10000, `bin_ci_2.sh` 10001–20000), plus **32,000** taking scenarios 1–4 to 500 runs (`bin_ci_extra_1.sh`–`bin_ci_extra_4.sh`, 20001–52000) |
+| array | **20,000 jobs** (`bin_ci_1.sh` 1–10000, `bin_ci_2.sh` 10001–20000): 100 runs for every scenario |
 | results | `../results/confidence_intervals/binary/scenario_<k>/<n>/<CI_sf>/` |
 
 ## ⚠ Bug A — fixed
@@ -33,6 +33,5 @@ single item in the re-run bill.
 ```bash
 qsub sample_size/confidence_intervals/binary/jobscripts/bin_ci_1.sh
 qsub sample_size/confidence_intervals/binary/jobscripts/bin_ci_2.sh
-for k in 1 2 3 4; do qsub sample_size/confidence_intervals/binary/jobscripts/bin_ci_extra_$k.sh; done
 qsub sample_size/confidence_intervals/optimal_sf/jobscripts/bin_ci_sf_1.sh
 ```

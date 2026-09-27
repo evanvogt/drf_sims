@@ -4,7 +4,7 @@
 #PBS -J 1-24
 #PBS -N cts_rerun
 #PBS -o logs_rerun/
-#PBS -e logs_rerun/
+#PBS -j oe
 
 
 module purge

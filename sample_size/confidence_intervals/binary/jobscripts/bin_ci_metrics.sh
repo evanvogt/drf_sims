@@ -2,6 +2,7 @@
 #PBS -l walltime=02:00:00  
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=200gb
 #PBS -N ci_bin_metrics
+#PBS -j oe
 
 module purge
 module add tools/prod

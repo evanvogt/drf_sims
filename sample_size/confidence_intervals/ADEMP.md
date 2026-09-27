@@ -19,7 +19,7 @@ The `continuous/` or `binary/` DGM (see their `ADEMP.md`), scenarios 1–10.
 | scenarios | 1–10 | 1–10 |
 | n | 500, 1000 | 500, 1000 |
 | `CI_sf` | 0.05 to 0.5 by 0.05 (design factor) | same values, as calibration candidates |
-| repetitions | 100; 500 for scenarios 1–4 | 100 |
+| repetitions | 100 | 100 |
 
 Full factorial over the rows above, per outcome type.
 

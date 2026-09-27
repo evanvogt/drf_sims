@@ -4,7 +4,7 @@
 #PBS -J 10001-20000%190
 #PBS -N ci_cts_2
 #PBS -o logs_2/
-#PBS -e logs_2/
+#PBS -j oe
 
 module purge
 module add tools/prod
