@@ -22,3 +22,4 @@ scratch/*test*
 .Rproj.user
 .Rhistory
 *.pdf
+*ADEMP_files/
