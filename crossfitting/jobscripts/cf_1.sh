@@ -1,12 +1,10 @@
 #!/bin/bash
-# %max chunk set since only 1 cpu per run required (limit is 400 and this keeps
-# space to start Rstudio OD)
 #PBS -l walltime=00:30:00
 #PBS -l select=1:ncpus=1:ompthreads=1:mem=2gb
-#PBS -J 1-400%380
+#PBS -J 1-400
 #PBS -N cf_1
 #PBS -o logs_1/
-#PBS -e logs_1/
+#PBS -j oe
 
 
 module purge

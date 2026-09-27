@@ -1,12 +1,10 @@
 #!/bin/bash
-# Reruns only the array indices listed in failed_ids.txt by cf_ci_check.R.
-# -J and the resource request are rewritten by check_failed(); do not hand-edit.
 #PBS -l walltime=02:00:00
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=10gb
 #PBS -J 1-53
 #PBS -N cf_ci_rerun
 #PBS -o logs_ci_rerun/
-#PBS -e logs_ci_rerun/
+#PBS -j oe
 
 
 module purge

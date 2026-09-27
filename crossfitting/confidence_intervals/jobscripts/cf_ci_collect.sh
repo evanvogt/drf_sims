@@ -1,6 +1,7 @@
 #PBS -l walltime=00:30:00
 #PBS -l select=1:ncpus=4:ompthreads=4:mem=4gb
 #PBS -N cf_ci_collect
+#PBS -j oe
 
 
 module purge
