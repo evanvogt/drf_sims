@@ -77,6 +77,7 @@ metrics_summary <- metrics %>%
 # per row/column, never per panel, so it would still show every panel all 11
 # categories. facet_wrap frees per panel, dropping the ones absent from that
 # family's arms.
+# hline = NULL omits the reference line.
 summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05) {
   z <- qnorm(1 - alpha / 2)
   df %>%
@@ -84,7 +85,7 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha =
            lo = .data[[mean_col]] - z * .data[[mcse_col]],
            hi = .data[[mean_col]] + z * .data[[mcse_col]]) %>%
     ggplot(aes(x = variant, y = est, colour = set, ymin = lo, ymax = hi)) +
-    geom_hline(yintercept = hline, linetype = "dashed") +
+    (if (!is.null(hline)) geom_hline(yintercept = hline, linetype = "dashed")) +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
     facet_wrap(vars(family, scenario), nrow = n_distinct(df$family), scales = "free") +
@@ -117,7 +118,7 @@ ggsave("cf_mse_summary.png", plot = mse_sum_plot, path = fig_path,
 
 corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != "Null"),
                               "mean_corr", "mcse_corr",
-                              "Mean correlation with the true CATE", "Mean correlation")
+                              "Mean correlation with the true CATE", "Mean correlation", hline = NULL)
 ggsave("cf_corr_summary.png", plot = corr_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 

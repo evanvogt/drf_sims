@@ -221,7 +221,7 @@ corr_plot <- miss_box_plot(corr_metrics, "corr", "Pearson correlation",
 save_fig("bin_miss_corr_all.png", fig_path)
 
 corr_sum_plot <- point_range_plot(corr_summary, "corr", "Pearson correlation",
-                                  facet_scales = "free_y")
+                                  facet_scales = "free_y", hline = NULL)
 save_fig("bin_miss_corr_summary.png", fig_path)
 
 # --- Spearman rank correlation with the truth -------------------------------
@@ -233,7 +233,7 @@ save_fig("bin_miss_spearman_all.png", fig_path)
 
 spearman_sum_plot <- point_range_plot(corr_summary, "spearman",
                                       "Spearman correlation",
-                                      facet_scales = "free_y")
+                                      facet_scales = "free_y", hline = NULL)
 save_fig("bin_miss_spearman_summary.png", fig_path)
 
 # --- sign accuracy ----------------------------------------------------------

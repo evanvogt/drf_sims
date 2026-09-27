@@ -105,6 +105,7 @@ metrics_summary <- metrics %>%
 # alpha/2) x MCSE) error bar, faceted by scenario (there's no family/variant
 # dimension here - just scenario x model x n) - see continuous/cts_results.R's
 # summary_plot for why this isn't a raw +/- 1x MCSE (~68% coverage, not 95%)
+# hline = NULL omits the reference line.
 summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05) {
   z <- qnorm(1 - alpha / 2)
   df %>%
@@ -112,7 +113,7 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha =
            lo = .data[[mean_col]] - z * .data[[mcse_col]],
            hi = .data[[mean_col]] + z * .data[[mcse_col]]) %>%
     ggplot(aes(x = n, y = est, colour = model, ymin = lo, ymax = hi)) +
-    geom_hline(yintercept = hline, linetype = "dashed") +
+    (if (!is.null(hline)) geom_hline(yintercept = hline, linetype = "dashed")) +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
     facet_wrap(~scenario, scales = "free") +
@@ -250,7 +251,6 @@ corr_df <- filter(metrics, scenario != scenario_labels[["1"]])
 
 corr_plot <- corr_df %>%
   ggplot(aes(x = n, y = corr, colour = model)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
@@ -264,7 +264,7 @@ ggsave("bin_corr_all.png", path = fig_path, width = 21, height = 15, units = "cm
 
 corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
                               "mean_corr", "mcse_corr",
-                              "Mean correlation with the true CATE", "Mean correlation")
+                              "Mean correlation with the true CATE", "Mean correlation", hline = NULL)
 ggsave("bin_corr_summary.png", plot = corr_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
@@ -272,7 +272,6 @@ ggsave("bin_corr_summary.png", plot = corr_sum_plot, path = fig_path,
 # same scenario-1-undefined convention as Pearson corr (R/metrics.R)
 spearman_plot <- corr_df %>%
   ggplot(aes(x = n, y = spearman, colour = model)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
@@ -287,7 +286,7 @@ ggsave("bin_spearman_all.png", path = fig_path, width = 21, height = 15, units =
 spearman_sum_plot <- summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
                                   "mean_spearman", "mcse_spearman",
                                   "Mean Spearman correlation with the true CATE",
-                                  "Mean Spearman correlation")
+                                  "Mean Spearman correlation", hline = NULL)
 ggsave("bin_spearman_summary.png", plot = spearman_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 

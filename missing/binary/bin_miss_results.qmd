@@ -325,7 +325,7 @@ corr_summary <- filter(metrics_summary, scenario != "Null")
 corr_plot <- miss_box_plot(corr_metrics, "corr", "Pearson correlation",
                            hline = NULL, facet_scales = "free_y")
 corr_sum_plot <- point_range_plot(corr_summary, "corr", "Pearson correlation",
-                                  facet_scales = "free_y")
+                                  facet_scales = "free_y", hline = NULL)
 
 (corr_plot / corr_sum_plot) + plot_layout(guides = "collect")
 ```
@@ -341,7 +341,7 @@ spearman_plot <- miss_box_plot(corr_metrics, "spearman", "Spearman correlation",
                                hline = NULL, facet_scales = "free_y")
 spearman_sum_plot <- point_range_plot(corr_summary, "spearman",
                                       "Spearman correlation",
-                                      facet_scales = "free_y")
+                                      facet_scales = "free_y", hline = NULL)
 
 (spearman_plot / spearman_sum_plot) + plot_layout(guides = "collect")
 ```

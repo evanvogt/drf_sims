@@ -279,7 +279,9 @@ save_fig <- function(
 #' @param shape_palette optional scale layer for `shape` (e.g.
 #'   scale_shape_manual(values = ...)); ignored when `shape` is NULL
 #' @param hline reference line, dashed - 0 for bias-type metrics (the
-#'   original hardcoded value), but e.g. 0.95 for a nominal-coverage panel
+#'   original hardcoded value), but e.g. 0.95 for a nominal-coverage panel.
+#'   NULL omits it - e.g. for correlation, where 0 is not a target and the
+#'   line would stretch the axis away from the data
 point_range_plot <- function(
   summary,
   metric,
@@ -318,7 +320,9 @@ point_range_plot <- function(
     p <- p + aes(shape = .data[[shape]])
   }
 
-  p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  if (!is.null(hline)) {
+    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  }
 
   if (line) {
     p <- p +

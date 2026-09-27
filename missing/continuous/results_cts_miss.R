@@ -19,9 +19,9 @@ metrics_summary <- metrics %>%
   group_by(scenario, type, mechanism, method, model) %>%
   summarise(
     mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T)/sqrt(n()),
+    mcse_bias = sd(bias, na.rm = T) / sqrt(sum(!is.na(bias))),
     mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T)/sqrt(n()),
+    mcse_mse = sd(mse, na.rm = T) / sqrt(sum(!is.na(mse))),
     .groups = "drop"
   )
 
@@ -44,12 +44,16 @@ metrics %>%
        x = "missing data handling method") +
   theme(axis.text.x = element_blank())
 
+# error bars are a 95% CI (mean +/- qnorm(0.975) x MCSE), not a raw +/- 1x
+# MCSE (~68% coverage)
+z <- qnorm(0.975)
+
 metrics_summary %>%
   ggplot(aes(x = model, y = mean_bias, color = model, fill = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_point(size = 3) +
-  geom_errorbar(aes(ymin = mean_bias - mcse_bias,
-                    ymax = mean_bias + mcse_bias),
+  geom_errorbar(aes(ymin = mean_bias - z * mcse_bias,
+                    ymax = mean_bias + z * mcse_bias),
                 width = 0.2) +
   facet_grid(mechanism ~ method) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
@@ -57,7 +61,7 @@ metrics_summary %>%
   theme_bw() +
   theme(strip.background = element_rect(fill = "white"),
         strip.text = element_text(colour = "black")) +
-  labs(title = "Mean bias (± MCSE) in continuous CATEs with missing data",
+  labs(title = "Mean bias (95% MC CI) in continuous CATEs with missing data",
        y = "Bias",
        x = "missing data handling method") +
   theme(axis.text.x = element_blank())
