@@ -298,22 +298,31 @@ nuisance_oob_rf_manual <- function(X, Y, W, num.threads = NULL) {
 
 # one train/test split's worth of SuperLearner nuisances. X must be a data.frame.
 # failsafes and propensity trimming carried over from cts_models.R:300-314.
+# Still an S-learner outcome model on cbind(W, X), although
+# R/cate_models.R::nuisance_sl has since moved to per-arm outcome models, and
+# sl_libraries(n)$Y is sized for a per-arm fit. The study needs an overhaul
+# around per-arm outcome models before it is re-run - see README.md.
+# sl_lib is list(W = , Y = , tau = ) or one character vector - see
+# R/sl_library.R's as_sl_libs().
 sl_nuisance_fit <- function(X, Y, W, in_train, in_test, sl_lib) {
 
+  sl_lib <- as_sl_libs(sl_lib)
   X_train <- X[in_train, , drop = FALSE]
   X_W_train <- cbind(W = W[in_train], X_train)
-
-  Y_lib <- pretest_superlearner(Y[in_train], X_W_train, sl_lib, gaussian())
-  Y.hat.model <- SuperLearner(Y = Y[in_train], X = X_W_train, SL.library = Y_lib)
-
-  W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib, binomial())
-  W.hat.model <- SuperLearner(W[in_train], X_train, family = binomial(),
-                              SL.library = W_lib, method = "method.NNloglik")
-
   X_test <- X[in_test, , drop = FALSE]
-  Y0.hat <- as.numeric(predict(Y.hat.model, newdata = cbind(W = 0, X_test))$pred)
-  Y1.hat <- as.numeric(predict(Y.hat.model, newdata = cbind(W = 1, X_test))$pred)
-  W.hat <- as.numeric(predict(W.hat.model, newdata = X_test)$pred)
+
+  Y_lib <- pretest_superlearner(Y[in_train], X_W_train, sl_lib$Y, gaussian())
+  Y_fit <- sl_fit_predict(Y[in_train], X_W_train,
+                          list(y0 = cbind(W = 0, X_test), y1 = cbind(W = 1, X_test)),
+                          Y_lib)
+
+  W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib$W, binomial())
+  W_fit <- sl_fit_predict(W[in_train], X_train, list(w = X_test), W_lib,
+                          family = binomial())
+
+  Y0.hat <- Y_fit$pred$y0
+  Y1.hat <- Y_fit$pred$y1
+  W.hat <- W_fit$pred$w
 
   if (all(Y0.hat == 0) && all(Y1.hat == 0)) {
     warning("SuperLearner failed for Y.hat. Using mean(Y).")
@@ -409,6 +418,7 @@ stage2_whole_rf <- function(X, po, X_test, num.threads = NULL) {
 stage2_crossfit_sl <- function(X, po, X_test, fold_indices, sl_lib) {
   po_is_matrix <- is.matrix(po)
   stopifnot(!po_is_matrix || ncol(po) == length(unique(fold_indices)))
+  tau_lib <- as_sl_libs(sl_lib)$tau
 
   fits <- future_map(unique(fold_indices), function(fold) {
     in_train <- fold_indices != fold
@@ -418,12 +428,12 @@ stage2_crossfit_sl <- function(X, po, X_test, fold_indices, sl_lib) {
 
     # cts_models.R:387 pretests into po_lib but then passes the untested sl_lib
     # in the matrix branch; po_lib is used in both branches here
-    po_lib <- pretest_superlearner(y_train, X_train, sl_lib, gaussian())
-    po_model <- SuperLearner(y_train, X_train, family = gaussian(), SL.library = po_lib)
+    po_lib <- pretest_superlearner(y_train, X_train, tau_lib, gaussian())
+    po_fit <- sl_fit_predict(y_train, X_train,
+                             list(fold = X[in_fold, , drop = FALSE], test = X_test),
+                             po_lib)
 
-    list(fold = fold,
-         tau = as.numeric(predict(po_model, newdata = X[in_fold, , drop = FALSE])$pred),
-         tau_test = as.numeric(predict(po_model, newdata = X_test)$pred))
+    list(fold = fold, tau = po_fit$pred$fold, tau_test = po_fit$pred$test)
   }, .options = furrr_options(seed = TRUE))
 
   tau <- rep(NA_real_, nrow(X))

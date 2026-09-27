@@ -118,8 +118,14 @@ choice rests on:
 | arm family | strategy | |
 |---|---|---|
 | `ipw`, `csf_cs`, `csf_sh`, `pseudo_cf_whole_oob` | grf's own internal crossfitting, **`cf_default`** | plain `causal_forest`/`causal_survival_forest`, OOB `tau` |
-| `pseudo_dr_whole_oob` | whole-sample OOB, S-learner, **`oob_oob_s`** | `nuisance_pseudo_rf_oob` + `stage2_whole_rf` |
-| the SuperLearner arms | single leave-one-fold-out, **`scf_scf`** | `nuisance_pseudo_sl` + `stage_2_sl`, sharing one `fold_indices` |
+| `pseudo_dr_whole_oob` | whole-sample OOB, T-learner (one forest per arm), **`oob_oob`** | `nuisance_pseudo_rf_oob` + `stage2_whole_rf` |
+| the SuperLearner arms | single leave-one-fold-out, **`scf_scf`**; DR outcome model per arm | `nuisance_pseudo_sl` + `stage_2_sl`, sharing one `fold_indices` |
+
+Every DR-learner outcome model (pseudo-value on X) is fit separately in each
+arm - a T-learner, as in `R/cate_models.R`. Until 2026-09-27 they were
+S-learners on `cbind(W, X)`, and `pseudo_dr_whole_oob` was the `oob_oob_s`
+arm. The disabled split-pseudo DR arm (`nuisance_pseudo_sl_split`) is still an
+S-learner. SuperLearner libraries are per nuisance, from `R/sl_library.R`.
 
 ### The pseudo-value comparison
 
@@ -379,8 +385,8 @@ it able to claim a failure it can no longer cause.
 
 `surv_analysis.R` sources `R/cate_models.R` before `surv_models.R`, so the
 study's own definitions win where they still exist. That is what supplies
-`oob_predict_counterfactual`, `stage2_whole_rf`, `stage_2_sl`,
-`pretest_superlearner` and `dr_pseudo`.
+`t_learner_rf`, `stage2_whole_rf`, `stage_2_sl`, `dr_pseudo`, and (via
+`R/sl_library.R`) `pretest_superlearner`, `sl_fit_predict` and `sl_libraries`.
 
 `surv_metrics.R` does not use `compute_metrics()`: its results nest as
 framework × target rather than one entry per model. It does use `cate_metrics()`,

@@ -24,9 +24,12 @@ Folds are reduced at small n because the double-crossfitting procedure fits
 nuisances over all `C(V,2)` fold pairs — 45 fits at V=10 — and the training
 sets become too small otherwise.
 
-The SuperLearner library also shrinks at n=100 (`SL.earth` and `SL.ranger` are
-dropped), which is why `dr_superlearner` is sometimes filtered out of the n=100
-figures.
+The SuperLearner libraries (one each for the propensity, outcome and CATE
+models, `R/sl_library.R::sl_libraries`) also shrink at n=100. Until the
+library change the single shared library dropped `SL.earth` and `SL.ranger`
+there, which is why `dr_superlearner` is sometimes filtered out of the older
+n=100 figures. The CATE library now keeps ranger at n=100, so it still has an
+interaction-capable learner (see `ADEMP.md`).
 
 ### Scenarios
 
@@ -183,6 +186,16 @@ the other four are unchanged there.
 **Also re-run for bug O** — the shared baseline and the `bW` calibration
 changed (see "Outcome model and `bW` calibration" above), which moves every
 dataset and the level of the true CATE in all ten scenarios.
+
+**Also re-run for the per-arm outcome models and the SuperLearner libraries**
+(2026-09-27). The DR-learners now fit the outcome model separately in each
+treatment arm, which moves `dr_random_forest`, `dr_semi_oracle` and
+`dr_superlearner` (`R/cate_models.R`). `dr_superlearner` also moves for its
+per-nuisance libraries and the fixed pretest (bug Q; `R/sl_library.R`). A
+smoke run at n = 1000 (index 34) on one core, as `jobscripts/cts_1.sh` runs it,
+took 6.2 minutes (sharing the machine with other runs) against the 1h walltime. Results now carry `sl_dropped`: the
+learners the pretest dropped, and any SuperLearner fit that failed and fell
+back to the mean.
 
 Nothing else in this study was affected by the *bug ledger*. `bias` also
 changes sign when the metrics are regenerated (bug G), but that needs no

@@ -14,6 +14,32 @@ pseudo-outcome from a nuisance model trained on every fold except `i`'s, which
 should differ from `dcf`. If it doesn't, the cheap procedure is enough and the
 rest of the study can be sped up 4.5x.
 
+> **Needs an overhaul before it is re-run (noted 2026-09-27, not started).**
+> The production DR-learners in `R/cate_models.R` (and `competing_risk/`) now
+> fit the outcome model **separately in each treatment arm** (a T-learner),
+> for both the random-forest and the SuperLearner versions. This study was
+> designed around S-learner outcome models, so most of its arms no longer
+> test the estimator production runs. The question itself — is double
+> crossfitting worth its cost? — is still relevant, but it has to be asked
+> with per-arm outcome models:
+>
+> - **DR-RF:** `dcf`, `scf_scf`, `scf_oob`, `oob_oob_s` and `oob_oob_manual`
+>   all use an S-learner outcome forest on `cbind(W, X)`. Only `oob_oob` and
+>   `scf_oob_t` are per-arm. Production is now `oob_oob` (`t_learner_rf`),
+>   not `oob_oob_s` as the text below says, and the S-vs-T framing of
+>   `oob_oob_s` / `oob_oob_manual` / `scf_oob_t` needs rethinking.
+> - **DR-SL:** both arms (`dcf`, `scf_scf`) fit one S-learner outcome model
+>   (`cf_models.R::sl_nuisance_fit`). Production `nuisance_sl` fits one
+>   SuperLearner per arm. These arms are also fed `sl_libraries(n)$Y`
+>   (`R/sl_library.R`), which is sized for per-arm fits on about half the
+>   rows, so as it stands their outcome library does not match their design.
+> - The rest of this README (design tables, the "Why `oob_oob` uses a
+>   T-learner" note, the production-parity claims, `cf_testing.R`'s checks)
+>   describes the pre-overhaul study.
+>
+> Do not submit `cf_1.sh` until the arms are rebuilt around per-arm outcome
+> models.
+
 ## Design
 
 Fixed at **n = 500, V = 10, scenarios 1 / 4 / 6 / 8, 100 runs** (400 array jobs).
@@ -253,7 +279,8 @@ the two can't drift apart.
 
 Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
 `collate_predictions`, `sample_size/continuous/cts_dgms.R` supplies the DGP, and
-`R/cate_models.R` supplies `pretest_superlearner` plus the reference
+`R/cate_models.R` supplies (via `R/sl_library.R`) `pretest_superlearner`, the
+per-nuisance SuperLearner libraries and `sl_fit_predict`, plus the reference
 implementation the regression check in `cf_testing.R` compares against — though
 that last one no longer holds, which is what breaks section 1 of `cf_testing.R`
 (see "Known issue" below).

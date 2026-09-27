@@ -225,6 +225,14 @@ archive it with the older results. Bug A is the *confidence-interval* binary
 study, not this one. `bias` also flips sign when the metrics are regenerated
 (bug G), but that needs no cluster time.
 
+**Also re-run for the per-arm outcome models and the SuperLearner libraries**
+(2026-09-27), as in `continuous/`. At n = 100 a treated arm's training rows can
+hold ~2 events (scenario 4, where the treated risk is lowest), so per-arm
+SuperLearner fits there often drop learners, and a whole fit can fail; it then
+falls back to the arm's event rate and is recorded in `sl_dropped`, rather
+than aborting the run. A smoke run at n = 1000 (index 34) on one core, as
+`jobscripts/bin_1.sh` runs it, took 2.8 minutes against the 1h walltime.
+
 ## Why the effect is on the risk-difference scale
 
 Until 2026-09-26 the scenarios put the treatment effect on the **logit** scale,

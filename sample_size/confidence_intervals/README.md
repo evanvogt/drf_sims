@@ -73,6 +73,12 @@ row (`optimal_sf/` never builds a query grid, so it has none of this).
 
 **Archive the old results first** - `R/archive_old_results.R` (root `README.md`, Status, step 0). They predate the current DGM and use the pre-2026-09-26 scenario numbers, so running into that tree would mix old and new results.
 
+All three studies are also moved by the per-arm (T-learner) outcome models
+the DR-learners now use (2026-09-27): `dr_random_forest` and `dr_semi_oracle`
+fit one outcome forest per arm (`R/cate_models.R::t_learner_rf`). No
+SuperLearner arm runs here (`sl_lib = NULL`), so the library change does not
+apply.
+
 `continuous/` — unaffected by the *bug ledger*, but **needs a re-run** for
 the crossfitting strategy change to `R/cate_models.R` (see root README
 Methods/Status).

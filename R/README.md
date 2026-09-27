@@ -18,6 +18,7 @@ which is where most of the bugs in the ledger below came from.
 | `dgm_scenarios.R` | scenario tables + `generate_scenario_data()`, `get_oracle_info()` |
 | `missingness.R` | `introduce_missingness`, `handle_missingness`, `generate_and_process_data` |
 | `cate_models.R` | the DR-learner family, causal forest, `cate_methods()`, `combine_mi` |
+| `sl_library.R` | per-nuisance SuperLearner libraries (`sl_libraries()`), custom learner wrappers, `sl_fit_predict()`, `pretest_superlearner()` |
 | `bootstrap_ci.R` | `cf_half_boot`, `rf_half_boot`, `combine_mi_ci`, `find_optimal_sf` |
 | `metrics.R` | `cate_metrics`, `interval_metrics`, `compute_metrics` |
 | `pipeline.R` | `study_config`, `get_results`, `check_failed`, `grid_indices` |

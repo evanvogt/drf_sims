@@ -10,7 +10,15 @@ library(ranger)
 library(glmnet)
 library(gam)
 
-DEFAULT_SL_LIBRARY <- c("SL.glm", "SL.glmnet", "SL.ranger", "SL.gam")
+# sl_libraries, sl_fit_predict, pretest_superlearner. Also arrives via
+# R/cate_models.R, but sourced here too so the diagnostic scripts that load
+# this file alone still find it.
+source(here::here("R", "sl_library.R"))
+
+# Per-nuisance libraries. surv_analysis.R passes sl_libraries(n); this default
+# is the full, n > 100 set. Until the library change it was the single
+# vector c("SL.glm", "SL.glmnet", "SL.ranger", "SL.gam") for every nuisance.
+DEFAULT_SL_LIBRARY <- sl_libraries(Inf)
 
 all_cate_surv_models <- function(
   data,
@@ -543,19 +551,21 @@ pseudo_cf_scf <- function(X, pseudo, W, fold_indices, fold_list) {
 }
 # DR learner nuisance functions
 #
-# Whole-sample OOB, S-learner ("oob_oob_s") - the pseudo-value counterpart of
+# Whole-sample OOB, T-learner ("oob_oob") - the pseudo-value counterpart of
 # R/cate_models.R::nuisance_rf, and the production-parity arm. No sample
-# splitting: one S-learner forest on cbind(W, X) supplies both counterfactuals
-# via oob_predict_counterfactual, and two more whole-sample forests supply W.hat
-# and pseudo.hat.cf, all taken out-of-bag.
+# splitting: t_learner_rf (one forest per arm; own-arm predictions OOB) supplies
+# both counterfactuals, and two more whole-sample forests supply W.hat and
+# pseudo.hat.cf, all taken out-of-bag. Until the move to per-arm outcome models
+# this was the S-learner "oob_oob_s" (one forest on cbind(W, X), read through
+# grf's X.orig).
 #
 # `pseudo` is the whole-sample pseudo-value vector, and it is also the outcome in
 # the DR correction term - there is no separate `pseudo_whole` argument here
 # because with no split the two coincide.
 nuisance_pseudo_rf_oob <- function(X, pseudo, W) {
-  forest <- regression_forest(cbind(W = W, X), pseudo)
-  pseudo0.hat <- oob_predict_counterfactual(forest, cbind(W = 0, X))
-  pseudo1.hat <- oob_predict_counterfactual(forest, cbind(W = 1, X))
+  mu <- t_learner_rf(X, pseudo, W)
+  pseudo0.hat <- mu$Y0.hat
+  pseudo1.hat <- mu$Y1.hat
 
   W.hat <- trim_ps(predict(regression_forest(X, W))$predictions)
   pseudo.hat.cf <- predict(regression_forest(X, pseudo))$predictions
@@ -601,24 +611,23 @@ nuisance_pseudo_rf_scf <- function(
       in_test <- !in_train
 
       pseudo_train <- if (cvps) pseudo[in_train, fold] else pseudo[in_train]
+      X_train <- X[in_train, ]
+      W_train <- W[in_train]
 
-      ps.hat.model <- regression_forest(
-        cbind(W[in_train], X[in_train, ]),
-        pseudo_train
-      )
-      ps.hat.cf.model <- regression_forest(X[in_train, ], pseudo_train)
-      W.hat.model <- regression_forest(X[in_train, ], W[in_train])
+      # one outcome forest per arm (T-learner), control arm first
+      arm_forest <- function(arm) {
+        regression_forest(X_train[W_train == arm, , drop = FALSE],
+                          pseudo_train[W_train == arm])
+      }
+      ps0.model <- arm_forest(0)
+      ps1.model <- arm_forest(1)
+      ps.hat.cf.model <- regression_forest(X_train, pseudo_train)
+      W.hat.model <- regression_forest(X_train, W_train)
 
       X_test <- X[in_test, ]
 
-      pseudo0.hat <- predict(
-        ps.hat.model,
-        newdata = cbind(W = 0, X_test)
-      )$predictions
-      pseudo1.hat <- predict(
-        ps.hat.model,
-        newdata = cbind(W = 1, X_test)
-      )$predictions
+      pseudo0.hat <- predict(ps0.model, newdata = X_test)$predictions
+      pseudo1.hat <- predict(ps1.model, newdata = X_test)$predictions
       pseudo.hat.cf <- predict(ps.hat.cf.model, newdata = X_test)$predictions
       W.hat <- trim_ps(predict(W.hat.model, newdata = X_test)$predictions)
 
@@ -741,6 +750,8 @@ pseudo_sl_t_standard <- function(
 ) {
   n_obs <- nrow(X)
   cvps <- is.matrix(pseudo)
+  # one outcome regression per arm - the per-arm outcome library
+  arm_lib <- as_sl_libs(sl_library)$Y
 
   tau_result <- future_map(
     seq_along(fold_list),
@@ -758,22 +769,22 @@ pseudo_sl_t_standard <- function(
       X1 <- as.data.frame(X_train[W_train == 1, , drop = FALSE])
       Y0 <- pseudo_train[W_train == 0]
       Y1 <- pseudo_train[W_train == 1]
+      newX <- list(test = as.data.frame(X_test))
 
-      sl0 <- SuperLearner(
-        Y = Y0,
-        X = X0,
-        SL.library = pretest_superlearner(Y0, X0, sl_library, gaussian()),
+      pred0 <- sl_fit_predict(
+        Y0,
+        X0,
+        newX,
+        pretest_superlearner(Y0, X0, arm_lib, gaussian()),
         cvControl = list(V = 5)
-      )
-      sl1 <- SuperLearner(
-        Y = Y1,
-        X = X1,
-        SL.library = pretest_superlearner(Y1, X1, sl_library, gaussian()),
+      )$pred$test
+      pred1 <- sl_fit_predict(
+        Y1,
+        X1,
+        newX,
+        pretest_superlearner(Y1, X1, arm_lib, gaussian()),
         cvControl = list(V = 5)
-      )
-
-      pred0 <- predict(sl0, newdata = as.data.frame(X_test))$pred
-      pred1 <- predict(sl1, newdata = as.data.frame(X_test))$pred
+      )$pred$test
 
       list(fold = fold, tau = as.numeric(pred1 - pred0))
     },
@@ -837,6 +848,8 @@ pseudo_sl_t_split <- function(
   n_folds <- length(fold_list)
   D_int <- as.integer(D)
   Dc <- as.integer(D %in% c(1, 2))
+  # one outcome regression per arm - the per-arm outcome library
+  arm_lib <- as_sl_libs(sl_library)$Y
 
   tau_result <- future_map(
     seq_along(fold_list),
@@ -889,17 +902,19 @@ pseudo_sl_t_split <- function(
         keep <- !is.na(y)
 
         lib <- pretest_superlearner(y[keep], x[keep, , drop = FALSE],
-                                    sl_library, gaussian())
-        fit <- SuperLearner(
-          Y = y[keep],
-          X = x[keep, , drop = FALSE],
-          SL.library = lib,
+                                    arm_lib, gaussian())
+        # predicted at newX during the fit (sl_fit_predict), from the weighted
+        # learners only, so a candidate that survives pretest's 2-fold CV and
+        # then fails in the live 5-fold one cannot reintroduce the NULL-fit
+        # crash above. (This was predict(onlySL = TRUE) before the fit moved to
+        # sl_fit_predict.)
+        pred <- sl_fit_predict(
+          y[keep],
+          x[keep, , drop = FALSE],
+          list(test = X_test),
+          lib,
           cvControl = list(V = 5)
-        )
-        # onlySL = TRUE predicts from the weighted learners only, so a candidate
-        # that survives pretest's 2-fold CV and then fails in the live 5-fold one
-        # cannot reintroduce the NULL-fit crash above.
-        pred <- as.numeric(predict(fit, newdata = X_test, onlySL = TRUE)$pred)
+        )$pred$test
 
         # Same failsafe as R/cate_models.R::nuisance_sl: when every learner ends
         # up with zero weight SuperLearner returns all-zero predictions, which
@@ -968,6 +983,7 @@ nuisance_pseudo_sl <- function(
   sl_library = DEFAULT_SL_LIBRARY
 ) {
   cvps <- is.matrix(pseudo)
+  libs <- as_sl_libs(sl_library)
 
   cross_fits <- future_map(
     seq_along(fold_list),
@@ -982,62 +998,58 @@ nuisance_pseudo_sl <- function(
       W_test <- W[in_test]
       pseudo_train <- if (cvps) pseudo[in_train, fold] else pseudo[in_train]
 
-      X_W_train <- cbind(W = W_train, X_train)
+      # one outcome model per arm (T-learner), control arm first
+      arm_pred <- function(arm) {
+        y <- pseudo_train[W_train == arm]
+        x <- X_train[W_train == arm, , drop = FALSE]
+        sl_fit_predict(
+          y,
+          x,
+          list(test = X_test),
+          pretest_superlearner(y, x, libs$Y, gaussian()),
+          cvControl = list(V = 5)
+        )$pred$test
+      }
+      pseudo0.hat <- arm_pred(0)
+      pseudo1.hat <- arm_pred(1)
 
-      sl_ps <- SuperLearner(
-        Y = pseudo_train,
-        X = X_W_train,
-        SL.library = pretest_superlearner(
+      # the marginal outcome model, on every training row
+      sl_cf <- sl_fit_predict(
+        pseudo_train,
+        X_train,
+        list(test = X_test),
+        pretest_superlearner(
           pseudo_train,
-          X_W_train,
-          sl_library,
+          X_train,
+          libs$Y,
           gaussian()
         ),
         cvControl = list(V = 5)
       )
-      sl_cf <- SuperLearner(
-        Y = pseudo_train,
-        X = X_train,
-        SL.library = pretest_superlearner(
-          pseudo_train,
-          X_train,
-          sl_library,
-          gaussian()
-        ),
-        cvControl = list(V = 5)
-      )
-      sl_W <- SuperLearner(
-        Y = W_train,
-        X = X_train,
-        SL.library = pretest_superlearner(
-          W_train,
-          X_train,
-          sl_library,
-          binomial()
-        ),
+      # binomial, as it is pretested and as R/cate_models.R::nuisance_sl fits
+      # it. Until the library change this fit took SuperLearner's default
+      # gaussian family (NNLS), after a binomial pretest.
+      sl_W <- sl_fit_predict(
+        W_train,
+        X_train,
+        list(test = X_test),
+        pretest_superlearner(W_train, X_train, libs$W, binomial()),
+        family = binomial(),
         cvControl = list(V = 5)
       )
 
-      pseudo0.hat <- as.numeric(
-        predict(sl_ps, newdata = cbind(W = 0, X_test))$pred
-      )
-      pseudo1.hat <- as.numeric(
-        predict(sl_ps, newdata = cbind(W = 1, X_test))$pred
-      )
-      pseudo.hat.cf <- as.numeric(predict(sl_cf, newdata = X_test)$pred)
-      W.hat <- as.numeric(predict(sl_W, newdata = X_test)$pred)
+      pseudo.hat.cf <- sl_cf$pred$test
+      W.hat <- sl_W$pred$test
 
-      # failsafes if SuperLearner returns all-zero predictions, as R/cate_models.R
-      if (all(pseudo0.hat == 0) && all(pseudo1.hat == 0)) {
-        warning("SuperLearner failed for pseudo.hat. Using mean(pseudo).")
-        pseudo0.hat <- rep(
-          mean(pseudo_train[W_train == 0], na.rm = TRUE),
-          sum(in_test)
-        )
-        pseudo1.hat <- rep(
-          mean(pseudo_train[W_train == 1], na.rm = TRUE),
-          sum(in_test)
-        )
+      # failsafes if SuperLearner returns all-zero predictions, as
+      # R/cate_models.R - per arm, since each arm now has its own model
+      if (all(pseudo0.hat == 0)) {
+        warning("SuperLearner failed for pseudo.hat in arm W = 0. Using its mean.")
+        pseudo0.hat <- rep(mean(pseudo_train[W_train == 0], na.rm = TRUE), sum(in_test))
+      }
+      if (all(pseudo1.hat == 0)) {
+        warning("SuperLearner failed for pseudo.hat in arm W = 1. Using its mean.")
+        pseudo1.hat <- rep(mean(pseudo_train[W_train == 1], na.rm = TRUE), sum(in_test))
       }
       if (all(W.hat == 0)) {
         warning("SuperLearner failed for W.hat. Using mean(W).")
@@ -1091,10 +1103,16 @@ pseudo_dr_sl <- function(
   fold_list,
   sl_library = DEFAULT_SL_LIBRARY
 ) {
-  stage_2_sl(as.data.frame(X), po, fold_indices, fold_list, sl_library)
+  tau <- stage_2_sl(as.data.frame(X), po, fold_indices, fold_list, sl_library)
+  # results here are one tau vector per estimand; the dropped-learner table
+  # stage_2_sl attaches is printed by the pretest as it runs
+  attr(tau, "sl_dropped") <- NULL
+  tau
 }
 
 # SuperLearner DR-learner nuisances: split pseudo-obs
+# DISABLED arm (see all_cate_surv_models) and still an S-learner outcome model
+# on cbind(W, X): it was left out of the move to per-arm outcome models.
 # 3-way split per fold: training (V-2 folds), KM set (fold k+1), validation (fold k)
 # Validation pseudo-obs are split pseudo-obs (independent of training), per Algorithm 2
 nuisance_pseudo_sl_split <- function(
@@ -1111,6 +1129,7 @@ nuisance_pseudo_sl_split <- function(
   n_folds <- length(fold_list)
   D_int <- as.integer(D)
   Dc <- as.integer(D %in% c(1, 2))
+  libs <- as_sl_libs(sl_library)
 
   cross_fits <- future_map(
     seq_along(fold_list),
@@ -1148,26 +1167,25 @@ nuisance_pseudo_sl_split <- function(
       )
 
       make_dr_po <- function(pseudo_train, pseudo_val_split) {
-        sl_ps <- SuperLearner(
-          Y = pseudo_train,
-          X = cbind(W = W_train, X_train),
-          SL.library = sl_library,
+        sl_ps <- sl_fit_predict(
+          pseudo_train,
+          cbind(W = W_train, X_train),
+          list(y0 = cbind(W = 0, X_val), y1 = cbind(W = 1, X_val)),
+          libs$Y,
           cvControl = list(V = 5)
         )
-        sl_W <- SuperLearner(
-          Y = W_train,
-          X = X_train,
-          SL.library = sl_library,
+        sl_W <- sl_fit_predict(
+          W_train,
+          X_train,
+          list(val = X_val),
+          libs$W,
+          family = binomial(),
           cvControl = list(V = 5)
         )
 
-        pseudo0.hat <- as.numeric(
-          predict(sl_ps, newdata = cbind(W = 0, X_val))$pred
-        )
-        pseudo1.hat <- as.numeric(
-          predict(sl_ps, newdata = cbind(W = 1, X_val))$pred
-        )
-        W.hat <- as.numeric(predict(sl_W, newdata = X_val)$pred)
+        pseudo0.hat <- sl_ps$pred$y0
+        pseudo1.hat <- sl_ps$pred$y1
+        W.hat <- sl_W$pred$val
 
         cate <- pseudo1.hat - pseudo0.hat
         pseudo.hat <- W_val * pseudo1.hat + (1 - W_val) * pseudo0.hat
@@ -1220,18 +1238,14 @@ stage_2_sl_vec <- function(
       in_train <- fold_indices != fold
       in_fold <- !in_train
 
-      sl <- SuperLearner(
-        Y = po_vec[in_train],
-        X = as.data.frame(X[in_train, , drop = FALSE]),
-        SL.library = sl_library,
+      sl <- sl_fit_predict(
+        po_vec[in_train],
+        as.data.frame(X[in_train, , drop = FALSE]),
+        list(fold = as.data.frame(X[in_fold, , drop = FALSE])),
+        as_sl_libs(sl_library)$tau,
         cvControl = list(V = 5)
       )
-      list(
-        fold = fold,
-        predictions = as.numeric(
-          predict(sl, newdata = as.data.frame(X[in_fold, , drop = FALSE]))$pred
-        )
-      )
+      list(fold = fold, predictions = sl$pred$fold)
     },
     .options = furrr_options(seed = TRUE)
   )

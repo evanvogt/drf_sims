@@ -124,15 +124,18 @@ causal survival forests, and pseudo-value approaches — see
 alternatives for DR-RF, DR-SL and causal forest. Based on that comparison,
 `R/cate_models.R` now uses, per method:
 
-- **DR-RF, DR-Oracle, DR-Semi-Oracle** — whole-sample, out-of-bag: an
-  S-learner nuisance forest with no sample splitting, and an OOB stage-2
-  regression forest (`nuisance_rf` / `stage2_whole_rf`).
+- **DR-RF, DR-Oracle, DR-Semi-Oracle** — whole-sample, out-of-bag: outcome
+  forests fit separately in each arm (a T-learner, `t_learner_rf`; each unit's
+  own-arm prediction OOB), no sample splitting, and an OOB stage-2 regression
+  forest (`nuisance_rf` / `stage2_whole_rf`). Until 2026-09-27 the outcome
+  forest was an S-learner on `cbind(W, X)` (crossfitting's `oob_oob_s`).
 - **Causal Forest** — `grf`'s own internal cross-fitting (a plain
   `causal_forest(X, Y, W)` with no externally-supplied nuisances).
 - **DR-SL** — a single leave-one-fold-out crossfit, with the *same* fold
   assignment shared by the nuisance stage and the stage-2 regression
   (`nuisance_sl` / `stage_2_sl`), rather than double-crossfit nuisances
-  feeding a separately-split stage 2.
+  feeding a separately-split stage 2. The outcome model is one SuperLearner
+  per arm, and each nuisance has its own library (`R/sl_library.R`).
 
 See `crossfitting/README.md` for the full arm comparison behind this choice.
 
@@ -187,6 +190,7 @@ Found during the de-duplication. Each is written up in the relevant folder READM
 | N | binary MNAR-Y truth evaluated at U = 0 rather than averaged over U — equal on the identity scale, not the logit one | `missing/binary` | yes — repaired at metrics time from the saved truth; no re-run |
 | O | continuous `bW` calibration used `sd = s_err + s2` (ignoring b1, b2 and the heterogeneity variance, and adding SDs) and set `bW` rather than the ATE, so realised power ran 3–100% and scenarios 3, 5, 8 had a positive ATE; b0, b1, b2 also varied by scenario. Now one baseline (0.4, −0.5, 1), and each trial planned for 80% power under homogeneity with the true ATE equal to the planned effect — realised power 61–80% as heterogeneity grows | `R/dgm_scenarios.R` — every continuous study | yes — re-run |
 | P | binary `bW` calibration planned at 75% power at the risk plogis(b0), ignoring X1 and X2 (0.401 against a population risk of 0.453), and set `bW` rather than the ATE (a marginal risk difference), so `bW` was the same in every scenario and realised power ran 5–99%; the modifiers in scenarios 2, 5, 6 and 7 also had the opposite sign to the continuous ones, and `b5` was a column no scenario used. Now each trial is planned for 80% power under homogeneity with the true RD equal to the planned effect in every scenario (realised power 79–81%), the signs match `sample_size/continuous/`, and `b5` is gone. *The risk-difference DGM (2026-09-26) has since reversed every binary modifier's sign relative to `sample_size/continuous/`, on purpose — see `sample_size/binary/README.md`* | `R/dgm_scenarios.R` — every binary study | yes — re-run |
+| Q | `pretest_superlearner()` dropped a learner on **any warning** (`tryCatch(warning = )` aborts the fit at the first one), so benign glm/gam warnings — and SL.mean's "All algorithms have zero weight" for a propensity near 0.5 — cut folds' libraries to one or two learners; it also kept a learner if even one prediction was non-NA. Now warnings are recorded and muffled, a learner is dropped only on an error or non-finite predictions, and the drops are saved as `sl_dropped`. Fixed alongside the move to per-nuisance libraries (`R/sl_library.R`) | shared, `crossfitting`, `competing_risk` | yes — re-run (SuperLearner arms only) |
 
 Three more surfaced along the way:
 
@@ -328,8 +332,8 @@ from. Until a lockfile exists, install directly:
 
 ```r
 install.packages(c("grf", "SuperLearner", "GenericML", "pseudo", "coin",
-  "furrr", "future", "ranger", "glmnet", "gam", "mice", "missForest", "VIM",
-  "dplyr", "here"))
+  "furrr", "future", "ranger", "glmnet", "gam", "earth", "mice",
+  "missForest", "VIM", "dplyr", "here"))
 ```
 
 **TODO:** once the package set stabilizes, run `renv::snapshot()` and commit

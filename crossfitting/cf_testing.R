@@ -113,7 +113,7 @@ cat("\n=== 2. structure: every arm complete and correctly sized ===\n")
 n <- 500
 n_test <- 1000
 sl_lib <- if (full) {
-  c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.ranger")
+  sl_libraries(n)
 } else {
   NULL
 }

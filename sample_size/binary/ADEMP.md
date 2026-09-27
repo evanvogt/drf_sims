@@ -43,15 +43,16 @@ Repetitions: 100 per cell; 500 for scenarios 1–4.
 
 ## Methods
 
-As `continuous/` (`family = binomial()` for SuperLearner):
+As `continuous/`, including its SuperLearner libraries (`family = binomial()`
+for the SuperLearner outcome model):
 
 | method | description |
 |---|---|
 | `causal_forest` | grf `causal_forest`, internal cross-fitting |
-| `dr_random_forest` | DR-learner; S-learner RF nuisances, OOB predictions, RF second stage |
-| `dr_superlearner` | DR-learner; SuperLearner, single leave-one-fold-out crossfit (V = 4, 5, 10 at n = 100, 250, ≥ 500) |
+| `dr_random_forest` | DR-learner; outcome model fit per arm (T-learner RF, own-arm predictions OOB), RF propensity, RF second stage |
+| `dr_superlearner` | DR-learner; SuperLearner per-arm outcome models and propensity, single leave-one-fold-out crossfit (V = 4, 5, 10 at n = 100, 250, ≥ 500), SuperLearner second stage |
 | `dr_oracle` | DR-learner with the true risk model and propensity 0.5 |
-| `dr_semi_oracle` | DR-learner with the known propensity 0.5 only |
+| `dr_semi_oracle` | DR-learner with the known propensity 0.5 and `dr_random_forest`'s per-arm outcome forests |
 
 Heterogeneity tests per method: BLP and independence tests on the CATE and on
 the pseudo-outcome. Also run on the true CATE (`bin_true_cate_tests.RDS`).

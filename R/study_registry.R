@@ -77,20 +77,20 @@ study_registry <- data.frame(
     "crossfit_rerun"
   ),
   reason = c(
-    "crossfitting strategy change; also bug F (dr_superlearner)",
-    "crossfitting strategy change; also bug F (dr_superlearner); also bug P and the risk-difference DGM (sample_size/binary/README.md)",
-    "crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy",
-    "crossfitting strategy change",
-    "crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale); also bug P and the risk-difference DGM (sample_size/binary/README.md)",
-    "crossfitting strategy change",
-    "crossfitting strategy change; also the DGM was wrong (see sample_size/confidence_intervals/optimal_sf README); also bug P and the risk-difference DGM (sample_size/binary/README.md)",
-    "own comparison arms unchanged by the crossfitting change, but bug O changed the continuous DGM it runs on, and the 2026-09-26 renumbering its scenario ids (1/4/6/9 -> 1/4/6/8); old results archived",
+    "crossfitting strategy change; also bug F (dr_superlearner); plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
+    "crossfitting strategy change; also bug F (dr_superlearner); also bug P and the risk-difference DGM (sample_size/binary/README.md); plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
+    "crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
+    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models",
+    "crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale); also bug P and the risk-difference DGM (sample_size/binary/README.md); plus T-learner (per-arm) DR outcome models",
+    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models",
+    "crossfitting strategy change; also the DGM was wrong (see sample_size/confidence_intervals/optimal_sf README); also bug P and the risk-difference DGM (sample_size/binary/README.md); plus T-learner (per-arm) DR outcome models",
+    "own comparison arms unchanged by the crossfitting change, but bug O changed the continuous DGM it runs on, and the 2026-09-26 renumbering its scenario ids (1/4/6/9 -> 1/4/6/8); old results archived; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only",
     "pilot study, not part of the production rerun; re-run because bug O changed the continuous DGM and the 2026-09-26 renumbering its scenario ids (1/6/9 -> 1/4/8); old results archived",
-    "crossfitting strategy change; also bug F (dr_superlearner); plus bug O (continuous DGM) - all 12,600 rows re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600",
-    "crossfitting strategy change; also the DGM was wrong three ways; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run; plus bug P and the risk-difference DGM - all 12,600 rows re-run, which also makes bug N moot",
-    "crossfitting strategy change",
+    "crossfitting strategy change; also bug F (dr_superlearner); plus bug O (continuous DGM) - all 12,600 rows re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
+    "crossfitting strategy change; also the DGM was wrong three ways; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run; plus bug P and the risk-difference DGM - all 12,600 rows re-run, which also makes bug N moot; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
+    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models",
     "its 358/360 runs (the first under single crossfitting, me_models.R) predate bug O, which changed the continuous DGM, and the 2026-09-26 renumbering (1/4/6/9 -> 1/4/6/8); archived with the strategies and split trees, so the count restarts from zero",
-    "crossfitting strategy change"
+    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models"
   ),
   blocked = c(
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,

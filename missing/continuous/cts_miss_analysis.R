@@ -43,7 +43,8 @@ mechanism <- param$mechanism
 method <- param$method
 run <- param$run
 
-sl_lib <- c("SL.glm", "SL.glmnet", "SL.earth", "SL.gam", "SL.mean", "SL.ranger")
+# per-nuisance SuperLearner libraries - see R/sl_library.R
+sl_lib <- sl_libraries(n)
 
 # set up simulation seed
 setup_rng_stream(run)

@@ -44,13 +44,27 @@ complex and non-linear scenarios).
 | method | description |
 |---|---|
 | `causal_forest` | grf `causal_forest`, internal cross-fitting |
-| `dr_random_forest` | DR-learner; S-learner RF nuisances, OOB predictions, RF second stage |
-| `dr_superlearner` | DR-learner; SuperLearner, single leave-one-fold-out crossfit (V = 4, 5, 10 at n = 100, 250, ≥ 500) |
+| `dr_random_forest` | DR-learner; outcome model fit per arm (T-learner RF, own-arm predictions OOB), RF propensity, RF second stage |
+| `dr_superlearner` | DR-learner; SuperLearner per-arm outcome models and propensity, single leave-one-fold-out crossfit (V = 4, 5, 10 at n = 100, 250, ≥ 500), SuperLearner second stage |
 | `dr_oracle` | DR-learner with the true outcome model and propensity 0.5 |
-| `dr_semi_oracle` | DR-learner with the known propensity 0.5 only |
+| `dr_semi_oracle` | DR-learner with the known propensity 0.5 and `dr_random_forest`'s per-arm outcome forests |
 
-SuperLearner library: glm, glmnet, earth, gam, mean, ranger (earth and ranger
-dropped at n = 100).
+SuperLearner libraries, one per nuisance (`R/sl_library.R::sl_libraries`),
+chosen without reference to the scenarios' HTE shapes. The outcome model is fit
+in each arm separately, so its library is sized to about half the training
+rows (~37 per arm at n = 100):
+
+| | n = 100 | n = 250 | n ≥ 500 |
+|---|---|---|---|
+| propensity | mean, glm | same | same |
+| outcome (per arm) | mean, lasso, ranger (min.node.size 25) | + glm, gam | + earth |
+| CATE (stage 2) | mean, glm, lasso (lambda.min and lambda.1se), gam, ranger (min.node.size 25) | + lasso on pairwise interactions (both tunings), earth | same |
+
+Each stage-2 lasso is included at both tunings and SuperLearner's CV weighs
+them, rather than fixing the tuning in advance.
+
+Learners that error or give non-finite predictions on a fold are dropped
+before fitting (`pretest_superlearner`) and saved as `sl_dropped`.
 Heterogeneity tests per method: BLP (GenericML) and independence tests on the
 CATE and on the pseudo-outcome. Also run on the true CATE and nuisances
 (`cts_true_cate_tests.RDS`).
