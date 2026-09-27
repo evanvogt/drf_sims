@@ -7,13 +7,14 @@
 #   Rscript crossfitting/cf_testing.R full  # adds the SuperLearner family (slow)
 #
 # Checks, in order:
-#   1. the new dcf arm reproduces R/cate_models.R's dr_random_forest
+#   1. the oob_oob arm reproduces R/cate_models.R's dr_random_forest, and
+#      propensity trimming is a no-op for the double-crossfit nuisances
+#   1b. the per-arm outcome models never see the other arm's outcomes
 #   2. every arm returns complete tau / tau_test of the right length
 #   3. scenario 1 (no heterogeneity) behaves
-#   4. test-set plumbing - arms sharing a fitted model have identical test
-#      predictions, and test predictions track the test truth. NOT an optimism
-#      check: scoring is against the known true CATE, not the labels the models
-#      were fit to, so there is no optimism to detect (see the note at check 4).
+#   4. test-set plumbing - test predictions track the test truth. NOT an
+#      optimism check: scoring is against the known true CATE, not the labels
+#      the models were fit to, so there is no optimism to detect.
 
 library(dplyr)
 library(furrr)
@@ -43,12 +44,16 @@ report <- function(ok, msg) {
 }
 
 # =============================================================================
-cat("\n=== 1. regression check: dcf against cts_models.R ===\n")
-# the new double-crossfit path must reproduce the existing implementation. both
-# are driven from the same RNG state with the same fold split, so the forests
-# should be bit-identical; the only deliberate difference is that trim_ps is
-# applied to the RF propensities here and not in cts_models.R, which is a no-op
-# unless a propensity leaves [0.05, 0.95].
+cat("\n=== 1. regression check: oob_oob against R/cate_models.R ===\n")
+# oob_oob is production's dr_random_forest: nuisance_rf (which nuisance_oob_rf
+# calls straight through) feeding a whole-sample OOB stage-2 forest. The stage-2
+# forest is this folder's own stage2_whole_rf, which masks production's (a
+# different signature) once cf_models.R is sourced - so production's is sourced
+# into an environment of its own and the two pipelines are compared from the
+# same RNG state. They should be bit-identical.
+
+prod <- new.env()
+sys.source(here("R", "cate_models.R"), envir = prod)
 
 setup_rng_stream(7)
 gen <- generate_cf_replicate(scenario = 8, n = 500, n_test = 1000)
@@ -61,51 +66,47 @@ fold_list <- unique(fold_indices)
 fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)
 
 setup_rng_stream(7)
-nz_old <- nuisance_rf(X, Y, W, fold_indices, fold_pairs)
+nz_prod <- prod$nuisance_rf(X, Y, W, num.threads = grf_threads)
+tau_prod <- prod$stage2_whole_rf(X, nz_prod$po, num.threads = grf_threads)$tau
 
 setup_rng_stream(7)
-nz_new <- nuisance_double_rf(
-  X,
-  Y,
-  W,
-  fold_indices,
-  fold_pairs,
-  num.threads = NULL
-)
+nz_oob <- nuisance_oob_rf(X, Y, W, num.threads = grf_threads)
+tau_oob <- stage2_whole_rf(X, nz_oob$po, gen$X_test, num.threads = grf_threads)$tau_oob
 
-ps_range <- range(nz_old$W.hat_matrix, na.rm = TRUE)
-cat(sprintf(
-  "  propensity range %.3f to %.3f (trimming is a no-op inside [0.05, 0.95])\n",
-  ps_range[1],
-  ps_range[2]
-))
-report(
-  ps_range[1] >= 0.05 && ps_range[2] <= 0.95,
-  "RF propensities lie inside the trimming bounds, so trim_ps changes nothing"
-)
+report(identical(nz_prod$po, nz_oob$po),
+       "oob_oob pseudo-outcomes are production nuisance_rf's")
+report(identical(tau_prod, tau_oob),
+       "oob_oob CATE estimates match R/cate_models.R's dr_random_forest")
 
-po_diff <- max(abs(nz_old$po_matrix - nz_new$po), na.rm = TRUE)
-cat(sprintf("  max |po_old - po_new| = %.3e\n", po_diff))
-report(po_diff < 1e-8, "double-crossfit pseudo-outcomes match cts_models.R")
+# trim_ps clamps to [0.05, 0.95]; with W ~ Bernoulli(0.5) no crossfit
+# propensity should get anywhere near, so no value may sit on a bound
+setup_rng_stream(7)
+nz_double <- nuisance_double_rf(X, Y, W, fold_indices, fold_pairs, grf_threads)
+ps <- nz_double$W.hat_matrix[!is.na(nz_double$W.hat_matrix)]
+cat(sprintf("  double-crossfit propensity range %.3f to %.3f\n", min(ps), max(ps)))
+report(all(ps > 0.05 & ps < 0.95),
+       "RF propensities lie inside the trimming bounds, so trim_ps changes nothing")
+
+# =============================================================================
+cat("\n=== 1b. per-arm outcome models never see the other arm ===\n")
+# the crossfit arms' outcome model is t_learner_rf_split: one forest per arm,
+# control first. Perturbing the treated units' outcomes must leave the control
+# forest - and so Y0.hat - bit-identical, since the control forest is fit from
+# the same RNG state on the same rows either way.
+
+in_train <- fold_indices != 1
+Y_pert <- Y
+Y_pert[W == 1] <- Y_pert[W == 1] + 100
 
 setup_rng_stream(7)
-tau_old <- stage_2_rf(X, nz_old$po_matrix, fold_indices, fold_list)
-
+mu <- t_learner_rf_split(X, Y, W, in_train, !in_train, num.threads = grf_threads)
 setup_rng_stream(7)
-s_new <- stage2_crossfit_rf(
-  X,
-  nz_new$po,
-  gen$X_test,
-  fold_indices,
-  num.threads = NULL
-)
+mu_pert <- t_learner_rf_split(X, Y_pert, W, in_train, !in_train, num.threads = grf_threads)
 
-tau_diff <- max(abs(tau_old - s_new$tau), na.rm = TRUE)
-cat(sprintf("  max |tau_old - tau_new| = %.3e\n", tau_diff))
-report(
-  tau_diff < 1e-8,
-  "dcf CATE estimates match cts_models.R's dr_random_forest"
-)
+report(identical(mu$Y0.hat, mu_pert$Y0.hat),
+       "control-arm predictions unchanged when treated outcomes are perturbed")
+report(min(mu_pert$Y1.hat - mu$Y1.hat) > 50,
+       "treated-arm predictions move with the treated outcomes")
 
 # =============================================================================
 cat("\n=== 2. structure: every arm complete and correctly sized ===\n")
@@ -143,10 +144,7 @@ expected_rf <- c(
   "dcf",
   "scf_scf",
   "scf_oob",
-  "scf_oob_t",
-  "oob_oob",
-  "oob_oob_s",
-  "oob_oob_manual"
+  "oob_oob"
 )
 expected_cf <- c("cf_dcf", "cf_scf", "cf_full_oob", "cf_default")
 expected_sl <- c(
@@ -217,10 +215,7 @@ report(all(single_ok), "single-model test MSE populated for every arm")
 # for a whole-sample arm there is only one model, so the two test scores must agree
 whole_arms <- c(
   "scf_oob",
-  "scf_oob_t",
   "oob_oob",
-  "oob_oob_s",
-  "oob_oob_manual",
   "cf_full_oob",
   "cf_default"
 )
@@ -279,12 +274,10 @@ report(
 report(all(is.finite(m_null$mse)), "all null-scenario MSEs finite")
 
 # =============================================================================
-cat("\n=== 4. test-set plumbing and the OOB-counterfactual workaround ===\n")
+cat("\n=== 4. test-set plumbing ===\n")
 #
 # No 'optimism' to detect in this study (fixed test-design flaw).
-# Test predictions are wired to the right truth; the grf X.orig OOB-counterfactual
-# shortcut (oob_predict_counterfactual) is verified against the documented-API
-# tree-loop (oob_predict_counterfactual_manual).
+# Test predictions are wired to the right truth.
 
 m <- run_metrics(
   list(
@@ -303,9 +296,9 @@ mse_tbl <- m %>%
 
 print(as.data.frame(mse_tbl), digits = 3, row.names = FALSE)
 
-# 4a. test predictions must track the test truth. scenario 8 has strong
+# test predictions must track the test truth. scenario 8 has strong
 # heterogeneity, so a misaligned X_test or truth_test shows up as ~0 correlation.
-tracking <- c("dcf", "scf_scf", "scf_oob", "cf_dcf")
+tracking <- c("dcf", "scf_scf", "scf_oob", "oob_oob", "cf_dcf")
 cors <- vapply(
   tracking,
   function(nm) {
@@ -318,40 +311,6 @@ report(
   sprintf(
     "test predictions track the test truth (%s)",
     paste(sprintf("%s=%.2f", tracking, cors), collapse = ", ")
-  )
-)
-
-# 4b. oob_oob_s (X.orig shortcut) and oob_oob_manual (documented get_tree/
-# get_leaf_node API) are two different implementations of the same OOB-
-# counterfactual idea, each with its own forest fit - so not identical, but should
-# be closely correlated on the training sample if the shortcut is doing what
-# grf-labs/grf#307 claims.
-oob_s_manual_cor <- cor(res$arms$oob_oob_s$tau, res$arms$oob_oob_manual$tau)
-report(
-  oob_s_manual_cor > 0.8,
-  sprintf(
-    "oob_oob_s and oob_oob_manual track each other (cor = %.3f)",
-    oob_s_manual_cor
-  )
-)
-
-# 4c. the tight version of 4b: hold one S-learner forest fixed and compare
-# oob_predict_counterfactual against oob_predict_counterfactual_manual directly, so
-# any difference is attributable only to the prediction method, not to
-# forest-to-forest randomness. Rebuilt from gen1 (the replicate res$arms came from)
-# rather than reusing section 1's X/W, which are a different draw.
-X1 <- as.matrix(gen1$data[, -c(1:2)])
-W1 <- gen1$data$W
-Y1 <- gen1$data$Y
-forest_s <- regression_forest(cbind(W = W1, X1), Y1, num.threads = grf_threads)
-shortcut_pred <- oob_predict_counterfactual(forest_s, cbind(W = 1, X1))
-manual_pred <- oob_predict_counterfactual_manual(forest_s, cbind(W = 1, X1), Y1)
-same_forest_cor <- cor(shortcut_pred, manual_pred)
-report(
-  same_forest_cor > 0.95,
-  sprintf(
-    "on one fixed forest, the X.orig shortcut and the manual tree-loop agree (cor = %.3f)",
-    same_forest_cor
   )
 )
 

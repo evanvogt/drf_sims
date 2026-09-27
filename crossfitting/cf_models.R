@@ -1,10 +1,16 @@
 ##########
 # title: crossfitting comparison - CATE model variants
 ##########
-# Compares double crossfitting (the procedure used throughout this study) against
-# standard crossfitting with the final model fit either on the whole dataset or
-# through a second crossfitting pass, and - for forests - against out-of-bag
-# predictions with no sample splitting at all.
+# Compares double crossfitting (the procedure this study used to use throughout)
+# against standard crossfitting with the final model fit either on the whole
+# dataset or through a second crossfitting pass, and - for forests - against
+# out-of-bag predictions with no sample splitting at all.
+#
+# Every DR arm fits its outcome model separately in each treatment arm (a
+# T-learner), as the production DR-learners in R/cate_models.R do, so the arms
+# differ only in how they split the sample. The per-arm fits themselves are
+# production's: t_learner_rf_split / nuisance_rf for the forests, sl_split_fit /
+# nuisance_sl for SuperLearner.
 #
 # Stage 1 = nuisance / pseudo-outcome construction, stage 2 = final CATE regression.
 # Nuisances are computed once by run_all_crossfit_variants and shared across the
@@ -18,9 +24,9 @@ require(dplyr)
 require(here)
 
 # reused rather than forked: collate_predictions (R/utils.R), the continuous DGP
-# (cts_dgms.R), and pretest_superlearner plus the reference DR implementations
-# that cf_testing.R's regression check compares against (R/cate_models.R - these
-# used to live in sample_size/continuous/cts_models.R, which is now a thin profile shim)
+# (cts_dgms.R), and from R/cate_models.R the per-arm outcome models
+# (t_learner_rf_split, nuisance_rf, sl_split_fit, nuisance_sl) plus, via
+# R/sl_library.R, pretest_superlearner and sl_fit_predict
 source(here("R", "utils.R"))
 source(here("sample_size", "continuous", "cts_dgms.R"))
 source(here("R", "cate_models.R"))
@@ -64,9 +70,9 @@ dr_pseudo <- function(Y, W, Y1.hat, Y0.hat, W.hat) {
   cate + ((Y - Y.hat) * (W - W.hat)) / (W.hat * (1 - W.hat))
 }
 
-# trim propensities away from 0/1. cts_models.R only does this for SuperLearner;
-# here every arm is trimmed identically so that no arm blows up on a technicality.
-# W is randomised 0.5 in the DGP so this binds only for the in-sample nuisances.
+# trim propensities away from 0/1, in every arm identically so that no arm blows
+# up on a technicality (R/cate_models.R now trims the same way, RF and SL alike).
+# W is randomised 0.5 in the DGP so this rarely binds.
 trim_ps <- function(p, lo = 0.05, hi = 0.95) pmin(pmax(p, lo), hi)
 
 # evaluate an expression, returning its value alongside elapsed seconds
@@ -86,79 +92,33 @@ scatter_folds <- function(reslist, fold_indices, targets) {
   out
 }
 
-# maintainer-endorsed (unsupported) workaround for the fact that grf has no public
-# API for an OOB prediction at a counterfactual covariate row: predict(forest)
-# without newdata re-reads object$X.orig fresh each call and restricts each row to
-# its out-of-bag trees, so pointing X.orig at a perturbed matrix and clearing the
-# cached predictions borrows grf's own OOB routine at that perturbed point.
-# "Hacky," per grf-labs/grf#307 - may break on a future grf version. R's
-# copy-on-modify semantics mean this cannot leak into the caller's forest object;
-# only the local copy inside this function is touched.
-oob_predict_counterfactual <- function(forest, X_counterfactual) {
-  forest$X.orig <- X_counterfactual
-  forest$predictions <- NULL
-  forest$debiased.error <- NULL
-  predict(forest)$predictions
-}
-
-# fully-manual alternative to oob_predict_counterfactual, touching only grf's
-# documented get_tree()/get_leaf_node() API rather than the X.orig monkey-patch - a
-# check on whether the shortcut actually reproduces grf's own OOB routine. For each
-# tree, row i is OOB if excluded from that tree's full in-bag set; the leaf a
-# counterfactual point falls into is found with get_leaf_node, and predicted as the
-# mean training Y over that leaf's samples. OOB status MUST be read from
-# tree$drawn_samples (the tree's complete in-bag draw) rather than a leaf's own
-# $samples, which for an honest forest is only the honesty-estimation subsample
-# (J2) and would misclassify honesty-split-only rows as OOB (grf-labs/grf#258).
-# Slower than oob_predict_counterfactual by construction (R-level loop over
-# num.trees); this is a correctness check, not meant for routine use.
-oob_predict_counterfactual_manual <- function(forest, X_counterfactual, Y) {
-  n <- nrow(forest$X.orig)
-  num_trees <- forest[["_num_trees"]]
-
-  pred_sum <- numeric(n)
-  pred_n <- integer(n)
-
-  for (k in seq_len(num_trees)) {
-    tree <- get_tree(forest, k)
-    in_bag <- unique(tree$drawn_samples)
-    oob_rows <- setdiff(seq_len(n), in_bag)
-    if (length(oob_rows) == 0) next
-
-    leaf_ids <- get_leaf_node(tree, X_counterfactual[oob_rows, , drop = FALSE])
-    for (j in seq_along(oob_rows)) {
-      leaf_samples <- tree$nodes[[leaf_ids[j]]]$samples
-      pred_sum[oob_rows[j]] <- pred_sum[oob_rows[j]] + mean(Y[leaf_samples])
-      pred_n[oob_rows[j]] <- pred_n[oob_rows[j]] + 1
-    }
-  }
-
-  ifelse(pred_n > 0, pred_sum / pred_n, NA_real_)
-}
-
 # ---- stage 1: nuisance estimation (random forest) ---------------------------
 
-# double crossfitting over fold pairs - the status quo (cts_models.R:62)
+# one train/test split's RF nuisances. The outcome model is production's per-arm
+# forest pair (R/cate_models.R's t_learner_rf_split, control arm first);
+# Y.hat.cf is the marginal outcome forest the causal forest arms need, and W.hat
+# the propensity. Shared by the double and single crossfit arms, so they differ
+# only in which rows each split trains on.
+rf_split_fit <- function(X, Y, W, in_train, in_test, num.threads = NULL) {
+  mu <- t_learner_rf_split(X, Y, W, in_train, in_test, num.threads = num.threads)
+
+  X_train <- X[in_train, , drop = FALSE]
+  X_test <- X[in_test, , drop = FALSE]
+  Y.hat.cf.model <- regression_forest(X_train, Y[in_train], num.threads = num.threads)
+  W.hat.model <- regression_forest(X_train, W[in_train], num.threads = num.threads)
+  Y.hat.cf <- predict(Y.hat.cf.model, newdata = X_test)$predictions
+  W.hat <- trim_ps(predict(W.hat.model, newdata = X_test)$predictions)
+
+  list(po = dr_pseudo(Y[in_test], W[in_test], mu$Y1.hat, mu$Y0.hat, W.hat),
+       Y0.hat = mu$Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat)
+}
+
+# double crossfitting over fold pairs - the status quo this study benchmarks
 nuisance_double_rf <- function(X, Y, W, fold_indices, fold_pairs, num.threads = NULL) {
 
   cross_fits <- future_map(seq_along(fold_pairs), function(i) {
-    fold_pair <- fold_pairs[[i]]
-    in_train <- !(fold_indices %in% fold_pair)
-    in_test <- !in_train
-
-    Y.hat.model <- regression_forest(cbind(W = W[in_train], X[in_train, ]), Y[in_train],
-                                     num.threads = num.threads)
-    Y.hat.cf.model <- regression_forest(X[in_train, ], Y[in_train], num.threads = num.threads)
-    W.hat.model <- regression_forest(X[in_train, ], W[in_train], num.threads = num.threads)
-
-    X_test <- X[in_test, ]
-    Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X_test))$predictions
-    Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X_test))$predictions
-    Y.hat.cf <- predict(Y.hat.cf.model, newdata = X_test)$predictions
-    W.hat <- trim_ps(predict(W.hat.model, newdata = X_test)$predictions)
-
-    list(po = dr_pseudo(Y[in_test], W[in_test], Y1.hat, Y0.hat, W.hat),
-         Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat)
+    in_train <- !(fold_indices %in% fold_pairs[[i]])
+    rf_split_fit(X, Y, W, in_train, !in_train, num.threads)
   }, .options = furrr_options(seed = TRUE))
 
   fold_list <- unique(fold_indices)
@@ -175,176 +135,40 @@ nuisance_double_rf <- function(X, Y, W, fold_indices, fold_pairs, num.threads = 
        W.hat = rowMeans(W.hat_matrix, na.rm = TRUE))
 }
 
-# ordinary leave-one-fold-out crossfitting, S-learner outcome model
+# ordinary leave-one-fold-out crossfitting
 nuisance_single_rf <- function(X, Y, W, fold_indices, num.threads = NULL) {
 
   cross_fits <- future_map(unique(fold_indices), function(fold) {
     in_train <- fold_indices != fold
-    in_test <- !in_train
-
-    Y.hat.model <- regression_forest(cbind(W = W[in_train], X[in_train, ]), Y[in_train],
-                                     num.threads = num.threads)
-    Y.hat.cf.model <- regression_forest(X[in_train, ], Y[in_train], num.threads = num.threads)
-    W.hat.model <- regression_forest(X[in_train, ], W[in_train], num.threads = num.threads)
-
-    X_test <- X[in_test, ]
-    Y0.hat <- predict(Y.hat.model, newdata = cbind(W = 0, X_test))$predictions
-    Y1.hat <- predict(Y.hat.model, newdata = cbind(W = 1, X_test))$predictions
-    Y.hat.cf <- predict(Y.hat.cf.model, newdata = X_test)$predictions
-    W.hat <- trim_ps(predict(W.hat.model, newdata = X_test)$predictions)
-
-    list(fold = fold, po = dr_pseudo(Y[in_test], W[in_test], Y1.hat, Y0.hat, W.hat),
-         Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat)
+    c(list(fold = fold), rf_split_fit(X, Y, W, in_train, !in_train, num.threads))
   }, .options = furrr_options(seed = TRUE))
 
   scatter_folds(cross_fits, fold_indices, c("po", "Y0.hat", "Y.hat.cf", "W.hat"))
 }
 
-# leave-one-fold-out crossfitting with a T-learner outcome model. exists as the
-# control for oob_oob: it differs from nuisance_single_rf only in learner
-# structure, so the S-vs-T effect and the OOB-vs-crossfit effect are separable.
-nuisance_single_rf_t <- function(X, Y, W, fold_indices, num.threads = NULL) {
-
-  cross_fits <- future_map(unique(fold_indices), function(fold) {
-    in_train <- fold_indices != fold
-    in_test <- !in_train
-
-    X_train <- X[in_train, , drop = FALSE]
-    Y_train <- Y[in_train]
-    W_train <- W[in_train]
-
-    f1 <- regression_forest(X_train[W_train == 1, , drop = FALSE], Y_train[W_train == 1],
-                            num.threads = num.threads)
-    f0 <- regression_forest(X_train[W_train == 0, , drop = FALSE], Y_train[W_train == 0],
-                            num.threads = num.threads)
-    W.hat.model <- regression_forest(X_train, W_train, num.threads = num.threads)
-
-    X_test <- X[in_test, , drop = FALSE]
-    Y1.hat <- predict(f1, newdata = X_test)$predictions
-    Y0.hat <- predict(f0, newdata = X_test)$predictions
-    W.hat <- trim_ps(predict(W.hat.model, newdata = X_test)$predictions)
-
-    list(fold = fold, po = dr_pseudo(Y[in_test], W[in_test], Y1.hat, Y0.hat, W.hat),
-         Y0.hat = Y0.hat, W.hat = W.hat)
-  }, .options = furrr_options(seed = TRUE))
-
-  scatter_folds(cross_fits, fold_indices, c("po", "Y0.hat", "W.hat"))
-}
-
-# no sample splitting: forests fit on the whole sample, predictions taken out-of-bag.
-# a T-learner is required here because grf can only return OOB predictions at each
-# unit's observed covariate row - an S-learner on cbind(W, X) has no OOB counterfactual.
-# with separate arm forests, a treated unit's Y1.hat is OOB and its Y0.hat comes from
-# a forest that never saw it, so both arms are honest.
+# no sample splitting: production's own whole-sample nuisances (R/cate_models.R's
+# nuisance_rf), so the oob_oob arm is dr_random_forest's stage 1 by construction.
+# Per-arm forests make OOB honest without any workaround: a unit's own-arm
+# prediction is OOB and its other-arm prediction comes from a forest that never
+# saw it.
 nuisance_oob_rf <- function(X, Y, W, num.threads = NULL) {
-  n_obs <- nrow(X)
-  treated <- W == 1
-
-  f1 <- regression_forest(X[treated, , drop = FALSE], Y[treated], num.threads = num.threads)
-  f0 <- regression_forest(X[!treated, , drop = FALSE], Y[!treated], num.threads = num.threads)
-
-  Y1.hat <- numeric(n_obs)
-  Y1.hat[treated] <- predict(f1)$predictions
-  Y1.hat[!treated] <- predict(f1, newdata = X[!treated, , drop = FALSE])$predictions
-
-  Y0.hat <- numeric(n_obs)
-  Y0.hat[!treated] <- predict(f0)$predictions
-  Y0.hat[treated] <- predict(f0, newdata = X[treated, , drop = FALSE])$predictions
-
-  W.hat <- trim_ps(predict(regression_forest(X, W, num.threads = num.threads))$predictions)
-  Y.hat.cf <- predict(regression_forest(X, Y, num.threads = num.threads))$predictions
-
-  list(po = dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat),
-       Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat)
-}
-
-# S-learner counterpart to nuisance_oob_rf, using oob_predict_counterfactual instead
-# of a T-learner - matches the S-learner structure used by every other nuisance in
-# this file (nuisance_double_rf, nuisance_single_rf). Kept alongside nuisance_oob_rf
-# rather than replacing it, so the T-learner and the workaround can be compared.
-nuisance_oob_rf_s <- function(X, Y, W, num.threads = NULL) {
-  forest <- regression_forest(cbind(W = W, X), Y, num.threads = num.threads)
-
-  Y0.hat <- oob_predict_counterfactual(forest, cbind(W = 0, X))
-  Y1.hat <- oob_predict_counterfactual(forest, cbind(W = 1, X))
-
-  W.hat <- trim_ps(predict(regression_forest(X, W, num.threads = num.threads))$predictions)
-  Y.hat.cf <- predict(regression_forest(X, Y, num.threads = num.threads))$predictions
-
-  list(po = dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat),
-       Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat)
-}
-
-# manual-API counterpart to nuisance_oob_rf_s - identical S-learner forest, but the
-# counterfactual OOB predictions come from oob_predict_counterfactual_manual instead
-# of the X.orig shortcut. Y0.hat/Y1.hat can be NA for rows that are in-bag in every
-# tree (astronomically unlikely at grf's default num.trees, but dr_pseudo will
-# propagate a resulting NA rather than silently drop it, so a run that hits this
-# will fail loudly).
-nuisance_oob_rf_manual <- function(X, Y, W, num.threads = NULL) {
-  forest <- regression_forest(cbind(W = W, X), Y, num.threads = num.threads)
-
-  Y0.hat <- oob_predict_counterfactual_manual(forest, cbind(W = 0, X), Y)
-  Y1.hat <- oob_predict_counterfactual_manual(forest, cbind(W = 1, X), Y)
-
-  W.hat <- trim_ps(predict(regression_forest(X, W, num.threads = num.threads))$predictions)
-  Y.hat.cf <- predict(regression_forest(X, Y, num.threads = num.threads))$predictions
-
-  list(po = dr_pseudo(Y, W, Y1.hat, Y0.hat, W.hat),
-       Y0.hat = Y0.hat, Y.hat.cf = Y.hat.cf, W.hat = W.hat)
+  nuisance_rf(X, Y, W, num.threads = num.threads)
 }
 
 # ---- stage 1: nuisance estimation (SuperLearner) ----------------------------
 
-# one train/test split's worth of SuperLearner nuisances. X must be a data.frame.
-# failsafes and propensity trimming carried over from cts_models.R:300-314.
-# Still an S-learner outcome model on cbind(W, X), although
-# R/cate_models.R::nuisance_sl has since moved to per-arm outcome models, and
-# sl_libraries(n)$Y is sized for a per-arm fit. The study needs an overhaul
-# around per-arm outcome models before it is re-run - see README.md.
-# sl_lib is list(W = , Y = , tau = ) or one character vector - see
-# R/sl_library.R's as_sl_libs().
-sl_nuisance_fit <- function(X, Y, W, in_train, in_test, sl_lib) {
-
-  sl_lib <- as_sl_libs(sl_lib)
-  X_train <- X[in_train, , drop = FALSE]
-  X_W_train <- cbind(W = W[in_train], X_train)
-  X_test <- X[in_test, , drop = FALSE]
-
-  Y_lib <- pretest_superlearner(Y[in_train], X_W_train, sl_lib$Y, gaussian())
-  Y_fit <- sl_fit_predict(Y[in_train], X_W_train,
-                          list(y0 = cbind(W = 0, X_test), y1 = cbind(W = 1, X_test)),
-                          Y_lib)
-
-  W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib$W, binomial())
-  W_fit <- sl_fit_predict(W[in_train], X_train, list(w = X_test), W_lib,
-                          family = binomial())
-
-  Y0.hat <- Y_fit$pred$y0
-  Y1.hat <- Y_fit$pred$y1
-  W.hat <- W_fit$pred$w
-
-  if (all(Y0.hat == 0) && all(Y1.hat == 0)) {
-    warning("SuperLearner failed for Y.hat. Using mean(Y).")
-    Y0.hat <- rep(mean(Y[in_train][W[in_train] == 0], na.rm = TRUE), sum(in_test))
-    Y1.hat <- rep(mean(Y[in_train][W[in_train] == 1], na.rm = TRUE), sum(in_test))
-  }
-  if (all(W.hat == 0)) {
-    warning("SuperLearner failed for W.hat. Using mean(W).")
-    W.hat <- rep(mean(W[in_train], na.rm = TRUE), sum(in_test))
-  }
-  W.hat <- trim_ps(W.hat)
-
-  list(po = dr_pseudo(Y[in_test], W[in_test], Y1.hat, Y0.hat, W.hat),
-       Y0.hat = Y0.hat, W.hat = W.hat)
-}
-
+# X must be a data.frame. Each split's fit is production's sl_split_fit
+# (R/cate_models.R) - one SuperLearner per arm, plus the propensity - so the
+# dcf arm differs from scf_scf only in splitting. sl_lib is list(W = , Y = ,
+# tau = ) or one character vector - see R/sl_library.R's as_sl_libs(). Dropped
+# learners are not recorded here, as they never were for this arm.
 nuisance_double_sl <- function(X, Y, W, fold_indices, fold_pairs, sl_lib) {
 
+  sl_lib <- as_sl_libs(sl_lib)
+
   cross_fits <- future_map(seq_along(fold_pairs), function(i) {
-    fold_pair <- fold_pairs[[i]]
-    in_train <- !(fold_indices %in% fold_pair)
-    sl_nuisance_fit(X, Y, W, in_train, !in_train, sl_lib)
+    in_train <- !(fold_indices %in% fold_pairs[[i]])
+    sl_split_fit(X, Y, W, in_train, !in_train, sl_lib)
   }, .options = furrr_options(seed = TRUE))
 
   fold_list <- unique(fold_indices)
@@ -357,14 +181,10 @@ nuisance_double_sl <- function(X, Y, W, fold_indices, fold_pairs, sl_lib) {
        W.hat = rowMeans(W.hat_matrix, na.rm = TRUE))
 }
 
+# single crossfit: production's nuisance_sl itself, so the scf_scf arm's stage 1
+# is dr_superlearner's by construction
 nuisance_single_sl <- function(X, Y, W, fold_indices, sl_lib) {
-
-  cross_fits <- future_map(unique(fold_indices), function(fold) {
-    in_train <- fold_indices != fold
-    c(list(fold = fold), sl_nuisance_fit(X, Y, W, in_train, !in_train, sl_lib))
-  }, .options = furrr_options(seed = TRUE))
-
-  scatter_folds(cross_fits, fold_indices, c("po", "Y0.hat", "W.hat"))
+  nuisance_sl(X, Y, W, fold_indices, sl_lib)
 }
 
 # ---- stage 2: final CATE regression -----------------------------------------
@@ -534,7 +354,7 @@ arm <- function(family, variant, tau, tau_test, time_nuisance, time_stage2,
 #'   $nuisances (the raw nuisance objects, needed by the
 #'   half-sample bootstraps in R/bootstrap_ci.R - see
 #'   crossfitting/confidence_intervals/cf_ci_analysis.R, which calls this with
-#'   sl_lib = NULL and bootstraps all 11 RF/CF arms). $nuisances is large; every
+#'   sl_lib = NULL and bootstraps all 8 RF/CF arms). $nuisances is large; every
 #'   caller picks the fields it saves, and cf_analysis.R deliberately saves none
 #'   of them, keeping the production per-run files small.
 run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
@@ -559,14 +379,8 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   nz_double <- timed(nuisance_double_rf(X, Y, W, fold_indices, fold_pairs, num.threads))
   cat("Nuisances: RF single crossfit...\n")
   nz_single <- timed(nuisance_single_rf(X, Y, W, fold_indices, num.threads))
-  cat("Nuisances: RF single crossfit (T-learner)...\n")
-  nz_single_t <- timed(nuisance_single_rf_t(X, Y, W, fold_indices, num.threads))
   cat("Nuisances: RF out-of-bag...\n")
   nz_oob <- timed(nuisance_oob_rf(X, Y, W, num.threads))
-  cat("Nuisances: RF out-of-bag (S-learner, X.orig workaround)...\n")
-  nz_oob_s <- timed(nuisance_oob_rf_s(X, Y, W, num.threads))
-  cat("Nuisances: RF out-of-bag (S-learner, manual tree-loop)...\n")
-  nz_oob_manual <- timed(nuisance_oob_rf_manual(X, Y, W, num.threads))
 
   # -- DR learner, random forest ---------------------------------------------
   cat("DR-RF variants...\n")
@@ -584,25 +398,10 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
                       nz_single$time, s$time, truth_test = truth_test,
                       variance = s$value$var_oob)
 
-  s <- timed(stage2_whole_rf(X, nz_single_t$value$po, X_test, num.threads))
-  arms$scf_oob_t <- arm("dr_rf", "scf_oob_t", s$value$tau_oob, s$value$tau_test,
-                        nz_single_t$time, s$time, truth_test = truth_test,
-                        variance = s$value$var_oob)
-
   s <- timed(stage2_whole_rf(X, nz_oob$value$po, X_test, num.threads))
   arms$oob_oob <- arm("dr_rf", "oob_oob", s$value$tau_oob, s$value$tau_test,
                       nz_oob$time, s$time, truth_test = truth_test,
                       variance = s$value$var_oob)
-
-  s <- timed(stage2_whole_rf(X, nz_oob_s$value$po, X_test, num.threads))
-  arms$oob_oob_s <- arm("dr_rf", "oob_oob_s", s$value$tau_oob, s$value$tau_test,
-                        nz_oob_s$time, s$time, truth_test = truth_test,
-                        variance = s$value$var_oob)
-
-  s <- timed(stage2_whole_rf(X, nz_oob_manual$value$po, X_test, num.threads))
-  arms$oob_oob_manual <- arm("dr_rf", "oob_oob_manual", s$value$tau_oob, s$value$tau_test,
-                             nz_oob_manual$time, s$time, truth_test = truth_test,
-                             variance = s$value$var_oob)
 
   # -- causal forest ---------------------------------------------------------
   cat("Causal forest variants...\n")
@@ -633,8 +432,8 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   nz_cf_default <- list(Y.hat.cf = s$value$Y.hat.cf, W.hat = s$value$W.hat)
 
   # -- DR learner, SuperLearner ----------------------------------------------
-  # no OOB analogue exists for SuperLearner, so the OOB arms and the T-learner
-  # control are dropped from this family
+  # no OOB analogue exists for SuperLearner, so the OOB arms are dropped from
+  # this family
   if (!is.null(sl_lib)) {
     X_df <- as.data.frame(X)
     X_test_df <- as.data.frame(X_test)
@@ -657,7 +456,5 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
 
   list(arms = arms, fold_indices = fold_indices,
        nuisances = list(nz_double = nz_double$value, nz_single = nz_single$value,
-                        nz_single_t = nz_single_t$value, nz_oob = nz_oob$value,
-                        nz_oob_s = nz_oob_s$value, nz_oob_manual = nz_oob_manual$value,
-                        nz_cf_default = nz_cf_default))
+                        nz_oob = nz_oob$value, nz_cf_default = nz_cf_default))
 }

@@ -73,8 +73,8 @@ metrics_summary <- metrics %>%
 # alpha/2) x MCSE) error bar - see sample_size/continuous/cts_results.R's summary_plot for
 # why this isn't a raw +/- 1x MCSE (~68% coverage, not 95%)
 # facet_wrap (not facet_grid) because variant is family-specific - each family
-# only populates 2-7 of the 11 levels, and facet_grid's free scales only vary
-# per row/column, never per panel, so it would still show every panel all 11
+# only populates 2-4 of the 8 levels, and facet_grid's free scales only vary
+# per row/column, never per panel, so it would still show every panel all 8
 # categories. facet_wrap frees per panel, dropping the ones absent from that
 # family's arms.
 # hline = NULL omits the reference line.

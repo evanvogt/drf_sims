@@ -14,31 +14,13 @@ pseudo-outcome from a nuisance model trained on every fold except `i`'s, which
 should differ from `dcf`. If it doesn't, the cheap procedure is enough and the
 rest of the study can be sped up 4.5x.
 
-> **Needs an overhaul before it is re-run (noted 2026-09-27, not started).**
-> The production DR-learners in `R/cate_models.R` (and `competing_risk/`) now
-> fit the outcome model **separately in each treatment arm** (a T-learner),
-> for both the random-forest and the SuperLearner versions. This study was
-> designed around S-learner outcome models, so most of its arms no longer
-> test the estimator production runs. The question itself — is double
-> crossfitting worth its cost? — is still relevant, but it has to be asked
-> with per-arm outcome models:
->
-> - **DR-RF:** `dcf`, `scf_scf`, `scf_oob`, `oob_oob_s` and `oob_oob_manual`
->   all use an S-learner outcome forest on `cbind(W, X)`. Only `oob_oob` and
->   `scf_oob_t` are per-arm. Production is now `oob_oob` (`t_learner_rf`),
->   not `oob_oob_s` as the text below says, and the S-vs-T framing of
->   `oob_oob_s` / `oob_oob_manual` / `scf_oob_t` needs rethinking.
-> - **DR-SL:** both arms (`dcf`, `scf_scf`) fit one S-learner outcome model
->   (`cf_models.R::sl_nuisance_fit`). Production `nuisance_sl` fits one
->   SuperLearner per arm. These arms are also fed `sl_libraries(n)$Y`
->   (`R/sl_library.R`), which is sized for per-arm fits on about half the
->   rows, so as it stands their outcome library does not match their design.
-> - The rest of this README (design tables, the "Why `oob_oob` uses a
->   T-learner" note, the production-parity claims, `cf_testing.R`'s checks)
->   describes the pre-overhaul study.
->
-> Do not submit `cf_1.sh` until the arms are rebuilt around per-arm outcome
-> models.
+**Every DR arm fits its outcome model separately in each treatment arm** (a
+T-learner), as the production DR-learners in `R/cate_models.R` do, so the arms
+differ only in how they split the sample. The per-arm fits are production's own
+code, not copies: `t_learner_rf_split` / `nuisance_rf` for the forests and
+`sl_split_fit` / `nuisance_sl` for SuperLearner. (Until 2026-09-27 most arms used
+an S-learner outcome model on `cbind(W, X)`; that design, and the S-vs-T arms
+`scf_oob_t` / `oob_oob_s` / `oob_oob_manual` that went with it, are gone.)
 
 ## Design
 
@@ -68,42 +50,33 @@ and averages the `V` scores, which is the like-for-like reading against a
 whole-sample arm's single model. For whole-sample arms the two coincide, so any
 gap between them is the ensembling effect alone (`cf_ensemble_effect.png`).
 
-### DR-learner, random forest (7 arms)
+### DR-learner, random forest (4 arms)
 
 | id | stage 1 (nuisances) | stage 2 (final model) |
 |---|---|---|
 | `dcf` | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
 | `scf_scf` | single CF, leave-one-fold-out | crossfit, same folds |
 | `scf_oob` | single CF | whole sample, **OOB** predictions |
-| `oob_oob` | whole sample, **OOB**, **T-learner** | whole sample, **OOB** |
-| `oob_oob_s` | whole sample, **OOB**, S-learner (`X.orig` workaround) | whole sample, **OOB** |
-| `oob_oob_manual` | whole sample, **OOB**, S-learner (manual tree-loop) | whole sample, **OOB** |
-| `scf_oob_t` | single CF, **T-learner** | whole sample, OOB (**control**) |
+| `oob_oob` | whole sample, **OOB** | whole sample, **OOB** (production `dr_random_forest`) |
 
-**Why `oob_oob` uses a T-learner, and what `oob_oob_s`/`oob_oob_manual` add.** The
-nuisance model elsewhere is an S-learner — one forest on `cbind(W, X)`, predicted at
-`W = 0` and `W = 1` (`cts_models.R:70`). grf's public API only returns OOB
-predictions at each unit's *observed* covariate row, so a plain S-learner has no OOB
-counterfactual; `oob_oob` sidesteps that with separate arm forests instead (a
-treated unit's `Y1.hat` is OOB and its `Y0.hat` comes from a forest that never saw
-it, so both arms are honest) — but that confounds "OOB vs crossfit" with "T vs S
-learner", which is what `scf_oob_t` is for.
-`oob_oob_s` and `oob_oob_manual` remove that confound directly, by getting a real
-S-learner OOB counterfactual: `oob_oob_s` uses a maintainer-endorsed but unsupported
-workaround ([grf-labs/grf#307](https://github.com/grf-labs/grf/issues/307)) —
-point the fitted forest's `X.orig` at the perturbed covariates, clear its cached
-`predictions`/`debiased.error`, and call `predict(forest)` so it re-reads `X.orig`
-and returns OOB-for-row-`i` predictions at the perturbed point. `oob_oob_manual`
-gets the same answer through grf's *documented* `get_tree()`/`get_leaf_node()` API
-instead — loop over every tree, and for each of row `i`'s out-of-bag trees, average
-the training `Y` in the leaf the counterfactual point falls into — and exists mainly
-as a check on the shortcut (see `cf_testing.R`'s section 4). Both are kept alongside
-`oob_oob` rather than replacing it.
+The crossfit arms fit one forest per treatment arm on each split's training rows
+and predict the held-out rows (`t_learner_rf_split`, via `rf_split_fit`, which
+adds the propensity forest and the marginal `Y.hat.cf` forest the causal forest
+arms use). `oob_oob` calls production's `nuisance_rf` itself. Per-arm forests make
+the OOB arm honest without any workaround: a unit's own-arm prediction is
+out-of-bag, and its other-arm prediction comes from a forest that never saw it.
+So `scf_oob` vs `oob_oob` isolates crossfit vs OOB nuisances directly.
 
 ### DR-learner, SuperLearner (2 arms)
 
-`dcf`, `scf_scf`. No OOB analogue exists for SuperLearner, so the OOB
-arms and the T-learner control are dropped.
+`dcf`, `scf_scf`. Each split's nuisances are production's `sl_split_fit`: one
+SuperLearner per treatment arm plus the propensity, with the per-nuisance
+libraries from `R/sl_library.R`. `scf_scf` calls production's `nuisance_sl`
+itself, so it is `dr_superlearner`'s stage 1 by construction; `dcf` runs the same
+per-split fit over the 45 fold pairs. At n = 500 each per-arm outcome fit sees
+~200 rows under `dcf` and ~225 under `scf_scf`, which is what `sl_libraries(n)$Y`
+is sized for. No OOB analogue exists for SuperLearner, so the OOB arms are
+dropped.
 
 ### Causal forest (4 arms)
 
@@ -118,29 +91,29 @@ arms and the T-learner control are dropped.
 
 | file | role |
 |---|---|
-| `cf_models.R` | DGP wrapper, nuisance producers, stage-2 consumers, `run_all_crossfit_variants` |
+| `cf_models.R` | DGP wrapper, nuisance producers (over production's per-arm fits), stage-2 consumers, `run_all_crossfit_variants` |
 | `cf_analysis.R` | array entry point, one replicate per index |
 | `cf_testing.R` | verification checks — run before submitting anything |
 | `cf_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cf_metrics.R` | metric definitions (functions only, no side effects) |
 | `cf_collect.R` | streams the per-run files through `cf_metrics.R` into `cf_metrics.RDS` |
 | `cf_results.R` | figures |
-| `confidence_intervals/cf_ci_analysis.R` | confidence-interval pilot, all 11 RF/CF arms — see below |
+| `confidence_intervals/cf_ci_analysis.R` | confidence-interval pilot, all 8 RF/CF arms — see below |
 | `confidence_intervals/cf_ci_testing.R` | verification checks for the CI pilot (`full` adds the production-parity check) |
 | `confidence_intervals/cf_ci_check.R` / `cf_ci_metrics.R` / `cf_ci_collect.R` | CI pilot's own check/metrics/collect, parallel to the files above |
 
 ## Half-sample bootstrap CI pilot
 
-`cf_ci_analysis.R` adds confidence intervals to **all 11 non-SuperLearner arms**.
+`cf_ci_analysis.R` adds confidence intervals to **all 8 non-SuperLearner arms**.
 The 2 SuperLearner arms stay out of scope (not RF-based), which is why the pilot
 calls `run_all_crossfit_variants(sl_lib = NULL)`.
 
-The 11 split by stage-2 structure, and the bootstrap differs between them:
+The 8 split by stage-2 structure, and the bootstrap differs between them:
 
 | arms | bootstrap | half sample | `tau_half` |
 |---|---|---|---|
 | `dcf`, `scf_scf`, `cf_dcf`, `cf_scf` | `rf_half_boot` / `cf_half_boot` | stratified by fold | refit per fold, predict the held-out fold |
-| `scf_oob`, `scf_oob_t`, `oob_oob`, `oob_oob_s`, `oob_oob_manual`, `cf_full_oob`, `cf_default` | `rf_oob_half_boot` / `cf_oob_half_boot` | unstratified `floor(n/2)` | one refit, OOB for in-half rows and `newdata` for the rest |
+| `scf_oob`, `oob_oob`, `cf_full_oob`, `cf_default` | `rf_oob_half_boot` / `cf_oob_half_boot` | unstratified `floor(n/2)` | one refit, OOB for in-half rows and `newdata` for the rest |
 
 Nuisances are held fixed and sliced in every case — only the final-stage forest
 is refit, which is `R/bootstrap_ci.R`'s existing design. That includes
@@ -236,7 +209,7 @@ run below nominal — that's the pilot's actual research question, so
 most units, non-degenerate width) rather than gating on ~95% coverage.
 
 `cf_ci_metrics.R` emits one row per **(arm, `ci_method`)**, so a replicate
-produces `4 + 7 × 3 = 25` rows. That multi-row shape is the convention
+produces `4 + 4 × 3 = 16` rows. That multi-row shape is the convention
 `R/metrics.R`'s `compute_metrics` already documents for the CI studies.
 
 ```bash
@@ -263,13 +236,11 @@ cost:
   a crossfit arm, one for an OOB arm. So elapsed time scales roughly linearly in
   `CI_boot`, and a timed run at a small `CI_boot` (the smoke test above uses 10)
   extrapolates to the real 200.
-- **A large fixed cost.** The 7 OOB arms add only ~15% to the bootstrap total
-  (`B x 1` refit each against a crossfit arm's `B x V`), and `half_boot_out`
-  adds nothing since it reuses the same refits. But the pilot pays for the 4
-  nuisance objects the old trimmed orchestrator skipped, and
-  `nuisance_oob_rf_manual` is a pure-R double tree loop over `num.trees x 2`
-  counterfactual passes. That is likely the largest single non-bootstrap cost in
-  a replicate, so extrapolate with an intercept, not just a per-draw rate.
+- **A fixed cost.** The 4 OOB arms add little to the bootstrap total (`B x 1`
+  refit each against a crossfit arm's `B x V`), and `half_boot_out` adds
+  nothing since it reuses the same refits. But every replicate first fits all
+  the RF/CF point estimates, including the 45 fold-pair double-crossfit
+  nuisances, so extrapolate with an intercept, not just a per-draw rate.
 - **Memory grows with `CI_boot` too.** `future_map()` accumulates all `CI_boot`
   result vectors before the draws matrix is assembled, so peak memory measured at
   a small `CI_boot` underestimates the real `CI_boot = 200`.
@@ -279,11 +250,14 @@ the two can't drift apart.
 
 Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
 `collate_predictions`, `sample_size/continuous/cts_dgms.R` supplies the DGP, and
-`R/cate_models.R` supplies (via `R/sl_library.R`) `pretest_superlearner`, the
-per-nuisance SuperLearner libraries and `sl_fit_predict`, plus the reference
-implementation the regression check in `cf_testing.R` compares against — though
-that last one no longer holds, which is what breaks section 1 of `cf_testing.R`
-(see "Known issue" below).
+`R/cate_models.R` supplies the per-arm outcome models (`t_learner_rf_split`,
+`nuisance_rf`, `sl_split_fit`, `nuisance_sl`) and, via `R/sl_library.R`,
+`pretest_superlearner`, the per-nuisance SuperLearner libraries and
+`sl_fit_predict`. `cf_testing.R` section 1 checks that `oob_oob` reproduces
+production's `dr_random_forest` bit-for-bit (production's `stage2_whole_rf` is
+masked by this folder's, so the check sources `R/cate_models.R` into an
+environment of its own), and section 1b that each arm's outcome forest never
+sees the other arm's outcomes.
 
 This folder was the model for the repo-wide `R/` refactor: it was already
 sourcing shared code rather than copying it, at a time when the same CATE
@@ -291,45 +265,11 @@ estimators existed in seven files. The reference implementations it compares
 against moved from `sample_size/continuous/cts_models.R` into `R/cate_models.R`, which is
 now the only copy - `cts_models.R` is a thirteen-line profile shim.
 
-## Known issue: `cf_testing.R` section 1 aborts
-
-**`cf_testing.R` currently fails on its first check** and takes the whole script
-down with it, so none of sections 2–5 run:
-
-```
-=== 1. regression check: dcf against cts_models.R ===
-Error in validate_num_threads(num.threads) :
-  'list' object cannot be coerced to type 'double'
-Calls: nuisance_rf -> regression_forest -> validate_num_threads
-```
-
-This is a **stale test, not a broken estimator**. Section 1 was left behind by
-the repo-wide crossfitting simplification (`b1bcb16`), which changed the shared
-reference implementations out from under it:
-
-| `cf_testing.R` line | calls | problem |
-|---|---|---|
-| 64 | `nuisance_rf(X, Y, W, fold_indices, fold_pairs)` | signature is now `(X, Y, W, ipw, num.threads)`, so `fold_indices` binds to `ipw` and the `fold_pairs` **list** binds to `num.threads` — hence the error |
-| 64 | `nz_old$po_matrix`, `nz_old$W.hat_matrix` | `nuisance_rf` returns vectors now; there are no `*_matrix` fields |
-| 92 | `stage_2_rf(...)` | no longer exists in `R/cate_models.R` — replaced by `stage2_whole_rf` |
-
-The check's premise is also gone: it asserted that this folder's
-`nuisance_double_rf` reproduces the *production* implementation, but production
-is no longer double crossfitting — `dcf` is now only an arm of this study, with
-no shared counterpart to regress against. Fixing it means either pointing
-section 1 at a pinned copy of the old double-crossfit code, or deleting it and
-relying on sections 2–5.
-
-Sections 2–5 (structure checks, the OOB S-learner equivalence check against the
-manual `get_tree()` reimplementation, and the SuperLearner family under `full`)
-are unaffected in principle but currently unreachable, so **this folder has no
-working verification** until section 1 is fixed. Discovered while migrating
-`competing_risk/` onto the shared strategy; confirmed to reproduce on pristine
-`HEAD`, so it predates that work.
-
 ## Status
 
-**Re-run owed** - bug O changed the continuous DGM this study generates from
+**Re-run owed** - the arms were rebuilt around per-arm outcome models
+(2026-09-27, above), so no existing result reflects the current design. Before
+that, bug O changed the continuous DGM this study generates from
 (`sample_size/continuous/README.md`), and the 2026-09-26 renumbering made its scenarios
 1 / 4 / 6 / 8 (were 1 / 4 / 6 / 9; the pilot's 1 / 6 / 9 are now 1 / 4 / 8).
 The comparison's conclusions were drawn on the old DGM. Archive both old trees
@@ -341,7 +281,7 @@ and `cf_ci_results.R` label the new numbers, so they would mislabel the old
 ## Running it
 
 ```bash
-Rscript crossfitting/cf_testing.R              # structure + regression checks (fast) - SEE ABOVE, currently aborts
+Rscript crossfitting/cf_testing.R              # structure + regression checks (fast)
 Rscript crossfitting/cf_testing.R full         # adds the SuperLearner family
 
 qsub crossfitting/jobscripts/cf_1.sh        # the study itself
@@ -369,10 +309,11 @@ README's "Resource profiling (removed)"). When changing them:
 
 ## Deviations from the rest of the study, on purpose
 
-- **Propensities are trimmed to `[0.05, 0.95]` in every arm**, including the RF ones.
-  `cts_models.R` only trims for SuperLearner. With `W ~ Bernoulli(0.5)` this is a
-  no-op for the crossfit arms — `cf_testing.R` asserts it — but it stops the in-sample
-  nuisances from producing exploding pseudo-outcomes and losing on a technicality.
+- **Propensities are trimmed to `[0.05, 0.95]` in every arm**, including the RF ones
+  (no longer a deviation: `R/cate_models.R` now trims its RF propensities too, where
+  it used to trim only for SuperLearner). With `W ~ Bernoulli(0.5)` this is a no-op
+  for the double-crossfit nuisances — `cf_testing.R` asserts it — but it stops any
+  arm from producing exploding pseudo-outcomes and losing on a technicality.
 - **`bias` is `estimate - truth`** (bug G, fixed repo-wide).
 - **`stage2_crossfit_sl` uses the pretested library in both branches** (bug F, fixed repo-wide).
 - **The per-run files carry no `data` and no nuisance matrices** — only `tau`,

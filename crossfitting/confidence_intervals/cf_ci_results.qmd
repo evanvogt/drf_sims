@@ -28,10 +28,10 @@ library(knitr)
 ## Does the pilot's bootstrap deliver nominal coverage?
 
 
-The 11 split into two structural families, and the bootstrap differs between
+The 8 split into two structural families, and the bootstrap differs between
 them. The 4 arms whose stage 2 is a genuine per-fold crossfit use
 `rf_half_boot` / `cf_half_boot`, which refit per fold against a fold-stratified
-half sample. The 7 whole-sample / OOB arms have no fold structure to refit
+half sample. The 4 whole-sample / OOB arms have no fold structure to refit
 against, so `rf_oob_half_boot` / `cf_oob_half_boot` refit one forest per draw
 on an unstratified half sample instead.
 
@@ -65,10 +65,7 @@ figure below should reproduce `cf_results.qmd`'s exactly.
 | `dcf` | DR-learner (RF) | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
 | `scf_scf` | DR-learner (RF) | single CF, leave-one-fold-out | crossfit, same folds |
 | `scf_oob` | DR-learner (RF) | single CF | whole sample, **OOB** |
-| `scf_oob_t` | DR-learner (RF) | single CF, T-learner | whole sample, **OOB** |
-| `oob_oob` | DR-learner (RF) | whole sample, **OOB**, T-learner | whole sample, **OOB** |
-| `oob_oob_s` | DR-learner (RF) | whole sample, **OOB**, S-learner (`X.orig`) | whole sample, **OOB** |
-| `oob_oob_manual` | DR-learner (RF) | whole sample, **OOB**, S-learner (tree loop) | whole sample, **OOB** |
+| `oob_oob` | DR-learner (RF) | whole sample, **OOB** | whole sample, **OOB** |
 | `cf_dcf` | Causal forest | double-CF matrices, column `k` | fold-wise (**status quo**) |
 | `cf_scf` | Causal forest | single-CF vectors | fold-wise |
 | `cf_full_oob` | Causal forest | single-CF vectors | whole sample, **OOB** |
@@ -85,9 +82,9 @@ The OOB arms carry three intervals, not one, and they are nearly free to have:
 
 | `ci_method` | arms | kind | how |
 |---|---|---|---|
-| `half_boot` | all 11 | simultaneous | every unit scored in every draw |
-| `half_boot_out` | the 7 OOB arms | simultaneous | same refits, only out-of-half units scored |
-| `grf_normal` | the 7 OOB arms | **pointwise** | grf's own OOB variance, no bootstrap at all |
+| `half_boot` | all 8 | simultaneous | every unit scored in every draw |
+| `half_boot_out` | the 4 OOB arms | simultaneous | same refits, only out-of-half units scored |
+| `grf_normal` | the 4 OOB arms | **pointwise** | grf's own OOB variance, no bootstrap at all |
 
 `half_boot` and `half_boot_out` come off one set of forest fits — a paired
 contrast, differing only in whether a unit that was *in* the half sample gets
@@ -138,7 +135,7 @@ metrics_all <- metrics %>%
   droplevels()
 
 # every section below the method comparison is about the half-sample bootstrap,
-# the one interval available for all 11 arms
+# the one interval available for all 8 arms
 metrics <- filter(metrics_all, ci_method == ci_method_labels[["half_boot"]])
 
 # per variant summaries
@@ -288,8 +285,7 @@ takes its supremum over ~`n/2` rather than `n` units, so a narrower band is the
 expected result, not a surprising one.
 
 ```{r method-comparison, fig.height=16}
-oob_variants <- ci_variant_labels[c("scf_oob", "scf_oob_t", "oob_oob", "oob_oob_s",
-                                    "oob_oob_manual", "cf_full_oob", "cf_default")]
+oob_variants <- ci_variant_labels[c("scf_oob", "oob_oob", "cf_full_oob", "cf_default")]
 
 method_df <- metrics_all %>%
   filter(variant %in% oob_variants) %>%

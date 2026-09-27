@@ -42,9 +42,9 @@ metrics_all <- metrics %>%
   droplevels()
 
 # every figure below the method comparison is about the half-sample bootstrap,
-# the one interval available for all 11 arms. The other two methods only exist
-# for the 7 whole-sample/OOB arms, so mixing them in would put three rows of a
-# different kind next to nine of one kind on the same axis.
+# the one interval available for all 8 arms. The other two methods only exist
+# for the 4 whole-sample/OOB arms, so mixing them in would put rows of a
+# different kind next to rows of one kind on the same axis.
 metrics <- filter(metrics_all, ci_method == ci_method_labels[["half_boot"]])
 
 # per variant summaries
@@ -173,8 +173,7 @@ ggsave("cf_ci_width_summary.png", plot = width_sum_plot, path = fig_path,
 # only in whether in-half units are scored; half_boot_out takes its supremum over
 # ~n/2 rather than n units, so it is expected to run narrower.
 method_df <- metrics_all %>%
-  filter(variant %in% ci_variant_labels[c("scf_oob", "scf_oob_t", "oob_oob", "oob_oob_s",
-                                          "oob_oob_manual", "cf_full_oob", "cf_default")]) %>%
+  filter(variant %in% ci_variant_labels[c("scf_oob", "oob_oob", "cf_full_oob", "cf_default")]) %>%
   droplevels() %>%
   group_by(scenario, family, variant, ci_method) %>%
   summarise(mean_marg_cov = mean(marginal_coverage, na.rm = T),

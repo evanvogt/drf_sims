@@ -30,19 +30,19 @@ CI pilot: scenarios 1, 4, 8; n = 500; 50 repetitions.
 
 ## Methods
 
-DR-learner, random forest (7 arms):
+Every DR-learner arm fits its outcome model separately in each treatment arm
+(a T-learner), as the production DR-learners do.
+
+DR-learner, random forest (4 arms):
 
 | arm | nuisances | second stage |
 |---|---|---|
 | `dcf` | double crossfit over fold pairs | crossfit, same folds |
 | `scf_scf` | single crossfit | crossfit, same folds |
 | `scf_oob` | single crossfit | whole sample, OOB |
-| `scf_oob_t` | single crossfit, T-learner | whole sample, OOB |
-| `oob_oob` | whole sample, OOB, T-learner | whole sample, OOB |
-| `oob_oob_s` | whole sample, OOB, S-learner (`X.orig` workaround) | whole sample, OOB |
-| `oob_oob_manual` | whole sample, OOB, S-learner (manual tree loop) | whole sample, OOB |
+| `oob_oob` | whole sample, OOB (production `dr_random_forest`) | whole sample, OOB |
 
-DR-learner, SuperLearner: `dcf`, `scf_scf`.
+DR-learner, SuperLearner: `dcf`, `scf_scf` (production `dr_superlearner`).
 
 Causal forest: `cf_dcf` (double-crossfit `Y.hat`/`W.hat`, fold-wise forest),
 `cf_scf` (single-crossfit nuisances, fold-wise), `cf_full_oob` (single-crossfit
@@ -50,7 +50,7 @@ nuisances, whole-sample OOB), `cf_default` (plain grf `causal_forest`).
 
 Propensities trimmed to [0.05, 0.95] in every arm.
 
-CI pilot: the 11 RF / causal forest arms, each with a half-sample bootstrap
+CI pilot: the 8 RF / causal forest arms, each with a half-sample bootstrap
 simultaneous band (`CI_boot = 200`, `CI_sf = 0.5`, α = 0.05). OOB arms carry
 two bootstrap variants (`half_boot`, `half_boot_out`) and grf's pointwise
 normal interval (`grf_normal`).

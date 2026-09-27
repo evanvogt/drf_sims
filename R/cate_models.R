@@ -275,20 +275,31 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
 
 # ---- stage 1: nuisance estimation -------------------------------------------
 
+#' One arm's outcome forest: a regression forest on the rows with W == arm
+#'
+#' The per-arm fit shared by t_learner_rf (whole sample) and
+#' t_learner_rf_split (one train/test split), so the two differ only in which
+#' rows they are handed and how they predict.
+arm_forest <- function(X, Y, W, arm, ipw = NULL, num.threads = NULL) {
+  in_arm <- W == arm
+  regression_forest(X[in_arm, , drop = FALSE], Y[in_arm],
+                    sample.weights = wts(ipw, in_arm),
+                    num.threads = num.threads)
+}
+
 #' T-learner outcome model with regression forests: one forest per arm
 #'
 #' Whole-sample, no splitting. A unit's prediction from its own arm's forest is
 #' out-of-bag; its prediction from the other arm's forest is an ordinary
 #' newdata prediction from a forest that never saw it - so both are honest.
-#' Ported from crossfitting/cf_models.R::nuisance_oob_rf, the "oob_oob" arm.
+#' This is the "oob_oob" arm of crossfitting/cf_models.R, which calls it
+#' (through nuisance_rf) rather than keeping its own copy.
 #' @return list(Y0.hat, Y1.hat), each length n
 t_learner_rf <- function(X, Y, W, ipw = NULL, num.threads = NULL) {
   n_obs <- nrow(X)
   arm_fit <- function(arm) {
     in_arm <- W == arm
-    forest <- regression_forest(X[in_arm, , drop = FALSE], Y[in_arm],
-                                sample.weights = wts(ipw, in_arm),
-                                num.threads = num.threads)
+    forest <- arm_forest(X, Y, W, arm, ipw, num.threads)
     pred <- numeric(n_obs)
     pred[in_arm] <- predict(forest)$predictions
     pred[!in_arm] <- predict(forest, newdata = X[!in_arm, , drop = FALSE])$predictions
@@ -297,6 +308,29 @@ t_learner_rf <- function(X, Y, W, ipw = NULL, num.threads = NULL) {
   # control arm first: fixes the order the two fits consume the RNG stream
   Y0.hat <- arm_fit(0)
   Y1.hat <- arm_fit(1)
+  list(Y0.hat = Y0.hat, Y1.hat = Y1.hat)
+}
+
+#' T-learner outcome model with regression forests, for one train/test split
+#'
+#' One forest per arm, each fit on that arm's training rows only and predicting
+#' every test row. No production estimator crossfits its forests any more; this
+#' is for crossfitting/cf_models.R's crossfit arms (dcf, scf_*), which then
+#' differ from the whole-sample t_learner_rf only in splitting.
+#' @param in_train,in_test logical row masks
+#' @return list(Y0.hat, Y1.hat), each of length sum(in_test)
+t_learner_rf_split <- function(X, Y, W, in_train, in_test, ipw = NULL,
+                               num.threads = NULL) {
+  X_train <- X[in_train, , drop = FALSE]
+  X_test <- X[in_test, , drop = FALSE]
+  ipw_train <- if (!is.null(ipw)) ipw[in_train] else NULL
+  arm_pred <- function(arm) {
+    forest <- arm_forest(X_train, Y[in_train], W[in_train], arm, ipw_train, num.threads)
+    predict(forest, newdata = X_test)$predictions
+  }
+  # control arm first, as in t_learner_rf
+  Y0.hat <- arm_pred(0)
+  Y1.hat <- arm_pred(1)
   list(Y0.hat = Y0.hat, Y1.hat = Y1.hat)
 }
 
@@ -325,71 +359,91 @@ nuisance_rf <- function(X, Y, W, ipw = NULL, num.threads = NULL) {
   list(po = po, Y.hat = Y.hat, Y.hat.cf = Y.hat.cf, Y0.hat = Y0.hat, W.hat = W.hat)
 }
 
+#' One train/test split's SuperLearner nuisances (T-learner outcome model)
+#'
+#' One SuperLearner per arm on X, each fit on that arm's training rows only
+#' and predicting every test row, plus a propensity SuperLearner on all the
+#' training rows. The per-split body of nuisance_sl, shared with
+#' crossfitting/cf_models.R's double-crossfit arm so that its fold-pair fits
+#' are the production estimator's.
+#'
+#' @param X covariates, as a data frame
+#' @param in_train,in_test logical row masks
+#' @param sl_lib list(W = , Y = , tau = ), already through as_sl_libs()
+#' @return list(po, Y.hat, Y0.hat, W.hat) at the test rows, and libs - the
+#'   pretested libraries list(Y0 = , Y1 = , W = ) for dropped_table()
+sl_split_fit <- function(X, Y, W, in_train, in_test, sl_lib, ipw = NULL,
+                         family = gaussian()) {
+
+  binom <- is_binomial(family)
+
+  X_train <- X[in_train, ]
+  X_test <- X[in_test, ]
+  Y_family <- if (binom) binomial() else gaussian()
+
+  # one outcome model per arm, each predicting at every held-out row. The
+  # failsafe - SuperLearner returns all-zero predictions when every learner
+  # ends up with zero weight - falls back to that arm's training mean. A fit
+  # that errors outright falls back to the mean inside sl_fit_predict, and
+  # is recorded with the pretest's drops.
+  arm_fit <- function(arm) {
+    in_arm <- in_train & W == arm
+    lib <- pretest_superlearner(Y[in_arm], X[in_arm, ], sl_lib$Y, Y_family)
+    fit <- sl_fit_predict(Y[in_arm], X[in_arm, ], list(test = X_test), lib,
+                          family = Y_family, obsWeights = wts(ipw, in_arm))
+    pred <- fit$pred$test
+    if (all(pred == 0)) {
+      warning("SuperLearner failed for Y.hat in arm W = ", arm, ". Using its mean.")
+      pred <- rep(mean(Y[in_arm], na.rm = TRUE), sum(in_test))
+    }
+    list(pred = pred, lib = mark_failed_fit(lib, fit))
+  }
+  fit0 <- arm_fit(0)
+  fit1 <- arm_fit(1)
+
+  W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib$W, binomial())
+  W_fit <- sl_fit_predict(W[in_train], X_train, list(w = X_test), W_lib,
+                          family = binomial(), obsWeights = wts(ipw, in_train))
+  W_lib <- mark_failed_fit(W_lib, W_fit)
+  W.hat <- W_fit$pred$w
+  if (all(W.hat == 0)) {
+    warning("SuperLearner failed for W.hat. Using mean(W).")
+    W.hat <- rep(mean(W[in_train], na.rm = TRUE), sum(in_test))
+  }
+
+  # clamp propensities away from 0/1, same as nuisance_rf's W.hat
+  W.hat <- trim_ps(W.hat)
+
+  Y0.hat <- fit0$pred
+  Y1.hat <- fit1$pred
+  W_test <- W[in_test]
+  Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
+  po <- dr_pseudo(Y[in_test], W_test, Y1.hat, Y0.hat, W.hat)
+
+  list(po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, W.hat = W.hat,
+       libs = list(Y0 = fit0$lib, Y1 = fit1$lib, W = W_lib))
+}
+
 #' Single leave-one-fold-out nuisance estimation with SuperLearner
 #'
 #' One split, shared with the stage-2 regression via the same fold_indices
 #' (see run_dr_superlearner / stage_2_sl) rather than double-crossfit
-#' nuisances feeding a separately-split stage 2 - the "scf_scf" arm validated
-#' in crossfitting/cf_models.R. The outcome model is a T-learner: one
-#' SuperLearner per arm on X, each fit on that arm's training rows only.
+#' nuisances feeding a separately-split stage 2 - the "scf_scf" arm of
+#' crossfitting/cf_models.R, which calls this directly. The outcome model is a
+#' T-learner - see sl_split_fit.
 #'
 #' @param sl_lib list(W = , Y = , tau = ) - see as_sl_libs(). The pretest's
 #'   dropped learners are returned as attr(, "sl_dropped").
 nuisance_sl <- function(X, Y, W, fold_indices, sl_lib, ipw = NULL,
                         family = gaussian()) {
 
-  binom <- is_binomial(family)
   sl_lib <- as_sl_libs(sl_lib)
 
   cross_fits <- future_map(unique(fold_indices), function(fold) {
     in_train <- fold_indices != fold
-    in_test <- !in_train
-
-    X_train <- X[in_train, ]
-    X_test <- X[in_test, ]
-    Y_family <- if (binom) binomial() else gaussian()
-
-    # one outcome model per arm, each predicting at every held-out row. The
-    # failsafe - SuperLearner returns all-zero predictions when every learner
-    # ends up with zero weight - falls back to that arm's training mean. A fit
-    # that errors outright falls back to the mean inside sl_fit_predict, and
-    # is recorded with the pretest's drops.
-    arm_fit <- function(arm) {
-      in_arm <- in_train & W == arm
-      lib <- pretest_superlearner(Y[in_arm], X[in_arm, ], sl_lib$Y, Y_family)
-      fit <- sl_fit_predict(Y[in_arm], X[in_arm, ], list(test = X_test), lib,
-                            family = Y_family, obsWeights = wts(ipw, in_arm))
-      pred <- fit$pred$test
-      if (all(pred == 0)) {
-        warning("SuperLearner failed for Y.hat in arm W = ", arm, ". Using its mean.")
-        pred <- rep(mean(Y[in_arm], na.rm = TRUE), sum(in_test))
-      }
-      list(pred = pred, lib = mark_failed_fit(lib, fit))
-    }
-    fit0 <- arm_fit(0)
-    fit1 <- arm_fit(1)
-
-    W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib$W, binomial())
-    W_fit <- sl_fit_predict(W[in_train], X_train, list(w = X_test), W_lib,
-                            family = binomial(), obsWeights = wts(ipw, in_train))
-    W_lib <- mark_failed_fit(W_lib, W_fit)
-    W.hat <- W_fit$pred$w
-    if (all(W.hat == 0)) {
-      warning("SuperLearner failed for W.hat. Using mean(W).")
-      W.hat <- rep(mean(W[in_train], na.rm = TRUE), sum(in_test))
-    }
-
-    # clamp propensities away from 0/1, same as nuisance_rf's W.hat
-    W.hat <- trim_ps(W.hat)
-
-    Y0.hat <- fit0$pred
-    Y1.hat <- fit1$pred
-    W_test <- W[in_test]
-    Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
-    po <- dr_pseudo(Y[in_test], W_test, Y1.hat, Y0.hat, W.hat)
-
-    list(fold = fold, po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, W.hat = W.hat,
-         dropped = dropped_table(list(Y0 = fit0$lib, Y1 = fit1$lib, W = W_lib), fold))
+    fit <- sl_split_fit(X, Y, W, in_train, !in_train, sl_lib, ipw, family)
+    c(list(fold = fold), fit[c("po", "Y.hat", "Y0.hat", "W.hat")],
+      list(dropped = dropped_table(fit$libs, fold)))
   }, .options = furrr_options(seed = TRUE))
 
   out <- scatter_folds(cross_fits, fold_indices, c("po", "Y.hat", "Y0.hat", "W.hat"))

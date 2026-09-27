@@ -1,15 +1,15 @@
 ##########
 # title: half-sample bootstrap CI pilot - crossfit-structured RF arms
 ##########
-# Adds confidence intervals to all 11 non-SuperLearner arms of the crossfitting
+# Adds confidence intervals to all 8 non-SuperLearner arms of the crossfitting
 # comparison. Two structural families, and the bootstrap differs between them:
 #
 #   4 crossfit-structured arms - dcf, scf_scf (family dr_rf) and
 #     cf_dcf, cf_scf (family causal_forest). Stage 2 is a genuine per-fold
 #     crossfit, so rf_half_boot / cf_half_boot refit per fold against a
 #     fold-stratified half sample.
-#   7 whole-sample/OOB arms - scf_oob, scf_oob_t, oob_oob, oob_oob_s,
-#     oob_oob_manual (dr_rf) and cf_full_oob, cf_default (causal_forest). No
+#   4 whole-sample/OOB arms - scf_oob, oob_oob (dr_rf) and cf_full_oob,
+#     cf_default (causal_forest). No
 #     fold structure to refit against, so rf_oob_half_boot / cf_oob_half_boot
 #     refit one forest per draw on an unstratified half sample. Those arms get
 #     two bands out of the same refits (all units vs out-of-half only) plus
@@ -77,7 +77,7 @@ Sys.setenv(OMP_NUM_THREADS = grf_threads)
 metaplan <- plan(multisession, workers = workers)
 on.exit(plan(metaplan), add = TRUE)
 
-# point estimates for all 11 RF/CF arms. sl_lib = NULL drops the SuperLearner
+# point estimates for all 8 RF/CF arms. sl_lib = NULL drops the SuperLearner
 # family, and nothing else about the call differs from cf_analysis.R's - so under
 # the same setup_rng_stream(run) seed these arms are bit-identical to the
 # production study's, and cf_ci_testing.R check 1 asserts exactly that.
@@ -114,10 +114,7 @@ boot_spec <- list(
   cf_scf         = list(fn = cf_half_boot,     arg = nz$nz_single,         fi = fold_indices,   fl = fold_list),
   # whole-sample stage 2, OOB predictions
   scf_oob        = list(fn = rf_oob_half_boot, arg = nz$nz_single$po,      fi = NULL,           fl = NULL),
-  scf_oob_t      = list(fn = rf_oob_half_boot, arg = nz$nz_single_t$po,    fi = NULL,           fl = NULL),
   oob_oob        = list(fn = rf_oob_half_boot, arg = nz$nz_oob$po,         fi = NULL,           fl = NULL),
-  oob_oob_s      = list(fn = rf_oob_half_boot, arg = nz$nz_oob_s$po,       fi = NULL,           fl = NULL),
-  oob_oob_manual = list(fn = rf_oob_half_boot, arg = nz$nz_oob_manual$po,  fi = NULL,           fl = NULL),
   cf_full_oob    = list(fn = cf_oob_half_boot, arg = nz$nz_single,         fi = NULL,           fl = NULL),
   cf_default     = list(fn = cf_oob_half_boot, arg = nz$nz_cf_default,     fi = NULL,           fl = NULL)
 )

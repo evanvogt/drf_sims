@@ -9,10 +9,10 @@
 # Kept separate from cf_testing.R since it exercises the bootstrap machinery,
 # which the production study never touches. Checks, in order:
 #   1. the pilot's orchestrator call (run_all_crossfit_variants with
-#      sl_lib = NULL) produces the 11 RF/CF arms, and its nuisances are
+#      sl_lib = NULL) produces the 8 RF/CF arms, and its nuisances are
 #      bit-identical to an independent replay of the same RNG stream
 #   2. (full only) sl_lib = NULL and sl_lib = <library> agree bit-for-bit on all
-#      11 RF/CF arms. The SuperLearner block is strictly after them and gated on
+#      8 RF/CF arms. The SuperLearner block is strictly after them and gated on
 #      sl_lib, so this holds by construction - the point of checking is that the
 #      pilot's saved arms ARE the production study's, not a different draw
 #   3. cf_half_boot's matrix path (double-crossfit nuisances) still resolves
@@ -26,8 +26,8 @@
 #      takes the OOB branch for in-half rows rather than silently predicting
 #      them in-sample, which is the one way this could degrade into a too-narrow
 #      band without erroring
-#   7. every one of the 11 arms has a well-formed band: finite, hb_lb <= tau <=
-#      hb_ub for most units, non-degenerate width - and the 7 OOB arms also have
+#   7. every one of the 8 arms has a well-formed band: finite, hb_lb <= tau <=
+#      hb_ub for most units, non-degenerate width - and the 4 OOB arms also have
 #      a well-formed, distinct hb_out_* band. No target-coverage check: coverage
 #      from this method is already known (confidence_intervals/) to run below
 #      nominal, so that is the pilot's research question, not a pass/fail gate
@@ -67,10 +67,9 @@ n_folds <- 10
 alpha <- 0.05
 CI_boot_smoke <- 20  # small draw count - this is a structure/wiring check, not a coverage study
 
-# the 11 arms the pilot covers, split by which bootstrap they need
+# the 8 arms the pilot covers, split by which bootstrap they need
 crossfit_arms <- c("dcf", "scf_scf", "cf_dcf", "cf_scf")
-oob_arms <- c("scf_oob", "scf_oob_t", "oob_oob", "oob_oob_s", "oob_oob_manual",
-              "cf_full_oob", "cf_default")
+oob_arms <- c("scf_oob", "oob_oob", "cf_full_oob", "cf_default")
 
 # =============================================================================
 cat("\n=== 1. the pilot's orchestrator call ===\n")
@@ -87,11 +86,10 @@ structured <- run_all_crossfit_variants(
 nz <- structured$nuisances
 
 report(setequal(names(structured$arms), c(crossfit_arms, oob_arms)) &&
-         length(structured$arms) == 11,
-       sprintf("sl_lib = NULL yields exactly the 11 RF/CF arms (got %d)", length(structured$arms)))
+         length(structured$arms) == 8,
+       sprintf("sl_lib = NULL yields exactly the 8 RF/CF arms (got %d)", length(structured$arms)))
 
-report(all(c("nz_double", "nz_single", "nz_single_t", "nz_oob", "nz_oob_s",
-             "nz_oob_manual", "nz_cf_default") %in% names(nz)),
+report(all(c("nz_double", "nz_single", "nz_oob", "nz_cf_default") %in% names(nz)),
        "the orchestrator returns every nuisance object the bootstraps need")
 
 # nz_double is the first RNG-consuming fit, straight after the deterministic
@@ -229,10 +227,7 @@ boot_spec <- list(
   cf_scf         = list(fn = cf_half_boot,     arg = nz$nz_single,        fi = fold_indices,   fl = fold_list),
   # whole-sample stage 2, OOB predictions
   scf_oob        = list(fn = rf_oob_half_boot, arg = nz$nz_single$po,     fi = NULL,           fl = NULL),
-  scf_oob_t      = list(fn = rf_oob_half_boot, arg = nz$nz_single_t$po,   fi = NULL,           fl = NULL),
   oob_oob        = list(fn = rf_oob_half_boot, arg = nz$nz_oob$po,        fi = NULL,           fl = NULL),
-  oob_oob_s      = list(fn = rf_oob_half_boot, arg = nz$nz_oob_s$po,      fi = NULL,           fl = NULL),
-  oob_oob_manual = list(fn = rf_oob_half_boot, arg = nz$nz_oob_manual$po, fi = NULL,           fl = NULL),
   cf_full_oob    = list(fn = cf_oob_half_boot, arg = nz$nz_single,        fi = NULL,           fl = NULL),
   cf_default     = list(fn = cf_oob_half_boot, arg = nz$nz_cf_default,    fi = NULL,           fl = NULL)
 )

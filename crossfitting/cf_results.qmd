@@ -67,30 +67,22 @@ coincide for whole-sample arms, so any gap is the ensembling effect alone
 
 ### Arms compared
 
-**DR-learner, random forest (7 arms)**
+**DR-learner, random forest (4 arms)**
 
 | id | stage 1 (nuisances) | stage 2 (final model) |
 |---|---|---|
 | `dcf` | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
 | `scf_scf` | single CF, leave-one-fold-out | crossfit, same folds |
 | `scf_oob` | single CF | whole sample, **OOB** predictions |
-| `oob_oob` | whole sample, **OOB**, T-learner | whole sample, **OOB** |
-| `oob_oob_s` | whole sample, **OOB**, S-learner (`X.orig` workaround) | whole sample, **OOB** |
-| `oob_oob_manual` | whole sample, **OOB**, S-learner (manual tree-loop) | whole sample, **OOB** |
-| `scf_oob_t` | single CF, T-learner | whole sample, OOB (**control**) |
+| `oob_oob` | whole sample, **OOB** | whole sample, **OOB** (production `dr_random_forest`) |
 
-`oob_oob_s` and `oob_oob_manual` give an S-learner a genuine OOB counterfactual
-prediction — matching the S-learner structure used by every other nuisance in
-this study, unlike `oob_oob`'s T-learner workaround. `oob_oob_s` uses the
-maintainer-endorsed but unsupported `forest$X.orig` shortcut
-([grf-labs/grf#307](https://github.com/grf-labs/grf/issues/307));
-`oob_oob_manual` gets the same answer through grf's documented
-`get_tree()`/`get_leaf_node()` API and exists mainly to check the shortcut
-against it. See `crossfitting/README.md` for the full explanation.
+Every DR arm fits its outcome model separately in each treatment arm, as the
+production DR-learners do, so the arms differ only in how they split the
+sample. See `crossfitting/README.md` for the full explanation.
 
-**DR-learner, SuperLearner (2 arms):** `dcf`, `scf_scf` — no
-OOB analogue exists for SuperLearner, so the OOB arms and the T-learner
-control are dropped.
+**DR-learner, SuperLearner (2 arms):** `dcf`, `scf_scf` (production
+`dr_superlearner`) — no OOB analogue exists for SuperLearner, so the OOB arms
+are dropped.
 
 **Causal forest (4 arms)**
 
@@ -181,9 +173,9 @@ metrics_summary <- metrics %>%
 # alpha/2) x MCSE) error bar - see sample_size/continuous/cts_results.R's summary_plot for
 # why this isn't a raw +/- 1x MCSE (~68% coverage, not 95%).
 # facet_wrap (not facet_grid) because variant is family-specific - each
-# family only populates 2-7 of the 11 levels, and facet_grid's free scales
+# family only populates 2-4 of the 8 levels, and facet_grid's free scales
 # only vary per row/column, never per panel, so it would still show every
-# panel all 11 categories. facet_wrap frees per panel, dropping the ones
+# panel all 8 categories. facet_wrap frees per panel, dropping the ones
 # absent from that family's arms.
 # hline = NULL omits the reference line.
 summary_plot <- function(
@@ -751,8 +743,7 @@ decision_table <- function(fam) {
     left_join(runtime, by = "variant") %>%
     arrange(mean_time) %>%
     mutate(
-      # the T-learner control is reported but never eligible for the pick
-      eligible = n_ni == n_scen & variant != variant_labels[["scf_oob_t"]],
+      eligible = n_ni == n_scen,
       pick = ifelse(eligible & cumsum(eligible) == 1, "✓", ""),
       worst_hi_rel = 100 * worst_hi_rel,
       ni = paste0(n_ni, "/", n_scen)
@@ -783,10 +774,6 @@ decision_table(family_labels[["causal_forest"]])
 ```{r decision-table-dr-rf}
 decision_table(family_labels[["dr_rf"]])
 ```
-
-If the pick is `OOB+OOB (S)`, check it agrees with `OOB+OOB (S, manual)` —
-that agreement is what justifies the unsupported `X.orig` shortcut.
-`CF+OOB (T)` is a control, not a candidate.
 
 #### DR-learner (SuperLearner)
 
