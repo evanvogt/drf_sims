@@ -18,10 +18,18 @@
 # DRAW ORDER IS PART OF THE CONTRACT. Every study seeds with setup_rng_stream()
 # and reproduces runs by index, so the sequence of random draws below must not
 # change:
-#     W, X1, X2, [X3], [X4], [X5], [U], [err], X01, X02, X03, cats
-# X3/X4/X5 are drawn only when the scenario needs them, U only for the MNAR
-# mechanisms, and err only for continuous outcomes. R/regression_check.R
-# fingerprints the generated dataset precisely to catch a change here.
+#     W, X1, X2, X3, X4, X5, [U], [err], X01, X02, X03, cats
+# U only for the MNAR mechanisms, and err only for continuous outcomes.
+# R/regression_check.R fingerprints the generated dataset precisely to catch a
+# change here.
+#
+# EVERY SCENARIO DRAWS X1-X5. Since 2026-09-27 X3, X4 and X5 are drawn and
+# returned whether or not the scenario's treatment effect uses them, so every
+# dataset has the same ten covariates and scenarios differ only in the CATE.
+# Before then each was drawn only where the scenario needed it (plus X3 in
+# scenario 9), which shifted every later draw: runs of scenarios 1, 2, 4-8 and
+# 10 made before 2026-09-27 are not reproducible from this file. Which
+# covariates modify the effect is read off te_expr (te_uses()).
 #
 # SCENARIO NUMBERING. The four scenarios the chapters report come first:
 # 1 null, 2 simple, 3 complex, 4 non-linear, then the other six. Before
@@ -197,9 +205,6 @@ SCENARIO_SETS <- list(
     b34 = c(NA, NA, NA, NA, NA, NA, 1, -0.5, NA, NA),
     b45 = c(NA, NA, -0.5, NA, NA, NA, NA, NA, -0.5, NA),
     s2 = 1, s4 = 1, s5 = 1, s_err = 0.5,
-    needs_X3 = c(FALSE, FALSE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE),
-    needs_X4 = c(FALSE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE, TRUE, TRUE, TRUE),
-    needs_X5 = c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE),
     te_expr = TE_10, oracle_expr = ORACLE_10
   ),
 
@@ -215,17 +220,13 @@ SCENARIO_SETS <- list(
     s2 = 1, s4 = 1, s5 = 1, s_err = 0.5,
     # under MNAR-Y, U_term = eval(u_expr)
     bU = 1, sU = 1, u_expr = "bU * U",
-    needs_X3 = c(FALSE, FALSE, TRUE, FALSE, TRUE, TRUE),
-    needs_X4 = c(FALSE, TRUE, TRUE, TRUE, FALSE, TRUE),
-    needs_X5 = c(FALSE, FALSE, TRUE, FALSE, FALSE, FALSE),
     te_expr = TE_MISS, oracle_expr = ORACLE_MISS
   )
 
 )
 
 # The binary table is the continuous one on the risk-difference scale (see the
-# file header and RD_SCALE): the same covariates, needs_* flags and
-# descriptions, the modifiers sign-reversed and scaled by RD_SCALE, and the
+# file header and RD_SCALE): the same covariates and descriptions, the modifiers sign-reversed and scaled by RD_SCALE, and the
 # control risk m0 = p0_lo + (p0_hi - p0_lo) * plogis(b0 + b1 X1 + b2 X2). b1 and
 # b2 are continuous's, and b0 = -1.72 puts the control event rate at
 # E[m0] = 0.400. m0 lies in [0.34, 0.70] (5-95%: 0.35-0.50, SD 0.048), so X1
@@ -305,10 +306,10 @@ GH_NODES <- local({
 
 #' Does a scenario's treatment effect use covariate v?
 #'
-#' Drawn (needs_<v>) and named in te_expr. A covariate the scenario draws but
-#' te_expr never mentions (X3 in scenario 9) gets no quadrature or range axis.
+#' Named in te_expr. Every scenario draws X3-X5, but only the ones te_expr uses
+#' get a quadrature, range or query-grid axis.
 te_uses <- function(params, v) {
-  params[[paste0("needs_", v)]] && grepl(paste0("\\b", v, "\\b"), params$te_expr)
+  grepl(paste0("\\b", v, "\\b"), params$te_expr)
 }
 
 #' Quadrature grid for a scenario's heterogeneity term g
@@ -541,9 +542,9 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
   X1 <- rbinom(n, 1, params$X1_prob)
   X2 <- rnorm(n, 0, params$s2)
 
-  X3 <- if (params$needs_X3) rbinom(n, 1, params$X3_prob) else NULL
-  X4 <- if (params$needs_X4) rnorm(n, 0, params$s4) else NULL
-  X5 <- if (params$needs_X5) rnorm(n, 0, params$s5) else NULL
+  X3 <- rbinom(n, 1, params$X3_prob)
+  X4 <- rnorm(n, 0, params$s4)
+  X5 <- rnorm(n, 0, params$s5)
   U <- if (needs_U) rnorm(n, 0, params$sU) else NULL
 
   err <- if (!binary) rnorm(n, 0, params$s_err) else NULL
@@ -588,14 +589,10 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
   X04 <- as.integer(cats == "A")
   X05 <- as.integer(cats == "B")
 
-  dataset_vars <- list(Y = Y, W = W, X1 = X1, X2 = X2)
-  if (params$needs_X3) dataset_vars$X3 <- X3
-  if (params$needs_X4) dataset_vars$X4 <- X4
-  if (params$needs_X5) dataset_vars$X5 <- X5
-  dataset_vars <- c(dataset_vars,
-                    list(X01 = X01, X02 = X02, X03 = X03, X04 = X04, X05 = X05))
+  dataset <- data.frame(Y = Y, W = W, X1 = X1, X2 = X2, X3 = X3, X4 = X4, X5 = X5,
+                        X01 = X01, X02 = X02, X03 = X03, X04 = X04, X05 = X05)
 
-  result <- list(dataset = as.data.frame(dataset_vars), bW = bW)
+  result <- list(dataset = dataset, bW = bW)
 
   if (return_truth) {
     if (is.null(mech)) {
@@ -635,10 +632,9 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
 #' @param bW calibrated treatment coefficient
 #' @param binary TRUE for a binary set: p0 is then the bounded control risk
 #'   (control_mean())
-#' @param X1,X2 numeric vectors, same length, the two covariates that always
-#'   exist
-#' @param X3,X4,X5 numeric vectors (same length as X1) or NULL, matching that
-#'   scenario's needs_X3/X4/X5 flags
+#' @param X1,X2 numeric vectors, same length, the prognostic covariates
+#' @param X3,X4,X5 numeric vectors (same length as X1); may be NULL where the
+#'   scenario's te_expr does not use them (te_uses())
 truth_at <- function(params, bW, binary, X1, X2, X3 = NULL, X4 = NULL, X5 = NULL) {
   treatment_effect <- eval(
     parse(text = params$te_expr),
@@ -672,7 +668,8 @@ get_oracle_info <- function(scenario, bW, set) {
 # ---- covariate query grid (confidence_intervals/{binary,continuous} only) --
 
 # Fixed reference value for covariates the query grid holds constant (X1, X2,
-# any of X3/X4/X5 this scenario doesn't need, and the unrelated X01..X05).
+# any of X3/X4/X5 this scenario's te_expr doesn't use, and the unrelated
+# X01..X05).
 # Inert for the true CATE on either outcome: tau at a grid point is exactly the
 # scenario's treatment effect, which never involves X1 or X2. It still sets the
 # grid's p0/p1, through m0. (Until the risk-difference DGM the binary CATE was
@@ -683,15 +680,15 @@ GRID_REFERENCE_VALUE <- 0
 #' Fixed covariate-grid query points for a scenario's active HTE covariates
 #'
 #' Varies only the covariates that scenario's treatment effect actually
-#' depends on (X3 if needs_X3, X4 if needs_X4, X5 if needs_X5), at fixed
+#' depends on (whichever of X3/X4/X5 te_uses() finds in te_expr), at fixed
 #' design points rather than data-adaptive ones, since every scenario's
 #' covariate distributions (X1_prob, X3_prob, s2, s4, s5) are constants, not
 #' drawn per replicate - so the same grid is valid, and comparable, across
 #' every run of a given scenario. Everything else - X1, X2, any of X3/X4/X5
-#' this scenario does not need, and the unrelated X01..X05 - is held at
+#' this scenario's effect does not use, and the unrelated X01..X05 - is held at
 #' GRID_REFERENCE_VALUE.
 #'
-#' Scenario 1 ("No HTE") needs none of X3/X4/X5, so the grid degenerates to a
+#' Scenario 1 ("No HTE") uses none of X3/X4/X5, so the grid degenerates to a
 #' single row at the reference point - handled explicitly (expand.grid() over
 #' zero variables returns a 1-row, 0-column data.frame, which is not a useful
 #' thing to cbind against) rather than left to that edge case.
@@ -708,9 +705,9 @@ build_query_grid <- function(scenario, set, covariate_names) {
   params <- params[params$scenario == scenario, ]
 
   active <- list()
-  if (isTRUE(params$needs_X3)) active$X3 <- c(0, 1)
-  if (isTRUE(params$needs_X4)) active$X4 <- seq(-2, 2, length.out = 5)
-  if (isTRUE(params$needs_X5)) active$X5 <- seq(-2, 2, length.out = 5)
+  if (te_uses(params, "X3")) active$X3 <- c(0, 1)
+  if (te_uses(params, "X4")) active$X4 <- seq(-2, 2, length.out = 5)
+  if (te_uses(params, "X5")) active$X5 <- seq(-2, 2, length.out = 5)
 
   grid <- if (length(active) > 0) {
     do.call(expand.grid, c(active, list(stringsAsFactors = FALSE, KEEP.OUT.ATTRS = FALSE)))
@@ -728,7 +725,7 @@ build_query_grid <- function(scenario, set, covariate_names) {
 #'
 #' @param scenario,set,bW as get_oracle_info
 #' @param grid_df output of build_query_grid() - must carry X1, X2 and
-#'   whichever of X3/X4/X5 that scenario needs
+#'   whichever of X3/X4/X5 that scenario's te_expr uses
 #' @return data.frame(p0, p1, tau), one row per row of grid_df
 build_query_grid_truth <- function(scenario, set, bW, grid_df) {
   params <- resolve_set(set)
@@ -736,7 +733,5 @@ build_query_grid_truth <- function(scenario, set, bW, grid_df) {
 
   truth_at(params, bW, is_binary_set(set),
            X1 = grid_df$X1, X2 = grid_df$X2,
-           X3 = if (isTRUE(params$needs_X3)) grid_df$X3 else NULL,
-           X4 = if (isTRUE(params$needs_X4)) grid_df$X4 else NULL,
-           X5 = if (isTRUE(params$needs_X5)) grid_df$X5 else NULL)
+           X3 = grid_df$X3, X4 = grid_df$X4, X5 = grid_df$X5)
 }

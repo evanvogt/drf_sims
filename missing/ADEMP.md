@@ -19,7 +19,7 @@ scenarios numbered as there.
 |---|---|---|
 | scenarios | 1–5 (no HTE; X4; X3 + X4 + X4·X5; cos(X4); X3) | 1, 3, 4, 5, 6 (6: X3 + X4) |
 | n | 500 | 500 |
-| amputed covariates | `both`: X1, X2 and the effect modifiers present (X01–X05 never) | `both` |
+| amputed covariates | `both`: X1–X5 in every scenario, effect modifiers or not (X01–X05 never) | `both` |
 | proportion incomplete | 0.3 (`mice::ampute`) | 0.3 |
 | mechanism | MAR, MNAR, MNAR-Y | MAR |
 | repetitions | 100 | 100 |

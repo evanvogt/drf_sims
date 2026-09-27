@@ -52,6 +52,9 @@ introduce_missingness <- function(data, type, prop, mech, U = NULL) {
   data <- data %>% select(-all_of(NEVER_MISSING))
   covs <- colnames(data)
 
+  # every scenario draws X1-X5 (R/dgm_scenarios.R), so "predictive" is X3-X5
+  # whether or not the scenario's treatment effect uses them, and "both" - what
+  # every missing-data grid runs - amputates all of X1-X5
   prog_vars <- PROGNOSTIC_VARS
   pred_vars <- setdiff(covs, prog_vars)
 

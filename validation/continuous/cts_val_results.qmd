@@ -71,8 +71,8 @@ the interaction test below.
 ### What the truth is
 
 Scenario 2 of the continuous set is `TE_10[2]`: `tau = bW + b4 * X4`, with
-`b4 = -1` and `X4 ~ N(0, 1)`. `X3` is not generated for this scenario
-(`needs_X3 = FALSE`). (Before the 2026-09-26 renumbering this was scenario 3,
+`b4 = -1` and `X4 ~ N(0, 1)`. `X3` and `X5` are generated (every scenario
+draws X1–X5) but do not modify the effect. (Before the 2026-09-26 renumbering this was scenario 3,
 and results produced then sit under `scenario_3/`.)
 
 Three consequences used as reference lines below:

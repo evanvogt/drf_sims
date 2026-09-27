@@ -100,14 +100,15 @@ idx <- grid_indices(study, method = "complete_data")
 contract — every study reproduces runs by index through `setup_rng_stream()`:
 
 ```
-W, X1, X2, [X3], [X4], [X5], [U], [err], X01, X02, X03, cats
+W, X1, X2, X3, X4, X5, [U], [err], X01, X02, X03, cats
 ```
 
-`X3`/`X4`/`X5` only when the scenario needs them, `U` only for the MNAR
-mechanisms, `err` only for continuous outcomes. `regression_check.R`
-fingerprints the generated dataset, not just the estimates, so a change here
-fails loudly. (Binary scenario 10 has drawn `X3` since the risk-difference DGM,
-when it took the continuous scenario 10's form.)
+`U` only for the MNAR mechanisms, `err` only for continuous outcomes.
+`regression_check.R` fingerprints the generated dataset, not just the
+estimates, so a change here fails loudly. Every scenario draws and returns
+`X1`–`X5` since 2026-09-27, whether or not its treatment effect uses them;
+before then `X3`/`X4`/`X5` were drawn only where needed, so earlier runs of
+scenarios 1, 2, 4–8 and 10 are not reproducible from the current code.
 
 Both outcomes are one model, `E[Y | x, W] = m0(x) + W·τ(x)` (`control_mean()`
 gives `m0`). For a binary outcome `m0` is a logistic scaled into

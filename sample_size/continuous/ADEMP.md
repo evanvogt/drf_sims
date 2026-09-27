@@ -10,7 +10,7 @@ and the size and power of the post-estimation heterogeneity tests.
 
 - `W ~ Bernoulli(0.5)`
 - Prognostic: `X1 ~ Bernoulli(0.4)`, `X2 ~ N(0, 1)`
-- Effect modifiers (drawn only where used): `X3 ~ Bernoulli(0.7)`, `X4, X5 ~ N(0, 1)`
+- Potential effect modifiers (drawn in every scenario, whether or not τ uses them): `X3 ~ Bernoulli(0.7)`, `X4, X5 ~ N(0, 1)`
 - Noise: `X01`–`X03 ~ N(0, 1)`; `X04`, `X05` indicators of a 3-level factor (0.45 / 0.30 / 0.25)
 - `Y = 0.4 − 0.5·X1 + X2 + W·τ(x) + ε`, `ε ~ N(0, 0.5²)`
 - `τ(x) = bW + g(x)`; `bW` set so the true ATE gives 80% power in an

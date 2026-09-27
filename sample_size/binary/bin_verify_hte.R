@@ -61,8 +61,7 @@ set.seed(2026)
 N <- 1e5
 cv <- list(X3 = rbinom(N, 1, 0.7), X4 = rnorm(N), X5 = rnorm(N))
 tau_at <- function(p, bW, X1, X2) {
-  truth_at(p, bW, TRUE, X1, X2,
-           if (p$needs_X3) cv$X3, if (p$needs_X4) cv$X4, if (p$needs_X5) cv$X5)$tau
+  truth_at(p, bW, TRUE, X1, X2, cv$X3, cv$X4, cv$X5)$tau
 }
 
 shift <- 0

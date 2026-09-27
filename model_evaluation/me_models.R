@@ -350,8 +350,8 @@ fit_tau_SL <- function(X, fold_list, fold_indices, po, hyper_list) {
 candidate_hyperparams <- function(p) {
   # rf2/rf3's mtry is scaled to ncol(X) rather than fixed at 30/10. Those
   # fixed values came from the old benchtm-based prototype, which had a much
-  # wider covariate set than R/dgm_scenarios.R produces (7-9 columns across
-  # this study's scenarios) - left as literals they make ranger error out
+  # wider covariate set than R/dgm_scenarios.R produces (10 columns in every
+  # scenario) - left as literals they make ranger error out
   # ("mtry can not be larger than number of variables in data"), which is
   # how this was actually found (me_testing.R full, check 4). rf2 uses every
   # covariate each split (the high-mtry extreme, well-defined at any p);
