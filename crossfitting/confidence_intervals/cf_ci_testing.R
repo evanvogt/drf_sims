@@ -9,10 +9,10 @@
 # Kept separate from cf_testing.R since it exercises the bootstrap machinery,
 # which the production study never touches. Checks, in order:
 #   1. the pilot's orchestrator call (run_all_crossfit_variants with
-#      sl_lib = NULL) produces the 12 RF/CF arms, and its nuisances are
+#      sl_lib = NULL) produces the 11 RF/CF arms, and its nuisances are
 #      bit-identical to an independent replay of the same RNG stream
 #   2. (full only) sl_lib = NULL and sl_lib = <library> agree bit-for-bit on all
-#      12 RF/CF arms. The SuperLearner block is strictly after them and gated on
+#      11 RF/CF arms. The SuperLearner block is strictly after them and gated on
 #      sl_lib, so this holds by construction - the point of checking is that the
 #      pilot's saved arms ARE the production study's, not a different draw
 #   3. cf_half_boot's matrix path (double-crossfit nuisances) still resolves
@@ -26,16 +26,13 @@
 #      takes the OOB branch for in-half rows rather than silently predicting
 #      them in-sample, which is the one way this could degrade into a too-narrow
 #      band without erroring
-#   7. every one of the 12 arms has a well-formed band: finite, hb_lb <= tau <=
+#   7. every one of the 11 arms has a well-formed band: finite, hb_lb <= tau <=
 #      hb_ub for most units, non-degenerate width - and the 7 OOB arms also have
 #      a well-formed, distinct hb_out_* band. No target-coverage check: coverage
 #      from this method is already known (confidence_intervals/) to run below
 #      nominal, so that is the pilot's research question, not a pass/fail gate
 #   8. the OOB arms' var_oob is finite and positive and normal_interval turns it
-#      into a well-formed band; the 5 crossfit arms carry no var_oob
-#   9. scf_scf_new is wired to fold_indices_b, not fold_indices - the one
-#      exception in an otherwise uniform table, and the easiest place for a
-#      copy-paste slip
+#      into a well-formed band; the 4 crossfit arms carry no var_oob
 
 library(dplyr)
 library(furrr)
@@ -70,8 +67,8 @@ n_folds <- 10
 alpha <- 0.05
 CI_boot_smoke <- 20  # small draw count - this is a structure/wiring check, not a coverage study
 
-# the 12 arms the pilot covers, split by which bootstrap they need
-crossfit_arms <- c("dcf", "scf_scf", "scf_scf_new", "cf_dcf", "cf_scf")
+# the 11 arms the pilot covers, split by which bootstrap they need
+crossfit_arms <- c("dcf", "scf_scf", "cf_dcf", "cf_scf")
 oob_arms <- c("scf_oob", "scf_oob_t", "oob_oob", "oob_oob_s", "oob_oob_manual",
               "cf_full_oob", "cf_default")
 
@@ -90,22 +87,21 @@ structured <- run_all_crossfit_variants(
 nz <- structured$nuisances
 
 report(setequal(names(structured$arms), c(crossfit_arms, oob_arms)) &&
-         length(structured$arms) == 12,
-       sprintf("sl_lib = NULL yields exactly the 12 RF/CF arms (got %d)", length(structured$arms)))
+         length(structured$arms) == 11,
+       sprintf("sl_lib = NULL yields exactly the 11 RF/CF arms (got %d)", length(structured$arms)))
 
 report(all(c("nz_double", "nz_single", "nz_single_t", "nz_oob", "nz_oob_s",
              "nz_oob_manual", "nz_cf_default") %in% names(nz)),
        "the orchestrator returns every nuisance object the bootstraps need")
 
-# nz_double is the first RNG-consuming fit, immediately after
-# fold_indices_b <- sample(fold_indices) - so replaying that prefix of the stream
-# by hand must reproduce it bit-for-bit. This is what "the fold/pair setup is
-# still where it was, and nothing was reordered ahead of stage 1" means to check.
+# nz_double is the first RNG-consuming fit, straight after the deterministic
+# fold/pair setup - so replaying that prefix of the stream by hand must
+# reproduce it bit-for-bit. This is what "the fold/pair setup is still where it
+# was, and nothing was reordered ahead of stage 1" means to check.
 nz_double_replay <- {
   setup_rng_stream(3)
   fold_indices <- sort(seq(n) %% n_folds) + 1
   fold_pairs <- utils::combn(unique(fold_indices), 2, simplify = FALSE)
-  fold_indices_b <- sample(fold_indices)  # consume the same RNG draw the orchestrator does
   nuisance_double_rf(as.matrix(gen$data[, -c(1:2)]), gen$data$Y, gen$data$W,
                      fold_indices, fold_pairs, grf_threads)
 }
@@ -144,8 +140,6 @@ Y <- gen$data$Y
 W <- gen$data$W
 fold_indices <- structured$fold_indices
 fold_list <- unique(fold_indices)
-fold_indices_b <- structured$fold_indices_b
-fold_list_b <- unique(fold_indices_b)
 
 report(is.matrix(nz$nz_double$Y.hat.cf_matrix), "nz_double carries the matrix fields cf_half_boot's matrix path expects")
 
@@ -231,7 +225,6 @@ boot_spec <- list(
   # per-fold crossfit stage 2
   dcf            = list(fn = rf_half_boot,     arg = nz$nz_double$po,     fi = fold_indices,   fl = fold_list),
   scf_scf        = list(fn = rf_half_boot,     arg = nz$nz_single$po,     fi = fold_indices,   fl = fold_list),
-  scf_scf_new    = list(fn = rf_half_boot,     arg = nz$nz_single$po,     fi = fold_indices_b, fl = fold_list_b),
   cf_dcf         = list(fn = cf_half_boot,     arg = nz$nz_double,        fi = fold_indices,   fl = fold_list),
   cf_scf         = list(fn = cf_half_boot,     arg = nz$nz_single,        fi = fold_indices,   fl = fold_list),
   # whole-sample stage 2, OOB predictions
@@ -294,24 +287,6 @@ for (nm in crossfit_arms) {
   report(is.null(structured$arms[[nm]]$var_oob),
         sprintf("%s: crossfit arm carries no var_oob (grf's variance does not apply)", nm))
 }
-
-# =============================================================================
-cat("\n=== 9. scf_scf_new is wired to fold_indices_b, not fold_indices ===\n")
-# the one exception in an otherwise uniform boot_spec table - confirm a
-# fold_indices-based call would give a materially different (and wrong) band,
-# so a copy-paste slip that dropped the exception would show up here
-
-wrong_band <- rf_half_boot(X, Y, W, nz$nz_single$po, structured$arms$scf_scf_new$tau,
-                           CI_boot_smoke, 0.5, alpha, fold_indices, fold_list)
-right_band <- bands$scf_scf_new
-
-# fold_indices and fold_indices_b are different permutations of the same fold
-# sizes (checked in cf_testing.R), so a half-sample bootstrap stratified by the
-# wrong split draws a different set of folds and should give a numerically
-# different band width from the correct one
-width_diff <- mean(abs((right_band$hb_ub - right_band$hb_lb) - (wrong_band$hb_ub - wrong_band$hb_lb)))
-report(width_diff > 1e-6,
-      sprintf("scf_scf_new's fold_indices_b band differs from a fold_indices-based band (mean |width diff| = %.3e)", width_diff))
 
 # =============================================================================
 plan(sequential)

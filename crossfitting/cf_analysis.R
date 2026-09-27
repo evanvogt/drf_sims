@@ -27,7 +27,7 @@ n_test <- 2000
 params <- expand.grid(
   scenario = c(1, 4, 6, 8),
   n = 500,
-  run = c(1:500),
+  run = c(1:100),
   stringsAsFactors = F
 )
 
@@ -71,7 +71,6 @@ res <- run_all_crossfit_variants(
 results <- list(
   arms = res$arms,
   fold_indices = res$fold_indices,
-  fold_indices_b = res$fold_indices_b,
   truth_tau = gen$truth_tau,
   truth_test_tau = gen$truth_test_tau,
   bW = gen$bW,

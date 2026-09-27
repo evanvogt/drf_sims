@@ -51,14 +51,13 @@ run_metrics <- function(sim_res, scenario) {
 }
 
 # display order and labels, used by cf_results.R
-variant_levels <- c("dcf", "scf_scf", "scf_scf_new", "scf_oob",
+variant_levels <- c("dcf", "scf_scf", "scf_oob",
                     "scf_oob_t", "oob_oob", "oob_oob_s", "oob_oob_manual",
                     "cf_dcf", "cf_scf", "cf_full_oob", "cf_default")
 
 variant_labels <- c(
   dcf = "Double CF",
   scf_scf = "CF+CF",
-  scf_scf_new = "CF+CF (new)",
   scf_oob = "CF+OOB",
   scf_oob_t = "CF+OOB (T)",
   oob_oob = "OOB+OOB",

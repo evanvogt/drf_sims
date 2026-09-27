@@ -42,7 +42,7 @@ metrics_all <- metrics %>%
   droplevels()
 
 # every figure below the method comparison is about the half-sample bootstrap,
-# the one interval available for all 12 arms. The other two methods only exist
+# the one interval available for all 11 arms. The other two methods only exist
 # for the 7 whole-sample/OOB arms, so mixing them in would put three rows of a
 # different kind next to nine of one kind on the same axis.
 metrics <- filter(metrics_all, ci_method == ci_method_labels[["half_boot"]])

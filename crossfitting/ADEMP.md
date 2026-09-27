@@ -17,7 +17,7 @@ The `continuous/` DGM (see `continuous/ADEMP.md`), at:
 |---|---|
 | scenarios | 1 (no HTE), 4 (cosine), 6 (two variables), 8 (single effects + interaction) |
 | n | 500 (training) + independent test sample of 2000 from the same DGM |
-| repetitions | 500 per scenario |
+| repetitions | 100 per scenario |
 
 All arms in a replicate share one fold assignment (V = 10).
 

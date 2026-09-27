@@ -17,10 +17,10 @@ study <- study_config(
   grid = expand.grid(
     scenario = c(1, 4, 6, 8),
     n = 500,
-    run = c(1:500),
+    run = c(1:100),
     stringsAsFactors = FALSE
   ),
   path_cols   = c("scenario", "n"),
-  n_sims      = 500,
+  n_sims      = 100,
   failed_file = here("crossfitting", "jobscripts", "failed_ids.txt")
 )

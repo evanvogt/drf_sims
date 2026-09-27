@@ -10,14 +10,13 @@ instead of 10 — 4.5x the cost — and it has never been benchmarked.
 
 **The hypothesis.** Under ordinary crossfitting, a stage-2 training row `i` carries a
 pseudo-outcome from a nuisance model trained on every fold except `i`'s, which
-*includes* the held-out test fold. Re-randomising the stage-2 split cannot remove
-that dependence. So if double crossfitting matters, `scf_scf` and `scf_scf_new`
-should perform alike and both should differ from `dcf`. If they don't, the cheap
-procedure is enough and the rest of the study can be sped up 4.5x.
+*includes* the held-out test fold. So if double crossfitting matters, `scf_scf`
+should differ from `dcf`. If it doesn't, the cheap procedure is enough and the
+rest of the study can be sped up 4.5x.
 
 ## Design
 
-Fixed at **n = 500, V = 10, scenarios 1 / 4 / 6 / 8, 500 runs** (2000 array jobs).
+Fixed at **n = 500, V = 10, scenarios 1 / 4 / 6 / 8, 100 runs** (400 array jobs).
 All variants within a replicate share one fold assignment, so differences are
 attributable to the procedure rather than to the fold draw.
 
@@ -43,13 +42,12 @@ and averages the `V` scores, which is the like-for-like reading against a
 whole-sample arm's single model. For whole-sample arms the two coincide, so any
 gap between them is the ensembling effect alone (`cf_ensemble_effect.png`).
 
-### DR-learner, random forest (8 arms)
+### DR-learner, random forest (7 arms)
 
 | id | stage 1 (nuisances) | stage 2 (final model) |
 |---|---|---|
 | `dcf` | double CF over fold pairs | crossfit, same folds, column `k` (**status quo**) |
 | `scf_scf` | single CF, leave-one-fold-out | crossfit, same folds |
-| `scf_scf_new` | single CF | crossfit, **fresh independent** split |
 | `scf_oob` | single CF | whole sample, **OOB** predictions |
 | `oob_oob` | whole sample, **OOB**, **T-learner** | whole sample, **OOB** |
 | `oob_oob_s` | whole sample, **OOB**, S-learner (`X.orig` workaround) | whole sample, **OOB** |
@@ -76,9 +74,9 @@ the training `Y` in the leaf the counterfactual point falls into — and exists 
 as a check on the shortcut (see `cf_testing.R`'s section 4). Both are kept alongside
 `oob_oob` rather than replacing it.
 
-### DR-learner, SuperLearner (3 arms)
+### DR-learner, SuperLearner (2 arms)
 
-`dcf`, `scf_scf`, `scf_scf_new`. No OOB analogue exists for SuperLearner, so the OOB
+`dcf`, `scf_scf`. No OOB analogue exists for SuperLearner, so the OOB
 arms and the T-learner control are dropped.
 
 ### Causal forest (4 arms)
@@ -101,21 +99,21 @@ arms and the T-learner control are dropped.
 | `cf_metrics.R` | metric definitions (functions only, no side effects) |
 | `cf_collect.R` | streams the per-run files through `cf_metrics.R` into `cf_metrics.RDS` |
 | `cf_results.R` | figures |
-| `confidence_intervals/cf_ci_analysis.R` | confidence-interval pilot, all 12 RF/CF arms — see below |
+| `confidence_intervals/cf_ci_analysis.R` | confidence-interval pilot, all 11 RF/CF arms — see below |
 | `confidence_intervals/cf_ci_testing.R` | verification checks for the CI pilot (`full` adds the production-parity check) |
 | `confidence_intervals/cf_ci_check.R` / `cf_ci_metrics.R` / `cf_ci_collect.R` | CI pilot's own check/metrics/collect, parallel to the files above |
 
 ## Half-sample bootstrap CI pilot
 
-`cf_ci_analysis.R` adds confidence intervals to **all 12 non-SuperLearner arms**.
-The 3 SuperLearner arms stay out of scope (not RF-based), which is why the pilot
+`cf_ci_analysis.R` adds confidence intervals to **all 11 non-SuperLearner arms**.
+The 2 SuperLearner arms stay out of scope (not RF-based), which is why the pilot
 calls `run_all_crossfit_variants(sl_lib = NULL)`.
 
-The 12 split by stage-2 structure, and the bootstrap differs between them:
+The 11 split by stage-2 structure, and the bootstrap differs between them:
 
 | arms | bootstrap | half sample | `tau_half` |
 |---|---|---|---|
-| `dcf`, `scf_scf`, `scf_scf_new`, `cf_dcf`, `cf_scf` | `rf_half_boot` / `cf_half_boot` | stratified by fold | refit per fold, predict the held-out fold |
+| `dcf`, `scf_scf`, `cf_dcf`, `cf_scf` | `rf_half_boot` / `cf_half_boot` | stratified by fold | refit per fold, predict the held-out fold |
 | `scf_oob`, `scf_oob_t`, `oob_oob`, `oob_oob_s`, `oob_oob_manual`, `cf_full_oob`, `cf_default` | `rf_oob_half_boot` / `cf_oob_half_boot` | unstratified `floor(n/2)` | one refit, OOB for in-half rows and `newdata` for the rest |
 
 Nuisances are held fixed and sliced in every case — only the final-stage forest
@@ -160,7 +158,7 @@ grf returns OOB variance estimates (bootstrap of little bags) alongside the
 predictions at no extra compute, and `R/metrics.R`'s `normal_interval()` — the
 same function `confidence_intervals/binary/` uses for its `causal_forest_inbuilt`
 method — turns those into a CI. `stage2_whole_rf`/`cf_whole` now return
-`var_oob`, and `arm()` carries it; the 5 crossfit arms have none, and downstream
+`var_oob`, and `arm()` carries it; the 4 crossfit arms have none, and downstream
 code keys off exactly that.
 
 This is natural for an OOB arm and awkward for a crossfit one, whose `tau` is
@@ -201,7 +199,7 @@ original double-crossfit matrix nuisances (`cf_dcf`) — a shape-detection chang
 backward compatible with its existing caller in `R/cate_models.R`.
 
 Results land in `../results/crossfitting_ci/`, a wholly separate tree from
-`../results/crossfitting/` — the production study's 2000 replicates are
+`../results/crossfitting/` — the production study's 400 replicates are
 never read or touched. Per-run files drop the bootstrap `draws` matrices
 before saving (only the bounds and `var_oob` are needed downstream), following
 this folder's existing small-file convention.
@@ -212,7 +210,7 @@ run below nominal — that's the pilot's actual research question, so
 most units, non-degenerate width) rather than gating on ~95% coverage.
 
 `cf_ci_metrics.R` emits one row per **(arm, `ci_method`)**, so a replicate
-produces `5 + 7 × 3 = 26` rows. That multi-row shape is the convention
+produces `4 + 7 × 3 = 25` rows. That multi-row shape is the convention
 `R/metrics.R`'s `compute_metrics` already documents for the CI studies.
 
 ```bash
@@ -320,7 +318,7 @@ Rscript crossfitting/cf_testing.R              # structure + regression checks (
 Rscript crossfitting/cf_testing.R full         # adds the SuperLearner family
 
 qsub crossfitting/jobscripts/cf_1.sh        # the study itself
-Rscript crossfitting/cf_check.R             # 2000/2000?
+Rscript crossfitting/cf_check.R             # 400/400?
 qsub crossfitting/jobscripts/cf_collect.sh
 Rscript crossfitting/cf_results.R
 ```

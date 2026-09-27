@@ -41,7 +41,7 @@ which *includes* the held-out test fold.
 ### Design
 
 Fixed at **n = 500, V = 10 folds, scenarios Null / Simple / Interaction /
-Non-linear, 500 replicates** (2000 array jobs). Every arm is scored twice:
+Non-linear, 100 replicates** (400 array jobs). Every arm is scored twice:
 against the known truth on the **training** sample, and on an independent **test**
 sample of 2000 drawn from the same DGP.
 
@@ -62,7 +62,7 @@ coincide for whole-sample arms, so any gap is the ensembling effect alone
 
 ### Arms compared
 
-**DR-learner, random forest (8 arms)**
+**DR-learner, random forest (7 arms)**
 
 | id | stage 1 (nuisances) | stage 2 (final model) |
 |---|---|---|
@@ -111,8 +111,6 @@ metrics <- readRDS(file.path(res_path, "cf_metrics.RDS"))
 
 # tidy up
 metrics <- metrics %>%
-  # remove some uninteresting things
-  filter(!(arm == "scf_scf_new" | arm == "sl_scf_scf_new")) %>%
   mutate(
     scenario = factor(
       case_when(scenario == 1 ~ "Null",
@@ -163,9 +161,9 @@ metrics_summary <- metrics %>%
 # alpha/2) x MCSE) error bar - see continuous/cts_results.R's summary_plot for
 # why this isn't a raw +/- 1x MCSE (~68% coverage, not 95%).
 # facet_wrap (not facet_grid) because variant is family-specific - each
-# family only populates 5-8 of the 13 levels, and facet_grid's free scales
+# family only populates 2-7 of the 11 levels, and facet_grid's free scales
 # only vary per row/column, never per panel, so it would still show every
-# panel all 13 categories. facet_wrap frees per panel, dropping the ones
+# panel all 11 categories. facet_wrap frees per panel, dropping the ones
 # absent from that family's arms.
 summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05) {
   z <- qnorm(1 - alpha / 2)

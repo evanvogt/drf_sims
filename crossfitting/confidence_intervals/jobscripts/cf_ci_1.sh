@@ -1,9 +1,9 @@
 #!/bin/bash
-# Pilot: half-sample bootstrap CIs for the 5 crossfit-structured RF arms.
+# Pilot: half-sample bootstrap CIs for the 11 RF/CF arms.
 # 3 scenarios x 50 runs = 150 array jobs. Resources below are hand-set
 # placeholders - see crossfitting/README.md's "Sizing the CI pilot's array job"
 # before submitting the full array. The bootstrap refits (~200 x V forests per
-# arm x 5 arms) dominate cost here, well beyond what cf_1.sh's
+# crossfit arm x 4 crossfit arms) dominate cost here, well beyond what cf_1.sh's
 # point-estimate-only timings would suggest.
 #PBS -l walltime=01:00:00
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=5gb

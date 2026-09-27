@@ -14,5 +14,5 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 # reads every per-run file and computes the metrics in one streaming pass.
-# only 150 replicates x 5 arms here, so 4gb is generous headroom.
+# only 150 replicates x 11 arms here, so 4gb is generous headroom.
 Rscript cf_ci_collect.R

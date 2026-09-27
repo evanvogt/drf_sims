@@ -28,8 +28,8 @@ library(knitr)
 ## Does the pilot's bootstrap deliver nominal coverage?
 
 
-The 12 split into two structural families, and the bootstrap differs between
-them. The 5 arms whose stage 2 is a genuine per-fold crossfit use
+The 11 split into two structural families, and the bootstrap differs between
+them. The 4 arms whose stage 2 is a genuine per-fold crossfit use
 `rf_half_boot` / `cf_half_boot`, which refit per fold against a fold-stratified
 half sample. The 7 whole-sample / OOB arms have no fold structure to refit
 against, so `rf_oob_half_boot` / `cf_oob_half_boot` refit one forest per draw
@@ -85,7 +85,7 @@ The OOB arms carry three intervals, not one, and they are nearly free to have:
 
 | `ci_method` | arms | kind | how |
 |---|---|---|---|
-| `half_boot` | all 12 | simultaneous | every unit scored in every draw |
+| `half_boot` | all 11 | simultaneous | every unit scored in every draw |
 | `half_boot_out` | the 7 OOB arms | simultaneous | same refits, only out-of-half units scored |
 | `grf_normal` | the 7 OOB arms | **pointwise** | grf's own OOB variance, no bootstrap at all |
 
@@ -123,8 +123,6 @@ metrics <- readRDS(file.path(res_path, "cf_ci_metrics.RDS"))
 
 # tidy up - no `set` column: training-sample tau only
 metrics_all <- metrics %>%
-  # filter out annoying scenarios
-  filter(!(arm == "scf_scf_new")) %>%
   mutate(
     scenario = factor(
       case_when(scenario == 1 ~ "Null",
@@ -140,7 +138,7 @@ metrics_all <- metrics %>%
   droplevels()
 
 # every section below the method comparison is about the half-sample bootstrap,
-# the one interval available for all 12 arms
+# the one interval available for all 11 arms
 metrics <- filter(metrics_all, ci_method == ci_method_labels[["half_boot"]])
 
 # per variant summaries

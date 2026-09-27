@@ -1,10 +1,10 @@
 ##########
 # title: half-sample bootstrap CI pilot - crossfit-structured RF arms
 ##########
-# Adds confidence intervals to all 12 non-SuperLearner arms of the crossfitting
+# Adds confidence intervals to all 11 non-SuperLearner arms of the crossfitting
 # comparison. Two structural families, and the bootstrap differs between them:
 #
-#   5 crossfit-structured arms - dcf, scf_scf, scf_scf_new (family dr_rf) and
+#   4 crossfit-structured arms - dcf, scf_scf (family dr_rf) and
 #     cf_dcf, cf_scf (family causal_forest). Stage 2 is a genuine per-fold
 #     crossfit, so rf_half_boot / cf_half_boot refit per fold against a
 #     fold-stratified half sample.
@@ -15,7 +15,7 @@
 #     two bands out of the same refits (all units vs out-of-half only) plus
 #     grf's own OOB variance interval - see crossfitting/README.md.
 #
-# The 3 SuperLearner arms stay out of scope (not RF-based), which is why this
+# The 2 SuperLearner arms stay out of scope (not RF-based), which is why this
 # calls run_all_crossfit_variants with sl_lib = NULL.
 #
 # A pilot, not the production run: reduced grid (3 scenarios x 50 runs),
@@ -77,7 +77,7 @@ Sys.setenv(OMP_NUM_THREADS = grf_threads)
 metaplan <- plan(multisession, workers = workers)
 on.exit(plan(metaplan), add = TRUE)
 
-# point estimates for all 12 RF/CF arms. sl_lib = NULL drops the SuperLearner
+# point estimates for all 11 RF/CF arms. sl_lib = NULL drops the SuperLearner
 # family, and nothing else about the call differs from cf_analysis.R's - so under
 # the same setup_rng_stream(run) seed these arms are bit-identical to the
 # production study's, and cf_ci_testing.R check 1 asserts exactly that.
@@ -96,18 +96,11 @@ W <- gen$data$W
 nz <- structured$nuisances
 fold_indices <- structured$fold_indices
 fold_list <- unique(fold_indices)
-fold_indices_b <- structured$fold_indices_b
-fold_list_b <- unique(fold_indices_b)
 
 # table-driven bootstrap wiring: all four bootstraps in R/bootstrap_ci.R share
 # the same argument order/count - rf_half_boot(X,Y,W,po,...) ignores Y and W, and
 # the two OOB bootstraps ignore the trailing fold arguments - so one loop drives
 # every arm.
-#
-# scf_scf_new is the ONE crossfit row that swaps fold_indices for fold_indices_b.
-# It must: its point estimate (stage2_crossfit_rf inside run_all_crossfit_variants)
-# was fit under that split, even though its po vector comes from the same
-# leave-one-fold-out nuisance (nz_single) as scf_scf.
 #
 # The OOB rows pass fi = NULL, fl = NULL because a whole-sample arm has no folds.
 # cf_default is the one arm with no nuisance stage of its own - nz_cf_default is
@@ -117,7 +110,6 @@ boot_spec <- list(
   # per-fold crossfit stage 2
   dcf            = list(fn = rf_half_boot,     arg = nz$nz_double$po,      fi = fold_indices,   fl = fold_list),
   scf_scf        = list(fn = rf_half_boot,     arg = nz$nz_single$po,      fi = fold_indices,   fl = fold_list),
-  scf_scf_new    = list(fn = rf_half_boot,     arg = nz$nz_single$po,      fi = fold_indices_b, fl = fold_list_b),
   cf_dcf         = list(fn = cf_half_boot,     arg = nz$nz_double,         fi = fold_indices,   fl = fold_list),
   cf_scf         = list(fn = cf_half_boot,     arg = nz$nz_single,         fi = fold_indices,   fl = fold_list),
   # whole-sample stage 2, OOB predictions
@@ -146,7 +138,6 @@ for (nm in names(boot_spec)) {
 results <- list(
   arms = structured$arms,
   fold_indices = fold_indices,
-  fold_indices_b = fold_indices_b,
   truth_tau = gen$truth_tau,
   truth_test_tau = gen$truth_test_tau,
   bW = gen$bW,

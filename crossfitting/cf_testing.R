@@ -142,7 +142,6 @@ cat(sprintf(
 expected_rf <- c(
   "dcf",
   "scf_scf",
-  "scf_scf_new",
   "scf_oob",
   "scf_oob_t",
   "oob_oob",
@@ -152,8 +151,7 @@ expected_rf <- c(
 expected_cf <- c("cf_dcf", "cf_scf", "cf_full_oob", "cf_default")
 expected_sl <- c(
   "sl_dcf",
-  "sl_scf_scf",
-  "sl_scf_scf_new"
+  "sl_scf_scf"
 )
 expected <- c(expected_rf, expected_cf, if (full) expected_sl)
 
@@ -237,15 +235,6 @@ whole_agree <- vapply(
 report(
   all(whole_agree),
   "single-model and ensemble test MSE coincide for the whole-sample arms"
-)
-
-report(
-  !identical(res$fold_indices, res$fold_indices_b),
-  "the fresh stage-2 split differs from the stage-1 split"
-)
-report(
-  all(sort(res$fold_indices_b) == sort(res$fold_indices)),
-  "the fresh split is a permutation of the same fold sizes"
 )
 
 # =============================================================================

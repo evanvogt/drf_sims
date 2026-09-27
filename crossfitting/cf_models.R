@@ -366,7 +366,7 @@ nuisance_single_sl <- function(X, Y, W, fold_indices, sl_lib) {
 stage2_crossfit_rf <- function(X, po, X_test, fold_indices, num.threads = NULL) {
   po_is_matrix <- is.matrix(po)
   # a po matrix is indexed by the fold it is valid for, so it is only meaningful
-  # against the split it was built from - never against the fresh split
+  # against the split it was built from
   stopifnot(!po_is_matrix || ncol(po) == length(unique(fold_indices)))
 
   fits <- future_map(unique(fold_indices), function(fold) {
@@ -520,11 +520,11 @@ arm <- function(family, variant, tau, tau_test, time_nuisance, time_stage2,
 #' @param truth_test true CATEs on the test sample. Used for scoring only - it is
 #'   never seen by any model - and only to compute the per-arm mse_test_single.
 #'   NULL leaves that field NA.
-#' @return list with $arms (named list of arm records), $fold_indices,
-#'   $fold_indices_b, and $nuisances (the raw nuisance objects, needed by the
+#' @return list with $arms (named list of arm records), $fold_indices, and
+#'   $nuisances (the raw nuisance objects, needed by the
 #'   half-sample bootstraps in R/bootstrap_ci.R - see
 #'   crossfitting/confidence_intervals/cf_ci_analysis.R, which calls this with
-#'   sl_lib = NULL and bootstraps all 12 RF/CF arms). $nuisances is large; every
+#'   sl_lib = NULL and bootstraps all 11 RF/CF arms). $nuisances is large; every
 #'   caller picks the fields it saves, and cf_analysis.R deliberately saves none
 #'   of them, keeping the production per-run files small.
 run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
@@ -541,9 +541,6 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   fold_indices <- sort(seq(n_obs) %% n_folds) + 1
   fold_list <- unique(fold_indices)
   fold_pairs <- utils::combn(fold_list, 2, simplify = FALSE)
-
-  # a fresh, independent split for the scf_scf_new variant
-  fold_indices_b <- sample(fold_indices)
 
   arms <- list()
 
@@ -571,10 +568,6 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   s <- timed(stage2_crossfit_rf(X, nz_single$value$po, X_test, fold_indices, num.threads))
   arms$scf_scf <- arm("dr_rf", "scf_scf", s$value$tau, s$value$tau_test, nz_single$time, s$time,
                       s$value$tau_test_folds, truth_test)
-
-  s <- timed(stage2_crossfit_rf(X, nz_single$value$po, X_test, fold_indices_b, num.threads))
-  arms$scf_scf_new <- arm("dr_rf", "scf_scf_new", s$value$tau, s$value$tau_test,
-                          nz_single$time, s$time, s$value$tau_test_folds, truth_test)
 
   s <- timed(stage2_whole_rf(X, nz_single$value$po, X_test, num.threads))
   arms$scf_oob <- arm("dr_rf", "scf_oob", s$value$tau_oob, s$value$tau_test,
@@ -650,13 +643,9 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
     s <- timed(stage2_crossfit_sl(X_df, sz_single$value$po, X_test_df, fold_indices, sl_lib))
     arms$sl_scf_scf <- arm("dr_sl", "scf_scf", s$value$tau, s$value$tau_test,
                            sz_single$time, s$time, s$value$tau_test_folds, truth_test)
-
-    s <- timed(stage2_crossfit_sl(X_df, sz_single$value$po, X_test_df, fold_indices_b, sl_lib))
-    arms$sl_scf_scf_new <- arm("dr_sl", "scf_scf_new", s$value$tau, s$value$tau_test,
-                               sz_single$time, s$time, s$value$tau_test_folds, truth_test)
   }
 
-  list(arms = arms, fold_indices = fold_indices, fold_indices_b = fold_indices_b,
+  list(arms = arms, fold_indices = fold_indices,
        nuisances = list(nz_double = nz_double$value, nz_single = nz_single$value,
                         nz_single_t = nz_single_t$value, nz_oob = nz_oob$value,
                         nz_oob_s = nz_oob_s$value, nz_oob_manual = nz_oob_manual$value,
