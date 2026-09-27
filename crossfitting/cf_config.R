@@ -20,7 +20,7 @@ study <- study_config(
     run = c(1:100),
     stringsAsFactors = FALSE
   ),
-  path_cols   = c("scenario", "n"),
+  path_cols   = "scenario",
   n_sims      = 100,
   failed_file = here("crossfitting", "jobscripts", "failed_ids.txt")
 )

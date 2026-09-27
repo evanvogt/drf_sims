@@ -24,7 +24,7 @@ study <- study_config(
     run = c(1:50),
     stringsAsFactors = FALSE
   ),
-  path_cols   = c("scenario", "n"),
+  path_cols   = "scenario",
   n_sims      = 50,
   failed_file = here("crossfitting", "confidence_intervals", "jobscripts",
                       "failed_ids.txt")
