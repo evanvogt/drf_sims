@@ -45,13 +45,13 @@ differ expensively.
 
 Four scenarios crossed with three sample sizes, 30 replicates each — **360
 array jobs**. Scenarios are indices into `R/dgm_scenarios.R`'s
-`set = "continuous"`; the subset 1 / 4 / 6 / 9 and its display labels are the
+`set = "continuous"`; the subset 1 / 4 / 6 / 8 and its display labels are the
 same ones `crossfitting/cf_results.qmd` uses, so the two reports are directly
 comparable.
 
 | | |
 |---|---|
-| scenarios | 1 (Null), 4 (Simple), 6 (Interaction), 9 (Non-linear) |
+| scenarios | 1 (Null), 6 (Simple), 8 (Interaction), 4 (Non-linear) |
 | n | 250, 500, 1000 |
 | runs | 30 |
 | folds | V = 10, single crossfitting, all n |
@@ -129,12 +129,12 @@ metrics <- metrics %>%
 score_cols <- setdiff(names(metrics), c(key_cols, "true_pehe"))
 
 # labels. Scenario labels match crossfitting/cf_results.qmd, which reports the
-# same 1/4/6/9 subset.
+# same 1/4/6/8 subset.
 scenario_labels <- c(
   `1` = "Null",
-  `4` = "Simple",
-  `6` = "Interaction",
-  `9` = "Non-linear"
+  `6` = "Simple",
+  `8` = "Interaction",
+  `4` = "Non-linear"
 )
 
 model_levels <- c(

@@ -10,7 +10,7 @@
 #   Rscript cts_miss_patch.R 7 dry     # combination 7, writes nothing
 #
 # The index is a row of combos(study) - a parameter combination, 100 result
-# files - NOT a row of study$grid. There are 126 of them; 100-126 are scenario 6,
+# files - NOT a row of study$grid. There are 126 of them; 100-126 are scenario 2,
 # which was run with the tests on and needs only the bookkeeping pass - see
 # jobscripts/cts_miss_patch.sh.
 #

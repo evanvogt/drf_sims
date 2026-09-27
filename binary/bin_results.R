@@ -25,14 +25,14 @@ metrics <- readRDS(file.path(res_path, "bin_metrics.RDS"))
 # labels), so these stay inline, matching bin_results.Rmd's precedent
 scenario_labels <- c(
   `1` = "1: No HTE",
-  `2` = "2: Binary HTE",
-  `3` = "3: binary HTE",
-  `4` = "4: Two HTE vars",
-  `5` = "5: Cts x binary interaction",
-  `6` = "6: Two vars + cts x binary",
-  `7` = "7: Cts x cts interaction",
-  `8` = "8: Two vars + cts x cts",
-  `9` = "9: Cosine HTE",
+  `2` = "2: Continuous HTE",
+  `3` = "3: Two vars + cts x cts",
+  `4` = "4: Cosine HTE",
+  `5` = "5: Binary HTE",
+  `6` = "6: Two HTE vars",
+  `7` = "7: Cts x binary interaction",
+  `8` = "8: Two vars + cts x binary",
+  `9` = "9: Cts x cts interaction",
   `10` = "10: Exponential HTE"
 )
 

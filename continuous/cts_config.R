@@ -12,7 +12,7 @@ study <- study_config(
   name     = "continuous",
   prefix   = "cts",
   res_path = file.path(dirname(here()), "results", "continuous"),
-  # Scenarios 1, 3, 8 and 9 go to 500 runs. Their runs 101-500 are appended as
+  # Scenarios 1-4 go to 500 runs. Their runs 101-500 are appended as
   # a second block rather than widening `run` above, so rows 1-4000 keep the
   # meaning they were submitted under and the new rows are one contiguous range,
   # 4001-10400, for jobscripts/cts_extra.sh.
@@ -24,7 +24,7 @@ study <- study_config(
       stringsAsFactors = FALSE
     ),
     expand.grid(
-      scenario = c(1, 3, 8, 9),
+      scenario = c(1:4),
       n = c(100, 250, 500, 1000),
       run = c(101:500),
       stringsAsFactors = FALSE

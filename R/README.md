@@ -27,29 +27,25 @@ which is where most of the bugs in the ledger below came from.
 The repo-root `utils.R` is a two-line shim onto `R/utils.R`, so existing
 `source(here("utils.R"))` calls keep working.
 
-## `cate_methods()` — the four axes
+## `cate_methods()` — the axes
 
-The seven forked model files differed on exactly four things, which are now
+The seven forked model files differed on exactly four things. Three are now
 arguments:
 
 | argument | what it changes | who uses it |
 |---|---|---|
 | `family` | SuperLearner outcome model: `binomial()` adds `method.NNloglik` | binary studies |
-| `oracle_link` | whether `plogis` is applied to the oracle formula **here** | see below |
 | `ipw` | grf `sample.weights` / SuperLearner `obsWeights`. `NULL` is the unweighted path exactly | the missing-data IPW arm |
 | `ci` | `list(boot=, sf=, alpha=)` turns on the half-sample bootstrap | the CI studies |
 
-**`oracle_link` is not the same as `family`, and conflating them is a bug.** The
-repo has two conventions for where the inverse link lives:
-
-- `binary/` and `confidence_intervals/binary/` — `get_binary_oracle_info()`
-  returns a **linear predictor**, and the model code applies `plogis`.
-  `oracle_link = "logit"`.
-- `missing/binary/` — the oracle formula string already contains `plogis(...)`.
-  `oracle_link = "identity"`.
-
-Both give the same answer. Applying `plogis` to a formula that already contains
-it does not.
+The fourth was where the oracle arm's inverse link lives, and it is gone. Every
+oracle formula in `dgm_scenarios.R` returns the outcome mean `E[Y | X, W]` —
+the linear predictor for a continuous outcome, the risk for a binary one — so
+`run_dr_oracle()` applies no link. While the binary DGM was on the logit scale
+its oracle formulas were linear predictors, and an `oracle_link` argument said
+whether to apply `plogis`. That argument was not implied by `family`, and
+getting it wrong was bug M; with one convention there is nothing left to get
+wrong.
 
 ### Orchestration profiles
 
@@ -112,7 +108,13 @@ W, X1, X2, [X3], [X4], [X5], [U], [err], X01, X02, X03, cats
 `X3`/`X4`/`X5` only when the scenario needs them, `U` only for the MNAR
 mechanisms, `err` only for continuous outcomes. `regression_check.R`
 fingerprints the generated dataset, not just the estimates, so a change here
-fails loudly.
+fails loudly. (Binary scenario 10 has drawn `X3` since the risk-difference DGM,
+when it took the continuous scenario 10's form.)
+
+Both outcomes are one model, `E[Y | x, W] = m0(x) + W·τ(x)` (`control_mean()`
+gives `m0`). For a binary outcome `m0` is a logistic scaled into
+`[p0_lo, p0_hi]`, so the treatment effect adds on the risk-difference scale;
+`binary/README.md` has the design and why.
 
 ## Fixed bugs
 

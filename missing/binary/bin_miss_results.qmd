@@ -34,7 +34,7 @@ sample-size axis in any figure below:
 
 | | |
 |---|---|
-| scenarios | 1, 2, 4, 5 — a **renumbered** set, not a subset of the main ten |
+| scenarios | 1–5 — the main study's scenarios 1–5, same numbers |
 | n | 500 |
 | type | `both` (prognostic and predictive covariates amputated) |
 | prop | 0.3 |
@@ -42,15 +42,14 @@ sample-size axis in any figure below:
 | method | 8 handling methods + `complete_data` reference |
 | runs | 100 |
 
-**Scenario numbering here is not the main study's.** Scenario *k* corresponds to
-main-study scenario 1, 2, 4, 8, 9 respectively — so "Complex" here means
-something different from scenario 4 in `binary/`. Full design in
-`missing/README.md`.
+**Scenario numbering is the main study's.** Scenario *k* here is scenario *k*
+in `binary/`; this study runs 1–5. Full design in `missing/README.md`.
 
 The outcome is binary, so every effect below is a **risk difference**, and the
-truth is on the probability scale. `get_binary_oracle_info()` wraps its formula
-in `plogis()`, which is why `bin_miss_models.R` passes
-`oracle_link = "identity"` — the opposite convention to `binary/`.
+truth is on the probability scale. The DGM puts the treatment effect on that
+scale directly — control risk bounded in [0.34, 0.70], `P(Y = 1) = m0(x) + W·τ(x)`
+— so X1 and X2 are purely prognostic (see `binary/README.md`). The oracle
+formula from `get_binary_oracle_info()` returns the risk itself.
 
 ### Mechanisms
 

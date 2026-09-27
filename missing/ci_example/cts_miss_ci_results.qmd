@@ -51,9 +51,9 @@ pools them three ways so they can be compared:
 **Estimators**: `causal_forest`, `dr_random_forest`, `dr_semi_oracle`,
 `dr_oracle` (`CI_MODELS` — this study has no SuperLearner arm).
 
-Scenario numbering is the missing-data set's, not the main study's. Scenario 3
-("Two HTE vars") appears here but not in `missing/continuous` or
-`missing/binary`, whose grids run 1, 2, 4, 5 only.
+Scenario numbering is the main study's: scenario *k* here is scenario *k* in
+`continuous/`. This study runs 1 and 3–6. Scenario 6 ("Two HTE vars") appears
+here but not in `missing/continuous` or `missing/binary`, whose grids run 1–5.
 
 ### Two things to know before reading the figures
 

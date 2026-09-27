@@ -34,7 +34,7 @@ a normal-approximation interval alongside the bootstrap one, labelled
 | scenarios | 1–10 |
 | n | 500, 1000 |
 | `CI_sf` | 0.05 to 0.5 in steps of 0.05 — the sweep `optimal_sf/` consumes |
-| runs | 100; **500 for scenarios 1, 3, 8, 9** |
+| runs | 100; **500 for scenarios 1–4** |
 | array | **20,000 jobs** per outcome, split across two jobscripts, plus **32,000** for runs 101–500 (rows 20001–52000, split across `*_ci_extra_{1..4}.sh`) |
 
 `CI_sf` is the `sample.fraction` passed to the half-sample forests. It is swept
@@ -70,6 +70,8 @@ the per-run sampled units are not (a fresh sample is drawn every run) — so
 row (`optimal_sf/` never builds a query grid, so it has none of this).
 
 ## Status
+
+**Archive the old results first** - `R/archive_old_results.R` (root `README.md`, Status, step 0). They predate the current DGM and use the pre-2026-09-26 scenario numbers, so running into that tree would mix old and new results.
 
 `continuous/` — unaffected by the *bug ledger*, but **needs a re-run** for
 the crossfitting strategy change to `R/cate_models.R` (see root README

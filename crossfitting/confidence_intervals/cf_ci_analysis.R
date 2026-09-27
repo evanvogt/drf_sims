@@ -47,7 +47,7 @@ grf_threads <- if (length(args) >= 4 && !is.na(args[4])) args[4] else 1
 n_test <- 2000
 
 params <- expand.grid(
-  scenario = c(1, 6, 9),
+  scenario = c(1, 4, 8),
   n = 500,
   run = c(1:50),
   stringsAsFactors = F

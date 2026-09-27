@@ -19,7 +19,7 @@ study <- study_config(
   prefix   = "cf_ci",
   res_path = file.path(dirname(here()), "results", "crossfitting_ci"),
   grid = expand.grid(
-    scenario = c(1, 6, 9),
+    scenario = c(1, 4, 8),
     n = 500,
     run = c(1:50),
     stringsAsFactors = FALSE

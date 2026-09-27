@@ -47,8 +47,8 @@ STUDIES <- list(
     sources = c("utils.R", "continuous/cts_dgms.R", "continuous/cts_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_continuous_scenario_data(scenario = 6, n = 120)
-      fmla <- get_continuous_oracle_info(6, gen$bW)
+      gen <- generate_continuous_scenario_data(scenario = 8, n = 120)
+      fmla <- get_continuous_oracle_info(8, gen$bW)
       setup_rng_stream(3)
       res <- run_all_cate_methods(gen$dataset, n_folds = 3,
                                   sl_lib = SL_LIB, fmla_info = fmla)
@@ -61,8 +61,8 @@ STUDIES <- list(
     sources = c("utils.R", "binary/bin_dgms.R", "binary/bin_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_binary_scenario_data(scenario = 8, n = 120)
-      fmla <- get_binary_oracle_info(8, gen$bW)
+      gen <- generate_binary_scenario_data(scenario = 3, n = 120)
+      fmla <- get_binary_oracle_info(3, gen$bW)
       setup_rng_stream(3)
       res <- run_all_cate_methods(gen$dataset, n_folds = 3,
                                   sl_lib = SL_LIB, fmla_info = fmla)
@@ -77,8 +77,8 @@ STUDIES <- list(
                 "confidence_intervals/continuous/cts_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_continuous_scenario_data(scenario = 6, n = 120)
-      fmla <- get_continuous_oracle_info(6, gen$bW)
+      gen <- generate_continuous_scenario_data(scenario = 8, n = 120)
+      fmla <- get_continuous_oracle_info(8, gen$bW)
       setup_rng_stream(3)
       res <- run_all_cate_methods(gen$dataset, n_folds = 3, fmla_info = fmla,
                                   CI_boot = 10, CI_sf = 0.5, alpha = 0.05)
@@ -96,8 +96,8 @@ STUDIES <- list(
                 "confidence_intervals/binary/bin_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_binary_scenario_data(scenario = 8, n = 120)
-      fmla <- get_binary_oracle_info(8, gen$bW)
+      gen <- generate_binary_scenario_data(scenario = 3, n = 120)
+      fmla <- get_binary_oracle_info(3, gen$bW)
       setup_rng_stream(3)
       res <- run_all_cate_methods(gen$dataset, n_folds = 3, fmla_info = fmla,
                                   CI_boot = 10, CI_sf = 0.5, alpha = 0.05)
@@ -118,9 +118,9 @@ STUDIES <- list(
       for (m in c("mean_imputation", "IPW")) {
         setup_rng_stream(3)
         gen <- suppressMessages(generate_and_process_continuous_data(
-          scenario = 4, n = 120, return_truth = TRUE,
+          scenario = 3, n = 120, return_truth = TRUE,
           type = "both", prop = 0.3, mech = "MAR", method = m))
-        fmla <- get_continuous_oracle_info(4, gen$bW)
+        fmla <- get_continuous_oracle_info(3, gen$bW)
         setup_rng_stream(3)
         res <- run_all_cate_methods(gen$dataset, n_folds = 3, sl_lib = SL_LIB,
                                     fmla_info = fmla,
@@ -145,9 +145,9 @@ STUDIES <- list(
         # binary outcome at the smaller size and errors out
         setup_rng_stream(3)
         gen <- suppressMessages(generate_and_process_binary_data(
-          scenario = 4, n = 400, return_truth = TRUE,
+          scenario = 3, n = 400, return_truth = TRUE,
           type = "both", prop = 0.3, mech = "MAR", method = m))
-        fmla <- get_binary_oracle_info(4, gen$bW)
+        fmla <- get_binary_oracle_info(3, gen$bW)
         setup_rng_stream(3)
         res <- run_all_cate_methods(gen$dataset, n_folds = 3, sl_lib = SL_LIB,
                                     fmla_info = fmla,
@@ -171,10 +171,10 @@ STUDIES <- list(
     run = function() {
       setup_rng_stream(3)
       gen <- suppressMessages(generate_and_process_data(
-        scenario = 4, n = 120, set = "continuous_missing", return_truth = TRUE,
+        scenario = 3, n = 120, set = "continuous_missing", return_truth = TRUE,
         type = "both", prop = 0.3, mech = "MAR",
         method = "multiple_imputation", n_imp = 3))
-      fmla <- get_continuous_oracle_info(4, gen$bW)
+      fmla <- get_continuous_oracle_info(3, gen$bW)
       # combine_mi() in this study reads `alpha` as a FREE VARIABLE - it is not
       # one of its arguments - and works only because cts_miss_ci_analysis.R
       # happens to define alpha at top level. Reproduce that here so the
@@ -225,7 +225,7 @@ STUDIES <- list(
     sources = c("crossfitting/cf_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_cf_replicate(scenario = 6, n = 120, n_test = 240)
+      gen <- generate_cf_replicate(scenario = 8, n = 120, n_test = 240)
       setup_rng_stream(3)
       res <- run_all_crossfit_variants(gen$data, gen$X_test, n_folds = 3,
                                        sl_lib = SL_LIB, num.threads = 1,

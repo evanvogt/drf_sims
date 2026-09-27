@@ -31,7 +31,7 @@ MISS_METHODS_STUDY <- c("complete_cases", "mean_imputation", "missforest",
                         "multiple_imputation", "none", "complete_data")
 
 grid <- expand.grid(
-  scenario  = c(1, 2, 4, 5),
+  scenario  = c(1, 3, 4, 5),
   n         = c(500),
   type      = c("both"),
   prop      = c(0.3),
@@ -46,12 +46,13 @@ grid <- expand.grid(
 # numbers are handed out.
 grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-Y"), ]
 
-# Scenario 6 (main-study scenario 3) was added after rows 1-9900 had run. It is
-# appended as a second block rather than added to `scenario` above, so rows
-# 1-9900 keep the meaning they were submitted under and the new rows are one
-# contiguous range, 9901-12600, for jobscripts/cts_miss_extra.sh.
+# Scenario 2 was added after rows 1-9900 had run (as scenario 6, before the
+# 2026-09-26 renumbering - see R/dgm_scenarios.R). It is appended as a second
+# block rather than added to `scenario` above, so rows 1-9900 keep the meaning
+# they were submitted under and the new rows are one contiguous range,
+# 9901-12600, for jobscripts/cts_miss_extra.sh.
 grid <- rbind(grid, expand.grid(
-  scenario  = 6,
+  scenario  = 2,
   n         = c(500),
   type      = c("both"),
   prop      = c(0.3),

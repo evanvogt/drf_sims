@@ -6,7 +6,7 @@ here).
 
 | | |
 |---|---|
-| array | **12,600 jobs**: `cts_miss_1.sh` (1–9900, scenarios 1, 2, 4, 5) and `cts_miss_extra.sh` (9901–12600, scenario 6) |
+| array | **12,600 jobs**: `cts_miss_1.sh` (1–9900, scenarios 1, 3, 4, 5) and `cts_miss_extra.sh` (9901–12600, scenario 2) |
 | results | `../results/missing/continuous/scenario_<k>/<n>/<type>/<prop>/<mechanism>/<method>/` |
 | metrics | `cts_miss_metrics.RDS`, including `rel_efficiency` against the `complete_data` arm; plus `cts_miss_true_cate_tests.RDS`, the true-CATE HTE test evaluation |
 
@@ -30,8 +30,8 @@ The `ipw` argument is the only thing separating this study's estimators from
 
 ## Gotchas
 
-**Scenario numbers are not the main study's.** Scenario `k` here maps to
-main-study scenario 1, 2, 4, 8, 9, 3. Scenario 6 was appended later, as a
+**Scenario numbers are the main study's** (since 2026-09-26; see
+`missing/README.md` for the old numbering). Scenario 2 was appended later, as a
 second block in `cts_miss_config.R`, so rows 1–9900 kept their meaning.
 
 **`multiple_imputation` returns a list of 50 datasets, not one.** The analysis
@@ -79,7 +79,7 @@ landed" in `missing/binary/README.md`.
 
 ```bash
 qsub missing/continuous/jobscripts/cts_miss_1.sh       # 1-9900
-qsub missing/continuous/jobscripts/cts_miss_extra.sh   # 9901-12600, scenario 6
+qsub missing/continuous/jobscripts/cts_miss_extra.sh   # 9901-12600, scenario 2
 Rscript missing/continuous/cts_miss_check.R
 qsub missing/continuous/jobscripts/cts_miss_patch.sh    # 1-99, the HTE back-fill
 qsub missing/continuous/jobscripts/cts_miss_collect.sh
@@ -105,14 +105,30 @@ To run only the `complete_data` reference arm, take
 
 ## Status
 
-**Scenario 6 owed** — `cts_miss_extra.sh` (rows 9901–12600), then the
-bookkeeping patch pass over combinations 100–126 (see `missing/README.md`
-Status) and collect/metrics. Nothing else in the grid changed.
+**All 12,600 rows re-run** (`cts_miss_1.sh`, then `cts_miss_extra.sh` for
+scenario 2), after archiving the old tree with `R/archive_old_results.R` (root
+`README.md`, Status, step 0). Bug O, below, supersedes rows 1–9900. The old
+tree uses the pre-2026-09-26 numbers, so running into it would put the new
+scenario 2 on top of the old scenario 2 (now 5). Then the bookkeeping patch
+pass and collect/metrics - see `missing/README.md` Status.
 
 **Re-runs required** — for the crossfitting strategy change to
 `R/cate_models.R` (see root README Methods/Status), which moves all five
-estimator arms, and separately for bug F (`dr_superlearner` only). The DGM is
-unaffected by the *bug ledger*. Bugs B and C were collection/metrics
-problems, so re-running `cts_miss_collect.R` and `cts_miss_metrics.R` over
-the existing per-run files recovers the mechanisms that were being missed
-and populates `rel_efficiency` — no cluster time needed for those two.
+estimator arms, and separately for bug F (`dr_superlearner` only). Bugs B and C
+were collection/metrics problems, so re-running `cts_miss_collect.R` and
+`cts_miss_metrics.R` over the existing per-run files recovers the mechanisms
+that were being missed and populates `rel_efficiency` — no cluster time needed
+for those two.
+
+**Also re-run for bug O** — the `continuous_missing` table now shares the main
+study's baseline (`b0 = 0.4`, `b1 = −0.5`, `b2 = 1`; scenario 4 alone had
+`b2 = 1` before) and its `bW` calibration: every trial is planned for 80% power
+under homogeneity, so every scenario has a true ATE of −0.29 at n = 500. See
+`continuous/README.md`'s "Outcome model and `bW` calibration". With complete
+data, realised power is 0.81 in scenario 1 and 0.63–0.76 elsewhere. MNAR-Y's `U`
+term is heterogeneity the plan knows nothing about, like the rest, so it is
+left out of the calibration too. That keeps one `bW` and one truth per scenario
+across every mechanism, and lowers realised power under MNAR-Y to 0.54–0.67.
+With `PROFILES$missing` already set, re-run results carry the
+`dr_random_forest` tests, so the back-fill patch above only matters for results
+made before bug O.

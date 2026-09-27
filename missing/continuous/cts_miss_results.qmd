@@ -34,7 +34,7 @@ sample-size axis in any figure below:
 
 | | |
 |---|---|
-| scenarios | 1, 2, 4, 5 — a **renumbered** set, not a subset of the main ten |
+| scenarios | 1–5 — the main study's scenarios 1–5, same numbers |
 | n | 500 |
 | type | `both` (prognostic and predictive covariates amputated) |
 | prop | 0.3 |
@@ -42,10 +42,8 @@ sample-size axis in any figure below:
 | method | 8 handling methods + `complete_data` reference |
 | runs | 100 |
 
-**Scenario numbering here is not the main study's.** Scenario *k* corresponds to
-main-study scenario 1, 2, 4, 8, 9 respectively — so "Complex" here means
-something different from scenario 4 in `continuous/`. Full design in
-`missing/README.md`.
+**Scenario numbering is the main study's.** Scenario *k* here is scenario *k*
+in `continuous/`; this study runs 1–5. Full design in `missing/README.md`.
 
 ### Mechanisms
 

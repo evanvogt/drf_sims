@@ -171,7 +171,7 @@ report(!identical(raw_order, colnames(X_s)),
 cat("\n=== 6. run_all_cate_methods attaches both measures ===\n")
 
 setup_rng_stream(1)
-gen_t <- generate_continuous_scenario_data(3, 250)
+gen_t <- generate_continuous_scenario_data(2, 250)
 fit_t <- run_all_cate_methods(data = gen_t$dataset, n_folds = 10)
 
 covars <- colnames(as.matrix(gen_t$dataset[, -c(1:2)]))
@@ -204,7 +204,7 @@ if (!run_full) {
               elapsed / 60))
 
   # row 1 of the grid is interim_prop = 0.25
-  out_file <- file.path(study$res_path, "scenario_3", "1000", "0.25", "res_sim_1.RDS")
+  out_file <- file.path(study$res_path, "scenario_2", "1000", "0.25", "res_sim_1.RDS")
   report(file.exists(out_file),
          sprintf("results land in a directory named by the un-mangled interim_prop (%s)",
                  out_file))

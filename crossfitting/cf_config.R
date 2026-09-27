@@ -15,7 +15,7 @@ study <- study_config(
   prefix   = "cf",
   res_path = file.path(dirname(here()), "results", "crossfitting"),
   grid = expand.grid(
-    scenario = c(1, 4, 6, 9),
+    scenario = c(1, 4, 6, 8),
     n = 500,
     run = c(1:500),
     stringsAsFactors = FALSE

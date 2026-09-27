@@ -10,6 +10,9 @@
 #   crossfit_rerun - needs resubmitting because of the crossfitting strategy
 #                     change, possibly plus a study-specific bug fix (see
 #                     `reason`)
+#   dgm_rerun       - needs resubmitting because the DGM changed under it
+#                     (bug O, 2026-09-26); the results it had are archived
+#                     by R/archive_old_results.R
 #   first_run       - never successfully run before; not a rerun
 #   no_rerun        - already fine as-is; own arms/results are unaffected
 #   broken          - currently fails to run; excluded from the filesystem
@@ -74,28 +77,28 @@ study_registry <- data.frame(
     "crossfit_rerun",
     "crossfit_rerun",
     "crossfit_rerun",
-    "no_rerun",
-    "no_rerun",
+    "dgm_rerun",
+    "dgm_rerun",
     "crossfit_rerun",
     "crossfit_rerun",
     "crossfit_rerun",
-    "first_run",
+    "dgm_rerun",
     "crossfit_rerun"
   ),
   reason = c(
     "crossfitting strategy change; also bug F (dr_superlearner)",
-    "crossfitting strategy change; also bug F (dr_superlearner)",
+    "crossfitting strategy change; also bug F (dr_superlearner); also bug P and the risk-difference DGM (binary/README.md)",
     "crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy",
     "crossfitting strategy change",
-    "crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale)",
+    "crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale); also bug P and the risk-difference DGM (binary/README.md)",
     "crossfitting strategy change",
-    "crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README)",
-    "own comparison arms unchanged; only the production consumers of R/cate_models.R moved",
-    "own comparison arms unchanged; pilot study, not part of the production rerun",
-    "crossfitting strategy change; also bug F (dr_superlearner); plus the dr_random_forest HTE back-fill, patched in place - no re-run; plus scenario 6 (main-study 3), rows 9901-12600",
-    "crossfitting strategy change; also the DGM was wrong three ways; plus the dr_random_forest HTE back-fill, patched in place - no re-run; plus scenario 6 (main-study 3), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run",
+    "crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README); also bug P and the risk-difference DGM (binary/README.md)",
+    "own comparison arms unchanged by the crossfitting change, but bug O changed the continuous DGM it runs on, and the 2026-09-26 renumbering its scenario ids (1/4/6/9 -> 1/4/6/8); old results archived",
+    "pilot study, not part of the production rerun; re-run because bug O changed the continuous DGM and the 2026-09-26 renumbering its scenario ids (1/6/9 -> 1/4/8); old results archived",
+    "crossfitting strategy change; also bug F (dr_superlearner); plus the dr_random_forest HTE back-fill, patched in place - no re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600",
+    "crossfitting strategy change; also the DGM was wrong three ways; plus the dr_random_forest HTE back-fill, patched in place - no re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run; plus bug P and the risk-difference DGM - all 12,600 rows re-run, which also makes bug N moot",
     "crossfitting strategy change",
-    "first run, not a re-run - its own 9 candidates moved off double crossfitting (me_models.R); the 16 pre-change res_sim_*.RDS have been deleted, so the count restarts from zero",
+    "its 358/360 runs (the first under single crossfitting, me_models.R) predate bug O, which changed the continuous DGM, and the 2026-09-26 renumbering (1/4/6/9 -> 1/4/6/8); archived with the strategies and split trees, so the count restarts from zero",
     "crossfitting strategy change"
   ),
   # Only the two studies that ran under PROFILES$missing's old dr_rf_tests =

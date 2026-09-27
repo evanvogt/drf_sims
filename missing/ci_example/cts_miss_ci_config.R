@@ -2,7 +2,8 @@
 # title: MI confidence-interval example - the one parameter grid
 ##########
 # A single cell of the missing-data design (MAR, multiple imputation), run over
-# all five scenarios, asking how to build a CATE interval after imputation.
+# five scenarios (1 and 3-6; 1-5 before the 2026-09-26 renumbering in
+# R/dgm_scenarios.R), asking how to build a CATE interval after imputation.
 #
 # The grid is arranged by (scenario, run) rather than left in expand.grid order.
 # That was already true in cts_miss_ci_analysis.R and it is preserved here,
@@ -12,7 +13,7 @@ library(here)
 source(here("R", "pipeline.R"))
 
 grid <- expand.grid(
-  scenario  = c(1:5),
+  scenario  = c(1, 3, 4, 5, 6),
   n         = c(500),
   type      = c("both"),
   prop      = c(0.3),

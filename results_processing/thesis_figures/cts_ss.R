@@ -19,7 +19,7 @@ dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 metrics <- readRDS(file.path(res_path, "cts_metrics.RDS"))
 
 metrics <- metrics %>%
-  filter(scenario %in% c(1, 3, 8, 9)) %>%
+  filter(scenario %in% c(1:4)) %>%
   apply_labels(SS_SCENARIO_LABELS) %>%
   mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
 

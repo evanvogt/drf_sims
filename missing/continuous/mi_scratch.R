@@ -9,7 +9,7 @@ source(here("missing/continuous/cts_miss_dgms.R"))
 source(here("missing/continuous/cts_miss_models.R"))
 
 data_result <- generate_continuous_scenario_data(
-  scenario = 4,
+  scenario = 3,
   n = 500,
   mech = "AUX"
 )

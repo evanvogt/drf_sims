@@ -297,7 +297,7 @@ n_test <- 250 # smallest grid n, to keep this check as fast as possible
 n_folds_test <- 10L # matches me_analysis.R's rule (single crossfitting, all n)
 
 setup_rng_stream(1)
-gen4 <- generate_me_scenario_data(scenario = 4, n = n_test)
+gen4 <- generate_me_scenario_data(scenario = 6, n = n_test)
 design4 <- prepare_design_matrix(gen4$dataset)
 Y4 <- design4$Y
 W4 <- design4$W
@@ -574,7 +574,7 @@ cat("\n=== 6. me_strategies.R assembly, on a synthetic res_sim object ===\n")
 # and miss the one that is actually near the edge.
 n_asm <- 250L
 setup_rng_stream(7)
-gen_asm <- generate_me_scenario_data(scenario = 4, n = n_asm)
+gen_asm <- generate_me_scenario_data(scenario = 6, n = n_asm)
 design_asm <- prepare_design_matrix(gen_asm$dataset)
 folds_asm <- split_folds(design_asm$Y, k = 10L)
 

@@ -32,7 +32,7 @@ sizes, 30 runs each — **360 array jobs**.
 study's research question — does a cheap proxy loss rank 9 candidate models
 the way true PEHE would — doesn't need every CATE-structure re-litigated to
 answer. `crossfitting/cf_analysis.R` made the same call for the same reason
-(`scenario = c(1, 4, 6, 9)`); this study reuses its exact subset.
+(`scenario = c(1, 4, 6, 8)`); this study reuses its exact subset.
 
 **Why 30 runs, not `continuous/`'s 100.** Each replicate here is far more
 expensive than a `continuous/` replicate: 9 single-crossfit candidate-model
@@ -514,7 +514,17 @@ local `me_testing.R full` run as a sign this study is ready to submit.
 
 ## Status
 
-**The main study has completed: 358 of 360 runs.** Two runs failed repeatedly
+**Re-run owed — every tree.** The runs described below predate bug O, which
+changed the continuous DGM this study generates from (`continuous/README.md`),
+and use the pre-2026-09-26 scenario numbers (1/4/6/9, now 1/4/6/8). The main,
+strategies and split trees are archived by `R/archive_old_results.R` (root
+`README.md`, Status, step 0), and all three re-run from empty. After the
+strategies pass, regenerate `me_strategies_verify.R`'s `known_holdout_na` - it
+lists which blocks degenerated under the old DGM.
+
+What follows is the state of the archived runs.
+
+**The main study completed 358 of 360 runs.** Two runs failed repeatedly
 and are permanently excluded. They have no `res_sim_*.RDS`, so every derived
 pass skips them by design (exiting 0 with a message rather than erroring) and
 they stay excluded consistently across all three trees — see `me_check.R` for

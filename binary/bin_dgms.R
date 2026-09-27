@@ -2,11 +2,12 @@
 # title: data generating process - binary outcomes, all scenarios
 ###############
 # Scenario tables and generator in R/dgm_scenarios.R. The same ten scenarios as
-# the continuous study on a logit scale, differing in the coefficient table and
-# in scenario 10's treatment effect (exp(X4) rather than exp(-abs(X4))).
+# the continuous study, with the treatment effect on the RISK-DIFFERENCE scale:
+# P(Y = 1) = m0(x) + W * tau(x), the control risk m0 bounded in [0.34, 0.70],
+# X4/X5 entering tau through tanh, and the modifiers sign-reversed and rescaled
+# (RD_SCALE). See README.md, "Outcome model and bW calibration".
 #
-# The oracle formula here is a LINEAR PREDICTOR and bin_models.R applies plogis
-# (oracle_link = "logit"), as missing/binary/ now does too.
+# The oracle formula here returns the risk itself.
 
 source(here::here("R", "dgm_scenarios.R"))
 

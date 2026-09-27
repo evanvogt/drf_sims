@@ -116,9 +116,9 @@ metrics <- metrics %>%
   mutate(
     scenario = factor(
       case_when(scenario == 1 ~ "Null",
-                scenario == 4 ~ "Simple",
-                scenario == 6 ~ "Interaction",
-                scenario == 9 ~ "Non-linear"),
+                scenario == 6 ~ "Simple",
+                scenario == 8 ~ "Interaction",
+                scenario == 4 ~ "Non-linear"),
       levels = c("Null", "Simple", "Interaction", "Non-linear")),
     family = factor(recode(family, !!!family_labels), levels = unname(family_labels)),
     variant = factor(recode(variant, !!!variant_labels),

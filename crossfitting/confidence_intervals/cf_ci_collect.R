@@ -22,7 +22,7 @@ out_file <- file.path(res_path, "cf_ci_metrics.RDS")
 # parameters - must match cf_ci_analysis.R exactly
 workers <- 4
 
-params <- expand.grid(scenario = c(1, 6, 9),
+params <- expand.grid(scenario = c(1, 4, 8),
                       stringsAsFactors = F)
 
 get_metrics <- function(scenario) {

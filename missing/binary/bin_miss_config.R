@@ -16,7 +16,7 @@ MISS_METHODS_STUDY <- c("complete_cases", "mean_imputation", "missforest",
                         "multiple_imputation", "none", "complete_data")
 
 grid <- expand.grid(
-  scenario  = c(1, 2, 4, 5),
+  scenario  = c(1, 3, 4, 5),
   n         = c(500),
   type      = c("both"),
   prop      = c(0.3),
@@ -28,11 +28,11 @@ grid <- expand.grid(
 
 grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-Y"), ]
 
-# Scenario 6 (main-study scenario 3) appended as a second block so rows 1-9900
-# keep their meaning - see missing/continuous/cts_miss_config.R. The new rows
-# are 9901-12600, for jobscripts/bin_miss_extra.sh.
+# Scenario 2 appended as a second block so rows 1-9900 keep their meaning - see
+# missing/continuous/cts_miss_config.R. The new rows are 9901-12600, for
+# jobscripts/bin_miss_extra.sh.
 grid <- rbind(grid, expand.grid(
-  scenario  = 6,
+  scenario  = 2,
   n         = c(500),
   type      = c("both"),
   prop      = c(0.3),
