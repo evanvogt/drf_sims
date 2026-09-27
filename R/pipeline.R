@@ -272,6 +272,15 @@ parse_select <- function(line) {
 #' because sample_size/confidence_intervals/optimal_sf/jobscripts holds two studies and a
 #' glob there matches both.
 #'
+#' A single failure is the exception to -J 1-<n_failed>: PBS Pro rejects an
+#' array whose range has one subjob, so -J 1-1 never gets past qsub. The -J line
+#' is instead disabled as ##PBS (not a directive to PBS, which wants #PBS at the
+#' start of the line) and the rerun goes in as a plain job. The rerun scripts
+#' need no change for that: with no array, PBS_ARRAY_INDEX is unset, so
+#' `sed -n "${PBS_ARRAY_INDEX}p"` becomes `sed -n "p"` and prints the whole of a
+#' one-line failed_ids.txt - the one index. The next call with more than one
+#' failure finds the ##PBS line and turns it back into a live -J.
+#'
 #' @param n_failed number of indices in study$failed_file
 #' A directive line in the rerun script that is present but unreadable is left
 #' exactly as it is, with a warning, because there is then no way to tell what
@@ -311,12 +320,17 @@ update_rerun_script <- function(study, n_failed, cpu_add = 1, mem_factor = 1.2,
   sc <- read_script(rerun_path)
   sel_i <- grep("^#PBS -l select=", sc$lines)
   wt_i  <- grep("^#PBS -l walltime=", sc$lines)
-  j_i   <- grep("^#PBS -J ", sc$lines)
+  # ##PBS is a -J this function disabled for a single failure (see above)
+  j_i   <- grep("^##?PBS -J ", sc$lines)
 
   # -J first: it is the half that must be right for the job to run at all, and
   # it is still worth writing when the base script is missing or unparseable.
+  j_note <- if (n_failed == 1) "-J disabled (1 failure, runs as a single job)" else
+    paste0("-J 1-", n_failed, "%", throttle)
   if (!length(j_i)) {
     warning("no '#PBS -J' line in ", rerun_path)
+  } else if (n_failed == 1) {
+    sc$lines[j_i[1]] <- "##PBS -J 1-1"
   } else {
     sc$lines[j_i[1]] <- sprintf("#PBS -J 1-%d%%%d", n_failed, throttle)
   }
@@ -400,7 +414,7 @@ update_rerun_script <- function(study, n_failed, cpu_add = 1, mem_factor = 1.2,
   }
 
   write_script(sc, rerun_path)
-  print(paste0(basename(rerun_path), ": -J 1-", n_failed, "%", throttle,
+  print(paste0(basename(rerun_path), ": ", j_note,
                if (is.null(bumped)) "" else paste0(", ", bumped)))
 
   invisible(rerun_path)
