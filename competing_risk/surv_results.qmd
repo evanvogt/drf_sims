@@ -313,7 +313,7 @@ summary_plot <- function(
     ) +
     facet_grid(rows = vars(target), cols = vars(scenario), scales = "free") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_light() +
+    theme_bw() +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       legend.position = "bottom",

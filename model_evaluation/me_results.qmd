@@ -413,7 +413,7 @@ box_plot <- function(df, metric, title, ylab, hline = NULL) {
       "rcartocolor::Safe",
       labels = c(dr = "DR risk", infl = "Influence")
     ) +
-    theme_light() +
+    theme_bw() +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       strip.background = element_rect(fill = "white"),
@@ -460,7 +460,7 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alph
       "rcartocolor::Safe",
       labels = c(dr = "DR risk", infl = "Influence")
     ) +
-    theme_light() +
+    theme_bw() +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       strip.background = element_rect(fill = "white"),
@@ -509,7 +509,7 @@ sum_ns_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alpha
       "rcartocolor::Safe",
       labels = c(dr = "DR risk", infl = "Influence")
     ) +
-    theme_light() +
+    theme_bw() +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       strip.background = element_rect(fill = "white"),
@@ -586,7 +586,7 @@ pehe_plot <- metrics %>%
   facet_wrap(~scenario, scales = "free_y") +
   #scale_y_log10() +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_light() +
+  theme_bw() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.background = element_rect(fill = "white"),
@@ -620,7 +620,7 @@ winner_plot <- winners %>%
   geom_col() +
   facet_wrap(~scenario) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
-  theme_light() +
+  theme_bw() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.background = element_rect(fill = "white"),
@@ -757,7 +757,7 @@ rank_plot <- rank_dist %>%
   geom_col() +
   facet_grid(rows = vars(n), cols = vars(scenario)) +
   scale_fill_viridis_d(direction = -1) +
-  theme_light() +
+  theme_bw() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     strip.background = element_rect(fill = "white"),
@@ -921,7 +921,7 @@ axis_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alpha =
     ) +
     facet_grid(rows = vars(scenario), cols = vars(axis), scales = "free_x") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_light() +
+    theme_bw() +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
       strip.background = element_rect(fill = "white"),
@@ -1012,7 +1012,7 @@ calibration_plot <- centred %>%
   geom_smooth(method = "lm", se = FALSE, linewidth = 0.6) +
   facet_wrap(~proxy, ncol = 4, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_light() +
+  theme_bw() +
   theme(
     strip.background = element_rect(fill = "white"),
     strip.text = element_text(colour = "black"),

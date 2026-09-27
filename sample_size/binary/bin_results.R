@@ -117,8 +117,10 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha =
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
     facet_wrap(~scenario, scales = "free") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
     labs(title = title, y = ylab, x = "Sample size", colour = "Model")
 }
 
@@ -129,8 +131,10 @@ bias_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Bias in CATE estimates", y = "Bias", x = "Sample size", colour = "Model")
 ggsave("bin_bias_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
@@ -149,8 +153,10 @@ ate_bias_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Bias in the average treatment effect", y = "ATE bias",
        x = "Sample size", colour = "Model")
 ggsave("bin_ate_bias_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -185,8 +191,10 @@ mse_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "MSE of CATE estimates", y = "MSE", x = "Sample size", colour = "Model")
 ggsave("bin_mse_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
@@ -203,8 +211,10 @@ rmse_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "RMSE of CATE estimates", y = "RMSE", x = "Sample size", colour = "Model")
 ggsave("bin_rmse_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
@@ -221,8 +231,10 @@ mae_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "MAE of CATE estimates", y = "MAE", x = "Sample size", colour = "Model")
 ggsave("bin_mae_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
@@ -242,8 +254,10 @@ corr_plot <- corr_df %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Correlation between estimated and true CATEs",
        y = "Pearson correlation", x = "Sample size", colour = "Model")
 ggsave("bin_corr_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -262,8 +276,10 @@ spearman_plot <- corr_df %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Spearman rank correlation between estimated and true CATEs",
        y = "Spearman correlation", x = "Sample size", colour = "Model")
 ggsave("bin_spearman_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -284,8 +300,10 @@ sign_acc_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free_x") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Sign accuracy of CATE estimates", y = "Proportion correct sign",
        x = "Sample size", colour = "Model")
 ggsave("bin_sign_acc_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -349,8 +367,10 @@ BLP_plot <- bind_true_cate(metrics, true_cate_raw, "BLP_p") %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free_x") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "BLP test p-values", y = "p-value", x = "Sample size", colour = "Model")
 ggsave("bin_blp_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
@@ -367,8 +387,10 @@ indep_cate_plot <- bind_true_cate(metrics, true_cate_raw, "indep_cate") %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free_x") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "CATE permutation test p-values", y = "p-value", x = "Sample size",
        colour = "Model")
 ggsave("bin_indep_cate_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -387,8 +409,10 @@ indep_po_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(~scenario, scales = "free_x") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "PO permutation test p-values", y = "p-value", x = "Sample size",
        colour = "Model")
 ggsave("bin_indep_po_all.png", path = fig_path, width = 21, height = 15, units = "cm")

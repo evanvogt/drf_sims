@@ -36,7 +36,9 @@ metrics %>%
   facet_grid(mechanism~method) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Average bias in continuous CATEs with missing data",
        y = "Bias",
        x = "missing data handling method") +
@@ -52,7 +54,9 @@ metrics_summary %>%
   facet_grid(mechanism ~ method) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Mean bias (± MCSE) in continuous CATEs with missing data",
        y = "Bias",
        x = "missing data handling method") +
@@ -66,7 +70,9 @@ metrics %>%
   facet_grid(method~mechanism) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Average MSE in continuous CATEs with missing data",
        y = "MSE",
        x = "missingness proportions")

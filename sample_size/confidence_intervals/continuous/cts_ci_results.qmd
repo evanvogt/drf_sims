@@ -201,8 +201,10 @@ box_plot <- function(df, metric, title, ylab, hline = NULL) {
     geom_boxplot(fill = "transparent", outlier.shape = NA) +
     facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
     labs(title = title, y = ylab, x = "Subsampling ratio", colour = "Model")
 }
 
@@ -219,8 +221,10 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alph
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
     facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
     labs(title = title, y = ylab, x = "Subsampling ratio", colour = "Model")
 }
 
@@ -241,8 +245,10 @@ interval_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alp
     geom_errorbar(position = position_dodge(width = 0.6), linewidth = 0.3, width = 0.3) +
     facet_grid(rows = vars(scenario), cols = vars(model), scales = "free_y") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
     labs(title = title, y = ylab, x = "Subsampling ratio",
          colour = "Interval kind", shape = "Sample size")
 }
@@ -355,8 +361,10 @@ sf_dist %>%
   geom_line(linewidth = 0.3) +
   facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Distance from nominal simultaneous coverage",
        subtitle = "Lower is better; zero is exactly nominal",
        y = "|mean simultaneous coverage - 0.95|", x = "Subsampling ratio",

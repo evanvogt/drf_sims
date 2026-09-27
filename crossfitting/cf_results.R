@@ -89,8 +89,10 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha =
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
     facet_wrap(vars(family, scenario), nrow = n_distinct(df$family), scales = "free") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
     labs(title = title, y = ylab, x = "Crossfitting procedure", colour = "Scored on")
 }
 
@@ -100,8 +102,10 @@ mse_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "MSE of CATE estimates by crossfitting procedure",
        y = "MSE", x = "Crossfitting procedure", colour = "Scored on")
 ggsave("cf_mse_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -153,8 +157,10 @@ gap_plot <- gap %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(gap$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none",
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Generalisation gap: test MSE minus training MSE",
        subtitle = "How far each fitted surface degrades on fresh covariate draws",
        y = "Test MSE - training MSE", x = "Crossfitting procedure")
@@ -179,8 +185,10 @@ ensemble_plot <- ensemble_df %>%
   geom_point(position = position_dodge(width = 0.5), size = 2) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(ensemble_df$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Test MSE: ensemble of fold models against a single fold model",
        subtitle = "Identical for whole-sample arms; the gap on crossfit arms is the ensembling effect",
        y = "Mean test MSE", x = "Crossfitting procedure", colour = "Scoring")
@@ -193,8 +201,10 @@ bias_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Bias of CATE estimates by crossfitting procedure",
        y = "Average bias (estimate - truth)", x = "Crossfitting procedure",
        colour = "Scored on")
@@ -210,8 +220,10 @@ corr_plot <- corr_df %>%
   # so y stays shared - only the sparse variant axis needs freeing per panel
   facet_wrap(vars(family, scenario), nrow = n_distinct(corr_df$family), scales = "free_x") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Correlation between estimated and true CATEs",
        y = "Pearson correlation", x = "Crossfitting procedure", colour = "Scored on")
 ggsave("cf_corr_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -232,8 +244,10 @@ time_plot <- time_df %>%
   geom_col() +
   facet_wrap(vars(family, scenario), nrow = n_distinct(time_df$family), scales = "free") +
   scale_fill_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Mean runtime per replicate",
        y = "Seconds", x = "Crossfitting procedure", fill = "Stage")
 ggsave("cf_runtime.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -247,7 +261,9 @@ frontier_plot <- metrics_summary %>%
   facet_wrap(~scenario, scales = "free") +
   scale_x_log10() +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Test-sample MSE against runtime",
        subtitle = "Down and to the left is better",
        y = "Mean test MSE", x = "Mean runtime per replicate (s, log scale)",

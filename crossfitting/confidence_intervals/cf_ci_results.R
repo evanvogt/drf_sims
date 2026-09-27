@@ -105,8 +105,10 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alph
     geom_errorbar(linewidth = 0.3, width = 0.3) +
     facet_wrap(vars(family, scenario), nrow = n_distinct(df$family), scales = "free") +
     scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none",
+          strip.background = element_rect(fill = "white"),
+          strip.text = element_text(colour = "black")) +
     labs(title = title, y = ylab, x = "Crossfitting procedure")
 }
 
@@ -117,8 +119,10 @@ marg_cov_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none",
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Marginal coverage of the half-sample bootstrap interval",
        y = "Marginal coverage", x = "Crossfitting procedure")
 ggsave("cf_ci_marg_cov_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -144,8 +148,10 @@ width_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none",
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Width of the half-sample bootstrap interval",
        y = "Mean interval length", x = "Crossfitting procedure")
 ggsave("cf_ci_width_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -189,8 +195,10 @@ method_cov_panel <- method_df %>%
   geom_errorbar(linewidth = 0.3, width = 0.3, position = position_dodge(width = 0.5)) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(method_df$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(y = "Mean marginal coverage", x = NULL, colour = "Interval method")
 
 method_width_panel <- method_df %>%
@@ -201,8 +209,10 @@ method_width_panel <- method_df %>%
   geom_errorbar(linewidth = 0.3, width = 0.3, position = position_dodge(width = 0.5)) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(method_df$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(y = "Mean interval length", x = "Whole-sample / OOB arm", colour = "Interval method")
 
 method_plot <- (method_cov_panel / method_width_panel) +
@@ -225,8 +235,10 @@ bias_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none",
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Bias of CATE point estimates by crossfitting procedure",
        y = "Average bias (estimate - truth)", x = "Crossfitting procedure")
 ggsave("cf_ci_bias_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -236,8 +248,10 @@ mse_plot <- metrics %>%
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
   facet_wrap(vars(family, scenario), nrow = n_distinct(metrics$family), scales = "free") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none",
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "MSE of CATE point estimates by crossfitting procedure",
        y = "MSE", x = "Crossfitting procedure")
 ggsave("cf_ci_mse_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -251,8 +265,10 @@ corr_plot <- corr_df %>%
   # scale, so y stays shared - only the sparse variant axis needs freeing
   facet_wrap(vars(family, scenario), nrow = n_distinct(corr_df$family), scales = "free_x") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none",
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Correlation between estimated and true CATEs",
        y = "Pearson correlation", x = "Crossfitting procedure")
 ggsave("cf_ci_corr_all.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -273,8 +289,10 @@ time_plot <- time_df %>%
   geom_col() +
   facet_wrap(vars(family, scenario), nrow = n_distinct(time_df$family), scales = "free") +
   scale_fill_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Mean runtime per replicate",
        y = "Seconds", x = "Crossfitting procedure", fill = "Stage")
 ggsave("cf_ci_runtime.png", path = fig_path, width = 21, height = 15, units = "cm")
@@ -289,7 +307,9 @@ coverage_cost_plot <- metrics_summary %>%
   facet_wrap(~scenario, scales = "free") +
   scale_x_log10() +
   scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Marginal coverage against runtime",
        subtitle = "Closer to the dashed line is better",
        y = "Mean marginal coverage", x = "Mean runtime per replicate (s, log scale)",

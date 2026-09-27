@@ -50,7 +50,9 @@ metrics_summary %>%
                 ) +
   facet_grid(~scenario) +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal()
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black"))
 
 
 metrics_summary %>%
@@ -62,7 +64,9 @@ metrics_summary %>%
   ) +
   facet_grid(~scenario) +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal()
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black"))
 
 metrics_summary %>%
   filter((scenario %in% c(1, 2, 4, 7, 9)) & (n == 1000) & model != "causal_forest_inbuilt") %>%
@@ -73,4 +77,6 @@ metrics_summary %>%
   ) +
   facet_grid(~scenario) +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal()
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black"))

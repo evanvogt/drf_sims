@@ -235,7 +235,9 @@ p <- ggplot(plot_df, aes(x = n, y = bias, color = component)) +
   geom_line() +
   geom_point() +
   facet_wrap(~scenario, scales = "free_y") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "dr_oracle CATE bias decomposition, continuous study",
        subtitle = "stage 1 and OLS-benchmark should sit at ~0; the gap to the forest line is stage-2 smoothing",
        x = "n", y = "bias (est - true)", color = NULL)

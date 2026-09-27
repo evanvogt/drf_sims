@@ -209,7 +209,7 @@ summarise_metrics <- function(
 drf_scale <- function() scale_colour_paletteer_d("rcartocolor::Safe")
 
 drf_theme <- function(rotate_x = FALSE) {
-  th <- theme_light() +
+  th <- theme_bw() +
     theme(
       strip.background = element_rect(fill = "white"),
       strip.text = element_text(colour = "black")

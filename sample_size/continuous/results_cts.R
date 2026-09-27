@@ -42,7 +42,9 @@ metrics %>%
   facet_wrap(~scenario, nrow = 2) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Average bias in continuous CATEs",
        y = "Bias",
        x = "Sample size")
@@ -56,7 +58,9 @@ metrics %>%
   facet_wrap(~scenario, nrow = 2) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "MSE in continuous CATEs",
        y = "MSE",
        x = "Sample size")
@@ -69,7 +73,9 @@ metrics %>%
   facet_wrap(~scenario, nrow = 2) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "Correlation true v estimated CATEs",
        y = expression("Pearson's " * rho),
        x = "Sample size")
@@ -88,7 +94,9 @@ metrics %>%
   facet_grid(rows = vars(Metric), cols = vars(scenario)) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   labs(title = "proportion of correct BLP tests",
        y = "proportion of simulations",
        x = "Sample size")
@@ -105,7 +113,9 @@ metrics %>%
   facet_grid(rows = vars(Test), cols = vars(scenario)) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   coord_flip() +
   labs(title = "P-value distribution from HTE tests",
        y = "p-value",
@@ -119,7 +129,9 @@ metrics %>%
   facet_grid(rows = vars(n), cols = vars(scenario)) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   xlim(0,1) +
   labs(title = "P-value distribution from BLP test",
        x = "p-value",
@@ -131,7 +143,9 @@ metrics %>%
   facet_grid(rows = vars(n), cols = vars(scenario)) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   scale_color_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
   xlim(0,1) +
   labs(title = "P-value distribution from permutation test",
        x = "p-value",
