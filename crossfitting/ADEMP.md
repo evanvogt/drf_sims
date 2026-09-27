@@ -11,7 +11,7 @@ the RF and causal forest arms.
 
 ## Data-generating mechanisms
 
-The `continuous/` DGM (see `continuous/ADEMP.md`), at:
+The `sample_size/continuous/` DGM (see `sample_size/continuous/ADEMP.md`), at:
 
 | | |
 |---|---|

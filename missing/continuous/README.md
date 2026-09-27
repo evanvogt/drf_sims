@@ -45,7 +45,7 @@ pooling rule is still to be decided (`missing/README.md`), so the arm's
 
 **`cts_miss_true_cate_tests.RDS` runs the BLP and independence tests on the
 true CATE and true nuisances instead of an estimator's** (`truth$tau`,
-`truth$p0`, `W.hat = 0.5` — see `continuous/README.md`'s "True-CATE HTE test
+`truth$p0`, `W.hat = 0.5` — see `sample_size/continuous/README.md`'s "True-CATE HTE test
 evaluation"), one row per (scenario, n, type, prop, mechanism, method, run),
 no per-model dimension. `method == "multiple_imputation"` rows are `NA`/`NA`
 there, the same pooling question as the estimated-CATE tests above: `data` is a
@@ -103,7 +103,7 @@ for those two.
 study's baseline (`b0 = 0.4`, `b1 = −0.5`, `b2 = 1`; scenario 4 alone had
 `b2 = 1` before) and its `bW` calibration: every trial is planned for 80% power
 under homogeneity, so every scenario has a true ATE of −0.29 at n = 500. See
-`continuous/README.md`'s "Outcome model and `bW` calibration". With complete
+`sample_size/continuous/README.md`'s "Outcome model and `bW` calibration". With complete
 data, realised power is 0.81 in scenario 1 and 0.63–0.76 elsewhere. MNAR-Y's `U`
 term is heterogeneity the plan knows nothing about, like the rest, so it is
 left out of the calibration too. That keeps one `bW` and one truth per scenario

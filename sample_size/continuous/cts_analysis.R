@@ -14,9 +14,9 @@ path <- here()
 
 # functions
 source(here("R", "utils.R"))
-source(here("continuous", "cts_dgms.R"))
-source(here("continuous", "cts_models.R"))
-source(here("continuous/cts_config.R"))
+source(here("sample_size", "continuous", "cts_dgms.R"))
+source(here("sample_size", "continuous", "cts_models.R"))
+source(here("sample_size/continuous/cts_config.R"))
 
 
 # simulation parameters

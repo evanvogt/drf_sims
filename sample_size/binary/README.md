@@ -141,7 +141,7 @@ fixed by the marginal risks, so the heterogeneity has no variance to add.
 
 `Rscript R/calibration_report.R` prints `bW`, the true RD, the power and the
 treated-risk floor and ceiling for every binary scenario at every n, and for
-`missing/binary/`. `Rscript bin_verify_hte.R` (from `binary/`) checks the
+`missing/binary/`. `Rscript bin_verify_hte.R` (from `sample_size/binary/`) checks the
 design end to end. See `continuous/README.md` for when to run them.
 
 **Before bug P** (root README), `bW` was calibrated for 75% power at the risk
@@ -199,9 +199,9 @@ test rejected there.
 ## Running it
 
 ```bash
-qsub binary/jobscripts/bin_1.sh     # 1-4000
-qsub binary/jobscripts/bin_extra.sh # 4001-10400: runs 101-500, scenarios 1-4
-Rscript binary/bin_check.R
+qsub sample_size/binary/jobscripts/bin_1.sh     # 1-4000
+qsub sample_size/binary/jobscripts/bin_extra.sh # 4001-10400: runs 101-500, scenarios 1-4
+Rscript sample_size/binary/bin_check.R
 ```
 
 **TODO:** `bin_metrics.sh` doesn't exist yet in `jobscripts/` — create it,

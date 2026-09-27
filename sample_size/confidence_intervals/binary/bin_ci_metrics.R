@@ -5,7 +5,7 @@
 # config, so this script carries only what is specific to binary outcome confidence intervals.
 
 library(here)
-source(here("confidence_intervals/binary/bin_ci_config.R"))
+source(here("sample_size/confidence_intervals/binary/bin_ci_config.R"))
 source(here("R", "metrics.R"))
 
 all_results_df <- readRDS(file.path(study$res_path, "ci_bin_all.RDS"))

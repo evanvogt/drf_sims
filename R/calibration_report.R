@@ -4,8 +4,8 @@
 # Prints, for every scenario at every n a study generates at, the calibrated
 # bW, the true ATE, and the ATE's planned and realised power, for both outcome
 # types - and for binary outcomes the worst-case treated risks. The design is
-# in the "Outcome model and bW calibration" sections of continuous/README.md
-# and binary/README.md: each trial is planned for TARGET_POWER under
+# in the "Outcome model and bW calibration" sections of sample_size/continuous/README.md
+# and sample_size/binary/README.md: each trial is planned for TARGET_POWER under
 # homogeneity, and the true ATE equals the planned effect.
 #
 #   Rscript R/calibration_report.R
@@ -34,7 +34,7 @@
 # Binary floor / ceiling: the lowest and highest treated risk over the whole
 # covariate support (treated_risk_bounds()). RD_SCALE keeps them inside
 # [RD_EPS, 1 - RD_EPS], give or take bW's 3-dp rounding (5e-4);
-# binary/bin_verify_hte.R checks that, and re-derives RD_SCALE.
+# sample_size/binary/bin_verify_hte.R checks that, and re-derives RD_SCALE.
 
 suppressPackageStartupMessages(library(here))
 suppressMessages(source(here("R", "dgm_scenarios.R")))

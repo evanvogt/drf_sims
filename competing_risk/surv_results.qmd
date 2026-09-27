@@ -91,7 +91,7 @@ figdir <- file.path(dirname(here()), "results", "all_figures", "competing_risk")
 dir.create(figdir, showWarnings = F)
 # display order and labels - no shared label-dictionary script for this study
 # (unlike crossfitting/cf_metrics.R), so these stay inline, matching
-# continuous/cts_results.qmd's precedent
+# sample_size/continuous/cts_results.qmd's precedent
 scenario_labels <- c(
   `1` = "ATE E1",
   `2` = "ATE E2",
@@ -278,7 +278,7 @@ kable(
 # extends crossfitting/cf_results.qmd's family x scenario facet with the
 # censoring dimension this study has and the precedents don't. facet_wrap
 # (not facet_grid) because variant is family-specific, same reasoning as
-# cf_results.qmd. See continuous/cts_results.R's summary_plot for why this
+# cf_results.qmd. See sample_size/continuous/cts_results.R's summary_plot for why this
 # isn't a raw +/- 1x MCSE (~68% coverage, not 95%).
 summary_plot <- function(
   df,

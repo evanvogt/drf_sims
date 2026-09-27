@@ -20,9 +20,9 @@ require(here)
 # reused rather than forked: collate_predictions (R/utils.R), the continuous DGP
 # (cts_dgms.R), and pretest_superlearner plus the reference DR implementations
 # that cf_testing.R's regression check compares against (R/cate_models.R - these
-# used to live in continuous/cts_models.R, which is now a thin profile shim)
+# used to live in sample_size/continuous/cts_models.R, which is now a thin profile shim)
 source(here("R", "utils.R"))
-source(here("continuous", "cts_dgms.R"))
+source(here("sample_size", "continuous", "cts_dgms.R"))
 source(here("R", "cate_models.R"))
 
 # ---- data -------------------------------------------------------------------

@@ -18,7 +18,7 @@ estimator comparison — it exists nowhere else in the repo.
 
 Only a continuous outcome is validated today. A `binary/` or
 `competing_risk/` sibling would slot in the same way `missing/binary/` and
-`confidence_intervals/binary/` sit alongside their `continuous/` — same
+`sample_size/confidence_intervals/binary/` sit alongside their `continuous/` — same
 `<prefix>_val_*.R` file split, its own `jobscripts/`, its own README.
 
 See `continuous/README.md` for the design, estimators, file roles and status.

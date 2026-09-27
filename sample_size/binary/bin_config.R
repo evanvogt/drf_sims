@@ -49,5 +49,5 @@ study <- study_config(
   ),
   path_cols   = c("scenario", "n"),
   n_sims      = 100,
-  failed_file = here("binary", "jobscripts", "failed_ids.txt")
+  failed_file = here("sample_size", "binary", "jobscripts", "failed_ids.txt")
 )

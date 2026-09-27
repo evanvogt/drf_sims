@@ -124,7 +124,7 @@ method_palette <- c(
 )
 
 # CI panel: two independent dimensions (see cts_ci_results.qmd's `interval`
-# derivation, and confidence_intervals/continuous/cts_ci_metrics.R).
+# derivation, and sample_size/confidence_intervals/continuous/cts_ci_metrics.R).
 # `interval` (colour) - which CI is being scored: the half-sample bootstrap
 # (all 4 CI_MODELS) or causal forest's own inbuilt variance estimate
 # (causal_forest only, no other model has this row at all).
@@ -253,7 +253,7 @@ met_sum_ss <- metrics_ss %>%
 
 
 # 95% CI (mean +/- qnorm(1 - alpha/2) x MCSE) error bar, not a raw +/- 1x
-# MCSE (~68% coverage) - see continuous/cts_results.R's summary_plot
+# MCSE (~68% coverage) - see sample_size/continuous/cts_results.R's summary_plot
 summary_plot <- function(
   df,
   mean_col,
@@ -1019,7 +1019,7 @@ ggsave(
 
 
 # Confidence intervals ----------
-# confidence_intervals/continuous/cts_ci_metrics.R (via R/metrics.R) writes
+# sample_size/confidence_intervals/continuous/cts_ci_metrics.R (via R/metrics.R) writes
 # alternative intervals as extra *rows* of `model`: "<model>_inbuilt" for
 # causal forest's own pointwise variance (causal_forest only - no other
 # model gets this row), "<model>_grid" for the same half-sample bootstrap

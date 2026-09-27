@@ -5,7 +5,7 @@
 # config, so this script carries only what is specific to continuous outcome.
 
 library(here)
-source(here("continuous/cts_config.R"))
+source(here("sample_size/continuous/cts_config.R"))
 source(here("R", "metrics.R"))
 source(here("R", "cate_models.R"))
 

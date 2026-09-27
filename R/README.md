@@ -5,7 +5,7 @@ study: the differences between them are arguments, not forks.
 
 This folder exists because they used to be forks. The same CATE estimation code
 lived in seven files, the same DGM in four, and the same collect/check
-boilerplate in eight — `continuous/cts_models.R` and `binary/bin_models.R`
+boilerplate in eight — `sample_size/continuous/cts_models.R` and `sample_size/binary/bin_models.R`
 differed in **two** places out of 438 lines. Consolidating removed roughly 3,000
 lines and, more usefully, removed the possibility of the copies drifting apart,
 which is where most of the bugs in the ledger below came from.
@@ -112,7 +112,7 @@ when it took the continuous scenario 10's form.)
 Both outcomes are one model, `E[Y | x, W] = m0(x) + W·τ(x)` (`control_mean()`
 gives `m0`). For a binary outcome `m0` is a logistic scaled into
 `[p0_lo, p0_hi]`, so the treatment effect adds on the risk-difference scale;
-`binary/README.md` has the design and why.
+`sample_size/binary/README.md` has the design and why.
 
 ## Fixed bugs
 

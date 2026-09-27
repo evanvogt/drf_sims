@@ -6,7 +6,7 @@
 # the metrics script unnests.
 
 library(here)
-source(here("binary/bin_config.R"))
+source(here("sample_size/binary/bin_config.R"))
 
 workers <- 2
 

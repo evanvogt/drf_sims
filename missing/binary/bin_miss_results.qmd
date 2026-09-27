@@ -48,7 +48,7 @@ in `binary/`; this study runs 1–5. Full design in `missing/README.md`.
 The outcome is binary, so every effect below is a **risk difference**, and the
 truth is on the probability scale. The DGM puts the treatment effect on that
 scale directly — control risk bounded in [0.34, 0.70], `P(Y = 1) = m0(x) + W·τ(x)`
-— so X1 and X2 are purely prognostic (see `binary/README.md`). The oracle
+— so X1 and X2 are purely prognostic (see `sample_size/binary/README.md`). The oracle
 formula from `get_binary_oracle_info()` returns the risk itself.
 
 ### Mechanisms

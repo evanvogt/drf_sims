@@ -361,7 +361,7 @@ the *ranking* of the 9 candidates within a single (scenario, n, run), so the
 report first has to reduce each run's 9x9 score matrix to per-run rank
 agreement, top-1 selection accuracy and regret before anything can be
 averaged. That derivation lives inline in the `.qmd`, as
-`continuous/cts_results.qmd` and `binary/bin_results.qmd` keep theirs; it is
+`sample_size/continuous/cts_results.qmd` and `sample_size/binary/bin_results.qmd` keep theirs; it is
 not in `R/figures.R`, whose `summarise_metrics()` is built for the
 bias/MSE/correlation columns this study doesn't have.
 
@@ -515,7 +515,7 @@ local `me_testing.R full` run as a sign this study is ready to submit.
 ## Status
 
 **Re-run owed — every tree.** The runs described below predate bug O, which
-changed the continuous DGM this study generates from (`continuous/README.md`),
+changed the continuous DGM this study generates from (`sample_size/continuous/README.md`),
 and use the pre-2026-09-26 scenario numbers (1/4/6/9, now 1/4/6/8). The main,
 strategies and split trees are archived by `R/archive_old_results.R` (root
 `README.md`, Status, step 0), and all three re-run from empty. After the

@@ -6,7 +6,7 @@
 # the metrics script unnests.
 
 library(here)
-source(here("confidence_intervals/continuous/cts_ci_config.R"))
+source(here("sample_size/confidence_intervals/continuous/cts_ci_config.R"))
 
 workers <- 2
 

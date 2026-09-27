@@ -11,9 +11,9 @@ path <- here()
 
 # functions
 source(here("R", "utils.R"))
-source(here("confidence_intervals", "continuous", "cts_ci_dgms.R"))
-source(here("confidence_intervals", "continuous", "cts_ci_models.R"))
-source(here("confidence_intervals", "optimal_sf", "cts_ci_sf_calibration.R"))
+source(here("sample_size", "confidence_intervals", "continuous", "cts_ci_dgms.R"))
+source(here("sample_size", "confidence_intervals", "continuous", "cts_ci_models.R"))
+source(here("sample_size", "confidence_intervals", "optimal_sf", "cts_ci_sf_calibration.R"))
 
 # simulation parameters
 i <- as.numeric(commandArgs(trailingOnly = T))

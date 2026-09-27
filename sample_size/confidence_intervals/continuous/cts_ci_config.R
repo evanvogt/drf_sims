@@ -33,5 +33,5 @@ study <- study_config(
   ),
   path_cols   = c("scenario", "n", "CI_sf"),
   n_sims      = 100,
-  failed_file = here("confidence_intervals", "continuous", "jobscripts", "failed_ids.txt")
+  failed_file = here("sample_size", "confidence_intervals", "continuous", "jobscripts", "failed_ids.txt")
 )

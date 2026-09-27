@@ -2,11 +2,11 @@
 # title: shared CATE estimators (DR-learner family + causal forest)
 ##########
 # One implementation of what used to be seven near-identical copies:
-#   continuous/cts_models.R              binary/bin_models.R
+#   sample_size/continuous/cts_models.R              sample_size/binary/bin_models.R
 #   missing/continuous/cts_miss_models.R missing/binary/bin_miss_models.R
 #   missing/ci_example/cts_miss_ci_models.R
-#   confidence_intervals/continuous/cts_ci_models.R
-#   confidence_intervals/binary/bin_ci_models.R
+#   sample_size/confidence_intervals/continuous/cts_ci_models.R
+#   sample_size/confidence_intervals/binary/bin_ci_models.R
 #
 # Those copies differed on four axes. Three are the arguments below:
 #
@@ -78,7 +78,7 @@ source(here::here("R", "bootstrap_ci.R")) # cf_half_boot, rf_half_boot
 # and patched files lack dr_random_forest$variance). The re-run needs no patch.
 #
 # The CI profiles keep tests off; that one IS deliberate (see
-# confidence_intervals/README.md).
+# sample_size/confidence_intervals/README.md).
 #
 # aggregate_nuisances (row-mean summaries of a double-crossfit matrix) used to
 # be a fourth axis here; it was dropped when nuisance_rf/nuisance_sl moved to

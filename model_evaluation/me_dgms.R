@@ -11,7 +11,7 @@
 # benchtm's adat$trt_effect, and generate_scenario_data() already returns Y,
 # W as the first two columns, so results$truth <- gen$truth saves verbatim.
 #
-# No get_*_oracle_info() wrapper here, unlike continuous/binary's _dgms.R
+# No get_*_oracle_info() wrapper here, unlike sample_size/{continuous,binary}'s _dgms.R
 # files - none of this study's 9 candidate models are oracle estimators, so
 # a wrapper nothing calls would be dead code from the moment it's written.
 

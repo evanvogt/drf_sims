@@ -25,11 +25,12 @@ R/                    shared library - every study sources from here
 ├── figures.R         display labels, palette, plot helpers
 └── regression_check.R  old-vs-new equivalence harness
 
-continuous/           continuous outcome, sample size sweep
-binary/               binary outcome, sample size sweep
+sample_size/
+├── continuous/           continuous outcome, sample size sweep
+├── binary/               binary outcome, sample size sweep
+└── confidence_intervals/ interval estimation (continuous, binary, optimal_sf)
 competing_risk/       competing risks - the target setting
 missing/              missing covariates (continuous, binary, CI example)
-confidence_intervals/ interval estimation (continuous, binary, optimal_sf)
 crossfitting/         compared double crossfitting against cheaper alternatives
 model_evaluation/    does cheap proxy scoring pick the right CATE learner?
 validation/           do CATE subgroups/variance/importance found at an interim
@@ -58,8 +59,8 @@ Every folder has its own README with that study's design, gotchas and status.
 ## Why `R/` exists
 
 The repo grew by copy-paste: each new study started as a duplicate of
-`continuous/`. By the time that stopped, `continuous/cts_models.R` and
-`binary/bin_models.R` differed in **two** places out of 438 lines, the same DGM
+`sample_size/continuous/`. By the time that stopped, `sample_size/continuous/cts_models.R` and
+`sample_size/binary/bin_models.R` differed in **two** places out of 438 lines, the same DGM
 existed in four files, and the same collect/check boilerplate in eight.
 
 Consolidating removed about 3,000 lines. The more useful outcome is that the
@@ -91,7 +92,7 @@ scenarios (`R/dgm_scenarios.R`). The four the chapters report come first:
 The last column is the old number. The renumbering changed no data: each
 scenario generates exactly what it did under its old number. Everything saved
 before it uses the old numbers: `../collected_metrics/`, results directories,
-figures, the `results_processing/` notebooks and `continuous/diagnostics/`.
+figures, the `results_processing/` notebooks and `sample_size/continuous/diagnostics/`.
 The missing-data studies use scenarios 1–6 under the same numbers. The subset
 studies run: `crossfitting/` and `model_evaluation/` 1, 4, 6, 8;
 `crossfitting/confidence_intervals/` 1, 4, 8; `validation/continuous/` 2.
@@ -102,7 +103,7 @@ the estimand, with the control risk bounded in [0.34, 0.70] (a 40% event rate).
 The binary modifiers are the continuous ones with X4 and X5 through `tanh`,
 signs reversed, and scaled per scenario to the largest effect the risk bounds
 allow. Until 2026-09-26 the binary effect was on the logit scale, which made X1
-and X2 effect modifiers of the risk difference too. See `binary/README.md`.
+and X2 effect modifiers of the risk difference too. See `sample_size/binary/README.md`.
 
 ## Methods
 
@@ -151,10 +152,10 @@ correlation, sign accuracy. `bias` is `estimate - truth` throughout.
 there. `Rscript` lines run anywhere, including as a local smoke test.
 
 ```bash
-qsub continuous/jobscripts/cts_1.sh         # the array job — cluster only
-Rscript continuous/cts_check.R              # any missing runs? — runs locally too
-qsub continuous/jobscripts/cts_collect.sh   # cluster only
-qsub continuous/jobscripts/cts_metrics.sh   # cluster only
+qsub sample_size/continuous/jobscripts/cts_1.sh         # the array job — cluster only
+Rscript sample_size/continuous/cts_check.R              # any missing runs? — runs locally too
+qsub sample_size/continuous/jobscripts/cts_collect.sh   # cluster only
+qsub sample_size/continuous/jobscripts/cts_metrics.sh   # cluster only
 ```
 
 The array index is a **row number** of `study$grid`. Never filter or reorder the
@@ -185,7 +186,7 @@ Found during the de-duplication. Each is written up in the relevant folder READM
 | M | `dr_oracle` handed log-odds as outcome predictions — `6b06db3` dropped the `plogis` from the oracle formulas but not `oracle_link = "identity"` | `missing/binary` | yes — no re-run: every finished result predates it |
 | N | binary MNAR-Y truth evaluated at U = 0 rather than averaged over U — equal on the identity scale, not the logit one | `missing/binary` | yes — repaired at metrics time from the saved truth; no re-run |
 | O | continuous `bW` calibration used `sd = s_err + s2` (ignoring b1, b2 and the heterogeneity variance, and adding SDs) and set `bW` rather than the ATE, so realised power ran 3–100% and scenarios 3, 5, 8 had a positive ATE; b0, b1, b2 also varied by scenario. Now one baseline (0.4, −0.5, 1), and each trial planned for 80% power under homogeneity with the true ATE equal to the planned effect — realised power 61–80% as heterogeneity grows | `R/dgm_scenarios.R` — every continuous study | yes — re-run |
-| P | binary `bW` calibration planned at 75% power at the risk plogis(b0), ignoring X1 and X2 (0.401 against a population risk of 0.453), and set `bW` rather than the ATE (a marginal risk difference), so `bW` was the same in every scenario and realised power ran 5–99%; the modifiers in scenarios 2, 5, 6 and 7 also had the opposite sign to the continuous ones, and `b5` was a column no scenario used. Now each trial is planned for 80% power under homogeneity with the true RD equal to the planned effect in every scenario (realised power 79–81%), the signs match `continuous/`, and `b5` is gone. *The risk-difference DGM (2026-09-26) has since reversed every binary modifier's sign relative to `continuous/`, on purpose — see `binary/README.md`* | `R/dgm_scenarios.R` — every binary study | yes — re-run |
+| P | binary `bW` calibration planned at 75% power at the risk plogis(b0), ignoring X1 and X2 (0.401 against a population risk of 0.453), and set `bW` rather than the ATE (a marginal risk difference), so `bW` was the same in every scenario and realised power ran 5–99%; the modifiers in scenarios 2, 5, 6 and 7 also had the opposite sign to the continuous ones, and `b5` was a column no scenario used. Now each trial is planned for 80% power under homogeneity with the true RD equal to the planned effect in every scenario (realised power 79–81%), the signs match `sample_size/continuous/`, and `b5` is gone. *The risk-difference DGM (2026-09-26) has since reversed every binary modifier's sign relative to `sample_size/continuous/`, on purpose — see `sample_size/binary/README.md`* | `R/dgm_scenarios.R` — every binary study | yes — re-run |
 
 Three more surfaced along the way:
 
@@ -195,7 +196,7 @@ Three more surfaced along the way:
 - `binary`'s grid was declared three ways and they disagreed. Submitting
   indices 1–1600 against the analysis script's ten-scenario grid ran runs 1–40
   of all ten scenarios, so the results on disk have 40 replicates per cell,
-  not 100 (see `binary/bin_config.R`). The study re-runs in full anyway
+  not 100 (see `sample_size/binary/bin_config.R`). The study re-runs in full anyway
 - `combine_mi()` in `missing/ci_example` read `alpha` as a **free variable** from
   the global environment
 
@@ -248,7 +249,7 @@ Three of the rerun scripts write to a `logs*/` directory that is gitignored and
 so never checked out; `mkdir -p` it on the cluster before the first submit, or
 PBS will reject the job:
 `competing_risk/jobscripts/logs_rerun/`,
-`confidence_intervals/optimal_sf/jobscripts/logs_bin_rerun/` and
+`sample_size/confidence_intervals/optimal_sf/jobscripts/logs_bin_rerun/` and
 `.../logs_cts_rerun/`.
 
 For a bird's-eye view

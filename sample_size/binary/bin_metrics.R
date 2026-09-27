@@ -5,7 +5,7 @@
 # config, so this script carries only what is specific to binary outcome.
 
 library(here)
-source(here("binary/bin_config.R"))
+source(here("sample_size/binary/bin_config.R"))
 source(here("R", "metrics.R"))
 source(here("R", "cate_models.R"))
 

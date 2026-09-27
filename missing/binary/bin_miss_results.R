@@ -14,7 +14,7 @@
 # the metric set and the extra factors are the same. The outcome is binary, so
 # every effect below is a RISK DIFFERENCE, and the truth is on the probability
 # scale. The DGM puts the treatment effect on that scale directly (see
-# binary/README.md), and the oracle formula returns the risk itself.
+# sample_size/binary/README.md), and the oracle formula returns the risk itself.
 
 rm(list = ls())
 # libraries

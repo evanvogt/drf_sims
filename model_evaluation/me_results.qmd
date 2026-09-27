@@ -398,7 +398,7 @@ best_fixed <- fixed_choice %>%
 ```{r plot-helpers, include=FALSE}
 # The house pair of plots - per-run distribution and mean with MCSE error bars.
 # The sweep (the 8 proxies) goes on x and the design on the facets, following
-# confidence_intervals/continuous/cts_ci_results.qmd rather than
+# sample_size/confidence_intervals/continuous/cts_ci_results.qmd rather than
 # cts_results.qmd's facet_wrap(~scenario).
 
 box_plot <- function(df, metric, title, ylab, hline = NULL) {

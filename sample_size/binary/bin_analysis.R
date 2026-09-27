@@ -13,10 +13,10 @@ library(here)
 path <- here()
 
 # functions
-source(here("binary", "bin_dgms.R"))
-source(here("binary", "bin_models.R"))
+source(here("sample_size", "binary", "bin_dgms.R"))
+source(here("sample_size", "binary", "bin_models.R"))
 source(here("R", "utils.R"))
-source(here("binary/bin_config.R"))
+source(here("sample_size/binary/bin_config.R"))
 
 # simulation parameters
 args <- as.numeric(commandArgs(trailingOnly = T))

@@ -1,8 +1,8 @@
 ##########
 # title: half-sample bootstrap confidence intervals for CATE estimates
 ##########
-# One copy of what was duplicated across confidence_intervals/continuous/,
-# confidence_intervals/binary/ and missing/ci_example/.
+# One copy of what was duplicated across sample_size/confidence_intervals/continuous/,
+# sample_size/confidence_intervals/binary/ and missing/ci_example/.
 #
 # Method: draw B half-samples stratified by fold, refit the second stage on each,
 # and form the "half-sample root" tau_full - tau_half. The intervals are

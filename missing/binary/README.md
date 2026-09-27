@@ -1,7 +1,7 @@
 # Missing covariates — binary outcome
 
 The `missing/continuous` design with a binary outcome, on `binary/`'s
-risk-difference DGM (`binary/README.md`, "Outcome model and `bW` calibration").
+risk-difference DGM (`sample_size/binary/README.md`, "Outcome model and `bW` calibration").
 See `missing/README.md` for the mechanisms, handling methods and the shared bug
 fixes.
 
@@ -27,7 +27,7 @@ correspondence had been inferred from the scenario descriptions.
 ### Bug P and the risk-difference DGM
 
 The binary calibration changed with bug P, and the whole binary DGM with the
-move to the risk-difference scale; `binary/README.md`'s "Outcome model and `bW`
+move to the risk-difference scale; `sample_size/binary/README.md`'s "Outcome model and `bW`
 calibration" has the design. Here it means:
 
 - **The effect is on the risk-difference scale.** `P(Y = 1) = m0(x) + W·τ(x)`,
@@ -187,7 +187,7 @@ them. Two things carry over for anyone comparing against the archived tree:
 independence tests run on the true CATE and true nuisances (`truth$tau`,
 `truth$p0`, `W.hat = 0.5`) instead of an estimator's fitted ones, one
 `BLP_p`/`indep_cate` row per (scenario, n, type, prop, mechanism, method,
-run). See `continuous/README.md`'s "True-CATE HTE test evaluation" for what
+run). See `sample_size/continuous/README.md`'s "True-CATE HTE test evaluation" for what
 it means and why scenario 1's `BLP_p` is `NA`. `method == "multiple_imputation"`
 rows are `NA`/`NA` too, for the same reason as above: `data` is a list of 50
 imputed data.frames there, with no single covariate matrix to test against.

@@ -258,7 +258,7 @@ save_fig <- function(
 #' @param facet_scales passed to facet_grid
 #' @param alpha error bar is a (1 - alpha) CI, i.e. mean +/- qnorm(1 -
 #'   alpha/2) x MCSE - not a raw +/- 1x MCSE, which is only a ~68% interval
-#'   (see continuous/cts_results.R's summary_plot() for the verification of
+#'   (see sample_size/continuous/cts_results.R's summary_plot() for the verification of
 #'   why the raw form is wrong). Not to be confused with `ci_alpha` below -
 #'   this `alpha` is a significance level, not a plotting transparency.
 #' @param line add a geom_line connecting each colour group's points across x

@@ -31,8 +31,8 @@ its 2,000 jobs re-run too. Together that is about 22,000 array jobs, the largest
 single item in the re-run bill.
 
 ```bash
-qsub confidence_intervals/binary/jobscripts/bin_ci_1.sh
-qsub confidence_intervals/binary/jobscripts/bin_ci_2.sh
-for k in 1 2 3 4; do qsub confidence_intervals/binary/jobscripts/bin_ci_extra_$k.sh; done
-qsub confidence_intervals/optimal_sf/jobscripts/bin_ci_sf_1.sh
+qsub sample_size/confidence_intervals/binary/jobscripts/bin_ci_1.sh
+qsub sample_size/confidence_intervals/binary/jobscripts/bin_ci_2.sh
+for k in 1 2 3 4; do qsub sample_size/confidence_intervals/binary/jobscripts/bin_ci_extra_$k.sh; done
+qsub sample_size/confidence_intervals/optimal_sf/jobscripts/bin_ci_sf_1.sh
 ```

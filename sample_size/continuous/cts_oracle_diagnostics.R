@@ -12,7 +12,7 @@
 # should also be ~0-biased, since po is pointwise unbiased for tau) to
 # isolate how much of final_bias is regression_forest-specific smoothing.
 #
-# Run from continuous/:  Rscript cts_oracle_diagnostics.R [n_reps]
+# Run from sample_size/continuous/:  Rscript cts_oracle_diagnostics.R [n_reps]
 # Smoke test first with a small n_reps (e.g. 10-20); the full characterisation
 # wants more (e.g. 100) for stable per-cell Monte Carlo error.
 
@@ -37,7 +37,7 @@ NS        <- if (length(args) >= 3) as.integer(strsplit(args[3], ",")[[1]]) else
 cat(sprintf("dr_oracle diagnostics: %d scenarios x %d sample sizes x %d reps\n",
             length(SCENARIOS), length(NS), N_REPS))
 
-out_dir <- here("continuous", "diagnostics")
+out_dir <- here("sample_size", "continuous", "diagnostics")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # correctly-specified stage-2 formula per scenario (RHS only; lm() adds the

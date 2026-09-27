@@ -11,9 +11,9 @@ path <- here()
 
 # functions
 source(here("R", "utils.R"))
-source(here("confidence_intervals", "binary", "bin_ci_dgms.R"))
-source(here("confidence_intervals", "binary", "bin_ci_models.R"))
-source(here("confidence_intervals/binary/bin_ci_config.R"))
+source(here("sample_size", "confidence_intervals", "binary", "bin_ci_dgms.R"))
+source(here("sample_size", "confidence_intervals", "binary", "bin_ci_models.R"))
+source(here("sample_size/confidence_intervals/binary/bin_ci_config.R"))
 
 # simulation parameters
 i <- as.numeric(commandArgs(trailingOnly = T))

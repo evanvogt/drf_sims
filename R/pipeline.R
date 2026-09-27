@@ -31,7 +31,7 @@ require(tibble)
 #' @param prefix the file-name stem this study's scripts share - "bin" for
 #'   bin_config.R, bin_analysis.R, jobscripts/bin_1.sh, jobscripts/bin_rerun.sh.
 #'   update_rerun_script() uses it to find the last two. It is declared rather
-#'   than inferred because confidence_intervals/optimal_sf/jobscripts holds two
+#'   than inferred because sample_size/confidence_intervals/optimal_sf/jobscripts holds two
 #'   studies, so globbing that directory for *_rerun.sh matches both.
 #' @param res_path directory holding this study's results
 #' @param grid THE parameter grid. One row per array job, in array-index order,
@@ -269,7 +269,7 @@ parse_select <- function(line) {
 #' and recomputing from the base alone would quietly drop it back to 6gb.
 #'
 #' Scripts are found by study$prefix rather than by globbing for *_rerun.sh,
-#' because confidence_intervals/optimal_sf/jobscripts holds two studies and a
+#' because sample_size/confidence_intervals/optimal_sf/jobscripts holds two studies and a
 #' glob there matches both.
 #'
 #' @param n_failed number of indices in study$failed_file

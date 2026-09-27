@@ -6,6 +6,6 @@
 # Writes array indices of the missing runs to jobscripts/failed_bin_ids.txt.
 
 library(here)
-source(here("confidence_intervals/optimal_sf/bin_ci_sf_config.R"))
+source(here("sample_size/confidence_intervals/optimal_sf/bin_ci_sf_config.R"))
 
 check_failed(study)

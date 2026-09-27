@@ -55,7 +55,7 @@ metrics_summary <- metrics %>%
   )
 
 # error bars below are a 95% CI (mean +/- qnorm(0.975) x MCSE), not a raw
-# +/- 1x MCSE (~68% coverage) - see continuous/cts_results.R's summary_plot
+# +/- 1x MCSE (~68% coverage) - see sample_size/continuous/cts_results.R's summary_plot
 z <- qnorm(0.975)
 
 # combining everything into a single plot?

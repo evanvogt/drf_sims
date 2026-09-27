@@ -19,7 +19,7 @@
 # how much of var(tau) the link handed to X1 and X2 - up to 80% at n = 100.
 # README.md keeps that table as the reason for the change.
 #
-# Writes nothing, and stops at the first failed check. Run from binary/:
+# Writes nothing, and stops at the first failed check. Run from sample_size/binary/:
 #   Rscript bin_verify_hte.R
 
 source(here::here("R", "dgm_scenarios.R"))

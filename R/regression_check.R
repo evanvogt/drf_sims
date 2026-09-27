@@ -44,7 +44,7 @@ BASELINE_DIR <- here(".regression_baseline")
 STUDIES <- list(
 
   continuous = list(
-    sources = c("utils.R", "continuous/cts_dgms.R", "continuous/cts_models.R"),
+    sources = c("utils.R", "sample_size/continuous/cts_dgms.R", "sample_size/continuous/cts_models.R"),
     run = function() {
       setup_rng_stream(3)
       gen <- generate_continuous_scenario_data(scenario = 8, n = 120)
@@ -58,7 +58,7 @@ STUDIES <- list(
   ),
 
   binary = list(
-    sources = c("utils.R", "binary/bin_dgms.R", "binary/bin_models.R"),
+    sources = c("utils.R", "sample_size/binary/bin_dgms.R", "sample_size/binary/bin_models.R"),
     run = function() {
       setup_rng_stream(3)
       gen <- generate_binary_scenario_data(scenario = 3, n = 120)
@@ -73,8 +73,8 @@ STUDIES <- list(
 
   ci_continuous = list(
     sources = c("utils.R",
-                "confidence_intervals/continuous/cts_ci_dgms.R",
-                "confidence_intervals/continuous/cts_ci_models.R"),
+                "sample_size/confidence_intervals/continuous/cts_ci_dgms.R",
+                "sample_size/confidence_intervals/continuous/cts_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
       gen <- generate_continuous_scenario_data(scenario = 8, n = 120)
@@ -92,8 +92,8 @@ STUDIES <- list(
   # Step 8 deliberately changes it.
   ci_binary = list(
     sources = c("utils.R",
-                "confidence_intervals/binary/bin_ci_dgms.R",
-                "confidence_intervals/binary/bin_ci_models.R"),
+                "sample_size/confidence_intervals/binary/bin_ci_dgms.R",
+                "sample_size/confidence_intervals/binary/bin_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
       gen <- generate_binary_scenario_data(scenario = 3, n = 120)

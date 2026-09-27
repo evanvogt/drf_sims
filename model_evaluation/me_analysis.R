@@ -1,7 +1,7 @@
 ##########
 # title: script for running the model evaluation study - one replicate per run
 ##########
-# Replaces the old sim_eval.R. Structure mirrors continuous/cts_analysis.R
+# Replaces the old sim_eval.R. Structure mirrors sample_size/continuous/cts_analysis.R
 # (grid comes from the study config, never re-typed here; setup_rng_stream();
 # save raw ingredients only, no metrics computed inline - see me_metrics.R).
 #

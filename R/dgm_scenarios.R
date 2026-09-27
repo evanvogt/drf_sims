@@ -2,11 +2,11 @@
 # title: shared data-generating mechanisms
 ##########
 # One implementation of what was four forked DGM files:
-#   continuous/cts_dgms.R
-#   binary/bin_dgms.R
-#   confidence_intervals/continuous/cts_ci_dgms.R  (a verbatim copy of the first,
+#   sample_size/continuous/cts_dgms.R
+#   sample_size/binary/bin_dgms.R
+#   sample_size/confidence_intervals/continuous/cts_ci_dgms.R  (a verbatim copy of the first,
 #                                                   as its own header admitted)
-#   confidence_intervals/binary/bin_ci_dgms.R
+#   sample_size/confidence_intervals/binary/bin_ci_dgms.R
 #   missing/{continuous,binary}/*_miss_dgms.R      (scenario half; the missingness
 #                                                   machinery is in R/missingness.R)
 #
@@ -40,7 +40,7 @@
 # is now exactly the scenario's te_expr: X1 and X2 are purely prognostic. Until
 # 2026-09-26 the effect was on the logit scale, so the link made X1 and X2
 # effect modifiers on the RD scale, scenario 1 was not an RD null, and the HTE
-# changed with n (binary/README.md). Both outcomes are now one model,
+# changed with n (sample_size/binary/README.md). Both outcomes are now one model,
 # E[Y | x, W] = m0(x) + W * tau(x), differing in m0, the noise, and the scale and
 # sign of the modifiers. Binary scenario 10 now draws X3, which it did not
 # before.
@@ -130,7 +130,7 @@ ORACLE_RD <- paste0(RD_CONTROL, c(
 # LESS benefit, where the bounds leave room - with the continuous signs,
 # scenarios 3, 4, 5, 8 and 10 would have to be much smaller. The price is that
 # the opposite subgroup benefits more than in continuous/, undoing bug P's sign
-# harmonisation. binary/bin_verify_hte.R re-derives RD_SCALE from the tables
+# harmonisation. sample_size/binary/bin_verify_hte.R re-derives RD_SCALE from the tables
 # and fails if it drifts: change p0_lo, p0_hi, b0-b2, bU, RD_EPS or the binary
 # studies' n, and it must be recomputed.
 RD_SCALE <- c(NA, 0.082, 0.051, 0.204, 0.137, 0.075, 0.082, 0.137, 0.164, 0.596)

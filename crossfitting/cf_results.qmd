@@ -158,7 +158,7 @@ metrics_summary <- metrics %>%
 
 ```{r summary-plot-helper, include=FALSE}
 # helper: the house summary plot, points with a 95% CI (mean +/- qnorm(1 -
-# alpha/2) x MCSE) error bar - see continuous/cts_results.R's summary_plot for
+# alpha/2) x MCSE) error bar - see sample_size/continuous/cts_results.R's summary_plot for
 # why this isn't a raw +/- 1x MCSE (~68% coverage, not 95%).
 # facet_wrap (not facet_grid) because variant is family-specific - each
 # family only populates 2-7 of the 11 levels, and facet_grid's free scales

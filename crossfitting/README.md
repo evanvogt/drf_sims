@@ -156,7 +156,7 @@ defaults to `FALSE`, so every pre-existing caller is bit-for-bit unaffected —
 The OOB arms carry a **third** interval, `grf_normal`. For a whole-sample forest
 grf returns OOB variance estimates (bootstrap of little bags) alongside the
 predictions at no extra compute, and `R/metrics.R`'s `normal_interval()` — the
-same function `confidence_intervals/binary/` uses for its `causal_forest_inbuilt`
+same function `sample_size/confidence_intervals/binary/` uses for its `causal_forest_inbuilt`
 method — turns those into a CI. `stage2_whole_rf`/`cf_whole` now return
 `var_oob`, and `arm()` carries it; the 4 crossfit arms have none, and downstream
 code keys off exactly that.
@@ -252,7 +252,7 @@ Change the trailing `workers` and the `ncpus` in `#PBS -l select` together, so
 the two can't drift apart.
 
 Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
-`collate_predictions`, `continuous/cts_dgms.R` supplies the DGP, and
+`collate_predictions`, `sample_size/continuous/cts_dgms.R` supplies the DGP, and
 `R/cate_models.R` supplies `pretest_superlearner` plus the reference
 implementation the regression check in `cf_testing.R` compares against — though
 that last one no longer holds, which is what breaks section 1 of `cf_testing.R`
@@ -261,7 +261,7 @@ that last one no longer holds, which is what breaks section 1 of `cf_testing.R`
 This folder was the model for the repo-wide `R/` refactor: it was already
 sourcing shared code rather than copying it, at a time when the same CATE
 estimators existed in seven files. The reference implementations it compares
-against moved from `continuous/cts_models.R` into `R/cate_models.R`, which is
+against moved from `sample_size/continuous/cts_models.R` into `R/cate_models.R`, which is
 now the only copy - `cts_models.R` is a thirteen-line profile shim.
 
 ## Known issue: `cf_testing.R` section 1 aborts
@@ -303,7 +303,7 @@ working verification** until section 1 is fixed. Discovered while migrating
 ## Status
 
 **Re-run owed** - bug O changed the continuous DGM this study generates from
-(`continuous/README.md`), and the 2026-09-26 renumbering made its scenarios
+(`sample_size/continuous/README.md`), and the 2026-09-26 renumbering made its scenarios
 1 / 4 / 6 / 8 (were 1 / 4 / 6 / 9; the pilot's 1 / 6 / 9 are now 1 / 4 / 8).
 The comparison's conclusions were drawn on the old DGM. Archive both old trees
 (`../results/crossfitting/`, `../results/crossfitting_ci/`) first with

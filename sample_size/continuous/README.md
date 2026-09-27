@@ -140,11 +140,11 @@ elsewhere) — while `indep_cate` still returns a real p-value there.
 ## Running it
 
 ```bash
-qsub continuous/jobscripts/cts_1.sh     # 1-4000
-qsub continuous/jobscripts/cts_extra.sh # 4001-10400: runs 101-500, scenarios 1-4
-Rscript continuous/cts_check.R          # writes failed_ids.txt if any are missing
-qsub continuous/jobscripts/cts_collect.sh
-qsub continuous/jobscripts/cts_metrics.sh
+qsub sample_size/continuous/jobscripts/cts_1.sh     # 1-4000
+qsub sample_size/continuous/jobscripts/cts_extra.sh # 4001-10400: runs 101-500, scenarios 1-4
+Rscript sample_size/continuous/cts_check.R          # writes failed_ids.txt if any are missing
+qsub sample_size/continuous/jobscripts/cts_collect.sh
+qsub sample_size/continuous/jobscripts/cts_metrics.sh
 ```
 
 ## Sizing the array job
