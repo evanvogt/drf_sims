@@ -48,9 +48,12 @@ grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-Y"), ]
 
 # Scenario 2 was added after rows 1-9900 had run (as scenario 6, before the
 # 2026-09-26 renumbering - see R/dgm_scenarios.R). It is appended as a second
-# block rather than added to `scenario` above, so rows 1-9900 keep the meaning
-# they were submitted under and the new rows are one contiguous range,
-# 9901-12600, for jobscripts/cts_miss_extra.sh.
+# block rather than added to `scenario` above, so its rows are one contiguous
+# range, 9901-12600, for jobscripts/cts_miss_extra.sh. The renumbering did
+# reorder rows 1-9900 (old scenarios 1, 2, 4, 5 are now 1, 5, 3, 4), so a row
+# index no longer means what it did before 2026-09-26 - harmless, since every
+# pre-renumbering result is archived and the study re-runs from empty
+# (R/archive_old_results.R).
 grid <- rbind(grid, expand.grid(
   scenario  = 2,
   n         = c(500),

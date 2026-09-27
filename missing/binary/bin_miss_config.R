@@ -28,9 +28,9 @@ grid <- expand.grid(
 
 grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-Y"), ]
 
-# Scenario 2 appended as a second block so rows 1-9900 keep their meaning - see
-# missing/continuous/cts_miss_config.R. The new rows are 9901-12600, for
-# jobscripts/bin_miss_extra.sh.
+# Scenario 2 appended as a second block, rows 9901-12600, for
+# jobscripts/bin_miss_extra.sh - see missing/continuous/cts_miss_config.R,
+# including why rows 1-9900 changed meaning at the 2026-09-26 renumbering.
 grid <- rbind(grid, expand.grid(
   scenario  = 2,
   n         = c(500),

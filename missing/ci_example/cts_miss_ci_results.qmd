@@ -76,7 +76,7 @@ res_path <- file.path(dirname(path), "results", "missing", "ci_example")
 metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS"))
 
 # unlike the chapter script this keeps all five scenarios - this study's grid
-# runs 1:5
+# runs 1 and 3-6
 metrics <- metrics %>%
   apply_labels(MISS_SCENARIO_LABELS) %>%
   mutate(n = factor(n), prop = factor(prop)) %>%

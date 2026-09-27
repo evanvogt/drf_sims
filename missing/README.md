@@ -30,6 +30,18 @@ scenarios 1–6, so scenario `k` here is scenario `k` in `continuous/` and
 on the continuous `X4`) was added after the others had been run, so it is the
 second block of the grid, rows 9,901–12,600.
 
+**Runs stay at 100 for every scenario**, unlike `continuous/` and `binary/`,
+which take scenarios 1–4 to 500. More runs cost far more here: one run is one
+job per mechanism × method, so each extra run of scenarios 1–4 adds 99 jobs
+(scenario 1 has no MNAR-Y), against 16 in the main studies (4 scenarios × 4
+sample sizes). Going to 500 runs for scenarios 1–4 would add 39,600 jobs per study (52,200
+in all, about 4× the current 12,600), so 79,200 across `continuous/` and
+`binary/`. That is four more array scripts per study under the 10,000-subjob
+limit. The `multiple_imputation` jobs are the costliest, since each fits 50
+imputed datasets. If more runs are ever needed, append runs 101+ as a new block
+at the end of the grid, as the main studies do, so existing row numbers keep
+their meaning.
+
 **Before 2026-09-26 this folder numbered them differently**, and results saved
 before then use the old numbers:
 
