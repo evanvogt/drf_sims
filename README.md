@@ -245,12 +245,13 @@ resource request to sit above `<prefix>_1.sh`'s (one more core, 1.2x the
 memory, 2x the walltime, capped at 72 hours and never lowered below what the
 script already asks for). There is no `-J` to set by hand any more.
 
-Three of the rerun scripts write to a `logs*/` directory that is gitignored and
-so never checked out; `mkdir -p` it on the cluster before the first submit, or
-PBS will reject the job:
-`competing_risk/jobscripts/logs_rerun/`,
-`sample_size/confidence_intervals/optimal_sf/jobscripts/logs_bin_rerun/` and
-`.../logs_cts_rerun/`.
+Every jobscript writes its PBS output to a `jobscripts/logs*/` directory, and
+`*logs*/` is gitignored, so none of them exist after a fresh clone and PBS
+rejects the job. Create them all on the cluster before the first submit:
+
+```bash
+Rscript make_log_dirs.R            # --dry-run to just list them
+```
 
 For a bird's-eye view
 across every study at once - how many jobs are expected, found and missing,
