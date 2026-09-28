@@ -107,11 +107,87 @@ Each run is seeded by its run index alone (`setup_rng_stream(run)`), so a given
 | `dr_random_forest` | DR-learner; outcome model fit per arm (T-learner RF, own-arm predictions OOB), RF propensity, OOB RF second stage | all |
 | `dr_superlearner` | DR-learner; SuperLearner per-arm outcome models and propensity, single leave-one-fold-out crossfit (V = 4, 5, 10 at n = 100, 250, ≥ 500), SuperLearner second stage | continuous / binary |
 | `dr_oracle` | DR-learner with the true outcome model (binary: true risk) and propensity 0.5 | all but optimal_sf |
-| `dr_semi_oracle` | DR-learner with the known propensity 0.5 and `dr_random_forest`'s per-arm outcome forests | all but optimal_sf |
+| `dr_semi_oracle` | DR-learner with the known propensity 0.5 and per-arm outcome forests specified as in `dr_random_forest` (refitted) | all but optimal_sf |
 | `t_random_forest` | T-learner $\hat\mu_1 - \hat\mu_0$ from `dr_random_forest`'s per-arm outcome forests (own-arm predictions OOB); derived at metrics time, not refitted | continuous / binary |
 | `t_superlearner` | T-learner $\hat\mu_1 - \hat\mu_0$ from `dr_superlearner`'s per-arm SuperLearners (out-of-fold); derived at metrics time, not refitted | continuous / binary |
 
-Estimated propensities trimmed to [0.05, 0.95].
+Estimated propensities in the DR-learners (`dr_random_forest`,
+`dr_superlearner`) are trimmed to [0.05, 0.95]; the causal forest's internal
+propensity is not.
+
+### Model fitting
+
+Implementation: `R/cate_models.R::cate_methods()`, called through each study's
+`*_models.R` shim. The binary and continuous studies differ only in the
+SuperLearner `family` (see below).
+
+**Inputs.** Every learner receives the 10 covariates X1–X5, X01–X05 as they
+are generated (no scaling or feature engineering, except the interaction lasso
+below). W enters the causal forest as the treatment; it is never a covariate
+of an outcome model, which is fit per arm.
+
+**DR pseudo-outcome** (`dr_pseudo`), shared by every DR-learner:
+
+$$\hat\phi_i = \hat\mu_1(x_i) - \hat\mu_0(x_i) + \frac{(Y_i - \hat\mu_{W_i}(x_i))(W_i - \hat e(x_i))}{\hat e(x_i)(1 - \hat e(x_i))}$$
+
+The CATE is the second-stage regression of $\hat\phi$ on X.
+
+**Forests.** All forests are grf `regression_forest` / `causal_forest` at
+grf's defaults: 2000 trees, `sample.fraction` 0.5, honest splitting
+(`honesty.fraction` 0.5, `honesty.prune.leaves` TRUE), `min.node.size` 5,
+`mtry` = min(⌈√p⌉ + 20, p) = all 10 covariates, `alpha` 0.05,
+`ci.group.size` 2, no parameter tuning. Only the CI studies' bootstrap forests
+change a setting (`sample.fraction = CI_sf`).
+
+**Per estimator:**
+
+- `causal_forest`: `causal_forest(X, Y, W)` with no supplied nuisances, so grf
+  fits `Y.hat` and `W.hat` itself as OOB predictions from regression forests of
+  500 trees (max(50, 2000/4)); τ̂ is the forest's OOB prediction. Splits use
+  grf's default `stabilize.splits = TRUE`.
+- `dr_random_forest` (whole sample, no sample splitting):
+  - $\hat\mu_0, \hat\mu_1$: one regression forest of Y on X per arm, fit on that
+    arm's rows. A unit's own-arm prediction is OOB; its other-arm prediction is
+    from a forest that never saw it.
+  - $\hat e$: regression forest of W on X, OOB predictions, trimmed.
+  - Stage 2: regression forest of $\hat\phi$ on X; τ̂ is its OOB prediction,
+    with grf's OOB variance estimate saved.
+- `dr_oracle`: $\mu_w(x)$ is the true outcome mean evaluated at W = w (the
+  DGM's oracle formula, `get_*_oracle_info()`); e = 0.5. Stage 2 as
+  `dr_random_forest`.
+- `dr_semi_oracle`: per-arm outcome forests as in `dr_random_forest` (a separate
+  fit); e = 0.5. Stage 2 as `dr_random_forest`.
+- `dr_superlearner` (single cross-fit; V = 4, 5, 10 folds at n = 100, 250,
+  ≥ 500; rows assigned to folds in contiguous blocks):
+  - Stage 1, per fold k: on the rows outside k, one SuperLearner of Y on X per
+    arm and one of W on X; predict fold k's rows; trim $\hat e$; form
+    $\hat\phi$ for fold k.
+  - Stage 2, per fold k: SuperLearner of $\hat\phi$ on X fit on the rows outside
+    k, predicting fold k. Stage 1 and stage 2 use the same folds.
+- `t_random_forest`, `t_superlearner`: $\hat\mu_1 - \hat\mu_0$, recovered at
+  metrics time from the saved DR nuisances by removing the residual term from
+  $\hat\phi$ (`R/metrics.R::add_t_learners`).
+
+**SuperLearner settings** (`R/sl_library.R::sl_fit_predict`):
+
+| model | family | meta-learner |
+|---|---|---|
+| propensity | binomial | `method.NNloglik` |
+| outcome, continuous | gaussian | `method.NNLS` |
+| outcome, binary | binomial | `method.NNloglik` |
+| CATE (stage 2) | gaussian | `method.NNLS` |
+
+- Ensemble weights from SuperLearner's internal 10-fold CV (package default),
+  within each cross-fitting training set.
+- Before each fit, each candidate is fit alone with 2-fold CV
+  (`pretest_superlearner`); learners that error or give non-finite predictions
+  are dropped and recorded in `sl_dropped`. If all fail, the library is
+  `SL.mean` alone.
+- If a SuperLearner fit itself errors, every prediction is the mean of its
+  training outcome, with a warning, recorded in `sl_dropped` as `(whole fit)`.
+- If an outcome or propensity fit returns all-zero predictions, they are
+  replaced by the training mean (for the outcome model, that arm's mean), with
+  a warning.
 
 SuperLearner libraries, one per nuisance (`R/sl_library.R::sl_libraries`),
 chosen without reference to the scenarios' HTE shapes. The outcome model is fit
@@ -129,15 +205,51 @@ included at both tunings and SuperLearner's CV weighs them. Learners that error
 or give non-finite predictions on a fold are dropped before fitting
 (`pretest_superlearner`) and saved as `sl_dropped`.
 
+Candidate learners (SuperLearner wrapper defaults unless stated; p = 10):
+
+| learner | definition |
+|---|---|
+| `SL.mean` | training mean |
+| `SL.glm` | `glm` on all main effects |
+| `SL.glmnet` | lasso (`alpha` 1) on main effects, λ chosen by 10-fold `cv.glmnet` at `lambda.min` |
+| `SL.glmnet.1se` | as `SL.glmnet`, at `lambda.1se` (custom wrapper) |
+| `SL.glmnet.int` | lasso on all main effects and pairwise interactions (`model.matrix(~ .^2)`), `lambda.min` (custom wrapper) |
+| `SL.glmnet.int.1se` | as `SL.glmnet.int`, at `lambda.1se` (custom wrapper) |
+| `SL.gam` | `gam` package; smoothing spline with 2 df for covariates with more than 4 unique values, linear otherwise |
+| `SL.earth` | MARS: `degree` 2, `penalty` 3, `nk` = max(21, 2p + 1), backward pruning |
+| `SL.ranger.ns25` | ranger, 500 trees, `mtry` ⌊√p⌋ = 3, `min.node.size` 25 (custom wrapper; the default is 5); probability forest for a binomial outcome |
+
 ### Heterogeneity tests (continuous / binary)
 
-Per method: BLP (GenericML) and independence tests on the CATE and on the
-pseudo-outcome. Also run on the true CATE and nuisances
+Per method, on the full sample (`run_blp_whole`,
+`run_independence_test_whole`). Also run on the true CATE and nuisances
 (`cts_true_cate_tests.RDS`, `bin_true_cate_tests.RDS`).
+
+- **BLP** (GenericML `BLP`, Chernozhukov et al.): weighted least squares, weights
+  $1/(\hat e(1-\hat e))$, of Y on an intercept, the baseline proxy
+  $\hat\mu_0(x)$, $(W - \hat e)$ and $(W - \hat e)(\hat\tau(x) - \bar{\hat\tau})$.
+  The test is on the last coefficient, β2. $\hat e$ and $\hat\mu_0$ are the
+  estimator's own stage-1 nuisances: `nuisances_rf` for `causal_forest`,
+  `dr_random_forest` and `t_random_forest`; `nuisances_sl` for
+  `dr_superlearner` and `t_superlearner`; e = 0.5 and the arm's own
+  $\mu_0$ for the oracles.
+  - `BLP_p`: two-sided, homoskedastic OLS standard errors (saved at
+    estimation time).
+  - `BLP_p_os`: one-sided (H1: β2 > 0), HC3 standard errors (recomputed at
+    metrics time from the saved nuisances).
+- **Independence test** (coin `independence_test(τ ~ X, teststat =
+  "quadratic")`, asymptotic χ² reference): of the estimated CATE against the
+  covariates (`indep_cate`), and of the pseudo-outcome against the covariates
+  (`indep_po`; reported once per pseudo-outcome, so not for `causal_forest` or
+  the T-learners).
+- A CATE that is constant (up to rounding) gives NA for both tests.
 
 ### Intervals (CI studies)
 
-No SuperLearner arm and no HTE tests.
+No SuperLearner arm and no HTE tests. The point estimators are fit exactly as
+above; since `family` only reaches SuperLearner, the continuous and binary CI
+studies fit the same models. The causal forest also saves grf's variance
+estimate (for `causal_forest_inbuilt`).
 
 - **Half-sample bootstrap band** (`R/bootstrap_ci.R`), B = 200, α = 0.05: per
   draw, refit the second stage (DR-learners: regression forest on the fixed
@@ -170,7 +282,7 @@ averaged over runs:
 - MSE, RMSE, MAE
 - Pearson and Spearman correlation with the true CATE (set to 0 in scenario 1)
 - sign accuracy
-- HTE tests: p-values `BLP_p`, `indep_cate`, `indep_po` → rejection rates at
+- HTE tests: p-values `BLP_p`, `BLP_p_os`, `indep_cate`, `indep_po` → rejection rates at
   0.05 (type I error in scenario 1, power in 2–10)
 
 ### CI continuous / binary
