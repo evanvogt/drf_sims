@@ -12,7 +12,7 @@ Three studies: `continuous/` and `binary/` (main design) and `ci_example/`
 
 ## Data-generating mechanisms
 
-Complete data: the `continuous/` or `binary/` DGM (see their `ADEMP.md`),
+Complete data: the `sample_size/` continuous or binary DGM (see `sample_size/ADEMP.md`),
 scenarios numbered as there.
 
 | | continuous / binary | ci_example (continuous) |

@@ -29,7 +29,7 @@ models, `R/sl_library.R::sl_libraries`) also shrink at n=100. Until the
 library change the single shared library dropped `SL.earth` and `SL.ranger`
 there, which is why `dr_superlearner` is sometimes filtered out of the older
 n=100 figures. The CATE library now keeps ranger at n=100, so it still has an
-interaction-capable learner (see `ADEMP.md`).
+interaction-capable learner (see `../ADEMP.md`).
 
 ### Scenarios
 
