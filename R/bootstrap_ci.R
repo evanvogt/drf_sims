@@ -55,7 +55,7 @@ simultaneous_band <- function(draws, tau, alpha, na.rm = FALSE) {
   lambda_hat <- apply(draws, 1, var, na.rm = na.rm)
   draws_norm <- abs(draws) / sqrt(lambda_hat)
   col_max <- apply(draws_norm, 2, max, na.rm = na.rm)
-  S_star <- quantile(col_max, 1 - (alpha / 2))
+  S_star <- quantile(col_max, 1 - (alpha))
 
   margin <- sqrt(lambda_hat) * S_star
 
