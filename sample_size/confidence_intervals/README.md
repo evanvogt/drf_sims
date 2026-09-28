@@ -16,8 +16,12 @@ how well they cover.
 For each of `CI_boot` draws: take half of each fold, refit the second stage on
 that half, and form the *half-sample root* `tau_full - tau_half`. Standardise
 each root by its own bootstrap SD, take the maximum over units within each draw,
-and use the `1 - alpha/2` quantile of that maximum as a **single** critical
-value. That scalar is what makes the band simultaneous.
+and use the `1 - alpha` quantile of that maximum as a **single** critical
+value. That scalar is what makes the band simultaneous. The maximum is of
+absolute roots, so both tails are already in it — `1 - alpha`, not
+`1 - alpha/2`, gives a two-sided `1 - alpha` band. (Before 2026-09-28 the code
+used `1 - alpha/2`, i.e. 97.5% bands at `alpha = 0.05` — any results from
+before then, archived ones included, are 97.5% bands.)
 
 Implemented in `R/bootstrap_ci.R` — `cf_half_boot` for the causal forest,
 `rf_half_boot` for the DR-learner second stage, `simultaneous_band` for the

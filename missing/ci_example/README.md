@@ -68,6 +68,8 @@ compared directly. `cts_miss_ci_results.qmd` says so on the relevant section.
 
 **`alpha` used to be a free variable in `combine_mi()`; it is now an explicit argument.**
 
+**The `mib` and `hybrid` critical values are now the `1 - alpha` quantile (2026-09-28), not `1 - alpha/2`.** They are quantiles of a maximum of *absolute* roots, so both tails are already in it; `1 - alpha/2` gave 97.5% bands at `alpha = 0.05`. Same fix as `simultaneous_band()`, so each imputation's own band changes too. `pooled` still uses `alpha/2` and `1 - alpha/2`, correctly — it takes quantiles of signed replicates. Results from before this date are 97.5% bands.
+
 **The hybrid margin looks like a typo.** It computes
 `sqrt(lambda_hat * S_star)` where the other two strategies and
 `simultaneous_band()` use `sqrt(lambda_hat) * S_star` — i.e. it takes the square

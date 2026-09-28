@@ -256,8 +256,10 @@ estimate (for `causal_forest_inbuilt`).
   pseudo-outcomes; causal forest: with `Y.hat`, `W.hat` fixed) on an
   unstratified half sample, with `sample.fraction = CI_sf`. Roots
   `tau_full − tau_half` (in-half units OOB, the rest out of sample) are
-  standardised by their bootstrap SD; critical value = `1 − α/2` quantile of
-  the per-draw maximum over units. Built over the sample's units and,
+  standardised by their bootstrap SD; critical value = `1 − α` quantile of
+  the per-draw maximum of absolute standardised roots over units (the
+  absolute value already makes it two-sided, so this is a 95% simultaneous
+  band). Built over the sample's units and,
   separately, over the query grid.
 - **`causal_forest_inbuilt`:** pointwise normal interval from grf's variance
   estimate, α = 0.05.
