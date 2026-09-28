@@ -7,7 +7,8 @@ rather than guessing one.
 
 | | |
 |---|---|
-| array | **2,000 jobs** per outcome |
+| scenarios | 1–4 only (the ones reported) |
+| array | **800 jobs** per outcome (4 scenarios × n ∈ {500, 1000} × 100 runs) |
 | results | `../results/confidence_intervals/<outcome>/sf_calibration/` |
 
 ## Method
@@ -42,6 +43,11 @@ is outcome-agnostic and the binary analysis has always sourced it. Now that it
 lives in `R/bootstrap_ci.R` the misleading filename only survives as a shim.
 
 ## Status
+
+**Scope cut to scenarios 1–4 (2026-09-28).** The grid went from 2,000 to 800
+rows, so every array index was renumbered. Results are saved by
+`scenario_<k>/<n>/res_sim_<run>.RDS`, so finished scenario 1–4 runs still count;
+scenario 5–10 results on disk are simply ignored.
 
 **Both variants re-run.** The crossfitting strategy change to
 `R/cate_models.R` (see root README Methods/Status) affects the point

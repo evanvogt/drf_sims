@@ -76,7 +76,7 @@ Full factorial over the rows below, per outcome type:
 
 | | continuous / binary | CI continuous / binary | optimal_sf |
 |---|---|---|---|
-| scenarios | 1–10 | 1–10 | 1–10 |
+| scenarios | 1–10 | 1–10 | 1–4 |
 | n | 100, 250, 500, 1000 | 500, 1000 | 500, 1000 |
 | `CI_sf` | — | 0.05 to 0.5 by 0.05 (design factor) | chosen per run from the same values |
 | repetitions | 100; 500 for scenarios 1–4 | 100 | 100 |

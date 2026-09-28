@@ -24,7 +24,7 @@ workers <- 2
 
 # no CI_sf axis — that is what we are finding
 params <- expand.grid(
-  scenario = c(1:10),
+  scenario = c(1:4),
   n        = c(500, 1000),
   run      = c(1:100),
   stringsAsFactors = FALSE

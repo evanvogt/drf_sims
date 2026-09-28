@@ -2,7 +2,7 @@
 
 #PBS -l walltime=12:00:00
 #PBS -l select=1:ncpus=3:ompthreads=2:mem=10gb
-#PBS -J 1-6%100
+#PBS -J 1-419%100
 #PBS -N ci_sf_bin_rerun
 #PBS -o logs_bin_rerun/
 #PBS -j oe

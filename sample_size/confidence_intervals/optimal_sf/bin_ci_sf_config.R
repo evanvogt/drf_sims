@@ -14,7 +14,7 @@ study <- study_config(
   res_path = file.path(dirname(here()), "results", "confidence_intervals",
                         "binary", "sf_calibration"),
   grid = expand.grid(
-    scenario = c(1:10),
+    scenario = c(1:4),
     n        = c(500, 1000),
     run      = c(1:100),
     stringsAsFactors = FALSE
