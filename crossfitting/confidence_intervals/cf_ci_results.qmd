@@ -469,3 +469,176 @@ kable(headline, digits = 4,
                     "Mean relative ATE bias", "Mean relative CATE bias",
                     "Mean MSE", "Mean runtime (s)"))
 ```
+
+## Decision
+
+The MCSEs above are marginal — they treat each arm's 50 replicates as
+independent. But every arm is fit to the same simulated dataset within a
+replicate, so dataset-to-dataset noise is shared across arms and cancels in a
+per-run difference. Comparing arms on the paired difference
+`marginal_coverage[arm] - marginal_coverage[reference]` within each run gives
+a much tighter (and correct) MCSE than eyeballing overlapping error bars.
+
+**Decision rule** (fixed before reading the results): within each family, use
+the **cheapest arm — runtime including the bootstrap — whose marginal coverage
+is non-inferior to the reference arm in all three scenarios**, where
+non-inferior means the lower 95% bound of its paired coverage difference
+against the reference is above `-ni_margin_cov`. All arms are scored on the
+half-sample bootstrap, the one interval every arm has.
+
+The reference in each scenario is the arm whose mean marginal coverage is
+**closest to nominal**, not the highest, so an over-covering arm never sets the
+bar. An arm that covers more than the reference passes on coverage trivially;
+width (the price of that extra coverage) and simultaneous coverage are the
+guardrails, and a picked arm shouldn't be visibly worse on either. The margin
+is absolute (percentage points), not relative like `cf_results.qmd`'s MSE
+margin — coverage already sits on a fixed 0-1 scale.
+
+```{r paired-helper}
+nominal <- 0.95
+ni_margin_cov <- 0.025 # 2.5 percentage-point absolute coverage margin
+
+status_quo <- setNames(ci_variant_labels[c("cf_dcf", "dcf")],
+                       family_labels[c("causal_forest", "dr_rf")])
+
+# paired per-run coverage and width differences against a reference arm
+# ref: one row per scenario x family, naming the reference arm in ref_variant
+paired_cov_diff <- function(ref, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
+
+  ref_runs <- metrics %>%
+    inner_join(ref, by = c("scenario", "family")) %>%
+    filter(variant == ref_variant) %>%
+    select(scenario, family, run, ref_variant,
+           ref_cov = marginal_coverage, ref_len = mean_ci_length)
+
+  # coverage difference is absolute. width difference is relative, a ratio of
+  # means mean(len_diff) / mean(ref_len) with the delta-method MCSE, the same
+  # construction as cf_results.qmd's paired_diff() uses for MSE.
+  # a failed bound makes a run's coverage and length NA (see metrics_summary),
+  # so those runs drop out of the pairing
+  metrics %>%
+    inner_join(ref_runs, by = c("scenario", "family", "run")) %>%
+    mutate(diff = marginal_coverage - ref_cov,
+           len_diff = mean_ci_length - ref_len) %>%
+    filter(!is.na(diff), !is.na(len_diff)) %>%
+    group_by(scenario, family, variant, ref_variant) %>%
+    summarise(
+      n_runs = n(),
+      mean_diff = mean(diff),
+      mcse_diff = sd(diff) / sqrt(n_runs),
+      p_higher = mean(diff > 0), # share of runs where this arm covers more than the reference
+      mean_rel_width = mean(len_diff) / mean(ref_len),
+      mcse_rel_width = sd(len_diff - mean_rel_width * ref_len) / (sqrt(n_runs) * mean(ref_len)),
+      .groups = "drop") %>%
+    mutate(lo = mean_diff - z * mcse_diff,
+           hi = mean_diff + z * mcse_diff)
+}
+
+ref_status_quo <- metrics %>%
+  distinct(scenario, family) %>%
+  mutate(ref_variant = unname(status_quo[as.character(family)]))
+
+ref_best <- metrics_summary %>%
+  group_by(scenario, family) %>%
+  slice_min(abs(mean_marg_cov - nominal), n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  transmute(scenario, family, ref_variant = as.character(variant))
+
+vs_status_quo <- paired_cov_diff(ref_status_quo)
+vs_best <- paired_cov_diff(ref_best)
+```
+
+### Against the status quo
+
+Paired difference in marginal coverage against double crossfitting (`dcf` /
+`cf_dcf`), with a 95% CI. Right of zero means the arm covers more than the
+status quo; the dotted line is the non-inferiority margin.
+
+```{r paired-plot, fig.height=7}
+paired_plot <- vs_status_quo %>%
+  filter(variant != ref_variant) %>%
+  ggplot(aes(x = 100 * mean_diff, y = variant, xmin = 100 * lo, xmax = 100 * hi)) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = -100 * ni_margin_cov, linetype = "dotted") +
+  geom_pointrange(size = 0.3) +
+  # free_y + space so each family row only shows its own arms
+  facet_grid(family ~ scenario, scales = "free", space = "free_y") +
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
+  labs(title = "Marginal coverage relative to double crossfitting (paired by run)",
+       subtitle = "Right of zero covers more than the status quo; dotted line is the non-inferiority margin",
+       x = "Difference in marginal coverage (percentage points)", y = NULL)
+
+paired_plot
+```
+
+### Decision tables
+
+One row per arm, cheapest first (runtime includes the bootstrap). *Worst lower
+bound* is the smallest lower 95% bound of the paired coverage difference
+against the closest-to-nominal arm across the three scenarios; *Worst
+P(covers more than status quo)* is the lowest share of runs, across scenarios,
+in which the arm's marginal coverage beat double crossfitting's; *Widest vs
+status quo* is the largest paired relative difference in mean interval length.
+The pick is the cheapest arm non-inferior in all three scenarios.
+
+```{r decision-table-helper}
+decision_table <- function(fam) {
+  # kable formats on the call, so the NA placeholder only needs to hold in here
+  op <- options(knitr.kable.NA = "—")
+  on.exit(options(op))
+
+  per_arm <- metrics_summary %>%
+    filter(family == fam) %>%
+    group_by(variant) %>%
+    summarise(mean_time = mean(mean_time_total),
+              worst_simul_cov = min(mean_simul_cov),
+              .groups = "drop")
+
+  # the status quo arm itself is left out, so its row reads as blank
+  sq <- vs_status_quo %>%
+    filter(family == fam, variant != ref_variant) %>%
+    group_by(variant) %>%
+    summarise(worst_p_higher = min(p_higher),
+              widest_rel_width = max(mean_rel_width),
+              .groups = "drop")
+
+  vs_best %>%
+    filter(family == fam) %>%
+    group_by(variant) %>%
+    summarise(worst_lo = min(lo),
+              n_ni = sum(lo > -ni_margin_cov),
+              n_scen = n(),
+              .groups = "drop") %>%
+    left_join(sq, by = "variant") %>%
+    left_join(per_arm, by = "variant") %>%
+    arrange(mean_time) %>%
+    mutate(eligible = n_ni == n_scen,
+           pick = ifelse(eligible & cumsum(eligible) == 1, "✓", ""),
+           worst_lo = 100 * worst_lo,
+           widest_rel_width = 100 * widest_rel_width,
+           ni = paste0(n_ni, "/", n_scen)) %>%
+    select(variant, mean_time, worst_lo, ni, worst_p_higher, widest_rel_width,
+           worst_simul_cov, pick) %>%
+    kable(digits = c(0, 2, 1, 0, 2, 1, 2, 0),
+          col.names = c("Procedure", "Mean runtime incl. bootstrap (s)",
+                        "Worst lower bound vs reference (pp)", "Non-inferior in",
+                        "Worst P(covers more than status quo)",
+                        "Widest vs status quo (%)", "Worst simultaneous coverage",
+                        "Pick"))
+}
+```
+
+#### Causal forest
+
+```{r decision-table-cf}
+decision_table(family_labels[["causal_forest"]])
+```
+
+#### DR-learner (RF)
+
+```{r decision-table-dr-rf}
+decision_table(family_labels[["dr_rf"]])
+```
