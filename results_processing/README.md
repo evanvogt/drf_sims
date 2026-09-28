@@ -45,19 +45,27 @@ shared module handles presentation, not analysis.
 
 ## `thesis_tables/`
 
-`ss_tables.R` writes booktabs `longtable`s for the sample-size studies to
-`../results/thesis_tables/`: `{cts,bin}_ss_main.tex` (scenarios 1–4) and
-`{cts,bin}_ss_supp.tex` (5–10). Each cell is `mean (MCSE)`, summarised with
-the figures' `summarise_metrics()`; the layout helpers are in `R/tables.R`.
-Run it from `results_processing/thesis_tables/`:
+Booktabs `longtable`s for the sample-size studies, written to
+`../results/thesis_tables/`, one table for scenarios 1–4 (`*_main.tex`) and
+one for 5–10 (`*_supp.tex`) per outcome:
+
+| script | writes | rows × columns |
+|---|---|---|
+| `ss_tables.R` | `{cts,bin}_ss_{main,supp}.tex` | scenario / n / model × estimation metrics |
+| `ss_test_tables.R` | `{cts,bin}_ss_tests_{main,supp}.tex` | scenario / test / model × n, HTE test rejection rates, with a True CATE reference row |
+
+Each cell is `mean (MCSE)`, summarised with the figures' `summarise_metrics()`;
+the layout helpers are in `R/tables.R`. Run from
+`results_processing/thesis_tables/`:
 
 ```
 Rscript ss_tables.R
+Rscript ss_test_tables.R
 ```
 
 The thesis preamble needs `\usepackage{booktabs, longtable, pdflscape, array}`.
-The script header explains the metric choices (one bias column, relative ATE
-bias but not relative CATE bias).
+Each script's header explains its metric choices (e.g. one bias column,
+relative ATE bias but not relative CATE bias).
 
 ## `poster_figs/`
 

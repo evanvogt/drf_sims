@@ -2,7 +2,8 @@
 # title: LaTeX tables for the thesis chapter - sample size, both outcomes
 ##########
 # One table for the reported scenarios 1-4 and one for the supplementary 5-10,
-# per outcome, each metric as "mean (MCSE)". Labels and the summary come from
+# per outcome, each estimation metric as "mean (MCSE)". The HTE tests have
+# their own tables, ss_test_tables.R. Labels and the summary come from
 # R/figures.R, the table layout from R/tables.R.
 #
 # Writes to ../results/thesis_tables/:
@@ -19,15 +20,10 @@
 #   approaches zero in several scenarios, and those units dominate its mean.
 # - Correlations are undefined in scenario 1 (stored as 0, R/metrics.R), so
 #   they are set to NA and print as a dash.
-# - Rejection rates are 0/1 per run, so they get the binomial MCSE. Runs with an
-#   NA p-value (constant tau, or a test not run - indep_po for the causal
-#   forest and T-learners) are left out of the denominator, as in the figures.
 
 library(here)
 source(here("R", "figures.R"))
 source(here("R", "tables.R"))
-
-ALPHA <- 0.05
 
 # paths
 path <- here()
@@ -41,29 +37,19 @@ outcomes <- list(
   list(dir = "binary", prefix = "bin", digits_bias = 4, digits_mse = 4)
 )
 
-tests <- c("BLP_p", "BLP_p_os", "indep_cate", "indep_po")
-
 # the table's columns, left to right. Drop a row here to drop a column.
 table_cols <- function(o) {
-  est <- "Estimation"
-  # no "\\%" or other macros in a spanning header: add_header_above() strips
-  # one level of backslash even with escape = FALSE. The caption gives alpha.
-  rej <- "Rejection rate"
   # two-line headers (header2 "" for one line) keep the columns as narrow as
-  # their cells, so the table fits a landscape A4 page
+  # their cells
   tibble::tribble(
-    ~stem,             ~header1,   ~header2,          ~group, ~digits,
-    "ate_bias",        "Bias",     "",                est,    o$digits_bias,
-    "rel_ate_bias",    "Rel. bias", "(\\%)",          est,    1,
-    "mse",             "MSE",      "",                est,    o$digits_mse,
-    "rmse",            "RMSE",     "",                est,    3,
-    "corr",            "Pearson",  "",                est,    2,
-    "spearman",        "Spearman", "",                est,    2,
-    "sign_acc",        "Sign",     "accuracy",        est,    2,
-    "rej_BLP_p",       "BLP",      "(2-sided)",       rej,    3,
-    "rej_BLP_p_os",    "BLP",      "(1-sided, HC3)",  rej,    3,
-    "rej_indep_cate",  "CATE",     "indep.",          rej,    3,
-    "rej_indep_po",    "PO",       "indep.",          rej,    3
+    ~stem,             ~header1,    ~header2,    ~digits,
+    "ate_bias",        "Bias",      "",          o$digits_bias,
+    "rel_ate_bias",    "Rel. bias", "(\\%)",     1,
+    "mse",             "MSE",       "",          o$digits_mse,
+    "rmse",            "RMSE",      "",          3,
+    "corr",            "Pearson",   "",          2,
+    "spearman",        "Spearman",  "",          2,
+    "sign_acc",        "Sign",      "accuracy",  2
   ) %>%
     mutate(header = ifelse(
       header2 == "", header1,
@@ -71,24 +57,16 @@ table_cols <- function(o) {
     ))
 }
 
-# runs per cell, read off the data rather than the design, so failed runs show
-runs_text <- function(metrics) {
-  r <- range(count(metrics, scenario, n, model, name = "runs")$runs)
-  if (r[1] == r[2]) r[1] else paste0(r[1], "--", r[2])
-}
-
 short_caption_text <- function(o, scenarios) {
-  paste0("Sample-size study, ", o$dir, " outcome, scenarios ", scenarios)
+  paste0("CATE estimation, ", o$dir, " outcome, scenarios ", scenarios)
 }
 
 caption_text <- function(o, scenarios, runs) {
   paste0(
-    "Sample-size study, ", o$dir, " outcome, scenarios ", scenarios,
-    ": mean (Monte Carlo SE) over ", runs, " runs per cell. ",
-    "Bias and relative bias are for the ATE; rejection rates are at ",
-    "$\\alpha = ", ALPHA, "$ (type I error in the null scenario, power ",
-    "otherwise). --- : not defined (correlation under no heterogeneity; the PO ",
-    "independence test for estimators that share another's pseudo-outcome)."
+    "CATE estimation, sample-size study, ", o$dir, " outcome, scenarios ",
+    scenarios, ": mean (Monte Carlo SE) over ", runs, " runs per cell. ",
+    "Bias and relative bias are for the ATE. --- : not defined (correlation ",
+    "under no heterogeneity)."
   )
 }
 
@@ -100,19 +78,15 @@ for (o in outcomes) {
     mutate(
       rel_ate_bias = 100 * rel_ate_bias,
       corr = if_else(scenario == 1, NA_real_, corr),
-      spearman = if_else(scenario == 1, NA_real_, spearman),
-      across(all_of(tests), ~ as.numeric(as.numeric(.x) < ALPHA),
-             .names = "rej_{.col}")
+      spearman = if_else(scenario == 1, NA_real_, spearman)
     )
 
   cols <- table_cols(o)
-  rej_stems <- grep("^rej_", cols$stem, value = TRUE)
 
   metrics_summary <- summarise_metrics(
     metrics,
     c("scenario", "n", "model"),
     cols = setNames(cols$stem, cols$stem),
-    binomial = rej_stems,
     count_na = character()
   )
 
@@ -133,9 +107,14 @@ for (o in outcomes) {
         cols,
         caption.short = short_caption_text(o, t$text),
         caption = caption_text(
-          o, t$text, runs_text(filter(metrics, scenario %in% t$scenarios))
+          o, t$text, runs_per_cell(filter(metrics, scenario %in% t$scenarios))
         ),
-        label = paste0(o$prefix, "_ss_", nm)
+        label = paste0(o$prefix, "_ss_", nm),
+        # portrait fits the 7 columns within 16cm (A4, 2.5cm margins) with
+        # 2pt column padding; the 4-decimal binary table needs it. Set
+        # landscape = TRUE instead if the thesis margins are wider
+        landscape = FALSE,
+        tabcolsep = "2pt"
       )
     out_file <- file.path(tab_path, paste0(o$prefix, "_ss_", nm, ".tex"))
     writeLines(tex, out_file)
