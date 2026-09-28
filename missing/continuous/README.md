@@ -46,8 +46,10 @@ pooling rule is still to be decided (`missing/README.md`), so the arm's
 **`cts_miss_true_cate_tests.RDS` runs the BLP and independence tests on the
 true CATE and true nuisances instead of an estimator's** (`truth$tau`,
 `truth$p0`, `W.hat = 0.5` — see `sample_size/continuous/README.md`'s "True-CATE HTE test
-evaluation"), one row per (scenario, n, type, prop, mechanism, method, run),
-no per-model dimension. `method == "multiple_imputation"` rows are `NA`/`NA`
+evaluation"; its "HTE tests" describes the test columns, including the
+one-sided, HC3 `BLP_p_os`), one row per (scenario, n, type, prop, mechanism,
+method, run), no per-model dimension. Every scenario-1 true-CATE test is `NA`:
+the true CATE is constant there. `method == "multiple_imputation"` rows are `NA`/`NA`
 there, the same pooling question as the estimated-CATE tests above: `data` is a
 list of 50 imputed data.frames, with no single covariate matrix to test against.
 

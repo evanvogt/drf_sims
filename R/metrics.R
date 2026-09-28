@@ -58,20 +58,50 @@ cate_metrics <- function(est, true, scenario) {
 #' Guarded, because the CI studies skip the tests and the missing-data studies
 #' skip them whenever the covariate matrix still has NAs.
 #'
+#' Needs R/cate_models.R sourced (blp_p_value, blp_inputs, run_blp_whole,
+#' is_constant). Columns:
+#'   BLP_p       beta.2's two-sided p, homoskedastic SEs - the saved BLP_whole,
+#'               as computed at estimation time
+#'   BLP_p_os    beta.2's one-sided p (H1: beta.2 > 0), HC3 SEs, recomputed
+#'               here from the run's saved nuisances (blp_inputs()) - so it
+#'               needs sim_res and model, and is NA without them
+#'   indep_cate  NA when tau is constant: coin returns p ~ 0 for a constant
+#'               response rather than failing (is_constant()), and results
+#'               saved before that guard carry that p
+#'   indep_po    NA for causal_forest, which shares dr_random_forest's
+#'               pseudo-outcome (nuisances_rf$po) - the value is reported once,
+#'               under dr_random_forest
+#'
 #' @param model_res one model's entry in a per-run results object
-hte_test_metrics <- function(model_res) {
+#' @param sim_res that run's whole results object, for BLP_p_os
+#' @param model model name, for BLP_p_os and indep_po
+hte_test_metrics <- function(model_res, sim_res = NULL, model = NULL) {
+  blp_os <- NA_real_
+  if (!is.null(sim_res) && !is.null(model)) {
+    inp <- blp_inputs(sim_res, model)
+    if (!is.null(inp)) {
+      blp_os <- blp_p_value(
+        run_blp_whole(inp$Y, inp$W, inp$W.hat, inp$Y0.hat, inp$tau, vcov_type = "HC3"),
+        "one"
+      )
+    }
+  }
+
+  indep_cate <- if (!is.null(model_res$independence_cate)) {
+    as.numeric(model_res$independence_cate$p_value)
+  } else NA_real_
+  if (!is.null(model_res$tau) && is_constant(model_res$tau)) indep_cate <- NA_real_
+
+  indep_po <- if (!is.null(model_res$independence_po)) {
+    as.numeric(model_res$independence_po$p_value)
+  } else NA_real_
+  if (identical(model, "causal_forest")) indep_po <- NA_real_
+
   tibble(
-    BLP_p = if (!is.null(model_res$BLP_whole)) {
-      # by name and last column: newer results keep the whole coefficient
-      # block, older ones only Estimate and Pr(>|t|) - see run_blp_whole()
-      model_res$BLP_whole["beta.2", ncol(model_res$BLP_whole)]
-    } else NA_real_,
-    indep_cate = if (!is.null(model_res$independence_cate)) {
-      as.numeric(model_res$independence_cate$p_value)
-    } else NA_real_,
-    indep_po = if (!is.null(model_res$independence_po)) {
-      as.numeric(model_res$independence_po$p_value)
-    } else NA_real_
+    BLP_p = blp_p_value(model_res$BLP_whole, "two"),
+    BLP_p_os = blp_os,
+    indep_cate = indep_cate,
+    indep_po = indep_po
   )
 }
 
@@ -80,10 +110,11 @@ hte_test_metrics <- function(model_res) {
 #' @param model_res one model's entry in a per-run results object
 #' @param true true CATEs for that run
 #' @param scenario scenario index
-run_model_metrics <- function(model_res, true, scenario) {
+#' @param sim_res,model passed to hte_test_metrics(), for BLP_p_os
+run_model_metrics <- function(model_res, true, scenario, sim_res = NULL, model = NULL) {
   bind_cols(
     cate_metrics(model_res$tau, true, scenario),
-    hte_test_metrics(model_res)
+    hte_test_metrics(model_res, sim_res, model)
   )
 }
 

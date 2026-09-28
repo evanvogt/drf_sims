@@ -16,7 +16,7 @@ metrics <- compute_metrics(
   per_model = function(model_res, true_tau, model, sim_res, keys) {
     bind_cols(
       cate_metrics(model_res$tau, true_tau, keys$scenario),
-      hte_test_metrics(model_res)
+      hte_test_metrics(model_res, sim_res, model)
     )
   }
 )

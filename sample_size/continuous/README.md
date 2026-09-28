@@ -129,16 +129,69 @@ known propensity of 0.5; the semi-oracle knows only the propensity.
 `cts_true_cate_tests.RDS` reruns the BLP and independence tests
 (`run_true_cate_tests()`, `R/cate_models.R`) against the *true* CATE and true
 nuisances (`truth$tau`, `truth$p0`, `W.hat = 0.5`) instead of an estimator's
-fitted ones — one `BLP_p`/`indep_cate` row per (scenario, n, run), with no
+fitted ones — one `BLP_p`/`BLP_p_os`/`indep_cate` row per (scenario, n, run), with no
 per-model dimension, since nothing here is estimated. This isolates the
 tests' own size/power from any estimator's error: scenario 1 is the null
 (no heterogeneity), scenarios 2-10 the alternative.
 
-Scenario 1's true CATE is *exactly* constant (no estimation noise to give it
-apparent variance), so `BLP_p` is `NA` for every scenario-1 run — `GenericML::BLP()`
-cannot identify its interaction coefficient when tau has zero variance (the
-same degenerate-tau guard as `hte_test_metrics()`'s `BLP_whole = NULL`
-elsewhere) — while `indep_cate` still returns a real p-value there.
+Scenario 1's true CATE is constant, so neither test is defined there and
+`BLP_p`, `BLP_p_os` and `indep_cate` are all `NA` for every scenario-1 run. The
+true-CATE rows therefore have no null scenario; the estimators' scenario-1 rows
+give the tests' size. Two details, both handled by `is_constant()`
+(`R/cate_models.R`):
+
+- `truth$tau` is computed as `p1 − p0 = (p0 + bW) − p0`, which leaves
+  floating-point noise (SD ~1e-17) rather than an exact constant. Before the
+  guard, `GenericML::BLP()` fitted beta.2 ≈ ±1e15 on that noise and returned a
+  meaningless p-value; it was only `NA` when the noise happened to vanish.
+- `coin::independence_test()` does not fail on a constant response: it warns
+  ("zero diagonal elements") and returns p ≈ 0. Before the guard, the
+  scenario-1 true-CATE `indep_cate` rejected in every run, and so did any
+  estimator run whose CATE estimate collapsed to a constant.
+
+### HTE tests
+
+Every model's fit carries three post-estimation tests (`R/cate_models.R`,
+"post-estimation heterogeneity tests"), read into the metrics by
+`hte_test_metrics()` (`R/metrics.R`):
+
+| Column | Test |
+|---|---|
+| `BLP_p` | `GenericML::BLP()`: `Y` on the baseline prediction `Y0.hat`, `(W − W.hat)` and `(W − W.hat)(τ̂ − mean τ̂)`, weighted by 1/(W.hat(1 − W.hat)). p-value for the interaction coefficient beta.2, **two-sided, homoskedastic SEs** (GenericML's default `vcovHC(type = "const")`), as computed when the models were fitted. |
+| `BLP_p_os` | The same regression, **one-sided (H1: beta.2 > 0) with HC3 SEs**, recomputed at metrics time from each run's saved nuisances (`blp_inputs()`), so it needed no simulation re-run. |
+| `indep_cate` | `coin::independence_test(τ̂ ~ X, teststat = "quadratic")`, asymptotic reference distribution: whether τ̂ is linearly associated with any covariate. |
+| `indep_po` | The same test on the DR pseudo-outcome — the global heterogeneity test of [WATCH](https://github.com/Novartis/WATCH) (`src/04_explore_TEH.R`). |
+
+Why two BLP columns. beta.2 = 1 means τ̂ is well calibrated and beta.2 = 0 that
+it carries no heterogeneity signal; a τ̂ that ranks units in reverse gives
+beta.2 < 0, which is not evidence of heterogeneity in the sense the test is
+defined for (Chernozhukov et al.; `grf::test_calibration()` is one-sided for
+the same reason) but gets the same two-sided p as a correct τ̂. And the
+residual variance is not constant — for a binary outcome it is p(1 − p) by
+construction — so the homoskedastic SEs are not the right ones. `BLP_p` is
+kept unchanged so earlier figures stay reproducible.
+
+Properties of the independence tests, evaluated as they are rather than changed:
+
+- The quadratic statistic is built from linear correlations between the
+  response and each covariate, so it has essentially no power against an
+  effect with no linear component, however strong: scenario 4 (`cos(X4)`),
+  scenario 9 (`X4·X5`; `tanh(X4)·tanh(X5)` for binary) and the `exp(−|X4|)`
+  part of scenario 10 are uncorrelated with every covariate. Conversely, for a
+  true CATE that is linear in X the statistic saturates (χ² = n − 1), so the
+  true-CATE `indep_cate` shows whether a scenario's CATE has a linear
+  component, not a power ceiling.
+- WATCH applies the test to the pseudo-outcome, which has independent noise
+  per unit. `indep_cate` applies it to τ̂, a fitted function of X, whose
+  values are not exchangeable across units even with no heterogeneity, so its
+  scenario-1 rejection rate is not guaranteed to be 5%.
+- `causal_forest` and `dr_random_forest` share `nuisances_rf$po`, so their
+  `indep_po` would be the same number; it is reported once, under
+  `dr_random_forest`, and `NA` for `causal_forest`.
+
+Power and mean p-values leave out runs whose p-value is `NA` (a constant τ̂,
+or a test that wasn't run); `n_na_BLP_p`, `n_na_BLP_p_os` and
+`n_na_indep_cate` in the results summaries count them.
 
 ## Running it
 

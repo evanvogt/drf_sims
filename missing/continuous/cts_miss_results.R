@@ -25,6 +25,9 @@ fig_path <- file.path(dirname(path), "results", "all_figures", "missing", "conti
 dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
 
 metrics <- readRDS(file.path(res_path, "cts_miss_metrics.RDS"))
+if (!"BLP_p_os" %in% names(metrics)) {
+  stop("cts_miss_metrics.RDS predates BLP_p_os - re-run cts_miss_metrics.R first.")
+}
 
 # tidy up. n / type / prop are single-valued in this design (500 / both / 0.3),
 # so nothing facets on them - but they stay factors, and stay in the grouping
@@ -39,6 +42,7 @@ metrics <- metrics %>%
 # an inline expression
 metrics <- metrics %>%
   mutate(BLP_reject = as.numeric(BLP_p < 0.05),
+         BLP_os_reject = as.numeric(BLP_p_os < 0.05),
          indep_cate_reject = as.numeric(indep_cate < 0.05),
          indep_po_reject = as.numeric(indep_po < 0.05))
 
@@ -50,13 +54,15 @@ metrics_summary <- summarise_metrics(
   c("scenario", "n", "type", "prop", "mechanism", "method", "model"),
   cols = c(bias = "bias", ate_bias = "ate_bias", mse = "mse", rmse = "rmse",
            mae = "mae", corr = "corr", spearman = "spearman",
-           sign_acc = "sign_acc", BLP = "BLP_p", indep_cate = "indep_cate",
+           sign_acc = "sign_acc", BLP = "BLP_p", BLP_os = "BLP_p_os",
+           indep_cate = "indep_cate",
            indep_po = "indep_po", rel_eff = "rel_efficiency",
            rel_bias_complete = "rel_bias_complete",
            rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate",
-           power_BLP = "BLP_reject", power_indep_cate = "indep_cate_reject",
+           power_BLP = "BLP_reject", power_BLP_os = "BLP_os_reject",
+           power_indep_cate = "indep_cate_reject",
            power_indep_po = "indep_po_reject"),
-  binomial = c("power_BLP", "power_indep_cate", "power_indep_po")
+  binomial = c("power_BLP", "power_BLP_os", "power_indep_cate", "power_indep_po")
 )
 
 # helper: the per-run distribution behind each summary panel. distribution_plot()
@@ -269,6 +275,8 @@ true_cate_summary <- true_cate_tests %>%
   summarise(
     mean_BLP = mean(BLP_p, na.rm = TRUE),
     mcse_BLP = sd(BLP_p, na.rm = TRUE) / sqrt(sum(!is.na(BLP_p))),
+    mean_BLP_os = mean(BLP_p_os, na.rm = TRUE),
+    mcse_BLP_os = sd(BLP_p_os, na.rm = TRUE) / sqrt(sum(!is.na(BLP_p_os))),
     mean_indep_cate = mean(indep_cate, na.rm = TRUE),
     mcse_indep_cate = sd(indep_cate, na.rm = TRUE) / sqrt(sum(!is.na(indep_cate))),
     # named mean_power_*/mcse_power_*, not power_*/mcse_power_* - matching
@@ -276,6 +284,9 @@ true_cate_summary <- true_cate_tests %>%
     # mean_/mcse_ even for its binomial columns
     mean_power_BLP = mean(BLP_p < 0.05, na.rm = TRUE),
     mcse_power_BLP = sqrt(mean_power_BLP * (1 - mean_power_BLP) / sum(!is.na(BLP_p))),
+    mean_power_BLP_os = mean(BLP_p_os < 0.05, na.rm = TRUE),
+    mcse_power_BLP_os = sqrt(mean_power_BLP_os * (1 - mean_power_BLP_os) /
+                               sum(!is.na(BLP_p_os))),
     mean_power_indep_cate = mean(indep_cate < 0.05, na.rm = TRUE),
     mcse_power_indep_cate = sqrt(mean_power_indep_cate * (1 - mean_power_indep_cate) /
                                    sum(!is.na(indep_cate))),
@@ -309,8 +320,24 @@ save_fig("cts_miss_blp_all.png", fig_path)
 BLP_sum_plot <- point_range_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP", "mcse_BLP")),
   "BLP", "p-value", facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  labs(title = "BLP test (two-sided, constant variance)")
 save_fig("cts_miss_blp_summary.png", fig_path)
+
+# --- BLP test p-values, one-sided with HC3 SEs ------------------------------
+# BLP_p_os: H1 beta.2 > 0 with heteroskedasticity-robust SEs, recomputed at
+# metrics time - see sample_size/continuous/README.md's "HTE tests"
+BLP_os_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p_os"),
+                             "BLP_p_os", "p-value", hline = 0.05, facet_scales = "free_x") +
+  labs(title = "BLP test (one-sided, HC3)")
+save_fig("cts_miss_blp_os_all.png", fig_path)
+
+BLP_os_sum_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP_os", "mcse_BLP_os")),
+  "BLP_os", "p-value", facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  labs(title = "BLP test (one-sided, HC3)")
+save_fig("cts_miss_blp_os_summary.png", fig_path)
 
 # --- CATE permutation test p-values -----------------------------------------
 indep_cate_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "indep_cate"),
@@ -325,13 +352,18 @@ indep_cate_sum_plot <- point_range_plot(
 save_fig("cts_miss_indep_cate_summary.png", fig_path)
 
 # --- PO permutation test p-values -------------------------------------------
+# causal_forest's indep_po is NA by design (it shares dr_random_forest's
+# pseudo-outcome - see R/metrics.R::hte_test_metrics()), so it draws nothing
+indep_po_caption <- "Causal forest shares DR-RandomForest's pseudo-outcome, so it has no separate series."
 indep_po_plot <- miss_box_plot(metrics, "indep_po", "p-value", hline = 0.05,
-                               facet_scales = "free_x")
+                               facet_scales = "free_x") +
+  labs(caption = indep_po_caption)
 save_fig("cts_miss_indep_po_all.png", fig_path)
 
 indep_po_sum_plot <- point_range_plot(metrics_summary, "indep_po", "p-value",
                                       facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  labs(caption = indep_po_caption)
 save_fig("cts_miss_indep_po_summary.png", fig_path)
 
 # --- HTE test power (proportion rejecting at alpha=0.05) --------------------
@@ -343,8 +375,17 @@ save_fig("cts_miss_indep_po_summary.png", fig_path)
 BLP_power_plot <- point_range_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_power_BLP", "mcse_power_BLP")),
   "power_BLP", "Power", facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  labs(title = "BLP test (two-sided, constant variance)")
 save_fig("cts_miss_blp_power.png", fig_path)
+
+BLP_os_power_plot <- point_range_plot(
+  bind_true_cate(metrics_summary, true_cate_summary,
+                c("mean_power_BLP_os", "mcse_power_BLP_os")),
+  "power_BLP_os", "Power", facet_scales = "free_x") +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  labs(title = "BLP test (one-sided, HC3)")
+save_fig("cts_miss_blp_os_power.png", fig_path)
 
 indep_cate_power_plot <- point_range_plot(
   bind_true_cate(metrics_summary, true_cate_summary,
@@ -355,8 +396,24 @@ save_fig("cts_miss_indep_cate_power.png", fig_path)
 
 indep_po_power_plot <- point_range_plot(metrics_summary, "power_indep_po", "Power",
                                         facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  labs(caption = indep_po_caption)
 save_fig("cts_miss_indep_po_power.png", fig_path)
+
+# --- HTE test NA counts -------------------------------------------------------
+# runs each test's power/mean p above leaves out: a degenerate (constant) tau,
+# or a test that wasn't run (every multiple_imputation row, until a pooling
+# rule is chosen). n_na_* come from summarise_metrics()'s count_na.
+test_na_table <- metrics_summary %>%
+  select(scenario, mechanism, method, model, n_na_BLP_p, n_na_BLP_p_os, n_na_indep_cate) %>%
+  filter(n_na_BLP_p > 0 | n_na_BLP_p_os > 0 | n_na_indep_cate > 0) %>%
+  arrange(scenario, mechanism, method, model)
+
+if (nrow(test_na_table) > 0) {
+  print(test_na_table, n = Inf)
+} else {
+  print("no NA HTE test p-values in any run")
+}
 
 # --- missing estimates (n_na) diagnostic ------------------------------------
 # the count of NA CATE estimates within a run. A data-quality diagnostic, not a
@@ -384,7 +441,8 @@ headline <- metrics_summary %>%
          mean_mae, mean_sign_acc, mean_corr, any_of("mean_rel_eff"),
          any_of("mean_rel_bias_complete"), any_of("mean_rel_ate_bias"),
          any_of("mean_rel_bias_cate"),
-         mean_BLP, mean_indep_cate, mean_indep_po) %>%
+         mean_BLP, mean_BLP_os, mean_indep_cate, mean_indep_po,
+         n_na_BLP_p, n_na_BLP_p_os, n_na_indep_cate) %>%
   arrange(scenario, mechanism, method, mean_mse)
 
 print(headline, n = Inf)

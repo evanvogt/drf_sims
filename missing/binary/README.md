@@ -186,9 +186,10 @@ them. Two things carry over for anyone comparing against the archived tree:
 `bin_miss_metrics.R` also writes `bin_miss_true_cate_tests.RDS` — the BLP and
 independence tests run on the true CATE and true nuisances (`truth$tau`,
 `truth$p0`, `W.hat = 0.5`) instead of an estimator's fitted ones, one
-`BLP_p`/`indep_cate` row per (scenario, n, type, prop, mechanism, method,
+`BLP_p`/`BLP_p_os`/`indep_cate` row per (scenario, n, type, prop, mechanism, method,
 run). See `sample_size/continuous/README.md`'s "True-CATE HTE test evaluation" for what
-it means and why scenario 1's `BLP_p` is `NA`. `method == "multiple_imputation"`
+it means and why every scenario-1 true-CATE test is `NA`, and its "HTE tests"
+for the test columns themselves (`BLP_p_os` is the one-sided, HC3 BLP). `method == "multiple_imputation"`
 rows are `NA`/`NA` too, for the same reason as above: `data` is a list of 50
 imputed data.frames there, with no single covariate matrix to test against.
 

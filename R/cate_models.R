@@ -624,13 +624,33 @@ run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list,
 
 # ---- post-estimation heterogeneity tests ------------------------------------
 
+#' Is x constant, up to floating-point rounding?
+#'
+#' Both tests below are meaningless for a constant CATE, and neither fails
+#' cleanly on one. coin::independence_test() only warns ("zero diagonal
+#' elements") and returns a huge statistic with p ~ 0 - a spurious rejection.
+#' GenericML::BLP() errors only when tau is EXACTLY constant (bug L below). A
+#' true CATE can be constant up to rounding instead: truth_at() computes tau as
+#' (p0 + bW) - p0, which leaves noise of ~1e-17 in scenario 1, and BLP then fits
+#' beta.2 ~ 1e15 on it. The tolerance is relative, far below any real variation
+#' in an estimated or true CATE.
+is_constant <- function(x, tol = sqrt(.Machine$double.eps)) {
+  x <- x[!is.na(x)]
+  length(x) < 2 || sd(x) <= tol * max(1, mean(abs(x)))
+}
+
 # Best Linear Predictor of the CATE (GenericML). Returns the whole coefficient
 # block - Estimate, Std. Error, t value, Pr(>|t|) - with the residual df as
-# attr(, "df"); beta.2's p-value, blp["beta.2", ncol(blp)], is what the metrics
-# scripts read. It used to keep only columns 1 and 4, which dropped the standard
-# error a multiple-imputation pooling rule needs (mi_test_table() below). Reading
-# the p-value by row name and last column works on both shapes, so results
-# saved before the change still read correctly.
+# attr(, "df"); blp_p_value() below reads beta.2's p-value from it. It used to
+# keep only columns 1 and 4, which dropped the standard error a
+# multiple-imputation pooling rule needs (mi_test_table() below).
+# blp_p_value() reads both shapes, so results saved before the change still
+# read correctly.
+#
+# vcov_type is the sandwich::vcovHC type. The default "const" (homoskedastic
+# OLS SEs, GenericML's own default) is what every estimation-time call uses, so
+# the saved BLP_whole objects are unchanged; R/metrics.R::hte_test_metrics()
+# recomputes with "HC3" for BLP_p_os - see blp_inputs().
 #
 # bug L: GenericML::BLP() regresses on beta.2 = (W - W.hat) * (tau - mean(tau)).
 # When tau is exactly constant (a degenerate/near-constant CATE fit - seen with
@@ -642,12 +662,18 @@ run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list,
 # out of bounds". NULL is a deliberate fallback, not just a safe default:
 # hte_test_metrics() (R/metrics.R) already maps BLP_whole = NULL to BLP_p = NA,
 # and NA is the statistically correct answer here - beta.2 has no fitted
-# coefficient to attach a p-value to when tau has zero variance.
-run_blp_whole <- function(Y, W, W.hat, Y0.hat, tau) {
+# coefficient to attach a p-value to when tau has zero variance. is_constant()
+# extends the same fallback to a tau that is constant only up to rounding.
+run_blp_whole <- function(Y, W, W.hat, Y0.hat, tau, vcov_type = "const") {
+  if (is_constant(tau)) {
+    warning("run_blp_whole: tau is constant (up to rounding); returning NULL.")
+    return(NULL)
+  }
+  vcov_control <- setup_vcov(estimator = "vcovHC", arguments = list(type = vcov_type))
   tryCatch(
     # unclass: a plain matrix, so reading it back needs no lmtest; the df
     # attribute survives
-    unclass(BLP(Y, W, W.hat, Y0.hat, tau)$coefficients),
+    unclass(BLP(Y, W, W.hat, Y0.hat, tau, vcov_control = vcov_control)$coefficients),
     error = function(e) {
       warning("run_blp_whole: BLP() failed (likely a constant/degenerate tau); ",
               "returning NULL. ", conditionMessage(e))
@@ -656,8 +682,69 @@ run_blp_whole <- function(Y, W, W.hat, Y0.hat, tau) {
   )
 }
 
-# Omnibus independence test of the estimated CATEs against the covariates
+#' beta.2's p-value from a run_blp_whole() coefficient block
+#'
+#' "two" is Pr(>|t|), what BLP_p has always been. "one" tests H1: beta.2 > 0,
+#' the direction Chernozhukov et al. and grf::test_calibration() use: a proxy
+#' that ranks units in reverse (beta.2 < 0) is not evidence of heterogeneity,
+#' but it gets the same two-sided p as a correct one.
+#'
+#' Reads both block shapes run_blp_whole() has saved: the full block
+#' (Estimate, Std. Error, t value, Pr(>|t|), attr "df") and the older
+#' Estimate + Pr(>|t|) pair, for which the one-sided p is recovered from the
+#' two-sided one and the sign of the estimate.
+#' @param blp a run_blp_whole() result; NULL (degenerate tau) gives NA
+blp_p_value <- function(blp, sided = c("one", "two")) {
+  sided <- match.arg(sided)
+  if (is.null(blp)) return(NA_real_)
+  p_two <- unname(blp["beta.2", ncol(blp)])
+  if (sided == "two") return(p_two)
+  est <- unname(blp["beta.2", 1])
+  if (ncol(blp) < 4) {
+    return(if (est > 0) p_two / 2 else 1 - p_two / 2)
+  }
+  stat <- est / unname(blp["beta.2", 2])
+  df <- attr(blp, "df")
+  if (is.null(df)) pnorm(stat, lower.tail = FALSE) else pt(stat, df, lower.tail = FALSE)
+}
+
+#' The inputs one model's BLP test was run on, rebuilt from a saved run
+#'
+#' Lets R/metrics.R::hte_test_metrics() recompute the BLP (with HC3 SEs, for
+#' BLP_p_os) from results already on disk. MUST stay in step with the
+#' run_blp_whole() calls in the run_* functions above:
+#'   causal_forest, dr_random_forest  nuisances_rf's W.hat and Y0.hat
+#'   dr_oracle, dr_semi_oracle        W.hat = 0.5, the arm's own Y0.hat
+#'   dr_superlearner                  nuisances_sl's W.hat and Y0.hat
+#' @param sim_res one run's saved results object
+#' @param model model name
+#' @return list(Y, W, W.hat, Y0.hat, tau), or NULL when the run has no single
+#'   dataset (multiple_imputation saves a list of them) or lacks a field
+blp_inputs <- function(sim_res, model) {
+  if (!is.data.frame(sim_res$data)) return(NULL)
+  m <- sim_res[[model]]
+  nuis <- switch(model,
+    causal_forest = , dr_random_forest = sim_res$nuisances_rf,
+    dr_oracle = , dr_semi_oracle = list(W.hat = 0.5, Y0.hat = m$Y0.hat),
+    dr_superlearner = sim_res$nuisances_sl,
+    NULL
+  )
+  if (is.null(m$tau) || is.null(nuis$W.hat) || is.null(nuis$Y0.hat)) return(NULL)
+  n_obs <- nrow(sim_res$data)
+  list(Y = sim_res$data$Y, W = sim_res$data$W,
+       W.hat = rep_len(nuis$W.hat, n_obs), Y0.hat = nuis$Y0.hat, tau = m$tau)
+}
+
+# Omnibus independence test of the estimated CATEs against the covariates.
+# The test is the one WATCH (github.com/Novartis/WATCH) runs on the DR
+# pseudo-outcome, and is kept exactly as is. A constant tau returns NA before
+# coin is called: coin does not fail on one, it only warns and returns p ~ 0
+# (see is_constant()).
 run_independence_test_whole <- function(X, tau) {
+  if (is_constant(tau)) {
+    return(list(p_value = NA_real_, statistic = NA_real_, df = NA_real_,
+                method = "constant_input"))
+  }
   test_data <- data.frame(tau = tau, X)
   tryCatch({
     test_result <- coin::independence_test(
@@ -687,33 +774,38 @@ run_independence_test_whole <- function(X, tau) {
 #' which draws W <- rbinom(n, 1, 0.5) unconditionally). No independence_po
 #' counterpart: dr_oracle's own independence_po already tests the true
 #' pseudo-outcome against X.
+#'
+#' Scenario 1's true CATE is constant up to rounding, so both tests come back
+#' NA there (is_constant()) - the true-CATE rows have no null scenario.
+#' BLP_whole_hc3 is the same BLP with HC3 SEs, for BLP_p_os.
 run_true_cate_tests <- function(X, Y, W, truth) {
   W.hat <- rep(0.5, length(W))
   list(
     BLP_whole = run_blp_whole(Y, W, W.hat, truth$p0, truth$tau),
+    BLP_whole_hc3 = run_blp_whole(Y, W, W.hat, truth$p0, truth$tau, vcov_type = "HC3"),
     independence_cate = run_independence_test_whole(X, truth$tau)
   )
 }
 
 #' One row of true-CATE HTE test p-values for one run
 #'
-#' NA/NA when sim_res$data is not a single data.frame - true today only for
+#' NA row when sim_res$data is not a single data.frame - true today only for
 #' multiple_imputation rows (missing/binary, missing/continuous), which save
 #' `data` as a list of 50 imputed data.frames with no single X to test
 #' against. Same open pooling question as the estimated-CATE tests - see
 #' mi_test_table() and missing/README.md.
 true_cate_test_row <- function(sim_res) {
   if (!is.data.frame(sim_res$data)) {
-    return(tibble::tibble(BLP_p = NA_real_, indep_cate = NA_real_))
+    return(tibble::tibble(BLP_p = NA_real_, BLP_p_os = NA_real_,
+                          indep_cate = NA_real_))
   }
   X <- as.matrix(sim_res$data[, -c(1:2)])
   Y <- sim_res$data$Y
   W <- sim_res$data$W
   out <- run_true_cate_tests(X, Y, W, sim_res$truth)
   tibble::tibble(
-    BLP_p = if (!is.null(out$BLP_whole)) {
-      out$BLP_whole["beta.2", ncol(out$BLP_whole)]
-    } else NA_real_,
+    BLP_p = blp_p_value(out$BLP_whole, "two"),
+    BLP_p_os = blp_p_value(out$BLP_whole_hc3, "one"),
     indep_cate = as.numeric(out$independence_cate$p_value)
   )
 }
@@ -769,8 +861,8 @@ mi_test_table <- function(res_list, model) {
     # statistic, p-value, but the last two are named t or z depending on the
     # vcov, and a name lookup failing here would lose the whole 50-imputation run
     blp_col <- function(col) if (is.null(blp)) NA_real_ else unname(blp["beta.2", col])
-    # a failed independence test comes back as p = 1, statistic = 0 (see
-    # run_independence_test_whole); its df = NA is what marks it
+    # a failed independence test comes back as p = 1, statistic = 0, and a
+    # constant tau as p = NA (see run_independence_test_whole); df = NA marks both
     indep <- function(test, field) {
       v <- test[[field]]
       if (is.null(v)) NA_real_ else as.numeric(v)

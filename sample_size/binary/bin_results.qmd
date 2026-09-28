@@ -135,6 +135,8 @@ metrics_summary <- metrics %>%
     mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(sum(!is.na(sign_acc))),
     mean_BLP = mean(BLP_p, na.rm = T),
     mcse_BLP = sd(BLP_p, na.rm = T) / sqrt(sum(!is.na(BLP_p))),
+    mean_BLP_os = mean(BLP_p_os, na.rm = T),
+    mcse_BLP_os = sd(BLP_p_os, na.rm = T) / sqrt(sum(!is.na(BLP_p_os))),
     mean_indep_cate = mean(indep_cate, na.rm = T),
     mcse_indep_cate = sd(indep_cate, na.rm = T) / sqrt(sum(!is.na(indep_cate))),
     mean_indep_po = mean(indep_po, na.rm = T),
@@ -143,12 +145,21 @@ metrics_summary <- metrics %>%
     # indicator, so it gets the binomial MCSE, unlike the mean p-values above
     power_BLP = mean(BLP_p < 0.05, na.rm = T),
     mcse_power_BLP = sqrt(power_BLP * (1 - power_BLP) / sum(!is.na(BLP_p))),
+    power_BLP_os = mean(BLP_p_os < 0.05, na.rm = T),
+    mcse_power_BLP_os = sqrt(power_BLP_os * (1 - power_BLP_os) / sum(!is.na(BLP_p_os))),
     power_indep_cate = mean(indep_cate < 0.05, na.rm = T),
     mcse_power_indep_cate = sqrt(power_indep_cate * (1 - power_indep_cate) / sum(!is.na(indep_cate))),
     power_indep_po = mean(indep_po < 0.05, na.rm = T),
     mcse_power_indep_po = sqrt(power_indep_po * (1 - power_indep_po) / sum(!is.na(indep_po))),
     mean_n_na = mean(n_na, na.rm = T),
     total_n_na = sum(n_na, na.rm = T),
+    # runs whose test p-value is NA, which the power and mean-p rows above
+    # leave out of their denominators: a degenerate (constant) tau, or a test
+    # that wasn't run. indep_po is NA for every causal_forest row by design -
+    # see R/metrics.R::hte_test_metrics()
+    n_na_BLP_p = sum(is.na(BLP_p)),
+    n_na_BLP_p_os = sum(is.na(BLP_p_os)),
+    n_na_indep_cate = sum(is.na(indep_cate)),
     .groups = "drop"
   )
 ```
@@ -415,7 +426,9 @@ ceiling each model's own BLP/CATE-permutation test is chasing, since nothing
 here is estimated. Shown as an extra "True CATE" series alongside the five
 models in the two sections below (and in "HTE test power"); no true-CATE
 counterpart for the PO permutation test, since `dr_oracle`'s own `indep_po`
-already tests the true pseudo-outcome.
+already tests the true pseudo-outcome. In scenario 1 the true CATE is constant
+(up to floating-point rounding), so neither test is defined there and "True
+CATE" has no scenario-1 series.
 
 ```{r true-cate-data}
 true_cate_tests <- readRDS(file.path(res_path, "bin_true_cate_tests.RDS")) %>%
@@ -431,10 +444,14 @@ true_cate_summary <- true_cate_tests %>%
   summarise(
     mean_BLP = mean(BLP_p, na.rm = T),
     mcse_BLP = sd(BLP_p, na.rm = T) / sqrt(sum(!is.na(BLP_p))),
+    mean_BLP_os = mean(BLP_p_os, na.rm = T),
+    mcse_BLP_os = sd(BLP_p_os, na.rm = T) / sqrt(sum(!is.na(BLP_p_os))),
     mean_indep_cate = mean(indep_cate, na.rm = T),
     mcse_indep_cate = sd(indep_cate, na.rm = T) / sqrt(sum(!is.na(indep_cate))),
     power_BLP = mean(BLP_p < 0.05, na.rm = T),
     mcse_power_BLP = sqrt(power_BLP * (1 - power_BLP) / sum(!is.na(BLP_p))),
+    power_BLP_os = mean(BLP_p_os < 0.05, na.rm = T),
+    mcse_power_BLP_os = sqrt(power_BLP_os * (1 - power_BLP_os) / sum(!is.na(BLP_p_os))),
     power_indep_cate = mean(indep_cate < 0.05, na.rm = T),
     mcse_power_indep_cate = sqrt(power_indep_cate * (1 - power_indep_cate) / sum(!is.na(indep_cate))),
     .groups = "drop"
@@ -462,9 +479,11 @@ bind_true_cate <- function(df, true_df, extra_cols) {
 Best linear predictor test of heterogeneity, against the nominal 5%
 significance threshold (dashed line) — where the CATE truly varies, low
 p-values indicate the model detects it; in scenario 1 (no HTE), p-values
-should sit uniform on [0, 1]. "True CATE" has no defined BLP test in scenario
-1: the true CATE is exactly constant there, and `GenericML::BLP()` cannot
-identify its interaction coefficient when tau has zero variance.
+should sit uniform on [0, 1]. Two versions of the p-value for the BLP's
+beta.2 (see `continuous/README.md`, "HTE tests"): `BLP_p` is two-sided with
+constant-variance SEs, as computed when the models were fitted; `BLP_p_os` is
+one-sided (H1: beta.2 > 0, the direction the method is defined for) with HC3
+SEs, recomputed at metrics time from the saved nuisances.
 
 ```{r blp-plot, fig.height=16}
 BLP_plot <- bind_true_cate(metrics, true_cate_raw, "BLP_p") %>%
@@ -477,13 +496,37 @@ BLP_plot <- bind_true_cate(metrics, true_cate_raw, "BLP_p") %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
         strip.text = element_text(colour = "black")) +
-  labs(title = "BLP test p-values", y = "p-value", x = "Sample size", colour = "Model")
+  labs(title = "BLP test p-values (two-sided, constant variance)", y = "p-value",
+       x = "Sample size", colour = "Model")
 
 BLP_sum_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP", "mcse_BLP")),
-  "mean_BLP", "mcse_BLP", "Mean BLP test p-value", "Mean p-value", hline = 0.05)
+  "mean_BLP", "mcse_BLP", "Mean BLP test p-value (two-sided, constant variance)",
+  "Mean p-value", hline = 0.05)
 
 (BLP_plot / BLP_sum_plot) + plot_layout(guides = "collect")
+```
+
+```{r blp-os-plot, fig.height=16}
+BLP_os_plot <- bind_true_cate(metrics, true_cate_raw, "BLP_p_os") %>%
+  ggplot(aes(x = n, y = BLP_p_os, colour = model)) +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free_x") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
+  labs(title = "BLP test p-values (one-sided, HC3)", y = "p-value",
+       x = "Sample size", colour = "Model")
+
+BLP_os_sum_plot <- summary_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP_os", "mcse_BLP_os")),
+  "mean_BLP_os", "mcse_BLP_os", "Mean BLP test p-value (one-sided, HC3)",
+  "Mean p-value", hline = 0.05)
+
+(BLP_os_plot / BLP_os_sum_plot) + plot_layout(guides = "collect")
 ```
 
 ## CATE permutation test p-values
@@ -511,6 +554,9 @@ indep_cate_sum_plot <- summary_plot(
 ```
 
 ## PO permutation test p-values
+
+The causal forest has no series here: its pseudo-outcome is DR-RandomForest's
+(both use the same random-forest nuisances), so the test is reported once.
 
 ```{r indep-po-plot, fig.height=16}
 indep_po_plot <- metrics %>%
@@ -543,7 +589,12 @@ measure one.
 ```{r power-plot, fig.height=16}
 BLP_power_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("power_BLP", "mcse_power_BLP")),
-  "power_BLP", "mcse_power_BLP", "BLP test power", "Power", hline = 0.05)
+  "power_BLP", "mcse_power_BLP", "BLP test power (two-sided, constant variance)",
+  "Power", hline = 0.05)
+BLP_os_power_plot <- summary_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("power_BLP_os", "mcse_power_BLP_os")),
+  "power_BLP_os", "mcse_power_BLP_os", "BLP test power (one-sided, HC3)",
+  "Power", hline = 0.05)
 indep_cate_power_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary,
                 c("power_indep_cate", "mcse_power_indep_cate")),
@@ -555,8 +606,28 @@ indep_po_power_plot <- summary_plot(metrics_summary, "power_indep_po",
                                     hline = 0.05)
 
 BLP_power_plot
+BLP_os_power_plot
 indep_cate_power_plot
 indep_po_power_plot
+```
+
+Runs with an `NA` test p-value are left out of that test's power and mean
+p-value: a degenerate (constant) CATE estimate, for which neither test is
+defined, or a test that wasn't run. Cells with any are listed below.
+
+```{r test-na-table}
+test_na_table <- metrics_summary %>%
+  select(scenario, model, n, n_na_BLP_p, n_na_BLP_p_os, n_na_indep_cate) %>%
+  filter(n_na_BLP_p > 0 | n_na_BLP_p_os > 0 | n_na_indep_cate > 0) %>%
+  arrange(scenario, n, model)
+
+if (nrow(test_na_table) > 0) {
+  kable(test_na_table,
+        col.names = c("Scenario", "Model", "n", "NA BLP p", "NA BLP p (one-sided, HC3)",
+                      "NA CATE perm. p"))
+} else {
+  cat("No NA HTE test p-values in any run.")
+}
 ```
 
 ## Missing estimates
@@ -590,8 +661,8 @@ each cell).
 headline <- metrics_summary %>%
   select(scenario, model, n, mean_bias, mean_ate_bias, mean_rel_ate_bias,
          mean_rel_bias_cate, mean_mse, mean_rmse, mean_mae,
-         mean_sign_acc, mean_corr, mean_BLP, mean_indep_cate, mean_indep_po,
-         power_BLP, power_indep_cate, power_indep_po) %>%
+         mean_sign_acc, mean_corr, mean_BLP, mean_BLP_os, mean_indep_cate,
+         mean_indep_po, power_BLP, power_BLP_os, power_indep_cate, power_indep_po) %>%
   arrange(scenario, n, mean_mse)
 
 kable(headline, digits = 4,
@@ -599,6 +670,8 @@ kable(headline, digits = 4,
                     "Mean relative ATE bias", "Mean relative CATE bias",
                     "Mean MSE", "Mean RMSE", "Mean MAE", "Mean sign accuracy",
                     "Mean correlation", "Mean BLP p-value",
+                    "Mean BLP p-value (one-sided, HC3)",
                     "Mean CATE perm. p-value", "Mean PO perm. p-value",
-                    "BLP power", "CATE perm. power", "PO perm. power"))
+                    "BLP power", "BLP power (one-sided, HC3)",
+                    "CATE perm. power", "PO perm. power"))
 ```

@@ -19,6 +19,9 @@ fig_path <- file.path(dirname(path), "results", "all_figures", "continuous")
 dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
 
 metrics <- readRDS(file.path(res_path, "cts_metrics.RDS"))
+if (!"BLP_p_os" %in% names(metrics)) {
+  stop("cts_metrics.RDS predates BLP_p_os - re-run cts_metrics.R first.")
+}
 
 # display order and labels - continuous has no shared label-dictionary script
 # (unlike crossfitting/cf_metrics.R, which does double duty as pipeline +
@@ -84,6 +87,8 @@ metrics_summary <- metrics %>%
     mcse_sign_acc = sd(sign_acc, na.rm = T) / sqrt(sum(!is.na(sign_acc))),
     mean_BLP = mean(BLP_p, na.rm = T),
     mcse_BLP = sd(BLP_p, na.rm = T) / sqrt(sum(!is.na(BLP_p))),
+    mean_BLP_os = mean(BLP_p_os, na.rm = T),
+    mcse_BLP_os = sd(BLP_p_os, na.rm = T) / sqrt(sum(!is.na(BLP_p_os))),
     mean_indep_cate = mean(indep_cate, na.rm = T),
     mcse_indep_cate = sd(indep_cate, na.rm = T) / sqrt(sum(!is.na(indep_cate))),
     mean_indep_po = mean(indep_po, na.rm = T),
@@ -92,12 +97,21 @@ metrics_summary <- metrics %>%
     # indicator, so it gets the binomial MCSE, unlike the mean p-values above
     power_BLP = mean(BLP_p < 0.05, na.rm = T),
     mcse_power_BLP = sqrt(power_BLP * (1 - power_BLP) / sum(!is.na(BLP_p))),
+    power_BLP_os = mean(BLP_p_os < 0.05, na.rm = T),
+    mcse_power_BLP_os = sqrt(power_BLP_os * (1 - power_BLP_os) / sum(!is.na(BLP_p_os))),
     power_indep_cate = mean(indep_cate < 0.05, na.rm = T),
     mcse_power_indep_cate = sqrt(power_indep_cate * (1 - power_indep_cate) / sum(!is.na(indep_cate))),
     power_indep_po = mean(indep_po < 0.05, na.rm = T),
     mcse_power_indep_po = sqrt(power_indep_po * (1 - power_indep_po) / sum(!is.na(indep_po))),
     mean_n_na = mean(n_na, na.rm = T),
     total_n_na = sum(n_na, na.rm = T),
+    # runs whose test p-value is NA, which the power and mean-p rows above
+    # leave out of their denominators: a degenerate (constant) tau, or a test
+    # that wasn't run. indep_po is NA for every causal_forest row by design -
+    # see R/metrics.R::hte_test_metrics()
+    n_na_BLP_p = sum(is.na(BLP_p)),
+    n_na_BLP_p_os = sum(is.na(BLP_p_os)),
+    n_na_indep_cate = sum(is.na(indep_cate)),
     .groups = "drop"
   )
 
@@ -341,10 +355,14 @@ true_cate_summary <- true_cate_tests %>%
   summarise(
     mean_BLP = mean(BLP_p, na.rm = T),
     mcse_BLP = sd(BLP_p, na.rm = T) / sqrt(sum(!is.na(BLP_p))),
+    mean_BLP_os = mean(BLP_p_os, na.rm = T),
+    mcse_BLP_os = sd(BLP_p_os, na.rm = T) / sqrt(sum(!is.na(BLP_p_os))),
     mean_indep_cate = mean(indep_cate, na.rm = T),
     mcse_indep_cate = sd(indep_cate, na.rm = T) / sqrt(sum(!is.na(indep_cate))),
     power_BLP = mean(BLP_p < 0.05, na.rm = T),
     mcse_power_BLP = sqrt(power_BLP * (1 - power_BLP) / sum(!is.na(BLP_p))),
+    power_BLP_os = mean(BLP_p_os < 0.05, na.rm = T),
+    mcse_power_BLP_os = sqrt(power_BLP_os * (1 - power_BLP_os) / sum(!is.na(BLP_p_os))),
     power_indep_cate = mean(indep_cate < 0.05, na.rm = T),
     mcse_power_indep_cate = sqrt(power_indep_cate * (1 - power_indep_cate) / sum(!is.na(indep_cate))),
     .groups = "drop"
@@ -377,13 +395,39 @@ BLP_plot <- bind_true_cate(metrics, true_cate_raw, "BLP_p") %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
         strip.text = element_text(colour = "black")) +
-  labs(title = "BLP test p-values", y = "p-value", x = "Sample size", colour = "Model")
+  labs(title = "BLP test p-values (two-sided, constant variance)", y = "p-value",
+       x = "Sample size", colour = "Model")
 ggsave("cts_blp_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 BLP_sum_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP", "mcse_BLP")),
-  "mean_BLP", "mcse_BLP", "Mean BLP test p-value", "Mean p-value", hline = 0.05)
+  "mean_BLP", "mcse_BLP", "Mean BLP test p-value (two-sided, constant variance)",
+  "Mean p-value", hline = 0.05)
 ggsave("cts_blp_summary.png", plot = BLP_sum_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
+# --- BLP test p-values, one-sided with HC3 SEs ---------------------------
+# BLP_p_os: H1 beta.2 > 0 with heteroskedasticity-robust SEs, recomputed at
+# metrics time - see continuous/README.md's "HTE tests"
+BLP_os_plot <- bind_true_cate(metrics, true_cate_raw, "BLP_p_os") %>%
+  ggplot(aes(x = n, y = BLP_p_os, colour = model)) +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, scales = "free_x") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black")) +
+  labs(title = "BLP test p-values (one-sided, HC3)", y = "p-value",
+       x = "Sample size", colour = "Model")
+ggsave("cts_blp_os_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+
+BLP_os_sum_plot <- summary_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP_os", "mcse_BLP_os")),
+  "mean_BLP_os", "mcse_BLP_os", "Mean BLP test p-value (one-sided, HC3)",
+  "Mean p-value", hline = 0.05)
+ggsave("cts_blp_os_summary.png", plot = BLP_os_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- CATE permutation test p-values --------------------------------------
@@ -409,6 +453,9 @@ ggsave("cts_indep_cate_summary.png", plot = indep_cate_sum_plot, path = fig_path
        width = 21, height = 15, units = "cm")
 
 # --- PO permutation test p-values ----------------------------------------
+# causal_forest's indep_po is NA by design, so it draws no series here (left
+# in rather than filtered out, so every model keeps its colour across plots)
+indep_po_caption <- "Causal forest shares DR-RandomForest's pseudo-outcome, so it has no separate series."
 indep_po_plot <- metrics %>%
   ggplot(aes(x = n, y = indep_po, colour = model)) +
   geom_hline(yintercept = 0.05, linetype = "dashed") +
@@ -420,12 +467,13 @@ indep_po_plot <- metrics %>%
         strip.background = element_rect(fill = "white"),
         strip.text = element_text(colour = "black")) +
   labs(title = "PO permutation test p-values", y = "p-value", x = "Sample size",
-       colour = "Model")
+       colour = "Model", caption = indep_po_caption)
 ggsave("cts_indep_po_all.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 indep_po_sum_plot <- summary_plot(metrics_summary, "mean_indep_po", "mcse_indep_po",
                                   "Mean PO permutation test p-value", "Mean p-value",
-                                  hline = 0.05)
+                                  hline = 0.05) +
+  labs(caption = indep_po_caption)
 ggsave("cts_indep_po_summary.png", plot = indep_po_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
@@ -434,8 +482,16 @@ ggsave("cts_indep_po_summary.png", plot = indep_po_sum_plot, path = fig_path,
 # alongside the mean p-values above
 BLP_power_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("power_BLP", "mcse_power_BLP")),
-  "power_BLP", "mcse_power_BLP", "BLP test power", "Power", hline = 0.05)
+  "power_BLP", "mcse_power_BLP", "BLP test power (two-sided, constant variance)",
+  "Power", hline = 0.05)
 ggsave("cts_blp_power.png", plot = BLP_power_plot, path = fig_path,
+       width = 21, height = 15, units = "cm")
+
+BLP_os_power_plot <- summary_plot(
+  bind_true_cate(metrics_summary, true_cate_summary, c("power_BLP_os", "mcse_power_BLP_os")),
+  "power_BLP_os", "mcse_power_BLP_os", "BLP test power (one-sided, HC3)",
+  "Power", hline = 0.05)
+ggsave("cts_blp_os_power.png", plot = BLP_os_power_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 indep_cate_power_plot <- summary_plot(
@@ -449,9 +505,23 @@ ggsave("cts_indep_cate_power.png", plot = indep_cate_power_plot, path = fig_path
 indep_po_power_plot <- summary_plot(metrics_summary, "power_indep_po",
                                     "mcse_power_indep_po",
                                     "PO permutation test power", "Power",
-                                    hline = 0.05)
+                                    hline = 0.05) +
+  labs(caption = indep_po_caption)
 ggsave("cts_indep_po_power.png", plot = indep_po_power_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
+
+# --- HTE test NA counts -------------------------------------------------------
+# runs each test's power/mean p above leaves out (degenerate tau, or not run)
+test_na_table <- metrics_summary %>%
+  select(scenario, model, n, n_na_BLP_p, n_na_BLP_p_os, n_na_indep_cate) %>%
+  filter(n_na_BLP_p > 0 | n_na_BLP_p_os > 0 | n_na_indep_cate > 0) %>%
+  arrange(scenario, n, model)
+
+if (nrow(test_na_table) > 0) {
+  print(test_na_table, n = Inf)
+} else {
+  print("no NA HTE test p-values in any run")
+}
 
 # --- missing estimates (n_na) diagnostic ------------------------------------
 # a count, mostly zero - not a performance metric, so a table rather than a
@@ -472,8 +542,9 @@ if (nrow(na_table) > 0) {
 headline <- metrics_summary %>%
   select(scenario, model, n, mean_bias, mean_ate_bias, mean_rel_ate_bias,
          mean_rel_bias_cate, mean_mse, mean_rmse, mean_mae,
-         mean_sign_acc, mean_corr, mean_BLP, mean_indep_cate, mean_indep_po,
-         power_BLP, power_indep_cate, power_indep_po) %>%
+         mean_sign_acc, mean_corr, mean_BLP, mean_BLP_os, mean_indep_cate,
+         mean_indep_po, power_BLP, power_BLP_os, power_indep_cate, power_indep_po,
+         n_na_BLP_p, n_na_BLP_p_os, n_na_indep_cate) %>%
   arrange(scenario, n, mean_mse)
 
 print(headline, n = Inf)

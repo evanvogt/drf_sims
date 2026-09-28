@@ -147,6 +147,10 @@ apply_labels <- function(metrics, scenario_labels = NULL) {
 #' @param binomial character vector of stems (from `names(cols)`) that are
 #'   genuine per-run 0/1 indicators and should get the binomial MCSE formula
 #'   instead of the general one. Empty by default.
+#' @param count_na source columns (values, not stems) to also report the number
+#'   of NA runs for, as n_na_<col>. The mean and MCSE leave NA runs out, so for
+#'   an HTE test p-value this is how many runs its power/mean p excludes - a
+#'   degenerate (constant) tau, or a test that wasn't run.
 summarise_metrics <- function(
   metrics,
   group_cols,
@@ -155,16 +159,19 @@ summarise_metrics <- function(
     mse = "mse",
     corr = "corr",
     BLP = "BLP_p",
+    BLP_os = "BLP_p_os",
     indep_cate = "indep_cate",
     indep_po = "indep_po",
     rel_ate_bias = "rel_ate_bias",
     rel_bias_cate = "rel_bias_cate"
   ),
-  binomial = character()
+  binomial = character(),
+  count_na = c("BLP_p", "BLP_p_os", "indep_cate")
 ) {
   cols <- cols[cols %in% names(metrics)]
   cont_cols <- cols[!names(cols) %in% binomial]
   binom_cols <- cols[names(cols) %in% binomial]
+  count_na <- intersect(count_na, names(metrics))
 
   out <- metrics %>%
     group_by(across(all_of(group_cols))) %>%
@@ -188,6 +195,7 @@ summarise_metrics <- function(
         ),
         .names = "{.fn}__{.col}"
       ),
+      across(all_of(count_na), ~ sum(is.na(.x)), .names = "n_na_{.col}"),
       .groups = "drop"
     )
 

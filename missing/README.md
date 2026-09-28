@@ -105,7 +105,11 @@ rule needs:
 | `blp_p`, `indep_cate_p`, `indep_po_p` | a p-value combination rule (Fisher, Stouffer, median p) |
 
 A `NA` BLP row is bug L's degenerate-tau fallback. A failed independence test
-reads `p = 1`, `stat = 0`, `df = NA`.
+reads `p = 1`, `stat = 0`, `df = NA`. From the `is_constant()` guard on, a
+constant tau gives `NA` for both tests (`p`, `stat` and `df` all `NA` for the
+independence tests); rows saved before it can instead carry an independence
+p ≈ 0 for a constant tau, which coin returns with only a warning (see
+`sample_size/continuous/README.md`, "True-CATE HTE test evaluation").
 
 **No pooling rule is applied yet.** What "the" heterogeneity test across 50
 imputations should be is still a methodological decision. The options answer

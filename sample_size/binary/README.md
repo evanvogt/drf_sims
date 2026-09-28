@@ -192,9 +192,14 @@ no link — as in every study now (see `R/README.md`).
 independence tests run on the true CATE and true nuisances instead of an
 estimator's, one row per (scenario, n, run). See
 `continuous/README.md`'s "True-CATE HTE test evaluation" for what it means
-and why scenario 1's `BLP_p` is `NA`. That now holds here too: scenario 1's
-true CATE is exactly constant. Under the logit-scale design it was not, so the
-test rejected there.
+and why every scenario-1 true-CATE test is `NA`. That now holds here too:
+scenario 1's true CATE is constant (up to floating-point rounding). Under the
+logit-scale design it was not, so the test rejected there.
+
+The HTE test columns — `BLP_p`, `BLP_p_os` (one-sided, HC3), `indep_cate`,
+`indep_po` — and the independence tests' blind spots are described once, in
+`continuous/README.md`'s "HTE tests"; everything there applies here. The
+heteroskedasticity `BLP_p_os` corrects for is built into a binary outcome.
 
 ## Running it
 
