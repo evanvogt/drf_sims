@@ -206,6 +206,38 @@ The HTE test columns — `BLP_p`, `BLP_p_os` (one-sided, HC3), `indep_cate`,
 `continuous/README.md`'s "HTE tests"; everything there applies here. The
 heteroskedasticity `BLP_p_os` corrects for is built into a binary outcome.
 
+## Monte Carlo checks on the ATE bias
+
+At n = 500, every model, `dr_oracle` included, shows an ATE bias of about
++0.007 in all of scenarios 1–4, roughly 4 MCSEs from zero.
+`bin_bias_mc_checks.R` holds the checks (run 2026-09-28) that traced it to
+Monte Carlo noise in the particular streams used:
+
+- **Every saved dataset reproduces.** Each scenario 1 dataset was regenerated
+  from its seed with the current code and matched exactly, so no runs came
+  from older code.
+- **The bias is in the data, not the models.** A difference in means, with no
+  model fitted, carries the same bias.
+- **The DGM and seeding are unbiased.** Fresh streams 501–5000, generated
+  without fitting models, show no bias at any n.
+- **Scenarios move together.** `setup_rng_stream(run)` seeds on the run alone,
+  so scenarios share random numbers and every model is fitted to the same
+  dataset. The per-run bias is ~0.9 correlated across scenarios, so one
+  fluctuation appears in every cell at once.
+- **Sample sizes can be treated as independent.** Each run's stream is reused
+  at every n, but the per-run errors are uncorrelated across n: model-free
+  |r| ≤ 0.019, and |mean Spearman r| < 0.09 for the fitted models' bias and
+  MSE.
+
+Two consequences for reporting. Compute MCSEs per scenario, never pooled
+across scenarios. Compare estimators' bias relative to `dr_oracle` on the same
+run, with the paired MCSE; `bin_results.qmd`'s "Bias relative to the
+DR-oracle" section and its headline table do this.
+
+The script fits no models; it needs `bin_all.RDS` and `bin_metrics.RDS`. Run
+it from `sample_size/binary/` as `Rscript bin_bias_mc_checks.R [n_streams]`,
+where `n_streams` defaults to 5000. It writes `bin_bias_mc_checks.RDS`.
+
 ## Running it
 
 ```bash
