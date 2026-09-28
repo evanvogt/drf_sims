@@ -11,7 +11,7 @@ format:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
-                       fig.width = 11, fig.height = 8)
+                       fig.width = 11, fig.height = 4)
 ```
 
 ```{r libraries, include=FALSE}
@@ -178,8 +178,12 @@ metrics_summary <- metrics %>%
 # alpha/2) x MCSE) error bar, faceted by scenario - see
 # continuous/cts_results.R's summary_plot for why this isn't a raw +/- 1x
 # MCSE (~68% coverage, not 95%)
-# hline = NULL omits the reference line.
-summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05) {
+# hline = NULL omits the reference line. free_y = FALSE shares one y axis
+# across the scenario columns, for the metrics already on a common 0-1 scale.
+# The free-y case is a one-row facet_wrap, not facet_grid: facet_grid can only
+# free y between rows, so a single row of scenarios would share one y axis.
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05,
+                         free_y = TRUE) {
   z <- qnorm(1 - alpha / 2)
   df %>%
     mutate(est = .data[[mean_col]],
@@ -189,12 +193,14 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha =
     (if (!is.null(hline)) geom_hline(yintercept = hline, linetype = "dashed")) +
     geom_point(position = position_dodge(width = 0.5), size = 2) +
     geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
-    facet_wrap(~scenario, scales = "free") +
+    (if (free_y) facet_wrap(~scenario, nrow = 1, scales = "free_y")
+     else facet_grid(cols = vars(scenario))) +
     scale_colour_paletteer_d("rcartocolor::Safe") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
           strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
+          strip.text = element_text(colour = "black"),
+          legend.position = "bottom") +
     labs(title = title, y = ylab, x = "Sample size", colour = "Model")
 }
 ```
@@ -204,23 +210,25 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha =
 Average bias in the estimated CATE (estimate minus truth), per unit and per
 run, against the known truth.
 
-```{r bias-plot, fig.height=16}
+```{r bias-plot, fig.height=7}
 bias_plot <- metrics %>%
   ggplot(aes(x = n, y = bias, colour = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free") +
+  facet_wrap(~scenario, nrow = 1, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "Bias in CATE estimates", y = "Bias", x = "Sample size", colour = "Model")
 
 bias_sum_plot <- summary_plot(metrics_summary, "mean_bias", "mcse_bias",
                               "Mean bias in CATE estimates", "Mean bias")
 
-(bias_plot / bias_sum_plot) + plot_layout(guides = "collect")
+(bias_plot / bias_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## ATE bias
@@ -229,24 +237,83 @@ Bias of the *average* treatment effect (`mean(est) - mean(true)`), as
 opposed to Bias's per-unit average — the two can differ in sign or magnitude
 when errors don't average out evenly across units.
 
-```{r ate-bias-plot, fig.height=16}
+```{r ate-bias-plot, fig.height=7}
 ate_bias_plot <- metrics %>%
   ggplot(aes(x = n, y = ate_bias, colour = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free") +
+  facet_wrap(~scenario, nrow = 1, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "Bias in the average treatment effect", y = "ATE bias",
        x = "Sample size", colour = "Model")
 
 ate_bias_sum_plot <- summary_plot(metrics_summary, "mean_ate_bias", "mcse_ate_bias",
                                   "Mean ATE bias", "Mean ATE bias")
 
-(ate_bias_plot / ate_bias_sum_plot) + plot_layout(guides = "collect")
+(ate_bias_plot / ate_bias_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+```
+
+## Bias relative to the DR-oracle
+
+Each run's ATE bias minus the DR-oracle's ATE bias on the same dataset. Every
+model is fitted to the same dataset in a run, and scenarios share random
+numbers (`setup_rng_stream(run)` seeds on the run alone), so the noise in a
+run's outcomes shifts every model's bias together. At `n = 500` that common
+shift is about +0.008 in every model and scenario. It comes from the outcome
+draws in runs 101-500: a plain difference in means carries it, and fresh
+streams 501-5000 do not. The DR-oracle uses the true outcome model and
+propensity, so its bias is zero by construction and its realised bias is that
+common noise. Subtracting it leaves what each estimator adds, and the MCSE here
+is the paired one, so it is much tighter than the ATE bias section's. The
+DR-oracle sits at exactly 0 as the reference.
+
+```{r bias-vs-oracle-plot, fig.height=7}
+oracle_ate_bias <- metrics %>%
+  filter(model == "DR-oracle") %>%
+  select(scenario, n, run, oracle_ate_bias = ate_bias)
+
+# NA wherever the model's ate_bias is NA (e.g. dr_superlearner's failed n = 100
+# fits), so those runs drop out of the mean and the MCSE denominator
+metrics_vs_oracle <- metrics %>%
+  left_join(oracle_ate_bias, by = c("scenario", "n", "run")) %>%
+  mutate(ate_bias_vs_oracle = ate_bias - oracle_ate_bias)
+
+vs_oracle_summary <- metrics_vs_oracle %>%
+  group_by(scenario, model, n) %>%
+  summarise(
+    mean_ate_bias_vs_oracle = mean(ate_bias_vs_oracle, na.rm = T),
+    mcse_ate_bias_vs_oracle = sd(ate_bias_vs_oracle, na.rm = T) /
+      sqrt(sum(!is.na(ate_bias_vs_oracle))),
+    .groups = "drop"
+  )
+
+vs_oracle_plot <- metrics_vs_oracle %>%
+  ggplot(aes(x = n, y = ate_bias_vs_oracle, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_wrap(~scenario, nrow = 1, scales = "free_y") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
+  labs(title = "ATE bias relative to the DR-oracle", y = "ATE bias - DR-oracle's",
+       x = "Sample size", colour = "Model")
+
+vs_oracle_sum_plot <- summary_plot(vs_oracle_summary, "mean_ate_bias_vs_oracle",
+                                   "mcse_ate_bias_vs_oracle",
+                                   "Mean ATE bias relative to the DR-oracle",
+                                   "Mean ATE bias - DR-oracle's")
+
+(vs_oracle_plot / vs_oracle_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## Relative bias
@@ -256,7 +323,7 @@ true ATE); `rel_bias_cate` is the per-unit version, `(est - true) / true`
 averaged over units (undefined and set to `NA` wherever the true CATE is
 exactly 0 for a unit — see `R/metrics.R::cate_metrics()`).
 
-```{r rel-bias-plot, fig.height=16}
+```{r rel-bias-plot}
 rel_ate_bias_sum_plot <- summary_plot(metrics_summary, "mean_rel_ate_bias",
                                       "mcse_rel_ate_bias",
                                       "Mean relative bias in the ATE",
@@ -275,23 +342,25 @@ rel_bias_cate_sum_plot
 The headline metric: mean squared error of the estimated CATE against the
 known truth, for every model and sample size.
 
-```{r mse-plot, fig.height=16}
+```{r mse-plot, fig.height=7}
 mse_plot <- metrics %>%
   ggplot(aes(x = n, y = mse, colour = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free") +
+  facet_wrap(~scenario, nrow = 1, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "MSE of CATE estimates", y = "MSE", x = "Sample size", colour = "Model")
 
 mse_sum_plot <- summary_plot(metrics_summary, "mean_mse", "mcse_mse",
                              "Mean MSE of CATE estimates", "Mean MSE")
 
-(mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
+(mse_plot / mse_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## RMSE of CATE estimates
@@ -299,23 +368,25 @@ mse_sum_plot <- summary_plot(metrics_summary, "mean_mse", "mcse_mse",
 `sqrt(mse)` — the same ranking as MSE, shown on the outcome's own scale
 rather than squared.
 
-```{r rmse-plot, fig.height=16}
+```{r rmse-plot, fig.height=7}
 rmse_plot <- metrics %>%
   ggplot(aes(x = n, y = rmse, colour = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free") +
+  facet_wrap(~scenario, nrow = 1, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "RMSE of CATE estimates", y = "RMSE", x = "Sample size", colour = "Model")
 
 rmse_sum_plot <- summary_plot(metrics_summary, "mean_rmse", "mcse_rmse",
                               "Mean RMSE of CATE estimates", "Mean RMSE")
 
-(rmse_plot / rmse_sum_plot) + plot_layout(guides = "collect")
+(rmse_plot / rmse_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## MAE of CATE estimates
@@ -323,23 +394,25 @@ rmse_sum_plot <- summary_plot(metrics_summary, "mean_rmse", "mcse_rmse",
 Mean absolute error — a robustness check on MSE, less sensitive to outlying
 runs.
 
-```{r mae-plot, fig.height=16}
+```{r mae-plot, fig.height=7}
 mae_plot <- metrics %>%
   ggplot(aes(x = n, y = mae, colour = model)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free") +
+  facet_wrap(~scenario, nrow = 1, scales = "free_y") +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "MAE of CATE estimates", y = "MAE", x = "Sample size", colour = "Model")
 
 mae_sum_plot <- summary_plot(metrics_summary, "mean_mae", "mcse_mae",
                              "Mean MAE of CATE estimates", "Mean MAE")
 
-(mae_plot / mae_sum_plot) + plot_layout(guides = "collect")
+(mae_plot / mae_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## Correlation with the true CATE
@@ -348,28 +421,29 @@ Pearson correlation between estimated and true CATEs (undefined, and forced
 to 0, in scenario 1 since there's no heterogeneity to correlate with —
 excluded from these plots).
 
-```{r corr-plot, fig.height=16}
+```{r corr-plot, fig.height=7}
 corr_df <- filter(metrics, scenario != scenario_labels[["1"]])
 
 corr_plot <- corr_df %>%
   ggplot(aes(x = n, y = corr, colour = model)) +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  # free_y only: sample size is shared across panels, only the correlation
-  # scale needs freeing per scenario
-  facet_wrap(~scenario, scales = "free_y") +
+  facet_grid(cols = vars(scenario)) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "Correlation between estimated and true CATEs",
        y = "Pearson correlation", x = "Sample size", colour = "Model")
 
 corr_sum_plot <- summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
                               "mean_corr", "mcse_corr",
-                              "Mean correlation with the true CATE", "Mean correlation", hline = NULL)
+                              "Mean correlation with the true CATE", "Mean correlation",
+                              hline = NULL, free_y = FALSE)
 
-(corr_plot / corr_sum_plot) + plot_layout(guides = "collect")
+(corr_plot / corr_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## Spearman rank correlation with the true CATE
@@ -378,25 +452,27 @@ Rank correlation alongside the Pearson correlation above — less sensitive to
 outlying CATE estimates and to non-linear-but-monotone miscalibration. Same
 scenario-1-undefined convention, so scenario 1 is excluded here too.
 
-```{r spearman-plot, fig.height=16}
+```{r spearman-plot, fig.height=7}
 spearman_plot <- corr_df %>%
   ggplot(aes(x = n, y = spearman, colour = model)) +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free_y") +
+  facet_grid(cols = vars(scenario)) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "Spearman rank correlation between estimated and true CATEs",
        y = "Spearman correlation", x = "Sample size", colour = "Model")
 
 spearman_sum_plot <- summary_plot(filter(metrics_summary, scenario != scenario_labels[["1"]]),
                                   "mean_spearman", "mcse_spearman",
                                   "Mean Spearman correlation with the true CATE",
-                                  "Mean Spearman correlation", hline = NULL)
+                                  "Mean Spearman correlation", hline = NULL, free_y = FALSE)
 
-(spearman_plot / spearman_sum_plot) + plot_layout(guides = "collect")
+(spearman_plot / spearman_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## Sign accuracy
@@ -405,25 +481,27 @@ Proportion of units where the estimated CATE has the correct sign — a
 direction-detection metric, distinct from magnitude accuracy. 0.5 (dashed
 line) is the chance level for a coin-flip on sign.
 
-```{r sign-acc-plot, fig.height=16}
+```{r sign-acc-plot, fig.height=7}
 sign_acc_plot <- metrics %>%
   ggplot(aes(x = n, y = sign_acc, colour = model)) +
   geom_hline(yintercept = 0.5, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free_x") +
+  facet_grid(cols = vars(scenario)) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "Sign accuracy of CATE estimates", y = "Proportion correct sign",
        x = "Sample size", colour = "Model")
 
 sign_acc_sum_plot <- summary_plot(metrics_summary, "mean_sign_acc", "mcse_sign_acc",
                                   "Mean sign accuracy", "Mean proportion correct sign",
-                                  hline = 0.5)
+                                  hline = 0.5, free_y = FALSE)
 
-(sign_acc_plot / sign_acc_sum_plot) + plot_layout(guides = "collect")
+(sign_acc_plot / sign_acc_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## True-CATE HTE test evaluation
@@ -441,6 +519,8 @@ CATE" has no scenario-1 series.
 
 ```{r true-cate-data}
 true_cate_tests <- readRDS(file.path(res_path, "bin_true_cate_tests.RDS")) %>%
+  # same temporary filter as `metrics` above, for the 4 thesis scenarios
+  filter(scenario %in% c(1:4)) %>%
   mutate(
     scenario = factor(scenario, levels = names(scenario_labels) %>% as.integer(),
                       labels = unname(scenario_labels)),
@@ -494,72 +574,79 @@ constant-variance SEs, as computed when the models were fitted; `BLP_p_os` is
 one-sided (H1: beta.2 > 0, the direction the method is defined for) with HC3
 SEs, recomputed at metrics time from the saved nuisances.
 
-```{r blp-plot, fig.height=16}
+```{r blp-plot, fig.height=7}
 BLP_plot <- bind_true_cate(metrics, true_cate_raw, "BLP_p") %>%
   ggplot(aes(x = n, y = BLP_p, colour = model)) +
   geom_hline(yintercept = 0.05, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free_x") +
+  facet_grid(cols = vars(scenario)) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "BLP test p-values (two-sided, constant variance)", y = "p-value",
        x = "Sample size", colour = "Model")
 
 BLP_sum_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP", "mcse_BLP")),
   "mean_BLP", "mcse_BLP", "Mean BLP test p-value (two-sided, constant variance)",
-  "Mean p-value", hline = 0.05)
+  "Mean p-value", hline = 0.05, free_y = FALSE)
 
-(BLP_plot / BLP_sum_plot) + plot_layout(guides = "collect")
+(BLP_plot / BLP_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
-```{r blp-os-plot, fig.height=16}
+```{r blp-os-plot, fig.height=7}
 BLP_os_plot <- bind_true_cate(metrics, true_cate_raw, "BLP_p_os") %>%
   ggplot(aes(x = n, y = BLP_p_os, colour = model)) +
   geom_hline(yintercept = 0.05, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free_x") +
+  facet_grid(cols = vars(scenario)) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "BLP test p-values (one-sided, HC3)", y = "p-value",
        x = "Sample size", colour = "Model")
 
 BLP_os_sum_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP_os", "mcse_BLP_os")),
   "mean_BLP_os", "mcse_BLP_os", "Mean BLP test p-value (one-sided, HC3)",
-  "Mean p-value", hline = 0.05)
+  "Mean p-value", hline = 0.05, free_y = FALSE)
 
-(BLP_os_plot / BLP_os_sum_plot) + plot_layout(guides = "collect")
+(BLP_os_plot / BLP_os_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## CATE permutation test p-values
 
-```{r indep-cate-plot, fig.height=16}
+```{r indep-cate-plot, fig.height=7}
 indep_cate_plot <- bind_true_cate(metrics, true_cate_raw, "indep_cate") %>%
   ggplot(aes(x = n, y = indep_cate, colour = model)) +
   geom_hline(yintercept = 0.05, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free_x") +
+  facet_grid(cols = vars(scenario)) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "CATE permutation test p-values", y = "p-value", x = "Sample size",
        colour = "Model")
 
 indep_cate_sum_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_indep_cate", "mcse_indep_cate")),
   "mean_indep_cate", "mcse_indep_cate",
-  "Mean CATE permutation test p-value", "Mean p-value", hline = 0.05)
+  "Mean CATE permutation test p-value", "Mean p-value", hline = 0.05,
+  free_y = FALSE)
 
-(indep_cate_plot / indep_cate_sum_plot) + plot_layout(guides = "collect")
+(indep_cate_plot / indep_cate_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## PO permutation test p-values
@@ -569,25 +656,27 @@ The causal forest has no series here: its pseudo-outcome is DR-RandomForest's
 Nor do the T-learners, for the same reason: T-RandomForest's is
 DR-RandomForest's and T-SuperLearner's is DR-SuperLearner's.
 
-```{r indep-po-plot, fig.height=16}
+```{r indep-po-plot, fig.height=7}
 indep_po_plot <- metrics %>%
   ggplot(aes(x = n, y = indep_po, colour = model)) +
   geom_hline(yintercept = 0.05, linetype = "dashed") +
   geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario, scales = "free_x") +
+  facet_grid(cols = vars(scenario)) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "PO permutation test p-values", y = "p-value", x = "Sample size",
        colour = "Model")
 
 indep_po_sum_plot <- summary_plot(metrics_summary, "mean_indep_po", "mcse_indep_po",
                                   "Mean PO permutation test p-value", "Mean p-value",
-                                  hline = 0.05)
+                                  hline = 0.05, free_y = FALSE)
 
-(indep_po_plot / indep_po_sum_plot) + plot_layout(guides = "collect")
+(indep_po_plot / indep_po_sum_plot) + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 ```
 
 ## HTE test power
@@ -597,24 +686,24 @@ p-values above — the rsimsum-standard measure for a hypothesis test's
 simulated behaviour, with the binomial 95% CI rather than the continuous-
 measure one.
 
-```{r power-plot, fig.height=16}
+```{r power-plot}
 BLP_power_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("power_BLP", "mcse_power_BLP")),
   "power_BLP", "mcse_power_BLP", "BLP test power (two-sided, constant variance)",
-  "Power", hline = 0.05)
+  "Power", hline = 0.05, free_y = FALSE)
 BLP_os_power_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("power_BLP_os", "mcse_power_BLP_os")),
   "power_BLP_os", "mcse_power_BLP_os", "BLP test power (one-sided, HC3)",
-  "Power", hline = 0.05)
+  "Power", hline = 0.05, free_y = FALSE)
 indep_cate_power_plot <- summary_plot(
   bind_true_cate(metrics_summary, true_cate_summary,
                 c("power_indep_cate", "mcse_power_indep_cate")),
   "power_indep_cate", "mcse_power_indep_cate",
-  "CATE permutation test power", "Power", hline = 0.05)
+  "CATE permutation test power", "Power", hline = 0.05, free_y = FALSE)
 indep_po_power_plot <- summary_plot(metrics_summary, "power_indep_po",
                                     "mcse_power_indep_po",
                                     "PO permutation test power", "Power",
-                                    hline = 0.05)
+                                    hline = 0.05, free_y = FALSE)
 
 BLP_power_plot
 BLP_os_power_plot
@@ -668,9 +757,15 @@ if (nrow(na_table) > 0) {
 Arranged by scenario, sample size, and mean MSE (best model first within
 each cell).
 
+The ATE bias relative to the DR-oracle is shown with its paired MCSE, since
+whether it clears that MCSE is what matters (see "Bias relative to the
+DR-oracle").
+
 ```{r headline-table}
 headline <- metrics_summary %>%
-  select(scenario, model, n, mean_bias, mean_ate_bias, mean_rel_ate_bias,
+  left_join(vs_oracle_summary, by = c("scenario", "model", "n")) %>%
+  select(scenario, model, n, mean_bias, mean_ate_bias, mean_ate_bias_vs_oracle,
+         mcse_ate_bias_vs_oracle, mean_rel_ate_bias,
          mean_rel_bias_cate, mean_mse, mean_rmse, mean_mae,
          mean_sign_acc, mean_corr, mean_BLP, mean_BLP_os, mean_indep_cate,
          mean_indep_po, power_BLP, power_BLP_os, power_indep_cate, power_indep_po) %>%
@@ -678,6 +773,7 @@ headline <- metrics_summary %>%
 
 kable(headline, digits = 4,
       col.names = c("Scenario", "Model", "n", "Mean bias", "Mean ATE bias",
+                    "Mean ATE bias vs DR-oracle", "MCSE (vs DR-oracle)",
                     "Mean relative ATE bias", "Mean relative CATE bias",
                     "Mean MSE", "Mean RMSE", "Mean MAE", "Mean sign accuracy",
                     "Mean correlation", "Mean BLP p-value",
