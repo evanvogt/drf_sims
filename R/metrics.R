@@ -70,7 +70,8 @@ cate_metrics <- function(est, true, scenario) {
 #'               saved before that guard carry that p
 #'   indep_po    NA for causal_forest, which shares dr_random_forest's
 #'               pseudo-outcome (nuisances_rf$po) - the value is reported once,
-#'               under dr_random_forest
+#'               under dr_random_forest. NA for the T-learners too, for the
+#'               same reason: add_t_learners() leaves independence_po unset
 #'
 #' @param model_res one model's entry in a per-run results object
 #' @param sim_res that run's whole results object, for BLP_p_os
@@ -124,6 +125,55 @@ CATE_MODELS <- c("causal_forest", "dr_random_forest", "dr_oracle",
 
 # the CI studies drop the SuperLearner arm
 CI_MODELS <- c("causal_forest", "dr_random_forest", "dr_oracle", "dr_semi_oracle")
+
+# T-learners derived at metrics time from a DR-learner's saved stage 1 - see
+# add_t_learners(). Only sample_size/{continuous,binary} ask for them; they
+# are kept out of CATE_MODELS, which the missing-data studies share.
+T_LEARNER_MODELS <- c("t_random_forest", "t_superlearner")
+
+#' T-learner CATE, Y1.hat - Y0.hat, recovered from saved DR nuisances
+#'
+#' Neither nuisance_rf nor nuisance_sl (R/cate_models.R) saves Y1.hat, but the
+#' pseudo-outcome they do save is
+#'   po = (Y1.hat - Y0.hat) + (Y - Y.hat)(W - W.hat) / (W.hat (1 - W.hat))
+#' (dr_pseudo), so removing the residual term gives the per-arm outcome
+#' models' contrast back exactly, up to rounding. W.hat is the trimmed one
+#' po was built with.
+#' @param nuis a saved nuisances_rf or nuisances_sl
+t_learner_tau <- function(nuis, Y, W) {
+  nuis$po - (Y - nuis$Y.hat) * (W - nuis$W.hat) / (nuis$W.hat * (1 - nuis$W.hat))
+}
+
+#' Add the T-learners to one run's results, from its saved DR stage 1
+#'
+#' t_random_forest is dr_random_forest's per-arm outcome forests (own-arm
+#' predictions OOB); t_superlearner is dr_superlearner's per-arm
+#' SuperLearners (out-of-fold). The BLP and independence tests are run as
+#' run_dr_random_forest() runs them, on the same nuisances as the DR
+#' counterpart. No independence_po: the pseudo-outcome is the DR-learner's,
+#' already reported under it. No variance either.
+#'
+#' Passed as compute_metrics(augment = ); a run with no single dataset
+#' (multiple imputation) or without the nuisances is returned unchanged.
+#' @param sim_res one run's saved results object
+add_t_learners <- function(sim_res) {
+  if (!is.data.frame(sim_res$data)) return(sim_res)
+  X <- as.matrix(sim_res$data[, -c(1:2)])
+  Y <- sim_res$data$Y
+  W <- sim_res$data$W
+  sources <- c(t_random_forest = "nuisances_rf", t_superlearner = "nuisances_sl")
+  for (m in names(sources)) {
+    nuis <- sim_res[[sources[[m]]]]
+    if (is.null(nuis$po) || is.null(nuis$Y.hat)) next
+    tau <- t_learner_tau(nuis, Y, W)
+    sim_res[[m]] <- list(
+      tau = tau,
+      BLP_whole = run_blp_whole(Y, W, nuis$W.hat, nuis$Y0.hat, tau),
+      independence_cate = run_independence_test_whole(X, tau)
+    )
+  }
+  sim_res
+}
 
 #' Coverage and width of one interval estimate
 #'
@@ -281,8 +331,11 @@ be_reference_for <- function(be_ref, keys, model, path_cols) {
 #'   callback may return SEVERAL rows and may include its own `model` column,
 #'   which is how the CI studies add the "causal_forest_inbuilt" row alongside
 #'   the bootstrap one.
+#' @param augment optional function(sim_res) returning sim_res with extra
+#'   model entries derived from what was saved - e.g. add_t_learners(). NULL
+#'   (default) uses each run as saved.
 compute_metrics <- function(study, all_results_df, models = CATE_MODELS,
-                            per_model) {
+                            per_model, augment = NULL) {
 
   u <- unnest_results(study, all_results_df)
   df <- u$df
@@ -290,6 +343,7 @@ compute_metrics <- function(study, all_results_df, models = CATE_MODELS,
 
   rows <- lapply(seq_len(nrow(df)), function(i) {
     sim_res <- df$sim_res[[i]]
+    if (!is.null(augment)) sim_res <- augment(sim_res)
     true_tau <- sim_res$truth$tau
     models_run <- intersect(names(sim_res), models)
 

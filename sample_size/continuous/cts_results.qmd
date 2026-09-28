@@ -54,6 +54,13 @@ SuperLearner library shrinks at `n = 100` (`SL.earth`/`SL.ranger` are
 dropped), so `dr_superlearner` is sometimes filtered out of the smallest-`n`
 figures below.
 
+`t_random_forest` and `t_superlearner` are the T-learners
+$\hat\mu_1(x) - \hat\mu_0(x)$ from `dr_random_forest`'s and
+`dr_superlearner`'s own per-arm outcome models. They are not fitted
+separately: `R/metrics.R::add_t_learners()` recovers them at metrics time
+from each run's saved nuisances, and runs their BLP and CATE independence
+tests there.
+
 ```{r data}
 # paths
 path <- here()
@@ -82,7 +89,9 @@ model_labels <- c(
   dr_random_forest = "DR-RandomForest",
   dr_oracle = "DR-oracle",
   dr_semi_oracle = "DR-semi-oracle",
-  dr_superlearner = "DR-SuperLearner"
+  dr_superlearner = "DR-SuperLearner",
+  t_random_forest = "T-RandomForest",
+  t_superlearner = "T-SuperLearner"
 )
 
 # tidy up
@@ -555,6 +564,8 @@ indep_cate_sum_plot <- summary_plot(
 
 The causal forest has no series here: its pseudo-outcome is DR-RandomForest's
 (both use the same random-forest nuisances), so the test is reported once.
+Nor do the T-learners, for the same reason: T-RandomForest's is
+DR-RandomForest's and T-SuperLearner's is DR-SuperLearner's.
 
 ```{r indep-po-plot, fig.height=16}
 indep_po_plot <- metrics %>%

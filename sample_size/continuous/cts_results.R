@@ -44,7 +44,9 @@ model_labels <- c(
   dr_random_forest = "DR-RandomForest",
   dr_oracle = "DR-oracle",
   dr_semi_oracle = "DR-semi-oracle",
-  dr_superlearner = "DR-SuperLearner"
+  dr_superlearner = "DR-SuperLearner",
+  t_random_forest = "T-RandomForest",
+  t_superlearner = "T-SuperLearner"
 )
 
 # tidy up
@@ -453,9 +455,10 @@ ggsave("cts_indep_cate_summary.png", plot = indep_cate_sum_plot, path = fig_path
        width = 21, height = 15, units = "cm")
 
 # --- PO permutation test p-values ----------------------------------------
-# causal_forest's indep_po is NA by design, so it draws no series here (left
-# in rather than filtered out, so every model keeps its colour across plots)
-indep_po_caption <- "Causal forest shares DR-RandomForest's pseudo-outcome, so it has no separate series."
+# causal_forest's and the T-learners' indep_po is NA by design, so they draw
+# no series here (left in rather than filtered out, so every model keeps its
+# colour across plots)
+indep_po_caption <- "Causal forest and T-RandomForest share DR-RandomForest's pseudo-outcome, and T-SuperLearner DR-SuperLearner's, so they have no separate series."
 indep_po_plot <- metrics %>%
   ggplot(aes(x = n, y = indep_po, colour = model)) +
   geom_hline(yintercept = 0.05, linetype = "dashed") +

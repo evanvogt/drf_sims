@@ -108,6 +108,8 @@ Each run is seeded by its run index alone (`setup_rng_stream(run)`), so a given
 | `dr_superlearner` | DR-learner; SuperLearner per-arm outcome models and propensity, single leave-one-fold-out crossfit (V = 4, 5, 10 at n = 100, 250, ≥ 500), SuperLearner second stage | continuous / binary |
 | `dr_oracle` | DR-learner with the true outcome model (binary: true risk) and propensity 0.5 | all but optimal_sf |
 | `dr_semi_oracle` | DR-learner with the known propensity 0.5 and `dr_random_forest`'s per-arm outcome forests | all but optimal_sf |
+| `t_random_forest` | T-learner $\hat\mu_1 - \hat\mu_0$ from `dr_random_forest`'s per-arm outcome forests (own-arm predictions OOB); derived at metrics time, not refitted | continuous / binary |
+| `t_superlearner` | T-learner $\hat\mu_1 - \hat\mu_0$ from `dr_superlearner`'s per-arm SuperLearners (out-of-fold); derived at metrics time, not refitted | continuous / binary |
 
 Estimated propensities trimmed to [0.05, 0.95].
 

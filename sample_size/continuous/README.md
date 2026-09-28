@@ -111,6 +111,19 @@ R 4.3.2 there could round a borderline value differently from 4.5.3 here.
 crossfitting for the nuisances. The oracle uses the true outcome model and a
 known propensity of 0.5; the semi-oracle knows only the propensity.
 
+`t_random_forest` and `t_superlearner` are T-learners, μ̂₁(x) − μ̂₀(x), built
+from `dr_random_forest`'s and `dr_superlearner`'s own per-arm outcome models
+(`nuisances_rf`, own-arm predictions OOB; `nuisances_sl`, out-of-fold). They
+are not fitted: `Y1.hat` isn't saved, but the saved pseudo-outcome is
+`(Y1.hat − Y0.hat) + (Y − Y.hat)(W − W.hat)/(W.hat(1 − W.hat))`, so
+`R/metrics.R::add_t_learners()` subtracts the residual term at metrics time
+and gets the contrast back exactly. It runs their BLP and `indep_cate` tests
+there too (`BLP_p_os` via `blp_inputs()` as usual). They have no variance
+estimate, and the n = 100 SuperLearner caveat above applies to
+`t_superlearner` as to `dr_superlearner`. Only this study and `binary/` ask
+for them (`compute_metrics(augment = add_t_learners)`); the CI and
+missing-data studies don't.
+
 ## Files
 
 | file | role |
@@ -187,7 +200,9 @@ Properties of the independence tests, evaluated as they are rather than changed:
   scenario-1 rejection rate is not guaranteed to be 5%.
 - `causal_forest` and `dr_random_forest` share `nuisances_rf$po`, so their
   `indep_po` would be the same number; it is reported once, under
-  `dr_random_forest`, and `NA` for `causal_forest`.
+  `dr_random_forest`, and `NA` for `causal_forest`. Likewise `NA` for
+  `t_random_forest` and `t_superlearner`, whose pseudo-outcomes are
+  `dr_random_forest`'s and `dr_superlearner`'s.
 
 Power and mean p-values leave out runs whose p-value is `NA` (a constant τ̂,
 or a test that wasn't run); `n_na_BLP_p`, `n_na_BLP_p_os` and

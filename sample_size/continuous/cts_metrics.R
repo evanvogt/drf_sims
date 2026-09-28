@@ -11,8 +11,11 @@ source(here("R", "cate_models.R"))
 
 all_results_df <- readRDS(file.path(study$res_path, "cts_all.RDS"))
 
+# The T-learners are derived here from each run's saved DR stage 1, not fitted
+# at estimation time - see add_t_learners() in R/metrics.R.
 metrics <- compute_metrics(
-  study, all_results_df, models = CATE_MODELS,
+  study, all_results_df, models = c(CATE_MODELS, T_LEARNER_MODELS),
+  augment = add_t_learners,
   per_model = function(model_res, true_tau, model, sim_res, keys) {
     bind_cols(
       cate_metrics(model_res$tau, true_tau, keys$scenario),

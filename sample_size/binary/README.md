@@ -188,6 +188,11 @@ Same layout as `continuous/`. `bin_models.R` sets `family = binomial()`. The
 oracle formula from `bin_dgms.R` returns the risk itself, so `dr_oracle` applies
 no link — as in every study now (see `R/README.md`).
 
+`bin_metrics.R` adds the T-learners `t_random_forest` and `t_superlearner`,
+derived from each run's saved DR nuisances rather than fitted — see
+`continuous/README.md`'s "Estimators". On this scale μ̂₁ − μ̂₀ is a risk
+difference, like the estimand.
+
 `bin_metrics.R` also writes `bin_true_cate_tests.RDS` — the BLP and
 independence tests run on the true CATE and true nuisances instead of an
 estimator's, one row per (scenario, n, run). See

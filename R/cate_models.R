@@ -716,6 +716,10 @@ blp_p_value <- function(blp, sided = c("one", "two")) {
 #'   causal_forest, dr_random_forest  nuisances_rf's W.hat and Y0.hat
 #'   dr_oracle, dr_semi_oracle        W.hat = 0.5, the arm's own Y0.hat
 #'   dr_superlearner                  nuisances_sl's W.hat and Y0.hat
+#' and with R/metrics.R::add_t_learners(), whose T-learners reuse their DR
+#' counterpart's:
+#'   t_random_forest                  nuisances_rf's W.hat and Y0.hat
+#'   t_superlearner                   nuisances_sl's W.hat and Y0.hat
 #' @param sim_res one run's saved results object
 #' @param model model name
 #' @return list(Y, W, W.hat, Y0.hat, tau), or NULL when the run has no single
@@ -724,9 +728,9 @@ blp_inputs <- function(sim_res, model) {
   if (!is.data.frame(sim_res$data)) return(NULL)
   m <- sim_res[[model]]
   nuis <- switch(model,
-    causal_forest = , dr_random_forest = sim_res$nuisances_rf,
+    causal_forest = , dr_random_forest = , t_random_forest = sim_res$nuisances_rf,
     dr_oracle = , dr_semi_oracle = list(W.hat = 0.5, Y0.hat = m$Y0.hat),
-    dr_superlearner = sim_res$nuisances_sl,
+    dr_superlearner = , t_superlearner = sim_res$nuisances_sl,
     NULL
   )
   if (is.null(m$tau) || is.null(nuis$W.hat) || is.null(nuis$Y0.hat)) return(NULL)
