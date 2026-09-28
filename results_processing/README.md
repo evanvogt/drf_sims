@@ -9,6 +9,7 @@ Nothing here reads per-run simulation output directly — run the study's
 | | |
 |---|---|
 | `thesis_figures/` | the figures that go in the thesis, one script per chapter section |
+| `thesis_tables/` | the LaTeX tables that go in the thesis |
 | `poster_figs/` | exploration tooling for choosing the ICTMC poster figures |
 | `LSR_figures.R` | figures for the LSR presentation |
 | `ictmc_figs.R` | figures for the ICTMC poster |
@@ -41,6 +42,22 @@ write-up used to mean editing six files.
 
 Each script still owns its paths, its filters and its choice of panels — the
 shared module handles presentation, not analysis.
+
+## `thesis_tables/`
+
+`ss_tables.R` writes booktabs `longtable`s for the sample-size studies to
+`../results/thesis_tables/`: `{cts,bin}_ss_main.tex` (scenarios 1–4) and
+`{cts,bin}_ss_supp.tex` (5–10). Each cell is `mean (MCSE)`, summarised with
+the figures' `summarise_metrics()`; the layout helpers are in `R/tables.R`.
+Run it from `results_processing/thesis_tables/`:
+
+```
+Rscript ss_tables.R
+```
+
+The thesis preamble needs `\usepackage{booktabs, longtable, pdflscape, array}`.
+The script header explains the metric choices (one bias column, relative ATE
+bias but not relative CATE bias).
 
 ## `poster_figs/`
 

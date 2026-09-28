@@ -26,6 +26,8 @@ MODEL_LABELS <- c(
   dr_oracle = "DR-oracle",
   dr_semi_oracle = "DR-semi-oracle",
   dr_superlearner = "DR-SuperLearner",
+  t_random_forest = "T-RandomForest",
+  t_superlearner = "T-SuperLearner",
   causal_forest_inbuilt = "Causal forest (inbuilt CI)"
 )
 
@@ -58,6 +60,18 @@ SS_SCENARIO_LABELS <- c(
   `2` = "Simple",
   `3` = "Complex",
   `4` = "Non-linear"
+)
+
+# the remaining sample-size scenarios, reported in the supplementary tables
+# (names from sample_size/ADEMP.md). `$\times$` is LaTeX: these labels are only
+# used by the table scripts, which write with escape = FALSE.
+SS_SUPP_SCENARIO_LABELS <- c(
+  `5` = "Simple (binary)",
+  `6` = "Two variables",
+  `7` = "Binary $\\times$ continuous",
+  `8` = "Single effects + interaction",
+  `9` = "Continuous $\\times$ continuous",
+  `10` = "Exponential"
 )
 
 # the missing-data studies' six-scenario set, numbered as the main study's
