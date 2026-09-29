@@ -38,7 +38,7 @@ sample-size axis in any figure below:
 | n | 500 |
 | type | `both` (prognostic and predictive covariates amputated) |
 | prop | 0.3 |
-| mechanism | MAR, MNAR, MNAR-Y |
+| mechanism | MAR, MNAR-Y0, MNAR-τ |
 | method | 8 handling methods + `complete_data` reference |
 | runs | 100 |
 
@@ -49,11 +49,11 @@ in `continuous/`; this study runs 1–5. Full design in `missing/README.md`.
 
 | mechanism | missingness depends on |
 |---|---|
-| MAR | the observed covariates |
-| MNAR | an unobserved `U` |
-| MNAR-Y | `U`, which also enters the treatment effect |
+| MAR | the observed covariates (correlated with the missing ones) |
+| MNAR-Y0 | an unobserved `U`, which also shifts the control outcome |
+| MNAR-τ | an unobserved `U`, which also enters the treatment effect |
 
-MNAR-Y is not defined for scenario 1 (Null): there is no treatment effect
+MNAR-τ is not defined for scenario 1 (Null): there is no treatment effect
 heterogeneity for `U` to enter. **That facet is empty by design, not by
 failure.**
 

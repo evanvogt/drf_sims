@@ -19,10 +19,11 @@ Three studies:
 | n | 500 |
 | type | `both` (prognostic and predictive covariates amputated) |
 | prop | 0.3 |
-| mechanism | MAR, MNAR, MNAR-Y |
+| covariates | correlated (copula, ρ = 0.5), X01–X03 auxiliary — see below |
+| mechanism | MAR, MNAR-Y0, MNAR-tau |
 | method | 8 handling methods + `complete_data` reference |
 | runs | 100 |
-| array | **12,600 jobs** — rows 1–9,900 are scenarios 1, 3, 4, 5 (scenario 1 has no MNAR-Y, so 900 rows are dropped); rows 9,901–12,600 are scenario 2 |
+| array | **12,600 jobs** — rows 1–9,900 are scenarios 1, 3, 4, 5 (scenario 1 has no MNAR-tau, so 900 rows are dropped); rows 9,901–12,600 are scenario 2 |
 
 Scenario numbering is the main study's: the missing-data set is the main set's
 scenarios 1–6, so scenario `k` here is scenario `k` in `continuous/` and
@@ -33,7 +34,7 @@ second block of the grid, rows 9,901–12,600.
 **Runs stay at 100 for every scenario**, unlike `continuous/` and `binary/`,
 which take scenarios 1–4 to 500. More runs cost far more here: one run is one
 job per mechanism × method, so each extra run of scenarios 1–4 adds 99 jobs
-(scenario 1 has no MNAR-Y), against 16 in the main studies (4 scenarios × 4
+(scenario 1 has no MNAR-tau), against 16 in the main studies (4 scenarios × 4
 sample sizes). Going to 500 runs for scenarios 1–4 would add 39,600 jobs per study (52,200
 in all, about 4× the current 12,600), so 79,200 across `continuous/` and
 `binary/`. That is four more array scripts per study under the 10,000-subjob
@@ -65,16 +66,33 @@ via `R/figures.R` — `MISS_SCENARIO_LABELS`, `METHOD_LABELS`,
 `MECHANISM_LABELS`, `STRATEGY_LABELS` and `point_range_plot()` in particular.
 Rename an estimator or a handling method there and every figure follows.
 
+### Covariates are correlated here (since 2026-09-28)
+
+Unlike the main studies, the missing-data sets draw X1–X5 and X01–X03 from a
+Gaussian copula with exchangeable latent correlation ρ = 0.5 (X1 and X3 by
+thresholding). X01–X03 are **auxiliaries**: correlated with X1–X5, in neither
+the outcome model nor the CATE, and never amputated, so they are what
+`regression` imputation and the `IPW` model have to work with. X04/X05 stay pure
+noise. Before this every covariate was independent, which left the imputation
+methods nothing to impute from and made MAR indistinguishable from MCAR as far
+as the CATE is concerned. See `ADEMP.md`.
+
 ### Mechanisms
 
-- **MAR** — missingness depends on the observed covariates
-- **MNAR** — driven entirely by an unobserved `U`
-- **MNAR-Y** — `U` also enters the treatment effect, so missingness is related to
-  the outcome. Not defined for scenario 1, which has no treatment effect
-  heterogeneity to relate to.
+- **MAR** — missingness depends on the observed covariates. With correlated
+  covariates the missing values differ from the observed ones, so this is the
+  arm that tests the imputation methods.
+- **MNAR-Y0** — missingness is driven by an unobserved `U` (independent of X)
+  that also shifts the **control outcome**: missingness is related to
+  prognosis.
+- **MNAR-tau** — `U` enters the **treatment effect** instead: missingness is
+  related to benefit. Not defined for scenario 1, which has no treatment effect
+  heterogeneity to relate to. Displayed as "MNAR-τ".
 
-`missing/ci_example/` still calls these `AUX` / `AUX-Y`. Both spellings are
-accepted and normalised in `R/missingness.R`.
+These replaced MAR / MNAR / MNAR-Y on 2026-09-28. The old "MNAR" had `U` in
+neither X nor Y, so it was MCAR in effect, and was dropped; the old "MNAR-Y" is
+MNAR-tau. The old names (and `ci_example`'s older `AUX` / `AUX-Y`) are now
+rejected with an error rather than mapped.
 
 ### Handling methods
 
@@ -153,6 +171,10 @@ the question is settled.
 - `missing/binary` — bug P and then the risk-difference DGM
   (`sample_size/binary/README.md`), on top of the three defects and bug K in its own
   README. Submit on the risk-difference code.
+- Both, and `ci_example` (which runs on `continuous_missing`), also for the
+  2026-09-28 redesign: correlated covariates with X01–X03 as auxiliaries, and
+  the mechanisms MAR / MNAR-Y0 / MNAR-tau. Every dataset changes, including the
+  `complete_data` arm's.
 
 Archiving first matters here in particular: the old trees use the
 pre-2026-09-26 numbers, so the new scenario 2 would land on the paths of the

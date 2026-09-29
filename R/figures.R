@@ -43,15 +43,13 @@ METHOD_LABELS <- c(
   complete_data = "Complete data (reference)"
 )
 
-# The DGMs now call these MNAR / MNAR-Y throughout. AUX / AUX-Y are the older
-# spelling, still present in results generated before the rename, so both map to
-# the same display label.
+# MAR / MNAR-Y0 / MNAR-tau since 2026-09-28 (R/dgm_scenarios.R, MISS_MECHS).
+# Results made before then (MNAR / MNAR-Y, or AUX / AUX-Y) are archived;
+# label_factor() passes their names through unchanged.
 MECHANISM_LABELS <- c(
   MAR = "MAR",
-  MNAR = "MNAR",
-  `MNAR-Y` = "MNAR-Y",
-  AUX = "MNAR",
-  `AUX-Y` = "MNAR-Y"
+  `MNAR-Y0` = "MNAR-Y0",
+  `MNAR-tau` = "MNAR-τ"
 )
 
 # the four scenarios the sample-size chapters report, by their scenario index

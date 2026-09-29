@@ -21,15 +21,20 @@
 #             from TARGET_POWER only through bW's rounding
 #   realised  adds the treated arm's Var(g), pooled across the two arms, which
 #             the plan knows nothing about
-#   MNAR-Y    adds bU^2 sU^2 on top - the unobserved U's contribution to the
-#             treated arm under that mechanism (missing-data studies only)
+#   MNAR-Y0   adds bU^2 sU^2 on top in BOTH arms - the unobserved U's
+#             contribution to the control mean (missing-data studies only)
+#   MNAR-tau  adds bU^2 sU^2 on top in the treated arm only - U's contribution
+#             to the treatment effect (missing-data studies only)
+# The missing-data sets' covariates are correlated, so their planned SD also
+# carries 2 b1 b2 Cov(X1, X2) (calibrate_bW()).
 #
 # Binary power is for a two-proportion test with n / 2 per arm, on the true
 # marginal risks. Heterogeneity cannot lower it - each arm's variance is fixed
 # by its marginal risk - so planned and realised are one column, which differs
 # from TARGET_POWER only through bW's rounding. The effect is on the
-# risk-difference scale and MNAR-Y's bU * tanh(U) has mean zero, so MNAR-Y
-# leaves the RD and the power alone; it only widens the treated-risk bounds.
+# risk-difference scale and the MNAR mechanisms' bU * tanh(U) has mean zero, so
+# they leave the RD and the power alone; they only widen the risk bounds (the
+# treated risk's the same under either).
 #
 # Binary floor / ceiling: the lowest and highest treated risk over the whole
 # covariate support (treated_risk_bounds()). RD_SCALE keeps them inside
@@ -50,13 +55,16 @@ continuous_row <- function(p, n) {
   bW <- calibrate_bW(p, n, "t")
   g <- te_moments(p)
   var0 <- p$b1^2 * p$X1_prob * (1 - p$X1_prob) + p$b2^2 * p$s2^2 + p$s_err^2
+  if (is_correlated(p)) var0 <- var0 + 2 * p$b1 * p$b2 * cov_X1X2(p)
   ate <- bW + g$mean
+  # extra_var is the treated arm's extra variance, pooled over the two arms
   power_at <- function(extra_var) {
     power.t.test(n = n / 2, delta = abs(ate), sd = sqrt(var0 + extra_var / 2))$power
   }
   u_var <- if (is.null(p$bU)) NA_real_ else p$bU^2 * p$sU^2
   c(bW = bW, ate = ate, planned = power_at(0), realised = power_at(g$var),
-    mnar_y = if (is.na(u_var)) NA_real_ else power_at(g$var + u_var))
+    mnar_y0 = if (is.na(u_var)) NA_real_ else power_at(g$var + 2 * u_var),
+    mnar_tau = if (is.na(u_var)) NA_real_ else power_at(g$var + u_var))
 }
 
 #' bW, true RD, two-proportion-test power and worst-case treated risks for one
@@ -70,7 +78,7 @@ binary_row <- function(p, n) {
   c(bW = bW, p0 = p0, ate = ate,
     power = power.prop.test(n = n / 2, p1 = p0, p2 = p0 + ate)$power,
     floor = b[1], ceiling = b[2],
-    floor_mnar_y = b_y[1], ceiling_mnar_y = b_y[2])
+    floor_mnar = b_y[1], ceiling_mnar = b_y[2])
 }
 
 #' One row function over every scenario of a table at every n in MAIN_NS
@@ -88,7 +96,7 @@ show <- function(rows, tbl, set, what, label, digits) {
   print(round(m, digits))
 }
 
-#' One table's rows at MISSING_N, scenario 1 without MNAR-Y (not in the grid)
+#' One table's rows at MISSING_N, scenario 1 without MNAR-tau (not in the grid)
 missing_table <- function(tbl, row_fn, cols, labels, bW_digits = 2) {
   m <- t(vapply(tbl$scenario, function(s) {
     row_fn(tbl[tbl$scenario == s, ], MISSING_N)[cols]
@@ -96,7 +104,7 @@ missing_table <- function(tbl, row_fn, cols, labels, bW_digits = 2) {
   dimnames(m) <- list(paste("scenario", tbl$scenario), labels)
   m[, 1] <- round(m[, 1], bW_digits)
   m[, -1] <- round(m[, -1], 3)
-  m[1, grepl("MNAR-Y", labels)] <- NA
+  m[1, grepl("MNAR-tau", labels)] <- NA
   m
 }
 
@@ -118,11 +126,11 @@ v <- vapply(VALIDATION_NS, function(n) calibrate_bW(pv, n, "t"), numeric(1))
 names(v) <- paste0("n=", VALIDATION_NS)
 print(v)
 
-cat(sprintf("\n=== continuous_missing at n = %d (scenario 1 has no MNAR-Y) ===\n",
-            MISSING_N))
+cat(sprintf(paste0("\n=== continuous_missing at n = %d, correlated covariates ",
+                   "(scenario 1 has no MNAR-tau) ===\n"), MISSING_N))
 print(missing_table(resolve_set("continuous_missing"), continuous_row,
-                    c("bW", "ate", "planned", "realised", "mnar_y"),
-                    c("bW", "true ATE", "planned", "realised", "MNAR-Y")))
+                    c("bW", "ate", "planned", "realised", "mnar_y0", "mnar_tau"),
+                    c("bW", "true ATE", "planned", "realised", "MNAR-Y0", "MNAR-tau")))
 
 # ---- binary -----------------------------------------------------------------
 
@@ -138,9 +146,10 @@ show(rows, tbl, "binary", "power", "power (planned = realised)", 3)
 show(rows, tbl, "binary", "floor", sprintf("treated-risk floor (>= %.2f)", RD_EPS), 3)
 show(rows, tbl, "binary", "ceiling", sprintf("treated-risk ceiling (<= %.2f)", 1 - RD_EPS), 3)
 
-cat(sprintf("\n=== binary_missing at n = %d (scenario 1 has no MNAR-Y) ===\n",
+cat(sprintf(paste0("\n=== binary_missing at n = %d, correlated covariates; the ",
+                   "MNAR treated-risk bounds hold for MNAR-Y0 and MNAR-tau alike ===\n"),
             MISSING_N))
 print(missing_table(resolve_set("binary_missing"), binary_row,
-                    c("bW", "ate", "power", "floor_mnar_y", "ceiling_mnar_y"),
-                    c("bW", "true RD", "power", "MNAR-Y floor", "MNAR-Y ceiling"),
+                    c("bW", "p0", "ate", "power", "floor_mnar", "ceiling_mnar"),
+                    c("bW", "E[m0]", "true RD", "power", "MNAR floor", "MNAR ceiling"),
                     bW_digits = 3))

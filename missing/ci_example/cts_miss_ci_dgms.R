@@ -4,11 +4,12 @@
 # Same scenarios and machinery as missing/continuous/, reached through
 # R/dgm_scenarios.R and R/missingness.R.
 #
-# This study calls the mechanisms "AUX" / "AUX-Y" where the others say
-# "MNAR" / "MNAR-Y". Both spellings are accepted and normalised. Its parameter
+# This study used to call the mechanisms "AUX" / "AUX-Y"; since 2026-09-28 the
+# only names are MAR / MNAR-Y0 / MNAR-tau (R/dgm_scenarios.R). Its parameter
 # grid only ever runs MAR, so the unobserved-U branches never fire here - which
 # is also why its divergent p1 definition (it did not subtract the U term) made
-# no difference to any result it produced.
+# no difference to any result it produced. It does run on continuous_missing's
+# correlated covariates (X01-X03 auxiliary), since 2026-09-28.
 #
 # The old header claimed the imputation count was reduced "from 50 to 20" to
 # keep CI generation tractable, but the code set n_imp <- 50 and the completion

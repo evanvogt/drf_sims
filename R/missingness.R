@@ -5,7 +5,8 @@
 # missing/ci_example/. The three differed only in the function-name suffix
 # (_continuous / _binary), the MNAR-vs-AUX spelling, and the number of multiple
 # imputations - none of which is about the outcome type, so the suffixes are gone
-# and the imputation count is an argument.
+# and the imputation count is an argument. The mechanisms are MISS_MECHS
+# (R/dgm_scenarios.R) since 2026-09-28; the old names are rejected.
 
 require(dplyr)
 require(mice)
@@ -14,8 +15,9 @@ require(VIM)
 
 source(here::here("R", "dgm_scenarios.R"))
 
-# columns that are never amputated: the outcome, the treatment, and the
-# deliberately-unrelated covariates
+# columns that are never amputated: the outcome, the treatment, and X01-X05 -
+# outside the outcome model, and in the missing-data sets X01-X03 are the
+# auxiliaries of the amputed covariates (R/dgm_scenarios.R)
 NEVER_MISSING <- c("Y", "W", "X01", "X02", "X03", "X04", "X05")
 PROGNOSTIC_VARS <- c("X1", "X2")
 
@@ -26,23 +28,25 @@ MISS_METHODS <- c("complete_cases", "mean_imputation", "missforest", "regression
 #'
 #' Builds an mice::ampute pattern matrix over the covariates being amputated and
 #' applies it. Under MAR the missingness depends on the observed covariates;
-#' under MNAR / MNAR-Y it is driven entirely by the unobserved U, which is what
-#' the weight matrix below encodes.
+#' under MNAR-Y0 / MNAR-tau it is driven entirely by the unobserved U, which is
+#' what the weight matrix below encodes. The two MNAR mechanisms amputate
+#' identically; they differ only in where the generator puts U in the outcome
+#' (R/dgm_scenarios.R).
 #'
 #' @param data simulated dataset
 #' @param type which covariates to amputate: "prognostic", "predictive" or "both"
 #' @param prop proportion of missingness, in (0, 1)
-#' @param mech "MAR", "MNAR" or "MNAR-Y" ("AUX"/"AUX-Y" accepted as synonyms)
+#' @param mech one of MISS_MECHS: "MAR", "MNAR-Y0" or "MNAR-tau"
 #' @param U the unobserved variable, required for the MNAR mechanisms
 introduce_missingness <- function(data, type, prop, mech, U = NULL) {
 
-  mech <- sub("^AUX", "MNAR", mech)
+  check_mech(mech)
 
   if (!type %in% c("prognostic", "predictive", "both")) {
     stop("type must be 'prognostic', 'predictive', or 'both'")
   }
   if (prop < 0 || prop > 1) stop("miss_prop must be between 0 and 1")
-  mnar <- mech %in% c("MNAR", "MNAR-Y")
+  mnar <- mech %in% MNAR_MECHS
   if (mnar && is.null(U)) {
     stop("unobserved variable U required for MNAR missingness generation")
   }
@@ -221,10 +225,9 @@ generate_and_process_data <- function(scenario, n, set, return_truth = TRUE,
   data_result <- generate_scenario_data(scenario, n, set,
                                         return_truth = return_truth, mech = mech)
 
-  mech_norm <- sub("^AUX", "MNAR", mech)
   miss_dataset <- introduce_missingness(
     data_result$dataset, type, prop, mech,
-    U = if (mech_norm %in% c("MNAR", "MNAR-Y")) data_result$truth$U else NULL)
+    U = if (mech %in% MNAR_MECHS) data_result$truth$U else NULL)
 
   processed <- handle_missingness(miss_dataset, method, n_imp = n_imp)
   data_result$dataset <- processed$data

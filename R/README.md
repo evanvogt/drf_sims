@@ -104,7 +104,11 @@ contract — every study reproduces runs by index through `setup_rng_stream()`:
 W, X1, X2, X3, X4, X5, [U], [err], X01, X02, X03, cats
 ```
 
-`U` only for the MNAR mechanisms, `err` only for continuous outcomes.
+`U` only for the MNAR mechanisms (MNAR-Y0, MNAR-tau), `err` only for
+continuous outcomes. The missing-data sets (`continuous_missing`,
+`binary_missing`) have correlated covariates since 2026-09-28 and draw
+`W, Z-block (X1–X5, X01–X03), [U], [err], cats` instead
+(`correlated_covariates()`); every other set is unchanged.
 `regression_check.R` fingerprints the generated dataset, not just the
 estimates, so a change here fails loudly. Every scenario draws and returns
 `X1`–`X5` since 2026-09-27, whether or not its treatment effect uses them;

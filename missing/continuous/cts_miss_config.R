@@ -22,6 +22,10 @@
 #
 # "complete_data" is the reference arm: no missingness is introduced at all, so
 # the other methods can be scored against complete-data performance.
+#
+# Mechanisms MAR / MNAR-Y0 / MNAR-tau since 2026-09-28 (R/dgm_scenarios.R,
+# MISS_MECHS). They took the old MAR / MNAR / MNAR-Y slots, so the row layout
+# is unchanged: the old MNAR (MCAR in effect) is gone, MNAR-Y is now MNAR-tau.
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -35,7 +39,7 @@ grid <- expand.grid(
   n         = c(500),
   type      = c("both"),
   prop      = c(0.3),
-  mechanism = c("MAR", "MNAR", "MNAR-Y"),
+  mechanism = c("MAR", "MNAR-Y0", "MNAR-tau"),
   method    = MISS_METHODS_STUDY,
   run       = c(1:100),
   stringsAsFactors = FALSE
@@ -44,7 +48,7 @@ grid <- expand.grid(
 # scenario 1 has no HTE, so a mechanism that depends on the treatment effect
 # through U is not defined for it. Applied at construction, before any row
 # numbers are handed out.
-grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-Y"), ]
+grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-tau"), ]
 
 # Scenario 2 was added after rows 1-9900 had run (as scenario 6, before the
 # 2026-09-26 renumbering - see R/dgm_scenarios.R). It is appended as a second
@@ -59,7 +63,7 @@ grid <- rbind(grid, expand.grid(
   n         = c(500),
   type      = c("both"),
   prop      = c(0.3),
-  mechanism = c("MAR", "MNAR", "MNAR-Y"),
+  mechanism = c("MAR", "MNAR-Y0", "MNAR-tau"),
   method    = MISS_METHODS_STUDY,
   run       = c(1:100),
   stringsAsFactors = FALSE

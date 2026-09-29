@@ -110,6 +110,25 @@ data, realised power is 0.81 in scenario 1 and 0.63–0.76 elsewhere. MNAR-Y's `
 term is heterogeneity the plan knows nothing about, like the rest, so it is
 left out of the calibration too. That keeps one `bW` and one truth per scenario
 across every mechanism, and lowers realised power under MNAR-Y to 0.54–0.67.
+
+**Superseded on 2026-09-28 by the correlated-covariate redesign**
+(`missing/ADEMP.md`): X1–X5 and X01–X03 are now drawn with exchangeable latent
+correlation 0.5, and the mechanisms are MAR / MNAR-Y0 / MNAR-tau. The planned
+SD now carries Cov(X1, X2) (b1 and b2 have opposite signs, so it shrinks, to
+√1.117), which moves the planned effect to −0.27; scenario 3's `bW` moves
+further (−1.69 → −1.42) because E[X4·X5] = 0.5. At n = 500, from
+`Rscript R/calibration_report.R`:
+
+| scenario | `bW` | realised power | MNAR-Y0 | MNAR-tau |
+|---|---|---|---|---|
+| 1 | −0.27 | 0.81 | 0.54 | — |
+| 2 | −0.27 | 0.66 | 0.46 | 0.54 |
+| 3 | −1.42 | 0.56 | 0.41 | 0.47 |
+| 4 | −0.87 | 0.76 | 0.51 | 0.61 |
+| 5 | −1.67 | 0.68 | 0.47 | 0.56 |
+
+MNAR-Y0's `U` (`bU = 1`, as prognostic as X2) adds variance 1 to *both* arms,
+the plan knows nothing about it, and so it costs the most power.
 With `PROFILES$missing` already set, re-run results carry the
 `dr_random_forest` tests, so the back-fill patch only ever mattered for results
 made before bug O.

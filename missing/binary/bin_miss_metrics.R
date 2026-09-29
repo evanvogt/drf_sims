@@ -10,7 +10,7 @@ source(here("R", "metrics.R"))
 source(here("R", "cate_models.R"))
 
 # No bug N repair here any more: runs from the risk-difference DGM save the
-# MNAR-Y truth already averaged over U (bU * tanh(U) has mean zero), and the
+# MNAR-Y (now MNAR-tau) truth already averaged over U (bU * tanh(U) has mean zero), and the
 # logit-scale runs it repaired are superseded.
 all_results_df <- readRDS(file.path(study$res_path, "bin_miss_all.RDS"))
 

@@ -12,7 +12,7 @@
 #   3. SD(tau) is the same at every n - only the ATE moves - and the ATE and
 #      power are the planned ones
 #   4. every treated risk stays inside [RD_EPS, 1 - RD_EPS] at every n, and
-#      under the missing study's MNAR-Y
+#      under the missing study's MNAR mechanisms (MNAR-Y0 and MNAR-tau share the bound)
 #   5. each RD_SCALE[k] is the largest scale check 4 allows, floored to 3 dp
 #
 # Until 2026-09-26 the effect was on the logit scale, and this script measured
@@ -109,14 +109,14 @@ mb <- t(vapply(miss$scenario[-1], function(s) {
   treated_risk_bounds(p, calibrate_bW(p, MISSING_N, "prop"), p$bU)
 }, numeric(2)))
 check(mb[, 1] >= RD_EPS - ROUNDING & mb[, 2] <= 1 - RD_EPS + ROUNDING,
-      sprintf("... and under missing/binary's MNAR-Y at n = %d (bU = %.2f)",
+      sprintf("... and under missing/binary's MNAR-Y0 / MNAR-tau at n = %d (bU = %.2f)",
               MISSING_N, miss$bU[1]))
 
 # ---- 5. RD_SCALE is the largest feasible scale --------------------------------
 # With a unit scale (the continuous coefficients, sign-reversed), g's
 # deviations from its mean span [lo, hi], lo <= 0 <= hi. At scale k the treated
 # risk's floor is p0_lo + delta_n + k * lo and its ceiling
-# p0_hi + delta_n + k * hi (-/+ bU under MNAR-Y), so each bound caps k. A
+# p0_hi + delta_n + k * hi (-/+ bU under MNAR-Y0 / MNAR-tau), so each bound caps k. A
 # negative cap means no k satisfies that bound, which fails the check below.
 
 cts <- resolve_set("continuous")
@@ -131,10 +131,15 @@ derived <- lapply(tbl$scenario[-1], function(s) {
     caps[paste0("ceiling, n = ", n)] <- (1 - RD_EPS - unit$p0_hi - d) / dev[2]
   }
   if (s %in% miss$scenario) {
-    d <- planned_rd(unit, MISSING_N)
+    # the missing set's covariates are correlated, which moves E[g] (scenario
+    # 3's tanh(X4) tanh(X5)) and the control event rate the RD is planned at
+    unit_m <- unit
+    unit_m$rho <- miss$rho[1]
+    dev_m <- te_range(unit_m) - te_moments(unit_m)$mean
+    d <- planned_rd(unit_m, MISSING_N)
     bU <- abs(miss$bU[1])
-    caps["MNAR-Y floor, n = 500"] <- (unit$p0_lo + d - bU - RD_EPS) / -dev[1]
-    caps["MNAR-Y ceiling, n = 500"] <- (1 - RD_EPS - unit$p0_hi - d - bU) / dev[2]
+    caps["MNAR floor, n = 500"] <- (unit$p0_lo + d - bU - RD_EPS) / -dev_m[1]
+    caps["MNAR ceiling, n = 500"] <- (1 - RD_EPS - unit$p0_hi - d - bU) / dev_m[2]
   }
   list(k_max = min(caps), binds = names(which.min(caps)))
 })

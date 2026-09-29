@@ -11,14 +11,14 @@ source(here("missing/continuous/cts_miss_models.R"))
 data_result <- generate_continuous_scenario_data(
   scenario = 3,
   n = 500,
-  mech = "AUX"
+  mech = "MAR"
 )
 
 miss_dataset <- introduce_missingness_continuous(
   data = data_result$dataset,
   type = "both",
   prop = 0.3,
-  mech = "AUX",
+  mech = "MAR",
   U = data_result$truth$U
 )
 

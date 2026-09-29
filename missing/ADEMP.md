@@ -13,37 +13,71 @@ Three studies: `continuous/` and `binary/` (main design) and `ci_example/`
 ## Data-generating mechanisms
 
 Complete data: the `sample_size/` continuous or binary DGM (see `sample_size/ADEMP.md`),
-scenarios numbered as there.
+scenarios numbered as there - the same outcome model, CATE and baseline - **except
+that the covariates are correlated**.
 
 | | continuous / binary | ci_example (continuous) |
 |---|---|---|
 | scenarios | 1–5 (no HTE; X4; X3 + X4 + X4·X5; cos(X4); X3) | 1, 3, 4, 5, 6 (6: X3 + X4) |
 | n | 500 | 500 |
+| covariates | copula, exchangeable latent ρ = 0.5; X01–X03 auxiliary | as main |
 | amputed covariates | `both`: X1–X5 in every scenario, effect modifiers or not (X01–X05 never) | `both` |
 | proportion incomplete | 0.3 (`mice::ampute`) | 0.3 |
-| mechanism | MAR, MNAR, MNAR-Y | MAR |
+| mechanism | MAR, MNAR-Y0, MNAR-τ | MAR |
 | repetitions | 100 | 100 |
+
+**Covariates.** A latent `Z ~ N(0, R)` over (X1, X2, X3, X4, X5, X01, X02,
+X03), R exchangeable with ρ = 0.5 (`rho` in the scenario table). X1 and X3
+are thresholds of their latent columns at the main study's prevalences (0.4,
+0.7); X2, X4, X5 are scaled latent columns (SD 1); X01–X03 are the latent
+columns themselves. X04/X05 (the categorical pair) are drawn independently as
+in the main study. So:
+
+- the prognostic X1, X2 and the effect modifiers X3–X5 are correlated with one
+  another: on the latent scale each is 44% predictable (R²) from the other
+  seven;
+- X01–X03 are **auxiliary**: in neither the outcome model nor the CATE, never
+  amputated, but correlated with X1–X5 (a latent R² ≈ 0.375 from the three), so
+  they carry information for `regression` imputation and the `IPW` model;
+- the truth is unchanged as a function: τ(X3, X4, X5) and m0(X1, X2) as in the
+  main study, and X01–X03 add nothing to either given X1–X5.
+
+Correlation changes E[g] only where the CATE multiplies two modifiers
+(scenario 3's X4·X5), and the planned outcome SD / control event rate through
+Cov(X1, X2); `calibrate_bW()` accounts for both (`te_grid()` and
+`baseline_grid()` integrate over the correlated latent), so the true ATE is
+still the planned effect. Before 2026-09-28 every covariate was independent:
+imputation then had nothing to impute from, and MAR selected on X only, which
+leaves the CATE unbiased - see "What each mechanism implies".
 
 Mechanisms:
 
 - **MAR:** missingness depends on the observed covariates.
-- **MNAR:** missingness driven only by an unobserved `U ~ N(0, 1)`.
-- **MNAR-Y:** as MNAR, and `U` also enters the treatment effect
-  (continuous: `+ U`; binary: `+ 0.08·tanh(U)`). Not run for scenario 1.
+- **MNAR-Y0:** missingness driven only by an unobserved `U ~ N(0, 1)`,
+  independent of X, which also shifts the control outcome
+  (continuous: `+ U`; binary: `+ 0.08·tanh(U)`, in both arms).
+- **MNAR-τ** (`MNAR-tau` in the grid and paths): as MNAR-Y0, but `U` enters
+  the treatment effect instead (same terms, treated arm only). Not run for
+  scenario 1.
 
 `bW` calibrated as in the complete-data study, ignoring `U`. `U` is drawn
-(after X5, before the continuous error) only under MNAR and MNAR-Y, so within
-a run the complete data under MAR differ from those under the MNAR mechanisms.
+(after the covariate block, before the continuous error) only under the MNAR
+mechanisms, so within a run the complete data under MAR differ from those
+under the MNAR mechanisms. Draw order: `W, Z-block, [U], [err], cats`.
+
+These mechanisms replaced MAR / MNAR / MNAR-Y on 2026-09-28. The old MNAR had
+`U` in neither X nor Y, so it was MCAR; the old MNAR-Y is MNAR-τ.
 
 ### Amputation
 
 Implementation: `R/missingness.R::introduce_missingness()`, one call to
 `mice::ampute` per dataset, after the complete data are generated.
 
-**Variables.** Y, W and the noise covariates X01–X05 are set aside before
+**Variables.** Y, W and X01–X05 (the auxiliaries X01–X03 and the noise pair
+X04/X05) are set aside before
 `ampute` is called: they are never made missing and, under MAR, do not drive
 the missingness either. Under `type = "both"` all of X1–X5 can be missing.
-Under MNAR / MNAR-Y, `U` is appended as an extra, always-observed column for
+Under MNAR-Y0 / MNAR-τ, `U` is appended as an extra, always-observed column for
 the call and dropped afterwards; it is never seen by the handling methods or
 estimators.
 
@@ -52,7 +86,7 @@ estimators.
 | mechanism | patterns | note |
 |---|---|---|
 | MAR | 30 | all-missing also dropped: a pattern must leave something observed to weight |
-| MNAR, MNAR-Y | 31 | all-missing kept, since `U` stays observed in it |
+| MNAR-Y0, MNAR-τ | 31 | all-missing kept, since `U` stays observed in it |
 
 Each covariate is missing in about half the patterns, so each is missing for
 about 15% of units, and 30% of units have at least one missing covariate
@@ -62,7 +96,7 @@ about 15% of units, and 30% of units have at least one missing covariate
 
 - `prop = 0.3`, `bycases = TRUE`: 30% of *units* are incomplete.
 - `freq`: equal, each unit is first allocated to one pattern with probability
-  1/30 (MAR) or 1/31 (MNAR).
+  1/30 (MAR) or 1/31 (MNAR-Y0, MNAR-τ).
 - `std = TRUE`: variables standardised before scoring.
 - `cont = TRUE`, `type = "RIGHT"`: within its pattern, a unit becomes
   incomplete with probability logistic in its weighted sum score, shifted so
@@ -72,20 +106,36 @@ about 15% of units, and 30% of units have at least one missing covariate
 | mechanism | weighted sum score |
 |---|---|
 | MAR | `ampute` default: weight 1 on each of X1–X5 *observed* in the pattern, 0 on those made missing |
-| MNAR, MNAR-Y | user-supplied: weight 1 on `U`, 0 on X1–X5, in every pattern |
+| MNAR-Y0, MNAR-τ | user-supplied: weight 1 on `U`, 0 on X1–X5, in every pattern |
 
-**What each mechanism implies** (checked over 20 draws of scenario 3):
+**What each mechanism implies** (one draw of scenario 2 at n = 20,000, both
+outcomes; "CC" is a complete-case `lm(Y ~ W·X4 + X1 + X2 + X3 + X5)`, which is
+correctly specified for the continuous CATE):
 
 - **MAR:** units with higher X1–X5 are more often incomplete (correlation of
-  incompleteness with each covariate ≈ 0.11–0.14). Since X1 and X2 are
-  prognostic, incompleteness is also correlated with Y (≈ 0.12).
-- **MNAR:** `U` enters neither the covariates nor the outcome, so
-  incompleteness is independent of X, W and Y (all correlations ≈ 0): in
-  Rubin's taxonomy this arm is MCAR, with `U` only a device for generating it.
-- **MNAR-Y:** incompleteness is independent of X but, through `U`, correlated
-  with the treated arm's outcome (≈ 0.10 with Y overall): units with the
-  largest individual treatment effects are the most likely to be incomplete.
-  Not correlated with the estimand, which averages over `U`.
+  incompleteness with each covariate ≈ 0.27). With correlated covariates the
+  *missing values themselves* are shifted: the missing X4 values average
+  0.39 SD above the observed ones, so mean imputation is biased and the
+  imputation models have something to learn. Selection is on X only, so CC
+  stays unbiased for the CATE (continuous: W and W·X4 within 1 SE).
+- **MNAR-Y0:** incompleteness is independent of X (|correlation| ≤ 0.01) but,
+  through `U`, correlated with the outcome in *both* arms (continuous ≈ 0.26;
+  binary ≈ 0.02–0.04). The shift is the same in both arms (W is randomised),
+  so it differences out of the CATE: CC unbiased (continuous: W −0.013 ± 0.018,
+  W·X4 +0.010 ± 0.018), and since X is independent of missingness the
+  imputation methods face MCAR-like X. **Predicted benign for the CATE** -
+  missingness tied to prognosis costs power (U is unplanned outcome variance)
+  and makes the missingness indicators prognostic, not biased.
+- **MNAR-τ:** incompleteness is independent of X but correlated with the
+  treated arm's outcome only (continuous ≈ 0.27, control ≈ 0): the units with
+  the largest individual effects are the most likely to be incomplete. The
+  estimand averages over `U`, so CC is biased by a constant shift -
+  continuous W −0.27 ± 0.01 against a true ATE of −0.27, binary −0.020 against
+  an RD of −0.118. No handling method that uses only X can remove it.
+
+Before 2026-09-28 (independent covariates, and an "MNAR" arm with `U` in
+neither X nor Y) MAR's missing values were marginally distributed, the old
+MNAR was MCAR, and only MNAR-Y (now MNAR-τ) could bias the CATE.
 
 ## Estimands
 
@@ -123,8 +173,13 @@ Per method:
 - **`IPW`:** a logistic regression of the complete-case indicator on the
   *fully observed* covariates, fit on all 500 units; complete cases are then
   weighted by the inverse of their fitted probability. Under `both` the fully
-  observed covariates are X01–X05 alone, which are unrelated to missingness
-  under every mechanism, so the weights are close to constant (≈ 1 / 0.7).
+  observed covariates are X01–X05 alone. Under MAR the auxiliaries X01–X03 are
+  correlated with the X1–X5 values that drive missingness, so the model is
+  informative but misspecified (ampute's pattern-wise score is not a logistic
+  function of X01–X05). Under MNAR-Y0 / MNAR-τ missingness depends only on
+  `U`, independent of every covariate, so the weights are close to constant
+  (≈ 1 / 0.7). (Before the 2026-09-28 correlated covariates they were close to
+  constant under every mechanism.)
   The weights reach every fit that accepts them: grf `sample.weights` in every
   forest (per-arm outcome forests, propensity forest, causal forest, stage-2
   forests) and SuperLearner `obsWeights` in every SuperLearner fit. Truth
@@ -138,8 +193,10 @@ Per method:
   a linear model (`lm`; X1 and X3 are numeric, so linear too) of that
   covariate on the *fully observed* covariates among the observed units and
   fills in its predictions, with no residual noise. Y and W are excluded from
-  the imputation model. Under `both` the predictors are X01–X05 alone, which
-  are independent of X1–X5, so the imputations are close to the observed means.
+  the imputation model. Under `both` the predictors are X01–X05 alone: the
+  auxiliaries X01–X03 explain part of each amputed covariate (latent
+  R² ≈ 0.375), X04/X05 nothing. (Before the 2026-09-28 correlated covariates
+  none of them did, and the imputations were close to the observed means.)
 - **`missforest`:** `missForest` on the ten covariates (Y and W excluded from
   the imputation model), binary covariates as factors so they are imputed by
   classification forests and stay 0/1. Package defaults: 100 trees, `mtry`

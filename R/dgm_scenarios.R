@@ -19,9 +19,31 @@
 # and reproduces runs by index, so the sequence of random draws below must not
 # change:
 #     W, X1, X2, X3, X4, X5, [U], [err], X01, X02, X03, cats
-# U only for the MNAR mechanisms, and err only for continuous outcomes.
+# U only for the MNAR mechanisms, and err only for continuous outcomes. The
+# missing-data sets, whose covariates are correlated (a `rho` column - see
+# CORRELATED COVARIATES below), draw instead
+#     W, Z-block (X1-X5, X01-X03), [U], [err], cats
 # R/regression_check.R fingerprints the generated dataset precisely to catch a
 # change here.
+#
+# CORRELATED COVARIATES (missing-data sets only, since 2026-09-28). The main
+# studies draw every covariate independently. The missing-data sets draw X1-X5
+# and X01-X03 from a Gaussian copula with exchangeable latent correlation rho
+# (correlated_covariates()): X1 and X3 thresholded at their prevalences, the
+# rest scaled latent columns. X01-X03 are then auxiliaries - never amputated,
+# in neither m0 nor tau, but informative about the amputed covariates. With
+# independent covariates imputation had nothing to impute from and MAR only
+# selected on X. The truth functions m0 and tau are unchanged; what moves is
+# E[g] where tau multiplies two modifiers, and the planned SD / control event
+# rate through Cov(X1, X2), which te_grid(), baseline_grid() and
+# calibrate_bW() integrate over the correlated latent.
+#
+# MISSINGNESS MECHANISMS (MISS_MECHS). MAR needs no U. Under both MNAR ones an
+# unobserved U ~ N(0, sU), independent of X, drives the missingness
+# (R/missingness.R) and enters the outcome as the set's u_expr: MNAR-Y0 adds it
+# to the control mean (both arms), MNAR-tau to the treatment effect. They
+# replaced MNAR / MNAR-Y on 2026-09-28: the old MNAR had U in neither X nor Y,
+# so it was MCAR, and the old MNAR-Y is MNAR-tau.
 #
 # EVERY SCENARIO DRAWS X1-X5. Since 2026-09-27 X3, X4 and X5 are drawn and
 # returned whether or not the scenario's treatment effect uses them, so every
@@ -132,8 +154,9 @@ ORACLE_RD <- paste0(RD_CONTROL, c(
 #   - at n = 100, where the planned RD (-0.248) is largest: the floor, which
 #     binds in every scenario but 4
 #   - at n = 1000, where it is smallest: the ceiling
-#   - for scenarios 2-6, also under the missing study's MNAR-Y at n = 500,
-#     with bU * tanh(U) added: its ceiling binds scenario 4
+#   - for scenarios 2-6, also under the missing study's MNAR mechanisms at
+#     n = 500, with bU * tanh(U) added (MNAR-tau and MNAR-Y0 share the bound):
+#     its ceiling binds scenario 4
 # Reversing the signs points each asymmetric scenario's larger swing towards
 # LESS benefit, where the bounds leave room - with the continuous signs,
 # scenarios 3, 4, 5, 8 and 10 would have to be much smaller. The price is that
@@ -160,7 +183,7 @@ DESC_10 <- c(
 # the missing-data studies use the first six scenarios above: scenario k here
 # is scenario k of the main study. The missing grids run 1-5 (ci_example: 1 and
 # 3-6), not all six.
-# U_term carries the unobserved-confounder contribution under MNAR-Y.
+# U_term carries the unobserved U's contribution under MNAR-tau (0 otherwise).
 TE_MISS <- c(
   "rep(bW, n)",
   "bW + b4 * X4 + U_term",
@@ -218,7 +241,10 @@ SCENARIO_SETS <- list(
     b34 = NA,
     b45 = c(NA, NA, -0.5, NA, NA, NA),
     s2 = 1, s4 = 1, s5 = 1, s_err = 0.5,
-    # under MNAR-Y, U_term = eval(u_expr)
+    # exchangeable latent correlation of X1-X5 and X01-X03 (correlated_covariates())
+    rho = 0.5,
+    # under MNAR-Y0 / MNAR-tau, eval(u_expr) enters the control mean / the
+    # treatment effect: as prognostic as X2 (b2 = 1, s2 = 1)
     bU = 1, sU = 1, u_expr = "bU * U",
     te_expr = TE_MISS, oracle_expr = ORACLE_MISS
   )
@@ -244,17 +270,21 @@ SCENARIO_SETS$binary <- transform(
 )
 
 # The binary missing-data table: the binary table's scenarios 1-6, as scenario
-# k of continuous_missing is scenario k of continuous. Under MNAR-Y the
-# unobserved U enters the treatment effect as bU * tanh(U): bounded, so the
-# treated risk stays inside [RD_EPS, 1 - RD_EPS] (RD_SCALE allows for it), and
-# mean zero, so the truth given the observed covariates - the U-free
-# m0 + tau - is exactly the average over U, as it is for continuous_missing's
-# bU * U. bU = 0.08 gives U's contribution an SD of 0.050, the size of
-# scenario 2's HTE. (Until the risk-difference DGM U entered a logit, and that
-# average needed quadrature - bug N.)
+# k of continuous_missing is scenario k of continuous, with the same correlated
+# covariates. Under MNAR-tau the unobserved U enters the treatment effect as
+# bU * tanh(U), under MNAR-Y0 the control risk: bounded, so every risk stays
+# inside [RD_EPS, 1 - RD_EPS] (RD_SCALE allows for it - the control risk is in
+# [p0_lo - bU, p0_hi + bU], and the treated risk has the same bound under
+# either), and mean zero, so the truth given the observed covariates - the
+# U-free m0 + tau - is exactly the average over U, as it is for
+# continuous_missing's bU * U. bU = 0.08 gives U's contribution an SD of
+# 0.050, the size of scenario 2's HTE and of m0's own SD (0.048). (Until the
+# risk-difference DGM U entered a logit, and that average needed quadrature -
+# bug N.)
 SCENARIO_SETS$binary_missing_fixed <- transform(
   SCENARIO_SETS$binary[1:6, ],
   description = DESC_MISS,
+  rho = 0.5,
   bU = 0.08, sU = 1, u_expr = "bU * tanh(U)",
   te_expr = c(TE_RD[1], paste(TE_RD[2:6], "+ U_term"))
 )
@@ -291,6 +321,71 @@ calibration_for <- function(set) {
   if (is_binary_set(set)) "prop" else "t"
 }
 
+# ---- missingness mechanisms ---------------------------------------------------
+
+# see MISSINGNESS MECHANISMS in the file header
+MISS_MECHS <- c("MAR", "MNAR-Y0", "MNAR-tau")
+MNAR_MECHS <- c("MNAR-Y0", "MNAR-tau")
+
+#' Stop on anything but a current mechanism name
+#'
+#' The pre-2026-09-28 names are rejected rather than mapped: the old MNAR was
+#' MCAR in effect and has no successor, so mapping it would silently run
+#' something else.
+check_mech <- function(mech) {
+  if (length(mech) == 1 && mech %in% MISS_MECHS) return(invisible(mech))
+  stop("unknown missingness mechanism '", paste(mech, collapse = ", "),
+       "': use one of ", paste(MISS_MECHS, collapse = ", "), ". MNAR / MNAR-Y ",
+       "(and AUX / AUX-Y) were retired on 2026-09-28: the old MNAR was MCAR in ",
+       "effect and was dropped, the old MNAR-Y is MNAR-tau.", call. = FALSE)
+}
+
+# ---- correlated covariates (missing-data sets only) ---------------------------
+
+# the copula's latent columns, in draw order
+COPULA_VARS <- c("X1", "X2", "X3", "X4", "X5", "X01", "X02", "X03")
+
+#' Does this scenario set draw correlated covariates? (a `rho` column)
+is_correlated <- function(params) {
+  !is.null(params$rho) && !is.na(params$rho[1])
+}
+
+#' k x k exchangeable correlation matrix
+exch_cor <- function(k, rho) {
+  R <- matrix(rho, k, k)
+  diag(R) <- 1
+  R
+}
+
+#' Draw the correlated covariates of a missing-data set
+#'
+#' Gaussian copula: latent Z ~ N(0, exch_cor(8, rho)) over COPULA_VARS, one
+#' rnorm() call of n * 8 draws. X1 and X3 are Z thresholded so that
+#' P(X = 1) is X1_prob / X3_prob, as rbinom() gives them in the main sets; X2,
+#' X4 and X5 are Z scaled by s2 / s4 / s5; X01-X03 are Z itself.
+#'
+#' @param n sample size
+#' @param params one-row scenario params with rho
+#' @return named list of covariate vectors
+correlated_covariates <- function(n, params) {
+  k <- length(COPULA_VARS)
+  Z <- matrix(rnorm(n * k), n, k) %*% chol(exch_cor(k, params$rho))
+  colnames(Z) <- COPULA_VARS
+  list(
+    X1 = as.integer(Z[, "X1"] > qnorm(1 - params$X1_prob)),
+    X2 = params$s2 * Z[, "X2"],
+    X3 = as.integer(Z[, "X3"] > qnorm(1 - params$X3_prob)),
+    X4 = params$s4 * Z[, "X4"],
+    X5 = params$s5 * Z[, "X5"],
+    X01 = Z[, "X01"], X02 = Z[, "X02"], X03 = Z[, "X03"]
+  )
+}
+
+#' Cov(X1, X2) under the copula: E[s2 Z2 1{Z1 > c}] = s2 * rho * dnorm(c)
+cov_X1X2 <- function(params) {
+  params$s2 * params$rho * dnorm(qnorm(1 - params$X1_prob))
+}
+
 # ---- quadrature -------------------------------------------------------------
 
 # Gauss-Hermite nodes and weights (Golub-Welsch), built once at source time.
@@ -324,28 +419,36 @@ te_uses <- function(params, v) {
 #' below bW's rounding either way. RD_SCALE is derived against this E[g], the
 #' one the generator uses.
 #'
+#' For a correlated set (is_correlated()) the grid is latent_te_grid()'s.
+#'
 #' @param params one-row scenario params
 #' @return list(g = values of g, w = their weights, summing to 1)
 te_grid <- function(params) {
-  axes <- list()
-  weights <- list()
-  if (te_uses(params, "X3")) {
-    axes$X3 <- c(0, 1)
-    weights$X3 <- c(1 - params$X3_prob, params$X3_prob)
-  }
-  for (v in c("X4", "X5")) {
-    if (te_uses(params, v)) {
-      axes[[v]] <- sqrt(2) * params[[sub("X", "s", v)]] * GH_NODES$x
-      weights[[v]] <- GH_NODES$w
-    }
-  }
-
-  if (length(axes) == 0) {
-    grid <- list()
-    w <- 1
+  if (is_correlated(params)) {
+    lg <- latent_te_grid(params)
+    grid <- lg$grid
+    w <- lg$w
   } else {
-    grid <- expand.grid(axes, KEEP.OUT.ATTRS = FALSE)
-    w <- Reduce(`*`, expand.grid(weights, KEEP.OUT.ATTRS = FALSE))
+    axes <- list()
+    weights <- list()
+    if (te_uses(params, "X3")) {
+      axes$X3 <- c(0, 1)
+      weights$X3 <- c(1 - params$X3_prob, params$X3_prob)
+    }
+    for (v in c("X4", "X5")) {
+      if (te_uses(params, v)) {
+        axes[[v]] <- sqrt(2) * params[[sub("X", "s", v)]] * GH_NODES$x
+        weights[[v]] <- GH_NODES$w
+      }
+    }
+
+    if (length(axes) == 0) {
+      grid <- list()
+      w <- 1
+    } else {
+      grid <- expand.grid(axes, KEEP.OUT.ATTRS = FALSE)
+      w <- Reduce(`*`, expand.grid(weights, KEEP.OUT.ATTRS = FALSE))
+    }
   }
   g <- eval(
     parse(text = params$te_expr),
@@ -354,6 +457,49 @@ te_grid <- function(params) {
                  b34 = params$b34, b45 = params$b45)
   )
   list(g = g, w = w)
+}
+
+#' te_grid()'s quadrature for correlated covariates
+#'
+#' Gauss-Hermite over the latent columns of the continuous modifiers te_expr
+#' uses (X4, X5), correlated through the Cholesky factor of their exchangeable
+#' correlation. X3 is handled exactly: given those latents zc,
+#' Z3 ~ N(r' R^-1 zc, 1 - r' R^-1 r) with r = rho, so
+#' P(X3 = 1 | zc) = pnorm((E[Z3 | zc] - qnorm(1 - X3_prob)) / sd), and each
+#' node is split into X3 = 0 and 1 with those weights. Every integrand is then
+#' smooth in the Gauss-Hermite variables. Deterministic, like te_grid().
+#'
+#' @param params one-row scenario params with rho
+#' @return list(grid = list of covariate vectors, w = weights summing to 1)
+latent_te_grid <- function(params) {
+  cont <- c("X4", "X5")[c(te_uses(params, "X4"), te_uses(params, "X5"))]
+  d <- length(cont)
+  rho <- params$rho
+  grid <- list()
+  if (d > 0) {
+    nodes <- as.matrix(expand.grid(rep(list(sqrt(2) * GH_NODES$x), d),
+                                   KEEP.OUT.ATTRS = FALSE))
+    w <- Reduce(`*`, expand.grid(rep(list(GH_NODES$w), d), KEEP.OUT.ATTRS = FALSE))
+    Zc <- nodes %*% chol(exch_cor(d, rho))
+    for (j in seq_len(d)) grid[[cont[j]]] <- params[[sub("X", "s", cont[j])]] * Zc[, j]
+  } else {
+    w <- 1
+  }
+  if (te_uses(params, "X3")) {
+    if (d > 0) {
+      a <- solve(exch_cor(d, rho), rep(rho, d))
+      mu <- drop(Zc %*% a)
+      s <- sqrt(1 - sum(rep(rho, d) * a))
+    } else {
+      mu <- 0
+      s <- 1
+    }
+    p1 <- pnorm((mu - qnorm(1 - params$X3_prob)) / s)
+    grid <- lapply(grid, function(x) c(x, x))
+    grid$X3 <- rep(c(0, 1), each = length(w))
+    w <- c(w * (1 - p1), w * p1)
+  }
+  list(grid = grid, w = w)
 }
 
 #' Mean and variance of a scenario's heterogeneity term g
@@ -397,11 +543,20 @@ te_range <- function(params) {
 
 #' Quadrature grid over the prognostic covariates X1 and X2
 #'
-#' Exact over X1's two points, Gauss-Hermite over X2.
+#' Exact over X1's two points, Gauss-Hermite over X2. For a correlated set X1
+#' is exact given X2's latent z: P(X1 = 1 | z) =
+#' pnorm((rho z - qnorm(1 - X1_prob)) / sqrt(1 - rho^2)).
 #'
 #' @param params one-row scenario params
 #' @return list(X1, X2 = covariate values, w = their weights, summing to 1)
 baseline_grid <- function(params) {
+  if (is_correlated(params)) {
+    z <- sqrt(2) * GH_NODES$x
+    p1 <- pnorm((params$rho * z - qnorm(1 - params$X1_prob)) /
+                  sqrt(1 - params$rho^2))
+    return(list(X1 = rep(c(0, 1), each = length(z)), X2 = params$s2 * c(z, z),
+                w = c((1 - p1) * GH_NODES$w, p1 * GH_NODES$w)))
+  }
   x2 <- sqrt(2) * params$s2 * GH_NODES$x
   list(X1 = rep(c(0, 1), each = length(x2)), X2 = c(x2, x2),
        w = c((1 - params$X1_prob) * GH_NODES$w, params$X1_prob * GH_NODES$w))
@@ -436,14 +591,15 @@ control_event_rate <- function(params) {
 
 #' Worst-case treated risk over the covariate support, for a binary scenario
 #'
-#' The treated risk is m0 + bW + g, plus bU * tanh(U) under MNAR-Y. m0 depends
+#' The treated risk is m0 + bW + g, plus bU * tanh(U) under either MNAR
+#' mechanism (in tau under MNAR-tau, in the control risk under MNAR-Y0). m0 depends
 #' only on X1 and X2 and g only on the modifiers, so the extremes add: m0 tends
 #' to p0_lo and p0_hi as X2 goes to -/+ infinity, g's range is te_range(), and
 #' |tanh(U)| < 1. Every generated risk lies inside these bounds.
 #'
 #' @param params one-row binary scenario params
 #' @param bW calibrated treatment coefficient
-#' @param bU the MNAR-Y coefficient; 0 outside MNAR-Y
+#' @param bU the MNAR coefficient; 0 under MAR or without missingness
 #' @return c(floor, ceiling)
 treated_risk_bounds <- function(params, bW, bU = 0) {
   g <- te_range(params)
@@ -461,8 +617,9 @@ TARGET_POWER <- 0.80
 #' ATE, assuming the effect is homogeneous - and bW is then set so the true
 #' ATE equals the planned effect delta: bW + E[g] = delta. The plan gets the
 #' average effect right but knows nothing of the heterogeneity g around it; g
-#' enters only through E[g], where it has to. MNAR-Y's U_term is left out, which
-#' keeps one bW and one truth per scenario across every missingness mechanism.
+#' enters only through E[g], where it has to. The MNAR mechanisms' U term is
+#' left out, which keeps one bW and one truth per scenario across every
+#' missingness mechanism.
 #'
 #' Continuous outcomes: -delta gives TARGET_POWER in an unadjusted two-sample
 #' t-test with n / 2 per arm, using the outcome SD with no heterogeneity:
@@ -495,8 +652,12 @@ calibrate_bW <- function(params, n, calibration = c("t", "prop")) {
     delta <- power.prop.test(n = n / 2, p2 = p0, power = TARGET_POWER)$p1 - p0
     digits <- 3
   } else {
-    sd_planned <- sqrt(params$b1^2 * params$X1_prob * (1 - params$X1_prob) +
-                         params$b2^2 * params$s2^2 + params$s_err^2)
+    var_planned <- params$b1^2 * params$X1_prob * (1 - params$X1_prob) +
+      params$b2^2 * params$s2^2 + params$s_err^2
+    if (is_correlated(params)) {
+      var_planned <- var_planned + 2 * params$b1 * params$b2 * cov_X1X2(params)
+    }
+    sd_planned <- sqrt(var_planned)
     delta <- -power.t.test(n = n / 2, delta = NULL, sd = sd_planned,
                            power = TARGET_POWER)$delta
     digits <- 2
@@ -510,9 +671,9 @@ calibrate_bW <- function(params, n, calibration = c("t", "prop")) {
 #' @param n sample size
 #' @param set which scenario table - see SCENARIO_SETS, plus "binary_ci"
 #' @param return_truth attach the true p0 / p1 / tau
-#' @param mech missingness mechanism; non-NULL draws the unobserved U for the
-#'   MNAR variants. "AUX"/"AUX-Y" are accepted as synonyms of "MNAR"/"MNAR-Y",
-#'   which is what missing/ci_example still calls them.
+#' @param mech missingness mechanism, one of MISS_MECHS; the MNAR ones draw the
+#'   unobserved U. The retired names MNAR / MNAR-Y / AUX / AUX-Y are errors
+#'   (check_mech()).
 #' @param seed optional convenience seed; the studies use setup_rng_stream instead
 generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
                                    mech = NULL, seed = NULL) {
@@ -527,45 +688,61 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
          " for set '", set, "'")
   }
   params <- params[params$scenario == scenario, ]
+  correlated <- is_correlated(params)
 
-  # normalise the AUX / MNAR spelling divergence
-  if (!is.null(mech)) mech <- sub("^AUX", "MNAR", mech)
-  needs_U <- !is.null(mech) && mech %in% c("MNAR", "MNAR-Y")
-  if (!is.null(mech) && scenario == 1 && mech == "MNAR-Y") {
-    stop("MNAR-Y missingness not applicable to no HTE scenario")
+  if (!is.null(mech)) check_mech(mech)
+  needs_U <- !is.null(mech) && mech %in% MNAR_MECHS
+  if (needs_U && is.null(params$u_expr)) {
+    stop("mechanism ", mech, " needs a set with an unobserved U (u_expr); '",
+         set, "' has none")
+  }
+  if (!is.null(mech) && scenario == 1 && mech == "MNAR-tau") {
+    stop("MNAR-tau missingness not applicable to no HTE scenario")
   }
 
   bW <- calibrate_bW(params, n, calibration_for(set))
 
   # ---- DRAW ORDER: do not reorder, see the file header ----
   W <- rbinom(n, 1, 0.5)
-  X1 <- rbinom(n, 1, params$X1_prob)
-  X2 <- rnorm(n, 0, params$s2)
+  if (correlated) {
+    cv <- correlated_covariates(n, params)
+    X1 <- cv$X1
+    X2 <- cv$X2
+    X3 <- cv$X3
+    X4 <- cv$X4
+    X5 <- cv$X5
+  } else {
+    X1 <- rbinom(n, 1, params$X1_prob)
+    X2 <- rnorm(n, 0, params$s2)
 
-  X3 <- rbinom(n, 1, params$X3_prob)
-  X4 <- rnorm(n, 0, params$s4)
-  X5 <- rnorm(n, 0, params$s5)
+    X3 <- rbinom(n, 1, params$X3_prob)
+    X4 <- rnorm(n, 0, params$s4)
+    X5 <- rnorm(n, 0, params$s5)
+  }
   U <- if (needs_U) rnorm(n, 0, params$sU) else NULL
 
   err <- if (!binary) rnorm(n, 0, params$s_err) else NULL
 
-  # the unobserved confounder enters the treatment effect only under MNAR-Y, as
-  # the set's u_expr: bU * U, or bU * tanh(U) for binary
-  U_term <- if (!is.null(mech) && mech == "MNAR-Y") {
+  # the unobserved U enters the outcome as the set's u_expr - bU * U, or
+  # bU * tanh(U) for binary: in the treatment effect under MNAR-tau, in the
+  # control mean (so both arms) under MNAR-Y0
+  U_term <- if (needs_U) {
     eval(parse(text = params$u_expr), envir = list(bU = params$bU, U = U))
   } else {
     0
   }
+  U_te <- if (identical(mech, "MNAR-tau")) U_term else 0
+  U_y0 <- if (identical(mech, "MNAR-Y0")) U_term else 0
 
   treatment_effect <- eval(
     parse(text = params$te_expr),
-    envir = list(bW = bW, n = n, X3 = X3, X4 = X4, X5 = X5, U_term = U_term,
+    envir = list(bW = bW, n = n, X3 = X3, X4 = X4, X5 = X5, U_term = U_te,
                  b3 = params$b3, b4 = params$b4,
                  b34 = params$b34, b45 = params$b45)
   )
 
   m0 <- control_mean(params, X1, X2, binary)
-  mu <- m0 + W * treatment_effect
+  mu <- m0 + W * treatment_effect + U_y0
   if (binary) {
     # rbinom() returns NA, with only a warning, for a risk outside [0, 1].
     # RD_SCALE keeps every risk inside at the studies' n; this catches any
@@ -581,10 +758,18 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
     Y <- mu + err
   }
 
-  # unrelated covariates, always drawn so the fold structure is comparable
-  X01 <- rnorm(n, 0, 1)
-  X02 <- rnorm(n, 0, 1)
-  X03 <- rnorm(n, 0, 1)
+  # unrelated covariates, always drawn so the fold structure is comparable -
+  # except that a correlated set drew X01-X03 in its covariate block, as
+  # auxiliaries of X1-X5
+  if (correlated) {
+    X01 <- cv$X01
+    X02 <- cv$X02
+    X03 <- cv$X03
+  } else {
+    X01 <- rnorm(n, 0, 1)
+    X02 <- rnorm(n, 0, 1)
+    X03 <- rnorm(n, 0, 1)
+  }
   cats <- sample(c("A", "B", "C"), size = n, replace = TRUE, prob = c(0.45, 0.3, 0.25))
   X04 <- as.integer(cats == "A")
   X05 <- as.integer(cats == "B")
@@ -605,9 +790,9 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
       # observed covariates, averaged over U (U is independent of X). Every
       # U_term has mean zero - bU * U, or bU * tanh(U) for binary - and enters
       # the outcome mean additively, so that average is the U-free mean on
-      # either outcome scale
+      # either outcome scale: m0 without U_y0, the treatment effect without U_te
       p0 <- m0
-      p1 <- m0 + treatment_effect - U_term
+      p1 <- m0 + treatment_effect - U_te
       truth <- data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
     }
 
@@ -623,7 +808,7 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
 #' Factored out of generate_scenario_data()'s non-MNAR truth block so that
 #' build_query_grid_truth() below cannot silently diverge from what
 #' generate_scenario_data() itself reports as ground truth. The MNAR branch
-#' (mech != NULL, subtracting U_term) is NOT reproduced here - it stays inline
+#' (mech != NULL, leaving out the U terms) is NOT reproduced here - it stays inline
 #' in generate_scenario_data(), since the query grid is only used by the
 #' non-missing CI studies, which never pass mech.
 #'

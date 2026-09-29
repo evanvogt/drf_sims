@@ -55,11 +55,11 @@ logit-scale design.
 - Each `RD_SCALE[k]` is the largest scale, floored to 3 dp, that keeps every
   treated risk inside [0.01, 0.99] (`RD_EPS`):
   - at n = 100 to 1000;
-  - for scenarios 2–6, also under `missing/binary`'s MNAR-Y, which adds
+  - for scenarios 2–6, also under `missing/binary`'s MNAR mechanisms (MNAR-tau, and MNAR-Y0 with the same bound), which add
     `bU·tanh(U)` with bU = 0.08 at n = 500.
 - The binding bound:
   - the floor at n = 100 binds in every scenario except 4;
-  - in scenario 4 the MNAR-Y ceiling binds.
+  - in scenario 4 the MNAR ceiling binds.
 - `bin_verify_hte.R` re-derives `RD_SCALE`. If `p0_lo`, `p0_hi`, b0–b2, bU,
   `RD_EPS` or the studies' n change, `RD_SCALE` has to be recomputed.
 
@@ -68,7 +68,7 @@ In the table below:
 - "τ 5–95%" is the middle 90% of the true CATE.
 - "harmed" is the share of patients with τ > 0 at n = 1000.
 - "floor" and "ceiling" are the lowest and highest treated risk over the
-  covariate support, with MNAR-Y included for scenarios 2–6.
+  covariate support, with the MNAR mechanisms included for scenarios 2–6.
 - t4 = tanh(X4) and t5 = tanh(X5).
 
 | # | g(x) | SD τ | τ 5–95%, n = 100 | τ 5–95%, n = 1000 | harmed | floor | ceiling |

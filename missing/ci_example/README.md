@@ -76,7 +76,7 @@ compared directly. `cts_miss_ci_results.qmd` says so on the relevant section.
 root of the critical value. Preserved as written, but flagged: if the hybrid
 intervals look oddly narrow, this is why.
 
-**This study spells the mechanisms `AUX` / `AUX-Y` where the others say `MNAR` / `MNAR-Y`; both are accepted and normalised in `R/missingness.R`.**
+**The old `AUX` / `AUX-Y` mechanism spellings are gone** (2026-09-28): the names are now MAR / MNAR-Y0 / MNAR-tau and anything else is an error. This study runs MAR only. **Its covariates changed the same day:** `continuous_missing` now draws correlated covariates with X01–X03 as auxiliaries (`missing/ADEMP.md`), so every dataset here changes too.
 
 **The header claimed imputations were reduced "from 50 to 20" to keep generation tractable; the code actually uses 50 and always has.**
 
@@ -89,3 +89,5 @@ arm), but bug O does: it changed the `continuous_missing` baseline and `bW`
 this study generates from (`missing/continuous/README.md`). Archive any old
 tree first with `R/archive_old_results.R` (root `README.md`, Status, step 0) -
 it would use the pre-2026-09-26 scenario numbers (1-5, now 1 and 3-6).
+The 2026-09-28 correlated covariates are a further reason: every dataset
+changes.

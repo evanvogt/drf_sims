@@ -7,6 +7,9 @@
 # NOTE: this study's DGM carried three further defects (continuous coefficients,
 # continuous power calibration, log-odds truth), all fixed together.
 # See missing/binary/README.md.
+#
+# Mechanisms MAR / MNAR-Y0 / MNAR-tau since 2026-09-28, in the old MAR / MNAR /
+# MNAR-Y slots - see missing/continuous/cts_miss_config.R.
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -20,13 +23,13 @@ grid <- expand.grid(
   n         = c(500),
   type      = c("both"),
   prop      = c(0.3),
-  mechanism = c("MAR", "MNAR", "MNAR-Y"),
+  mechanism = c("MAR", "MNAR-Y0", "MNAR-tau"),
   method    = MISS_METHODS_STUDY,
   run       = c(1:100),
   stringsAsFactors = FALSE
 )
 
-grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-Y"), ]
+grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-tau"), ]
 
 # Scenario 2 appended as a second block, rows 9901-12600, for
 # jobscripts/bin_miss_extra.sh - see missing/continuous/cts_miss_config.R,
@@ -36,7 +39,7 @@ grid <- rbind(grid, expand.grid(
   n         = c(500),
   type      = c("both"),
   prop      = c(0.3),
-  mechanism = c("MAR", "MNAR", "MNAR-Y"),
+  mechanism = c("MAR", "MNAR-Y0", "MNAR-tau"),
   method    = MISS_METHODS_STUDY,
   run       = c(1:100),
   stringsAsFactors = FALSE

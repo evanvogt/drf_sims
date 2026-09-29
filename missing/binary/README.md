@@ -40,17 +40,26 @@ calibration" has the design. Here it means:
 - **`bW`** is set so that the true ATE is the same marginal RD in all six
   scenarios. At n = 500 it is −0.118, −0.118, −0.047, 0.005, 0.073 and −0.103
   for scenarios 1–6; the true RD is −0.118 and the power 0.80.
-- **MNAR-Y.** U enters the treatment effect as `bU·tanh(U)`, with bU = 0.08.
-  That term is bounded, so every treated risk stays inside [0.01, 0.99].
-  `RD_SCALE` allows for it, and it binds scenario 4's. It has mean zero, so
-  MNAR-Y leaves the RD and the power as they are. Under the logit design,
-  averaging over U pulled the treated risk towards 0.5 and shrank the RD to
-  about −0.10, and the power to 0.61–0.63. MNAR-Y is still calibrated without
-  U, as in `missing/continuous`, so every mechanism shares one `bW` and one
-  truth per scenario.
+- **MNAR-tau** (was MNAR-Y). U enters the treatment effect as `bU·tanh(U)`,
+  with bU = 0.08. That term is bounded, so every treated risk stays inside
+  [0.01, 0.99]. `RD_SCALE` allows for it, and it binds scenario 4's. It has
+  mean zero, so it leaves the RD and the power as they are. Under the logit
+  design, averaging over U pulled the treated risk towards 0.5 and shrank the
+  RD to about −0.10, and the power to 0.61–0.63. It is still calibrated
+  without U, as in `missing/continuous`, so every mechanism shares one `bW`
+  and one truth per scenario.
+- **MNAR-Y0** (since 2026-09-28). The same `bU·tanh(U)` added to the control
+  risk instead, so in both arms: an SD of 0.050, about m0's own (0.048). The
+  control risk stays in [0.26, 0.78] and the treated risk has exactly
+  MNAR-tau's bound, so `RD_SCALE` needs nothing new.
+- **Correlated covariates** (since 2026-09-28, `missing/ADEMP.md`). They move
+  scenario 3's `bW` to −0.052 (E[tanh(X4)·tanh(X5)] ≠ 0) and leave the others
+  and the 40% control event rate (0.398) as they were.
+  `sample_size/binary/bin_verify_hte.R` re-derives the MNAR caps on the
+  correlated set; `RD_SCALE` is unchanged.
 
-`Rscript R/calibration_report.R` prints this table, with the MNAR-Y
-treated-risk floor and ceiling.
+`Rscript R/calibration_report.R` prints this table, with the MNAR
+treated-risk floor and ceiling (shared by MNAR-Y0 and MNAR-tau).
 
 ## Bug M — `dr_oracle` on the log-odds scale (fixed; no finished result affected)
 

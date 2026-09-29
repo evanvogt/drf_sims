@@ -63,10 +63,9 @@ here but not in `missing/continuous` or `missing/binary`, whose grids run 1–5.
 root of the critical value. Preserved as written; if the hybrid intervals look
 oddly narrow below, this is why.
 
-**This study spells the mechanisms `AUX` / `AUX-Y`** where the others say
-`MNAR` / `MNAR-Y`. Both are normalised in `R/missingness.R`, and
-`MECHANISM_LABELS` maps both spellings to the same display label. Its grid only
-ever runs MAR, so the unobserved-`U` branches never fire here.
+**Its grid only ever runs MAR**, so the unobserved-`U` branches never fire
+here. The covariates are `continuous_missing`'s: correlated, with X01–X03 as
+auxiliaries (since 2026-09-28; `missing/ADEMP.md`).
 
 ```{r data}
 # paths
