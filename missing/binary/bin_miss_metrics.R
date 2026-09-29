@@ -8,6 +8,7 @@ library(here)
 source(here("missing/binary/bin_miss_config.R"))
 source(here("R", "metrics.R"))
 source(here("R", "cate_models.R"))
+source(here("R", "missingness.R"))
 
 # No bug N repair here any more: runs from the risk-difference DGM save the
 # MNAR-Y (now MNAR-tau) truth already averaged over U (bU * tanh(U) has mean zero), and the
@@ -25,39 +26,55 @@ if (any(has_tau_u0)) {
        "(R/archive_old_results.R) and re-collect.", call. = FALSE)
 }
 
+# MNAR-tau's secondary truth, tau + E[U_term | complete or incomplete] - see
+# cate_metrics_split() in R/metrics.R and missing/ADEMP.md, "Estimands"
+U_SHIFT <- u_term_by_completeness("binary_missing")
+
+# every point metric on all analysed units, the complete units (_cu, the subset
+# every method shares) and the incomplete units (_iu) - see cate_metrics_split()
 metrics <- compute_metrics(
   study, all_results_df, models = CATE_MODELS,
   per_model = function(model_res, true_tau, model, sim_res, keys) {
     bind_cols(
-      cate_metrics(model_res$tau, true_tau, keys$scenario),
+      cate_metrics_split(model_res$tau, true_tau, keys$scenario,
+                         sim_res$miss_mask, sim_res$retained_indices,
+                         r_shift = if (keys$mechanism == "MNAR-tau") U_SHIFT),
       hte_test_metrics(model_res, sim_res, model)
     )
   }
 )
 
-# Relative efficiency and relative bias against the complete-data reference arm.
-# This used to be NA for every row (bug C): the reference was selected with
-# method == "complete_data", which the collect grid did not contain. It does now.
-# rel_ate_bias and rel_bias_cate (relative to the TRUE parameter, not this
-# complete_data arm) already arrive from cate_metrics() in R/metrics.R - no
-# join needed for those.
+# Comparisons against the complete-data reference arm, same (scenario,
+# mechanism, run, model). The headline is rel_efficiency_cu, on the complete
+# units, which every method has. The all-unit rel_efficiency is kept only for
+# the methods that analyse all 500 units: for complete_cases and IPW it would
+# divide a ~350-unit MSE by a 500-unit one, so it is NA there. The bias
+# comparisons are differences, not ratios - bias_complete is often near zero,
+# which made the old per-run ratio rel_bias_complete unstable (see
+# missing/README.md). rel_ate_bias and rel_bias_cate (relative to the TRUE
+# parameter) arrive from cate_metrics() in R/metrics.R; rel_bias_cate is not
+# plotted here, since the true CATE crosses zero.
 ref_by <- setdiff(c(study$path_cols, "run", "model"), "method")
+ROW_DROPPING <- c("complete_cases", "IPW")
 
 complete_ref <- metrics %>%
   filter(method == "complete_data") %>%
-  select(all_of(ref_by), mse_complete = mse, bias_complete = bias)
+  select(all_of(ref_by), mse_complete = mse, mse_cu_complete = mse_cu,
+         mse_iu_complete = mse_iu, bias_complete = bias,
+         bias_cu_complete = bias_cu)
 
 metrics <- metrics %>%
   left_join(complete_ref, by = ref_by) %>%
-  mutate(rel_efficiency = mse / mse_complete,
-         rel_bias_complete = bias / bias_complete)
+  mutate(rel_efficiency = if_else(method %in% ROW_DROPPING, NA_real_,
+                                  mse / mse_complete),
+         rel_efficiency_cu = mse_cu / mse_cu_complete,
+         rel_efficiency_iu = mse_iu / mse_iu_complete,
+         bias_diff_complete = if_else(method %in% ROW_DROPPING, NA_real_,
+                                      bias - bias_complete),
+         bias_diff_complete_cu = bias_cu - bias_cu_complete)
 
-if (all(is.na(metrics$rel_efficiency))) {
-  warning("rel_efficiency is NA everywhere - is the complete_data arm collected?")
-}
-
-if (all(is.na(metrics$rel_bias_complete))) {
-  warning("rel_bias_complete is NA everywhere - is the complete_data arm collected?")
+if (all(is.na(metrics$rel_efficiency_cu))) {
+  warning("rel_efficiency_cu is NA everywhere - is the complete_data arm collected?")
 }
 
 saveRDS(metrics, file.path(study$res_path, "bin_miss_metrics.RDS"))

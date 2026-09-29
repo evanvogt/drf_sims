@@ -22,9 +22,9 @@ require(purrr)   # map, map_int
 #'   reported as 0 rather than NA - the convention the study has always used.
 #'
 #' `rel_ate_bias` and `rel_bias_cate` are "relative bias" in the conventional,
-#' vs-true-parameter sense (as opposed to `rel_efficiency`/`rel_bias_complete`
-#' in the missing-data studies, which are ratios against the complete-data
-#' arm). `rel_ate_bias` is the parameter-level version (`ate_bias` divided by
+#' vs-true-parameter sense (as opposed to `rel_efficiency_cu` and
+#' `bias_diff_complete_cu` in the missing-data studies, which compare against
+#' the complete-data arm). `rel_ate_bias` is the parameter-level version (`ate_bias` divided by
 #' the true ATE); `rel_bias_cate` is the per-unit version, `(est - true) /
 #' true` averaged over units. True CATE is heterogeneous and crosses zero in
 #' several scenarios, so both guard a zero denominator with NA rather than
@@ -51,6 +51,86 @@ cate_metrics <- function(est, true, scenario) {
     sign_acc = mean(sign(est) == sign(true), na.rm = TRUE),
     n_na = sum(is.na(est))
   )
+}
+
+#' cate_metrics() on all analysed units, the complete units, and the incomplete ones
+#'
+#' For the missing-data studies (since 2026-09-29). The truth is tau at the
+#' UNAMPUTED covariates, which no method can recover for a unit whose effect
+#' modifiers are missing: an imputation arm carries an error floor on its
+#' incomplete units that the row-dropping arms (complete_cases, IPW), scored on
+#' their complete units only, never face. So every metric comes three ways:
+#'   (no suffix)  all analysed units - as before; ~350 units for complete_cases
+#'                and IPW, 500 for the rest, so NOT comparable across the two
+#'   _cu          complete units only: the subset every method has, so the
+#'                comparison across methods, including the row-dropping ones
+#'   _iu          incomplete units only; NA for complete_cases and IPW
+#' The complete / incomplete split is the amputation's, so it differs across
+#' mechanisms (MAR selects on X, MNAR on U): compare mechanisms through
+#' within-mechanism ratios to complete_data, not through absolute _cu / _iu.
+#'
+#' MNAR-tau's secondary truth. With `r_shift`, the metrics are also scored
+#' against tau_R = tau + r_shift[complete or incomplete]: the CATE given the
+#' covariates AND whether the unit is complete, which under MNAR-tau differs
+#' from tau because U, which drives missingness, is in the treatment effect.
+#' Columns bias_r, ate_bias_r, rmse_r, rmse_r_cu, rmse_r_iu. See
+#' missing/ADEMP.md, "Estimands", for which of the two truths is primary.
+#'
+#' @param est estimated CATEs for the analysed units
+#' @param true true CATEs for the same units
+#' @param scenario scenario index, as cate_metrics()
+#' @param miss_mask n x k logical, which covariates each of the n units had
+#'   missing (R/missingness.R, amputation_mask())
+#' @param retained length-n logical, which units the analysed data kept
+#' @param r_shift NULL, or c(complete = , incomplete = ): E[U_term | complete]
+#'   and E[U_term | incomplete] (R/missingness.R, u_term_by_completeness())
+cate_metrics_split <- function(est, true, scenario, miss_mask, retained,
+                               r_shift = NULL) {
+  if (is.null(miss_mask) || is.null(retained)) {
+    stop("no miss_mask / retained_indices in this run - it predates the ",
+         "2026-09-29 rerun (see missing/README.md)", call. = FALSE)
+  }
+  n <- nrow(miss_mask)
+  if (length(retained) != n || sum(retained) != length(est)) {
+    stop("miss_mask, retained_indices and the estimates disagree on the units",
+         call. = FALSE)
+  }
+  incomplete <- rowSums(miss_mask) > 0
+  # back onto all n units, NA where a row-dropping method has no estimate
+  est_n <- true_n <- rep(NA_real_, n)
+  est_n[retained] <- est
+  true_n[retained] <- true
+  cu <- retained & !incomplete
+  iu <- retained & incomplete
+
+  suffixed <- function(keep, suffix) {
+    m <- if (any(keep)) {
+      cate_metrics(est_n[keep], true_n[keep], scenario)
+    } else {
+      # the row-dropping methods have no incomplete units: cate_metrics()'s
+      # columns, all NA (scenario 1 so the template skips cor())
+      m <- cate_metrics(c(0, 1), c(0, 1), 1)
+      m[] <- lapply(m, function(x) NA_real_)
+      m
+    }
+    rename_with(m, ~ paste0(.x, suffix))
+  }
+
+  out <- bind_cols(cate_metrics(est, true, scenario),
+                   suffixed(cu, "_cu"), suffixed(iu, "_iu"))
+
+  if (!is.null(r_shift)) {
+    tau_r <- true_n + ifelse(incomplete, r_shift[["incomplete"]], r_shift[["complete"]])
+    err <- est_n - tau_r
+    out <- bind_cols(out, tibble(
+      bias_r = mean(err[retained], na.rm = TRUE),
+      ate_bias_r = mean(est_n[retained], na.rm = TRUE) - mean(tau_r[retained]),
+      rmse_r = sqrt(mean(err[retained]^2, na.rm = TRUE)),
+      rmse_r_cu = sqrt(mean(err[cu]^2, na.rm = TRUE)),
+      rmse_r_iu = if (any(iu)) sqrt(mean(err[iu]^2, na.rm = TRUE)) else NA_real_
+    ))
+  }
+  out
 }
 
 #' Heterogeneity-test p-values recorded alongside a fitted model
@@ -185,6 +265,30 @@ interval_metrics <- function(lb, ub, true) {
     marginal_coverage = mean(as.numeric(true >= lb & true <= ub)),
     simultaneous_coverage = as.numeric(all(true >= lb & true <= ub)),
     mean_ci_length = mean(ub - lb)
+  )
+}
+
+#' interval_metrics() on all units, the complete units and the incomplete ones
+#'
+#' missing/ci_example's counterpart to cate_metrics_split(): an interval for an
+#' incomplete unit is aimed at tau at its unamputed covariates, which the data
+#' cannot pin down, so coverage is reported for the two groups separately
+#' (suffixes _cu, _iu). Its only arm, multiple_imputation, keeps every unit.
+#'
+#' @param lb,ub,true as interval_metrics(), one per analysed unit
+#' @param miss_mask,retained as cate_metrics_split()
+interval_metrics_split <- function(lb, ub, true, miss_mask, retained) {
+  if (is.null(miss_mask) || is.null(retained)) {
+    stop("no miss_mask / retained_indices in this run - it predates the ",
+         "2026-09-29 rerun", call. = FALSE)
+  }
+  incomplete <- (rowSums(miss_mask) > 0)[retained]
+  bind_cols(
+    interval_metrics(lb, ub, true),
+    rename_with(interval_metrics(lb[!incomplete], ub[!incomplete], true[!incomplete]),
+                ~ paste0(.x, "_cu")),
+    rename_with(interval_metrics(lb[incomplete], ub[incomplete], true[incomplete]),
+                ~ paste0(.x, "_iu"))
   )
 }
 

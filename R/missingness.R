@@ -24,6 +24,52 @@ PROGNOSTIC_VARS <- c("X1", "X2")
 MISS_METHODS <- c("complete_cases", "mean_imputation", "missforest", "regression",
                   "missing_indicator", "IPW", "multiple_imputation", "none")
 
+#' Which covariates an amputation left missing
+#'
+#' Saved with every missing-data run (since 2026-09-29) so the metrics can
+#' score each method on the complete units, the incomplete units, and the
+#' complete-unit subset every method shares (R/metrics.R,
+#' cate_metrics_split()). The truth is tau at the unamputed covariates, which no
+#' method can recover for an incomplete unit, so without the split the
+#' imputation arms carry an error floor the row-dropping arms never face.
+#'
+#' @param amputed introduce_missingness()'s output
+#' @return n x k logical matrix over the amputable covariates (X1-X5)
+amputation_mask <- function(amputed) {
+  is.na(as.matrix(amputed[, setdiff(names(amputed), NEVER_MISSING), drop = FALSE]))
+}
+
+#' Apply an imputation separately within each treatment arm
+#'
+#' Imputing within arm keeps every W x X interaction in the imputation model,
+#' which a pooled model with main effects would flatten - the point of
+#' imputing for a CATE. W is constant within an arm, so `impute` is handed the
+#' arm's rows without it and must return them (or a list of completed copies)
+#' with the same columns; W is put back and the rows returned in the original
+#' order, since cate_methods() reads covariates by position. An arm with
+#' nothing missing is returned as it is.
+#'
+#' @param data dataset with Y, W and covariates, containing NAs
+#' @param impute function(df) returning a completed data.frame, or a list of
+#'   them (multiple imputation)
+#' @param n_out 1, or the number of completed datasets impute returns
+#' @return a data.frame, or a list of n_out data.frames
+impute_by_arm <- function(data, impute, n_out = 1) {
+  out <- rep(list(data), n_out)
+  for (arm in c(0, 1)) {
+    rows <- which(data$W == arm)
+    df <- data[rows, setdiff(names(data), "W"), drop = FALSE]
+    if (!anyNA(df)) next
+    done <- impute(df)
+    if (is.data.frame(done)) done <- list(done)
+    for (i in seq_len(n_out)) {
+      cols <- names(done[[i]])
+      out[[i]][rows, cols] <- done[[i]][, cols]
+    }
+  }
+  if (n_out == 1) out[[1]] else out
+}
+
 #' Introduce missingness into a simulated dataset
 #'
 #' Builds an mice::ampute pattern matrix over the covariates being amputated and
@@ -97,7 +143,32 @@ introduce_missingness <- function(data, type, prop, mech, U = NULL) {
     weights[, length(covs)] <- 1
   }
 
-  result <- ampute(data, prop = prop, patterns = indicators, weights = weights)
+  # mice::ampute (3.19.0, ampute.continuous()) has an edge case: a pattern with
+  # exactly one candidate whose weighted sum score is 0 gets the response
+  # indicator R <- 0, a scalar, which recycles over EVERY row - so that
+  # pattern's variables go missing for the whole dataset, and rows turn up with
+  # missingness patterns that were never specified (all-missing, unions of
+  # patterns). Found 2026-09-29: 6 of 40 MAR draws at n = 120 (about 4
+  # candidates per pattern). At the studies' n = 500 a pattern has about 17
+  # candidates and a single-candidate pattern is rare (none in 3000 MAR and
+  # 1000 MNAR-Y0 draws of scenario 2), but
+  # guard anyway: redraw until every incomplete row carries one of the
+  # specified patterns. A valid first draw - every one at n = 500 so far - is
+  # returned unchanged, with the same RNG consumption as before the guard.
+  pattern_key <- function(m) apply(m, 1, paste, collapse = "")
+  allowed <- pattern_key(matrix(as.matrix(indicators) == 0, ncol = length(covs)))
+  for (attempt in 1:20) {
+    result <- ampute(data, prop = prop, patterns = indicators, weights = weights)
+    na <- is.na(as.matrix(result$amp[, covs, drop = FALSE]))
+    incomplete <- rowSums(na) > 0
+    if (all(pattern_key(na[incomplete, , drop = FALSE]) %in% allowed)) break
+    if (attempt == 20) {
+      stop("mice::ampute produced unspecified missingness patterns 20 times running",
+           call. = FALSE)
+    }
+    warning("mice::ampute produced unspecified missingness patterns (a pattern ",
+            "with a single candidate) - redrawing the amputation", call. = FALSE)
+  }
 
   data <- cbind(result$amp, keep)
   data %>% select(all_of(orig))
@@ -135,21 +206,24 @@ handle_missingness <- function(data, method, n_imp = 50) {
       list(data = imputed_data)
     },
     "missforest" = {
-      keep <- data %>% select(all_of(c("Y", "W")))
-      df <- data %>% select(-all_of(c("Y", "W")))
-      # missForest wants binary columns as factors, so round-trip them
-      df <- df %>%
-        mutate(across(everything(), function(x) {
-          unique_vals <- unique(x[!is.na(x)])
-          bin <- length(unique_vals) == 2 && all(unique_vals %in% c(0, 1))
-          if (bin) factor(x, levels = c(0, 1)) else x
+      # within each arm, with Y as a predictor (since 2026-09-29; before then Y
+      # and W were both left out, which flattened the HTE - see impute_by_arm)
+      imputed <- impute_by_arm(data, function(df) {
+        # missForest wants binary columns as factors (Y too, for a binary
+        # outcome), so round-trip them
+        df <- df %>%
+          mutate(across(everything(), function(x) {
+            unique_vals <- unique(x[!is.na(x)])
+            bin <- length(unique_vals) == 2 && all(unique_vals %in% c(0, 1))
+            if (bin) factor(x, levels = c(0, 1)) else x
+          }))
+        mf_imputed <- missForest(df)
+        as.data.frame(lapply(mf_imputed$ximp, function(x) {
+          if (is.factor(x)) as.numeric(as.character(x)) else x
         }))
-      mf_imputed <- missForest(df)
-      imputed_df <- as.data.frame(lapply(mf_imputed$ximp, function(x) {
-        if (is.factor(x)) as.numeric(as.character(x)) else x
-      }))
+      })
       message("Imputation with missForest complete")
-      list(data = cbind(keep, imputed_df))
+      list(data = imputed)
     },
     "regression" = {
       keep <- data %>% select(all_of(c("Y", "W")))
@@ -198,13 +272,17 @@ handle_missingness <- function(data, method, n_imp = 50) {
       list(data = complete_data, ipw = ipw, retained_indices = retained_indices)
     },
     "multiple_imputation" = {
-      n_var <- ncol(data)
-      predMat <- matrix(1, nrow = n_var, ncol = n_var)
-      diag(predMat) <- 0
-      predMat[, which(colnames(data) %in% c("Y", "W"))] <- 0
-
-      imputation <- mice(data, m = n_imp, method = "rf", predictorMatrix = predMat)
-      data_mi <- lapply(seq_len(n_imp), function(i) complete(imputation, i))
+      # within each arm, every other column - Y included - predicting each
+      # incomplete one (since 2026-09-29; before then one pooled model with Y
+      # and W both excluded, which flattened the HTE - see impute_by_arm)
+      data_mi <- impute_by_arm(data, function(df) {
+        n_var <- ncol(df)
+        predMat <- matrix(1, nrow = n_var, ncol = n_var,
+                          dimnames = list(names(df), names(df)))
+        diag(predMat) <- 0
+        imputation <- mice(df, m = n_imp, method = "rf", predictorMatrix = predMat)
+        lapply(seq_len(n_imp), function(i) complete(imputation, i))
+      }, n_out = n_imp)
       message(paste0("Missing imputation completed - returning ", n_imp,
                      " imputed datasets"))
       list(data = data_mi)
@@ -228,10 +306,19 @@ generate_and_process_data <- function(scenario, n, set, return_truth = TRUE,
   miss_dataset <- introduce_missingness(
     data_result$dataset, type, prop, mech,
     U = if (mech %in% MNAR_MECHS) data_result$truth$U else NULL)
+  data_result$miss_mask <- amputation_mask(miss_dataset)
 
   processed <- handle_missingness(miss_dataset, method, n_imp = n_imp)
   data_result$dataset <- processed$data
   data_result$missing_method <- method
+
+  # which of the n units the analysed dataset keeps: the complete cases for
+  # the row-dropping methods, every unit otherwise
+  data_result$retained_indices <- if (method %in% c("complete_cases", "IPW")) {
+    processed$retained_indices
+  } else {
+    rep(TRUE, n)
+  }
 
   # the row-dropping methods must drop the same rows from the truth
   if (method %in% c("complete_cases", "IPW") && return_truth) {
@@ -239,5 +326,61 @@ generate_and_process_data <- function(scenario, n, set, return_truth = TRUE,
   }
   if (method == "IPW") data_result$ipw <- processed$ipw
 
+  data_result
+}
+
+#' E[U_term | complete] and E[U_term | incomplete] under the MNAR mechanisms
+#'
+#' Under MNAR-Y0 / MNAR-tau the amputation selects on U alone, so the units
+#' left complete have lower U than average and the incomplete ones higher.
+#' Under MNAR-tau U's term is in the treatment effect, so the CATE given the
+#' covariates AND whether a unit is complete is tau(X) plus one of these two
+#' constants - the secondary truth cate_metrics_split() scores against
+#' (missing/ADEMP.md, "Estimands"). They are population constants of the DGM,
+#' estimated once here by a large simulation; the amputation depends on U
+#' alone, so any scenario gives them. The caller's RNG state is restored.
+#'
+#' @param set a missing-data scenario set (one with a u_expr)
+#' @param type,prop the amputation, as introduce_missingness()
+#' @param n simulated sample size
+#' @return c(complete = , incomplete = )
+u_term_by_completeness <- function(set, type = "both", prop = 0.3, n = 1e5,
+                                   seed = 20260929) {
+  if (exists(".Random.seed", envir = globalenv())) {
+    old_seed <- get(".Random.seed", envir = globalenv())
+    on.exit(assign(".Random.seed", old_seed, envir = globalenv()))
+  }
+  set.seed(seed)
+  params <- resolve_set(set)
+  # bW calibrated at the studies' n = 500, as they run (it does not move U or
+  # the amputation, but keeps every binary risk where the studies' are)
+  g <- generate_scenario_data(2, n, set, mech = "MNAR-tau", calib_n = 500)
+  amputed <- suppressWarnings(
+    introduce_missingness(g$dataset, type, prop, "MNAR-tau", U = g$truth$U))
+  complete <- rowSums(amputation_mask(amputed)) == 0
+  u_term <- eval(parse(text = params$u_expr[1]),
+                 envir = list(bU = params$bU[1], U = g$truth$U))
+  c(complete = mean(u_term[complete]), incomplete = mean(u_term[!complete]))
+}
+
+#' Generate the complete-data reference arm, with the mask it would have had
+#'
+#' The complete_data arm analyses the unamputed data, but its metrics need the
+#' same complete / incomplete split as the other arms (amputation_mask()). The
+#' seed stream is set by run alone, so generating and then amputating here
+#' consumes exactly the draws generate_and_process_data() does, and the mask
+#' is the one every other method of this (scenario, mechanism, run) sees. The
+#' amputed copy is discarded; only its mask is kept.
+#'
+#' @inheritParams generate_and_process_data
+generate_reference_data <- function(scenario, n, set, type, prop, mech) {
+  data_result <- generate_scenario_data(scenario, n, set, return_truth = TRUE,
+                                        mech = mech)
+  amputed <- introduce_missingness(
+    data_result$dataset, type, prop, mech,
+    U = if (mech %in% MNAR_MECHS) data_result$truth$U else NULL)
+  data_result$miss_mask <- amputation_mask(amputed)
+  data_result$retained_indices <- rep(TRUE, n)
+  data_result$missing_method <- "complete_data"
   data_result
 }

@@ -63,8 +63,13 @@ metrics_summary <- summarise_metrics(
            sign_acc = "sign_acc", BLP = "BLP_p", BLP_os = "BLP_p_os",
            indep_cate = "indep_cate",
            indep_po = "indep_po", rel_eff = "rel_efficiency",
-           rel_bias_complete = "rel_bias_complete",
-           rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate",
+           rel_eff_cu = "rel_efficiency_cu", rel_eff_iu = "rel_efficiency_iu",
+           bias_diff_cu = "bias_diff_complete_cu",
+           bias_cu = "bias_cu", bias_iu = "bias_iu",
+           rmse_cu = "rmse_cu", rmse_iu = "rmse_iu", corr_cu = "corr_cu",
+           corr_iu = "corr_iu", rmse_r = "rmse_r", rmse_r_cu = "rmse_r_cu",
+           rmse_r_iu = "rmse_r_iu", ate_bias_r = "ate_bias_r",
+           rel_ate_bias = "rel_ate_bias",
            power_BLP = "BLP_reject", power_BLP_os = "BLP_os_reject",
            power_indep_cate = "indep_cate_reject",
            power_indep_po = "indep_po_reject"),
@@ -134,47 +139,82 @@ mae_sum_plot <- point_range_plot(metrics_summary, "mae", "MAE",
                                  facet_scales = "free_y")
 save_fig("bin_miss_mae_summary.png", fig_path)
 
+# --- complete vs incomplete units -------------------------------------------
+# The truth is tau at the UNAMPUTED covariates, so on an incomplete unit every
+# imputation method carries an error floor no amount of data removes, while
+# complete_cases and IPW are scored on their complete units alone. The
+# comparison across all methods is therefore on the complete units (_cu), the
+# subset every method has; the incomplete units (_iu) show the floor. See
+# cate_metrics_split() in R/metrics.R. The split is the amputation's, so the
+# complete units are a different set of units under each mechanism - compare
+# mechanisms through the relative measures below, not these absolute panels.
+rmse_cu_plot <- miss_box_plot(metrics, "rmse_cu", "RMSE, complete units",
+                              facet_scales = "free_y")
+save_fig("bin_miss_rmse_cu_all.png", fig_path)
+
+rmse_cu_sum_plot <- point_range_plot(metrics_summary, "rmse_cu",
+                                     "RMSE, complete units", facet_scales = "free_y")
+save_fig("bin_miss_rmse_cu_summary.png", fig_path)
+
+# complete_cases and IPW have no incomplete units, so draw nothing here
+rmse_iu_sum_plot <- point_range_plot(metrics_summary, "rmse_iu",
+                                     "RMSE, incomplete units", facet_scales = "free_y")
+save_fig("bin_miss_rmse_iu_summary.png", fig_path)
+
+bias_cu_sum_plot <- point_range_plot(metrics_summary, "bias_cu",
+                                     "Bias, complete units")
+save_fig("bin_miss_bias_cu_summary.png", fig_path)
+
+bias_iu_sum_plot <- point_range_plot(metrics_summary, "bias_iu",
+                                     "Bias, incomplete units")
+save_fig("bin_miss_bias_iu_summary.png", fig_path)
+
 # --- relative efficiency ----------------------------------------------------
-# mse / mse of the same (scenario, mechanism, run, model) under complete_data.
-# The reference arm sits at exactly 1 by construction; above 1 is the price of
-# the missingness plus the handling method. This is the metric specific to the
-# missing-data studies - nothing in binary/ or continuous/ has it.
-if ("rel_efficiency" %in% names(metrics)) {
-  rel_eff_plot <- miss_box_plot(metrics, "rel_efficiency",
-                                "Relative efficiency (vs complete data)",
-                                hline = 1, facet_scales = "free_y")
-  save_fig("bin_miss_rel_eff_all.png", fig_path)
+# mse / mse of the same (scenario, mechanism, run, model) under complete_data,
+# on the complete units: rel_efficiency_cu, the one every method has. The
+# reference arm sits at exactly 1 by construction; above 1 is the price of the
+# missingness plus the handling method. Within a mechanism, so it is also how
+# the mechanisms compare (MNAR-Y0's U adds outcome variance to the
+# complete_data arm too). The all-unit rel_efficiency is NA for complete_cases
+# and IPW, which analyse fewer units than complete_data.
+rel_eff_cu_plot <- miss_box_plot(metrics, "rel_efficiency_cu",
+                                 "Relative efficiency, complete units (vs complete data)",
+                                 hline = 1, facet_scales = "free_y")
+save_fig("bin_miss_rel_eff_cu_all.png", fig_path)
 
-  rel_eff_sum_plot <- point_range_plot(metrics_summary, "rel_eff",
-                                       "Relative efficiency (vs complete data)",
-                                       facet_scales = "free_y") +
-    geom_hline(yintercept = 1, linetype = "dashed")
-  save_fig("bin_miss_rel_eff_summary.png", fig_path)
-} else {
-  warning("rel_efficiency absent from the metrics file - skipping those figures")
-}
+rel_eff_cu_sum_plot <- point_range_plot(metrics_summary, "rel_eff_cu",
+                                        "Relative efficiency, complete units (vs complete data)",
+                                        facet_scales = "free_y") +
+  geom_hline(yintercept = 1, linetype = "dashed")
+save_fig("bin_miss_rel_eff_cu_summary.png", fig_path)
 
-# --- relative bias (vs complete data) ----------------------------------------
-# bias / bias of the same (scenario, mechanism, run, model) under complete_data.
-# Unlike relative efficiency this is a SIGNED ratio: 1 means the same bias as
-# complete data, a negative value means the handling method flipped the sign of
-# the bias, and it blows up when bias_complete is near zero - read alongside the
-# plain bias panel above, not on its own. This is an ARM-TO-ARM ratio (like
-# relative efficiency), not a bias fraction - hence the hline = 1.
-if ("rel_bias_complete" %in% names(metrics)) {
-  rel_bias_complete_plot <- miss_box_plot(metrics, "rel_bias_complete",
-                                          "Relative bias (vs complete data)",
-                                          hline = 1, facet_scales = "free_y")
-  save_fig("bin_miss_rel_bias_complete_all.png", fig_path)
+rel_eff_sum_plot <- point_range_plot(metrics_summary, "rel_eff",
+                                     "Relative efficiency, all units (vs complete data)",
+                                     facet_scales = "free_y") +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  labs(caption = "Not defined for complete cases and IPW, which analyse fewer units.")
+save_fig("bin_miss_rel_eff_summary.png", fig_path)
 
-  rel_bias_complete_sum_plot <- point_range_plot(metrics_summary, "rel_bias_complete",
-                                                 "Relative bias (vs complete data)",
-                                                 facet_scales = "free_y") +
-    geom_hline(yintercept = 1, linetype = "dashed")
-  save_fig("bin_miss_rel_bias_complete_summary.png", fig_path)
-} else {
-  warning("rel_bias_complete absent from the metrics file - skipping those figures")
-}
+rel_eff_iu_sum_plot <- point_range_plot(metrics_summary, "rel_eff_iu",
+                                        "Relative efficiency, incomplete units (vs complete data)",
+                                        facet_scales = "free_y") +
+  geom_hline(yintercept = 1, linetype = "dashed")
+save_fig("bin_miss_rel_eff_iu_summary.png", fig_path)
+
+# --- bias difference (vs complete data) --------------------------------------
+# bias_cu - bias_cu of the same (scenario, mechanism, run, model) under
+# complete_data: the bias the missingness and the handling method add, on the
+# complete units every method has. A difference, not a ratio: the old
+# rel_bias_complete divided by a complete-data bias that is often near zero.
+bias_diff_plot <- miss_box_plot(metrics, "bias_diff_complete_cu",
+                                "Bias minus complete-data bias, complete units",
+                                facet_scales = "free_y")
+save_fig("bin_miss_bias_diff_cu_all.png", fig_path)
+
+bias_diff_sum_plot <- point_range_plot(metrics_summary, "bias_diff_cu",
+                                       "Bias minus complete-data bias, complete units",
+                                       facet_scales = "free_y")
+save_fig("bin_miss_bias_diff_cu_summary.png", fig_path)
 
 # --- relative ATE bias (vs true) ---------------------------------------------
 # (mean(est) - mean(true)) / mean(true): the ATE's bias as a fraction of the
@@ -196,23 +236,30 @@ if ("rel_ate_bias" %in% names(metrics)) {
   warning("rel_ate_bias absent from the metrics file - skipping those figures")
 }
 
-# --- relative bias of individual CATEs (vs true) ------------------------------
-# mean((est - true) / true) per unit - the literal per-unit relative bias.
-# Units where true == 0 are NA'd out upstream (R/metrics.R's cate_metrics())
-# rather than contributing +/-Inf. Bias fraction, not a ratio - hline = 0.
-if ("rel_bias_cate" %in% names(metrics)) {
-  rel_bias_cate_plot <- miss_box_plot(metrics, "rel_bias_cate",
-                                      "Relative bias (vs true CATE)",
-                                      hline = 0, facet_scales = "free_y")
-  save_fig("bin_miss_rel_bias_cate_all.png", fig_path)
+# rel_bias_cate, mean((est - true) / true), is still in the metrics file but
+# not plotted: the true CATE crosses zero in scenarios 2-5, so the per-unit
+# ratio is dominated by the units nearest zero.
 
-  rel_bias_cate_sum_plot <- point_range_plot(metrics_summary, "rel_bias_cate",
-                                             "Relative bias (vs true CATE)",
-                                             facet_scales = "free_y") +
-    geom_hline(yintercept = 0, linetype = "dashed")
-  save_fig("bin_miss_rel_bias_cate_summary.png", fig_path)
-} else {
-  warning("rel_bias_cate absent from the metrics file - skipping those figures")
+# --- MNAR-tau: the truth given completeness -----------------------------------
+# Under MNAR-tau, U drives the missingness and sits in the treatment effect, so
+# the incomplete units' true effects are shifted from tau(X). The primary truth
+# ignores that (the CATE as a function of X); rmse_r scores against
+# tau + E[U_term | complete or incomplete] instead, which rewards a method that
+# learns the shift from the missingness itself (missing_indicator, none).
+# See missing/ADEMP.md, "Estimands". MNAR-tau rows only.
+mnar_tau_summary <- filter(metrics_summary, mechanism == "MNAR-tau")
+if (nrow(mnar_tau_summary) > 0 && "mean_rmse_r" %in% names(mnar_tau_summary)) {
+  rmse_r_plot <- point_range_plot(mnar_tau_summary, "rmse_r",
+                                  "RMSE against the truth given completeness",
+                                  facet_scales = "free_y") +
+    labs(title = "MNAR-tau, secondary truth")
+  save_fig("bin_miss_rmse_r_summary.png", fig_path)
+
+  ate_bias_r_plot <- point_range_plot(mnar_tau_summary, "ate_bias_r",
+                                      "ATE bias against the truth given completeness",
+                                      facet_scales = "free_y") +
+    labs(title = "MNAR-tau, secondary truth")
+  save_fig("bin_miss_ate_bias_r_summary.png", fig_path)
 }
 
 # --- correlation with the truth ---------------------------------------------
@@ -441,15 +488,16 @@ if (nrow(na_table) > 0) {
 }
 
 # --- headline table ---------------------------------------------------------
-# best model first within each (scenario, mechanism, method) cell
+# best model first within each (scenario, mechanism, method) cell, on the
+# complete units every method has
 headline <- metrics_summary %>%
   select(scenario, mechanism, method, model, mean_bias, mean_mse, mean_rmse,
-         mean_mae, mean_sign_acc, mean_corr, any_of("mean_rel_eff"),
-         any_of("mean_rel_bias_complete"), any_of("mean_rel_ate_bias"),
-         any_of("mean_rel_bias_cate"),
+         mean_rmse_cu, mean_rmse_iu, mean_rel_eff_cu, any_of("mean_rel_eff"),
+         mean_bias_diff_cu, mean_mae, mean_sign_acc, mean_corr,
+         any_of("mean_rel_ate_bias"), any_of("mean_rmse_r"),
          mean_BLP, mean_BLP_os, mean_indep_cate, mean_indep_po,
          n_na_BLP_p, n_na_BLP_p_os, n_na_indep_cate) %>%
-  arrange(scenario, mechanism, method, mean_mse)
+  arrange(scenario, mechanism, method, mean_rmse_cu)
 
 print(headline, n = Inf)
 saveRDS(headline, file.path(res_path, "bin_miss_headline.RDS"))

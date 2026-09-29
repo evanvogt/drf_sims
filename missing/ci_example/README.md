@@ -29,6 +29,18 @@ in `R/bootstrap_ci.R` then pools them three ways so they can be compared:
 | `mib` | Rubin's rules — within + between variance, critical value averaged over the per-imputation maxima |
 | `hybrid` | one variance and one critical value from the stacked draws |
 
+**Imputation within arm, with the outcome (since 2026-09-29).** The 50
+imputations are drawn separately in each treatment arm with Y as a predictor
+(`impute_by_arm()`, `R/missingness.R`), as in the main design - see
+`missing/ADEMP.md`. Before, Y and W were left out of the imputation model.
+
+**Coverage on complete and incomplete units.** The truth is τ at the
+unamputed covariates, which an incomplete unit's interval cannot pin down from
+the observed values, so marginal coverage and the point metrics are also
+reported on the complete units (`_cu`) and the incomplete units (`_iu`)
+separately (`interval_metrics_split()`, `R/metrics.R`). Each run saves its
+missingness mask for this.
+
 ## To add: grid-based simultaneous coverage
 
 `simultaneous_coverage` here is **per-unit** — it asks whether the band covers
@@ -90,4 +102,5 @@ this study generates from (`missing/continuous/README.md`). Archive any old
 tree first with `R/archive_old_results.R` (root `README.md`, Status, step 0) -
 it would use the pre-2026-09-26 scenario numbers (1-5, now 1 and 3-6).
 The 2026-09-28 correlated covariates are a further reason: every dataset
-changes.
+changes. So is the 2026-09-29 review: imputation within arm with Y, and the
+saved missingness mask (`cts_miss_ci_metrics.R` refuses runs without it).

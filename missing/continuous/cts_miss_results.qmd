@@ -26,7 +26,18 @@ source(here("R", "figures.R"))
 
 Covariates are amputated from a dataset the estimators would otherwise have seen
 in full, then handed to nine different handling methods. Every arm is scored
-against the *same* known true CATE, so the comparison is like-for-like.
+against the *same* known true CATE: τ at the **unamputed** covariates.
+
+**Complete and incomplete units are scored separately.** No method can recover
+τ for a unit whose effect modifiers are missing, so on those units every
+imputation method carries an error floor, while complete cases and IPW are
+scored on their complete units alone. Scored on all analysed units, complete
+cases would win on MSE whatever they did. So every point metric also comes on
+the **complete units** (suffix `_cu`), the subset every method has and the one
+the methods are compared on, and on the **incomplete units** (`_iu`), which
+show the floor. The split is the amputation's, so the complete units are a
+different set under each mechanism: compare mechanisms through the ratios to
+`complete_data`, not through absolute `_cu` / `_iu` values.
 
 Unlike the sample-size studies in `continuous/` and `binary/`, this design holds
 the sample size fixed and varies the missingness instead. There is therefore no
@@ -63,11 +74,11 @@ failure.**
 |---|---|
 | Complete case | delete every row with any `NA` |
 | Single mean imputation | replace `NA` with the column mean |
-| Single forest-based imputation | `missForest` |
+| Single forest-based imputation | `missForest`, within each arm, Y as a predictor |
 | Single model-based imputation | predict the missing values by regression |
 | Missing indicators | add binary missing flags, then mean-impute |
 | IPW | inverse-probability weighting of the complete cases |
-| Multiple imputation (rf) | MICE, 50 imputations, Rubin-combined |
+| Multiple imputation (rf) | MICE, 50 imputations within each arm, Y as a predictor, Rubin-combined |
 | Inbuilt missingness handling | hand the `NA`s straight to the estimator |
 | Complete data (reference) | no missingness introduced at all |
 
@@ -114,8 +125,13 @@ metrics_summary <- summarise_metrics(
            sign_acc = "sign_acc", BLP = "BLP_p", BLP_os = "BLP_p_os",
            indep_cate = "indep_cate",
            indep_po = "indep_po", rel_eff = "rel_efficiency",
-           rel_bias_complete = "rel_bias_complete",
-           rel_ate_bias = "rel_ate_bias", rel_bias_cate = "rel_bias_cate",
+           rel_eff_cu = "rel_efficiency_cu", rel_eff_iu = "rel_efficiency_iu",
+           bias_diff_cu = "bias_diff_complete_cu",
+           bias_cu = "bias_cu", bias_iu = "bias_iu",
+           rmse_cu = "rmse_cu", rmse_iu = "rmse_iu", corr_cu = "corr_cu",
+           corr_iu = "corr_iu", rmse_r = "rmse_r", rmse_r_cu = "rmse_r_cu",
+           rmse_r_iu = "rmse_r_iu", ate_bias_r = "ate_bias_r",
+           rel_ate_bias = "rel_ate_bias",
            power_BLP = "BLP_reject", power_BLP_os = "BLP_os_reject",
            power_indep_cate = "indep_cate_reject",
            power_indep_po = "indep_po_reject"),
@@ -175,8 +191,10 @@ ate_bias_sum_plot <- point_range_plot(metrics_summary, "ate_bias", "ATE bias")
 
 ## MSE of CATE estimates
 
-The headline metric: mean squared error of the estimated CATE against the known
-truth.
+Mean squared error of the estimated CATE against the known truth, on all
+analysed units — about 350 for complete cases and IPW, 500 for the rest, so
+not comparable across the two. The comparison across methods is the
+complete-units section below.
 
 ```{r mse-plot, fig.height=16}
 mse_plot <- miss_box_plot(metrics, "mse", "MSE", facet_scales = "free_y")
@@ -211,54 +229,69 @@ mae_sum_plot <- point_range_plot(metrics_summary, "mae", "MAE",
 (mae_plot / mae_sum_plot) + plot_layout(guides = "collect")
 ```
 
-## Relative efficiency
+## Complete and incomplete units
 
-`mse` divided by the MSE of the same scenario, mechanism, run and model under
-`complete_data`. The reference arm sits at exactly 1 by construction (dashed
-line); anything above 1 is the price of the missingness plus the handling
-method. This is the metric specific to the missing-data studies — nothing in
-`binary/` or `continuous/` has it.
+RMSE and bias on the complete units (top: the subset every method has) and the
+incomplete units (bottom: complete cases and IPW have none, so draw nothing).
+The incomplete-unit error of the imputation methods is mostly the floor that
+comes from scoring against τ at covariates they never saw.
 
-```{r rel-eff-plot, fig.height=16}
-if ("rel_efficiency" %in% names(metrics)) {
-  rel_eff_plot <- miss_box_plot(metrics, "rel_efficiency",
-                                "Relative efficiency", hline = 1,
-                                facet_scales = "free_y")
-  rel_eff_sum_plot <- point_range_plot(metrics_summary, "rel_eff",
-                                       "Relative efficiency",
-                                       facet_scales = "free_y") +
-    geom_hline(yintercept = 1, linetype = "dashed")
+```{r rmse-split-plot, fig.height=16}
+rmse_cu_sum_plot <- point_range_plot(metrics_summary, "rmse_cu",
+                                     "RMSE, complete units", facet_scales = "free_y")
+rmse_iu_sum_plot <- point_range_plot(metrics_summary, "rmse_iu",
+                                     "RMSE, incomplete units", facet_scales = "free_y")
 
-  (rel_eff_plot / rel_eff_sum_plot) + plot_layout(guides = "collect")
-} else {
-  cat("rel_efficiency is not present in this metrics file.")
-}
+(rmse_cu_sum_plot / rmse_iu_sum_plot) + plot_layout(guides = "collect")
 ```
 
-## Relative bias (vs complete data)
+```{r bias-split-plot, fig.height=16}
+bias_cu_sum_plot <- point_range_plot(metrics_summary, "bias_cu", "Bias, complete units")
+bias_iu_sum_plot <- point_range_plot(metrics_summary, "bias_iu", "Bias, incomplete units")
 
-`bias` divided by the bias of the same scenario, mechanism, run and model under
-`complete_data`. Unlike relative efficiency this is a *signed* ratio: 1 (dashed
-line) means the same bias as complete data, a negative value means the handling
-method flipped the sign of the bias, and the ratio blows up when the
-complete-data bias is near zero — read it alongside the plain Bias panel above,
-not on its own. This is an arm-to-arm ratio, like relative efficiency, so 1 is
-the reference line.
+(bias_cu_sum_plot / bias_iu_sum_plot) + plot_layout(guides = "collect")
+```
 
-```{r rel-bias-complete-plot, fig.height=16}
-if ("rel_bias_complete" %in% names(metrics)) {
-  rel_bias_complete_plot <- miss_box_plot(metrics, "rel_bias_complete",
-                                          "Relative bias (vs complete data)",
-                                          hline = 1, facet_scales = "free_y")
-  rel_bias_complete_sum_plot <- point_range_plot(metrics_summary, "rel_bias_complete",
-                                                 "Relative bias (vs complete data)",
-                                                 facet_scales = "free_y") +
-    geom_hline(yintercept = 1, linetype = "dashed")
+## Relative efficiency
 
-  (rel_bias_complete_plot / rel_bias_complete_sum_plot) + plot_layout(guides = "collect")
-} else {
-  cat("rel_bias_complete is not present in this metrics file.")
-}
+MSE on the complete units divided by the complete-unit MSE of the same
+scenario, mechanism, run and model under `complete_data`
+(`rel_efficiency_cu`). The reference arm sits at exactly 1 by construction
+(dashed line); anything above 1 is the price of the missingness plus the
+handling method. It is a within-mechanism ratio, so it is also how the
+mechanisms compare: MNAR-Y0's `U` adds outcome variance to the `complete_data`
+arm as well. The all-unit ratio is not defined for complete cases and IPW,
+which analyse fewer units than `complete_data`.
+
+```{r rel-eff-plot, fig.height=16}
+rel_eff_cu_plot <- miss_box_plot(metrics, "rel_efficiency_cu",
+                                 "Relative efficiency, complete units", hline = 1,
+                                 facet_scales = "free_y")
+rel_eff_cu_sum_plot <- point_range_plot(metrics_summary, "rel_eff_cu",
+                                        "Relative efficiency, complete units",
+                                        facet_scales = "free_y") +
+  geom_hline(yintercept = 1, linetype = "dashed")
+
+(rel_eff_cu_plot / rel_eff_cu_sum_plot) + plot_layout(guides = "collect")
+```
+
+## Bias difference (vs complete data)
+
+Complete-unit bias minus the complete-unit bias of the same scenario,
+mechanism, run and model under `complete_data`: the bias the missingness and
+the handling method add. A difference rather than a ratio — the complete-data
+bias is often near zero, which made the old ratio `rel_bias_complete`
+unstable.
+
+```{r bias-diff-plot, fig.height=16}
+bias_diff_plot <- miss_box_plot(metrics, "bias_diff_complete_cu",
+                                "Bias minus complete-data bias, complete units",
+                                facet_scales = "free_y")
+bias_diff_sum_plot <- point_range_plot(metrics_summary, "bias_diff_cu",
+                                       "Bias minus complete-data bias, complete units",
+                                       facet_scales = "free_y")
+
+(bias_diff_plot / bias_diff_sum_plot) + plot_layout(guides = "collect")
 ```
 
 ## Relative ATE bias (vs true)
@@ -285,27 +318,28 @@ if ("rel_ate_bias" %in% names(metrics)) {
 }
 ```
 
-## Relative bias of individual CATEs (vs true)
+The per-unit relative bias `mean((est - true) / true)` (`rel_bias_cate`) is
+still in the metrics file but not shown: the true CATE crosses zero in
+scenarios 2–5, so the ratio is dominated by the units nearest zero.
 
-`mean((est - true) / true)` per unit — the literal per-unit relative bias.
-True CATE is heterogeneous and crosses zero in several scenarios; units where
-it is exactly 0 are set to `NA` upstream (`R/metrics.R`'s `cate_metrics()`)
-rather than contributing `Inf`. A bias fraction, not a ratio, so 0 is the
-reference line.
+## MNAR-τ: the truth given completeness
 
-```{r rel-bias-cate-plot, fig.height=16}
-if ("rel_bias_cate" %in% names(metrics)) {
-  rel_bias_cate_plot <- miss_box_plot(metrics, "rel_bias_cate",
-                                      "Relative bias (vs true CATE)", hline = 0,
-                                      facet_scales = "free_y")
-  rel_bias_cate_sum_plot <- point_range_plot(metrics_summary, "rel_bias_cate",
-                                             "Relative bias (vs true CATE)",
-                                             facet_scales = "free_y") +
-    geom_hline(yintercept = 0, linetype = "dashed")
+Under MNAR-τ, `U` drives the missingness and sits in the treatment effect, so
+the incomplete units' true effects are shifted away from τ(X). The primary
+truth ignores that — it is the CATE as a function of X under every mechanism.
+This panel scores against the secondary truth τ + E[U-term | complete or
+incomplete] instead, which rewards a method that learns the shift from the
+missingness itself (missing indicators, inbuilt handling). See
+`missing/ADEMP.md`, "Estimands".
 
-  (rel_bias_cate_plot / rel_bias_cate_sum_plot) + plot_layout(guides = "collect")
+```{r rmse-r-plot, fig.height=8}
+mnar_tau_summary <- filter(metrics_summary, mechanism == "MNAR-tau")
+if (nrow(mnar_tau_summary) > 0 && "mean_rmse_r" %in% names(mnar_tau_summary)) {
+  point_range_plot(mnar_tau_summary, "rmse_r",
+                   "RMSE against the truth given completeness",
+                   facet_scales = "free_y")
 } else {
-  cat("rel_bias_cate is not present in this metrics file.")
+  cat("No MNAR-tau rows with the secondary truth in this metrics file.")
 }
 ```
 
@@ -586,10 +620,11 @@ each cell).
 
 ```{r headline-table}
 headline <- metrics_summary %>%
-  select(scenario, mechanism, method, model, mean_bias, mean_mse, mean_rmse,
-         mean_mae, mean_sign_acc, mean_corr, any_of("mean_rel_eff"),
+  select(scenario, mechanism, method, model, mean_bias, mean_rmse,
+         mean_rmse_cu, mean_rmse_iu, mean_rel_eff_cu, mean_bias_diff_cu,
+         mean_mae, mean_sign_acc, mean_corr, any_of("mean_rmse_r"),
          mean_BLP, mean_BLP_os, mean_indep_cate, mean_indep_po) %>%
-  arrange(scenario, mechanism, method, mean_mse)
+  arrange(scenario, mechanism, method, mean_rmse_cu)
 
 kable(headline, digits = 4)
 ```

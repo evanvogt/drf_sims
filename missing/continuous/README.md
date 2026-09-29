@@ -86,6 +86,10 @@ To run only the `complete_data` reference arm, take
 
 ## Status
 
+**Also re-run for the 2026-09-29 review** (`missing/README.md`, Status): U
+drawn under MAR, the saved missingness mask, and imputation within arm with Y.
+`cts_miss_metrics.R` refuses runs without the mask.
+
 **All 12,600 rows re-run** (`cts_miss_1.sh`, then `cts_miss_extra.sh` for
 scenario 2), after archiving the old tree with `R/archive_old_results.R` (root
 `README.md`, Status, step 0). Bug O, below, supersedes rows 1–9900. The old

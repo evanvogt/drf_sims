@@ -29,6 +29,12 @@ generate_and_process_binary_data <- function(scenario, n, return_truth = TRUE,
                             n_imp = 50)
 }
 
+# the complete_data arm: unamputed data plus the mask the other arms see
+generate_binary_reference_data <- function(scenario, n, type, prop, mech) {
+  generate_reference_data(scenario, n, set = "binary_missing",
+                          type = type, prop = prop, mech = mech)
+}
+
 get_binary_oracle_info <- function(scenario, bW) {
   get_oracle_info(scenario, bW, set = "binary_missing")
 }

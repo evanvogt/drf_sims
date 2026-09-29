@@ -53,32 +53,34 @@ logit-scale design.
 
 - `g = −RD_SCALE[k] × (the continuous coefficients)`.
 - Each `RD_SCALE[k]` is the largest scale, floored to 3 dp, that keeps every
-  treated risk inside [0.01, 0.99] (`RD_EPS`):
-  - at n = 100 to 1000;
-  - for scenarios 2–6, also under `missing/binary`'s MNAR mechanisms (MNAR-tau, and MNAR-Y0 with the same bound), which add
-    `bU·tanh(U)` with bU = 0.08 at n = 500.
-- The binding bound:
-  - the floor at n = 100 binds in every scenario except 4;
-  - in scenario 4 the MNAR ceiling binds.
-- `bin_verify_hte.R` re-derives `RD_SCALE`. If `p0_lo`, `p0_hi`, b0–b2, bU,
-  `RD_EPS` or the studies' n change, `RD_SCALE` has to be recomputed.
+  treated risk inside [0.01, 0.99] (`RD_EPS`) at n = 100 to 1000. The floor
+  at n = 100 binds in every scenario.
+- **Except scenario 4, frozen at 0.204.** Until 2026-09-29 `RD_SCALE` also had
+  to hold under `missing/binary`'s MNAR mechanisms, whose ceiling capped
+  scenario 4 at 0.204. `missing/binary` now has its own scale
+  (`RD_SCALE_MISS`, `missing/binary/README.md`), which would let scenario 4
+  rise to 0.209 here, but this study and the binary CI studies were already
+  running on 0.204, so it stays.
+- `bin_verify_hte.R` re-derives `RD_SCALE` (and `missing/binary`'s scale). If
+  `p0_lo`, `p0_hi`, b0–b2, `RD_EPS` or the studies' n change, `RD_SCALE` has
+  to be recomputed.
 
 In the table below:
 
 - "τ 5–95%" is the middle 90% of the true CATE.
 - "harmed" is the share of patients with τ > 0 at n = 1000.
 - "floor" and "ceiling" are the lowest and highest treated risk over the
-  covariate support, with the MNAR mechanisms included for scenarios 2–6.
+  covariate support, at any of the study's n.
 - t4 = tanh(X4) and t5 = tanh(X5).
 
 | # | g(x) | SD τ | τ 5–95%, n = 100 | τ 5–95%, n = 1000 | harmed | floor | ceiling |
 |---|---|---|---|---|---|---|---|
 | 1 | 0 | 0 | −0.248 | −0.085 | 0% | 0.092 | 0.615 |
-| 2 | 0.082·t4 | 0.051 | −0.324, −0.172 | −0.161, −0.009 | 0% | 0.010 | 0.744 |
-| 3 | −0.102·X3 − 0.026·t4 + 0.026·t4·t5 | 0.050 | −0.308, −0.158 | −0.145, 0.005 | 6.5% | 0.011 | 0.784 |
-| 4 | −0.204·cos(X4) | 0.091 | −0.328, −0.047 | −0.165, 0.116 | 16.8% | 0.012 | 0.989 |
-| 5 | −0.274·X3 | 0.126 | −0.330, −0.056 | −0.167, 0.107 | 30% | 0.010 | 0.853 |
-| 6 | −0.023·X3 + 0.075·t4 | 0.048 | −0.322, −0.176 | −0.159, −0.013 | 1.6% | 0.011 | 0.752 |
+| 2 | 0.082·t4 | 0.051 | −0.324, −0.172 | −0.161, −0.009 | 0% | 0.010 | 0.697 |
+| 3 | −0.102·X3 − 0.026·t4 + 0.026·t4·t5 | 0.050 | −0.308, −0.158 | −0.145, 0.005 | 6.5% | 0.011 | 0.738 |
+| 4 | −0.204·cos(X4) | 0.091 | −0.328, −0.047 | −0.165, 0.116 | 16.8% | 0.012 | 0.943 |
+| 5 | −0.274·X3 | 0.126 | −0.330, −0.056 | −0.167, 0.107 | 30% | 0.010 | 0.807 |
+| 6 | −0.023·X3 + 0.075·t4 | 0.048 | −0.322, −0.176 | −0.159, −0.013 | 1.6% | 0.011 | 0.706 |
 | 7 | −0.082·X3·t4 | 0.043 | −0.322, −0.174 | −0.159, −0.011 | 0% | 0.010 | 0.697 |
 | 8 | −0.274·X3 − 0.069·t4 + 0.069·X3·t4 | 0.128 | −0.330, −0.005 | −0.167, 0.158 | 30% | 0.010 | 0.875 |
 | 9 | 0.082·t4·t5 | 0.032 | −0.304, −0.192 | −0.141, −0.029 | 0% | 0.010 | 0.697 |

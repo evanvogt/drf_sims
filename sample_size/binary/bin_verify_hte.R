@@ -13,7 +13,13 @@
 #      power are the planned ones
 #   4. every treated risk stays inside [RD_EPS, 1 - RD_EPS] at every n, and
 #      under the missing study's MNAR mechanisms (MNAR-Y0 and MNAR-tau share the bound)
-#   5. each RD_SCALE[k] is the largest scale check 4 allows, floored to 3 dp
+#   5. each RD_SCALE[k] is the largest scale check 4 allows at the binary
+#      studies' n, floored to 3 dp - except scenario 4, frozen below it (see
+#      RD_SCALE in R/dgm_scenarios.R)
+#   6. missing/binary's own RD_SCALE_MISS and BU_MISS (since 2026-09-29): BU_MISS
+#      is the largest bU, to 2 dp, that leaves every floor-bound scenario its
+#      RD_SCALE at n = 500, and RD_SCALE_MISS[k] = min(RD_SCALE[k], the largest
+#      scale feasible at n = 500 with that bU)
 #
 # Until 2026-09-26 the effect was on the logit scale, and this script measured
 # how much of var(tau) the link handed to X1 and X2 - up to 80% at n = 100.
@@ -54,6 +60,20 @@ for (s in tbl$scenario) for (n in ns) {
 }
 check(gap < 1e-12,
       sprintf("oracle formula reproduces the generator's p0 and p1 (max gap %.1e)", gap))
+
+# the missing set's own table, under a mechanism that uses no U in the outcome
+gap <- 0
+for (s in miss$scenario) {
+  d <- generate_scenario_data(s, MISSING_N, set = "binary_missing", mech = "MAR",
+                              seed = s * 1000)
+  oi <- get_oracle_info(s, d$bW, "binary_missing")
+  risk <- function(w) {
+    eval(parse(text = oi$fmla), envir = c(oi$params, list(X = d$dataset, W = w)))
+  }
+  gap <- max(gap, abs(risk(1) - d$truth$p1), abs(risk(0) - d$truth$p0))
+}
+check(gap < 1e-12,
+      sprintf("... and for missing/binary's table (max gap %.1e)", gap))
 
 # ---- 2. tau depends on the described modifiers only ---------------------------
 
@@ -118,11 +138,27 @@ check(mb[, 1] >= RD_EPS - ROUNDING & mb[, 2] <= 1 - RD_EPS + ROUNDING,
 # risk's floor is p0_lo + delta_n + k * lo and its ceiling
 # p0_hi + delta_n + k * hi (-/+ bU under MNAR-Y0 / MNAR-tau), so each bound caps k. A
 # negative cap means no k satisfies that bound, which fails the check below.
+#
+# Until 2026-09-29 RD_SCALE also had to hold under missing/binary's MNAR
+# mechanisms, which capped scenario 4 at 0.204. That bound now belongs to
+# RD_SCALE_MISS (check 6); scenario 4 could rise to 0.209, but the binary
+# sample_size studies were already running on 0.204, so it stays there - it
+# must be feasible, not the largest.
 
 cts <- resolve_set("continuous")
-derived <- lapply(tbl$scenario[-1], function(s) {
+FROZEN <- 4   # scenarios whose RD_SCALE is feasible but deliberately below k_max
+
+unit_scale <- function(s, rho = NULL) {
   unit <- tbl[tbl$scenario == s, ]
   for (nm in c("b3", "b4", "b34", "b45")) unit[[nm]] <- -cts[[nm]][s]
+  # the missing set's covariates are correlated, which moves E[g] (scenario
+  # 3's tanh(X4) tanh(X5)) and the control event rate the RD is planned at
+  if (!is.null(rho)) unit$rho <- rho
+  unit
+}
+
+derived <- lapply(tbl$scenario[-1], function(s) {
+  unit <- unit_scale(s)
   dev <- te_range(unit) - te_moments(unit)$mean
   caps <- c()
   for (n in ns) {
@@ -130,22 +166,50 @@ derived <- lapply(tbl$scenario[-1], function(s) {
     caps[paste0("floor, n = ", n)] <- (unit$p0_lo + d - RD_EPS) / -dev[1]
     caps[paste0("ceiling, n = ", n)] <- (1 - RD_EPS - unit$p0_hi - d) / dev[2]
   }
-  if (s %in% miss$scenario) {
-    # the missing set's covariates are correlated, which moves E[g] (scenario
-    # 3's tanh(X4) tanh(X5)) and the control event rate the RD is planned at
-    unit_m <- unit
-    unit_m$rho <- miss$rho[1]
-    dev_m <- te_range(unit_m) - te_moments(unit_m)$mean
-    d <- planned_rd(unit_m, MISSING_N)
-    bU <- abs(miss$bU[1])
-    caps["MNAR floor, n = 500"] <- (unit$p0_lo + d - bU - RD_EPS) / -dev_m[1]
-    caps["MNAR ceiling, n = 500"] <- (1 - RD_EPS - unit$p0_hi - d - bU) / dev_m[2]
-  }
   list(k_max = min(caps), binds = names(which.min(caps)))
 })
 k_max <- vapply(derived, `[[`, numeric(1), "k_max")
-check(RD_SCALE[-1] <= k_max + 1e-9 & k_max - RD_SCALE[-1] < 1e-3,
-      "RD_SCALE is the largest feasible scale, floored to 3 dp")
+largest <- !(tbl$scenario[-1] %in% FROZEN)
+check(RD_SCALE[-1] <= k_max + 1e-9 &
+        (!largest | k_max - RD_SCALE[-1] < 1e-3),
+      sprintf("RD_SCALE is the largest feasible scale, floored to 3 dp (scenario %s: feasible, frozen)",
+              paste(FROZEN, collapse = ", ")))
+
+# ---- 6. missing/binary's RD_SCALE_MISS and BU_MISS ----------------------------
+# At n = 500 only, correlated covariates, bU * tanh(U) added under either MNAR
+# mechanism. Scenario 1 has no HTE but still needs its risks inside the bounds
+# under MNAR-Y0.
+
+miss_caps <- function(s, bU) {
+  unit <- unit_scale(s, miss$rho[1])
+  dev <- te_range(unit) - te_moments(unit)$mean
+  d <- planned_rd(unit, MISSING_N)
+  c(floor = (unit$p0_lo + d - bU - RD_EPS) / -dev[1],
+    ceiling = (1 - RD_EPS - unit$p0_hi - d - bU) / dev[2])
+}
+k_max_miss <- function(bU) {
+  vapply(miss$scenario[-1], function(s) floor(min(miss_caps(s, bU)) * 1000) / 1000,
+         numeric(1))
+}
+floor_bound <- vapply(miss$scenario[-1], function(s) {
+  caps <- miss_caps(s, BU_MISS)
+  caps[["floor"]] < caps[["ceiling"]]
+}, logical(1))
+keeps_rd_scale <- function(bU) {
+  all(k_max_miss(bU)[floor_bound] >= RD_SCALE[miss$scenario[-1]][floor_bound])
+}
+
+u1 <- unit_scale(1, miss$rho[1])
+d1 <- planned_rd(u1, MISSING_N)
+check(BU_MISS <= u1$p0_lo + d1 - RD_EPS & BU_MISS <= 1 - RD_EPS - u1$p0_hi - d1,
+      sprintf("scenario 1's risks stay inside the bounds under MNAR-Y0 with bU = %.2f", BU_MISS))
+check(keeps_rd_scale(BU_MISS) && !keeps_rd_scale(BU_MISS + 0.01),
+      sprintf("BU_MISS = %.2f is the largest bU (2 dp) leaving scenarios %s their RD_SCALE",
+              BU_MISS, paste(miss$scenario[-1][floor_bound], collapse = ", ")))
+check(abs(RD_SCALE_MISS[-1] - pmin(RD_SCALE[miss$scenario[-1]], k_max_miss(BU_MISS))) < 1e-9,
+      "RD_SCALE_MISS = min(RD_SCALE, the largest scale feasible at n = 500 with BU_MISS)")
+check(isTRUE(all.equal(miss$bU, rep(BU_MISS, nrow(miss)))),
+      "missing/binary's table uses BU_MISS")
 
 # ---- summary ----------------------------------------------------------------
 
@@ -163,3 +227,20 @@ num <- vapply(smry, is.double, logical(1))
 smry[num] <- lapply(smry[num], round, 3)
 options(width = 200)
 print(smry, row.names = FALSE)
+
+cat(sprintf("\nmissing/binary at n = %d, bU = %.2f:\n", MISSING_N, BU_MISS))
+mb_all <- t(vapply(miss$scenario, function(s) {
+  p <- miss[miss$scenario == s, ]
+  treated_risk_bounds(p, calibrate_bW(p, MISSING_N, "prop"), p$bU)
+}, numeric(2)))
+smry_m <- data.frame(
+  scenario = miss$scenario,
+  RD_SCALE_MISS = RD_SCALE_MISS,
+  k_max = c(NA, k_max_miss(BU_MISS)),
+  binds = c(NA, ifelse(floor_bound, "MNAR floor", "MNAR ceiling")),
+  floor = mb_all[, 1],
+  ceiling = mb_all[, 2]
+)
+num <- vapply(smry_m, is.double, logical(1))
+smry_m[num] <- lapply(smry_m[num], round, 3)
+print(smry_m, row.names = FALSE)

@@ -33,30 +33,69 @@ calibration" has the design. Here it means:
 - **The effect is on the risk-difference scale.** `P(Y = 1) = m0(x) + W·τ(x)`,
   with the control risk m0 bounded in [0.34, 0.70] and a 40% control event
   rate. The modifiers are the continuous ones sign-reversed and scaled by
-  `RD_SCALE`, with X4 and X5 through `tanh`. That makes X1 and X2 purely
+  `RD_SCALE_MISS` (since 2026-09-29 - the main study's `RD_SCALE` except
+  scenario 4, 0.179 against 0.204; see "Stronger U" below), with X4 and X5
+  through `tanh`. That makes X1 and X2 purely
   prognostic, and only **weakly** prognostic: m0's SD is 0.048. So amputating
   X1 and X2 (they are two of the `both` covariates) costs an estimator less
   than it did under the logit design.
 - **`bW`** is set so that the true ATE is the same marginal RD in all six
-  scenarios. At n = 500 it is −0.118, −0.118, −0.047, 0.005, 0.073 and −0.103
-  for scenarios 1–6; the true RD is −0.118 and the power 0.80.
+  scenarios. At n = 500 it is −0.118, −0.118, −0.052, −0.010, 0.073 and
+  −0.103 for scenarios 1–6 (with the correlated covariates and
+  `RD_SCALE_MISS`); the true RD is −0.118 and the power 0.80.
 - **MNAR-tau** (was MNAR-Y). U enters the treatment effect as `bU·tanh(U)`,
-  with bU = 0.08. That term is bounded, so every treated risk stays inside
-  [0.01, 0.99]. `RD_SCALE` allows for it, and it binds scenario 4's. It has
+  with bU = 0.12 and U ~ N(0, 2²) (bU = 0.08, U ~ N(0, 1) before 2026-09-29).
+  That term is bounded, so every treated risk stays inside [0.01, 0.99].
+  `RD_SCALE_MISS` allows for it, and it binds scenario 4's. It has
   mean zero, so it leaves the RD and the power as they are. Under the logit
   design, averaging over U pulled the treated risk towards 0.5 and shrank the
   RD to about −0.10, and the power to 0.61–0.63. It is still calibrated
   without U, as in `missing/continuous`, so every mechanism shares one `bW`
   and one truth per scenario.
 - **MNAR-Y0** (since 2026-09-28). The same `bU·tanh(U)` added to the control
-  risk instead, so in both arms: an SD of 0.050, about m0's own (0.048). The
-  control risk stays in [0.26, 0.78] and the treated risk has exactly
-  MNAR-tau's bound, so `RD_SCALE` needs nothing new.
+  risk instead, so in both arms: an SD of 0.095, about twice m0's own (0.048).
+  The control risk stays in [0.22, 0.82] and the treated risk has exactly
+  MNAR-tau's bound, so `RD_SCALE_MISS` needs nothing new.
 - **Correlated covariates** (since 2026-09-28, `missing/ADEMP.md`). They move
   scenario 3's `bW` to −0.052 (E[tanh(X4)·tanh(X5)] ≠ 0) and leave the others
   and the 40% control event rate (0.398) as they were.
   `sample_size/binary/bin_verify_hte.R` re-derives the MNAR caps on the
-  correlated set; `RD_SCALE` is unchanged.
+  correlated set.
+
+### Stronger U, and this study's own HTE scale (2026-09-29)
+
+With bU = 0.08 the binary mechanisms barely existed: U was 1% of Var(Y),
+MNAR-Y0 was MCAR in effect, and complete cases' ATE bias under MNAR-tau was
+about a tenth of the RD, against nine tenths for `missing/continuous`. bU was
+capped by `RD_SCALE`, which the main binary studies derive at n = 100, where
+the planned RD (−0.248) leaves almost no room above the risk floor.
+
+This study runs n = 500 only, where the RD is −0.118, so it now has its own
+scale, `RD_SCALE_MISS`, and spends the extra floor room on U:
+
+- `bU = 0.12` (`BU_MISS`) is the largest value, to 2 dp, that leaves the
+  floor-bound scenarios 2, 3, 5 and 6 exactly the HTE `sample_size/binary`
+  gives them.
+- Scenario 4 is bound by the ceiling instead, so its scale drops from 0.204
+  to 0.179 (SD of τ 0.080 rather than 0.091).
+- `sU = 2` pushes `tanh(U)` towards ±1. The amputation standardises U, so
+  this strengthens the selection without touching the bounds.
+
+`sample_size/binary/bin_verify_hte.R` re-derives both (its check 6). The main
+`RD_SCALE` is unchanged, so the sample-size studies are not affected.
+
+The result, from `missing/miss_dgm_checks.R` (scenario 2, n = 20,000):
+
+| | before | now | `missing/continuous` |
+|---|---|---|---|
+| U's share of Var(Y) | 1% | 4% | 45% |
+| AUC of incompleteness from Y, MNAR-Y0 | 0.52 | 0.54 | 0.66 |
+| E[U-term \| complete] | −0.012 | −0.023 | −0.25 |
+| CC ATE bias under MNAR-tau, % of the ATE | ~10% | ~20% | ~90% |
+
+Still far weaker than the continuous mechanisms: a Bernoulli outcome's own
+variance dominates, and the bounds cap bU. Read the binary MNAR results as a
+mild version of the continuous ones, and binary MNAR-Y0 as nearly MCAR.
 
 `Rscript R/calibration_report.R` prints this table, with the MNAR
 treated-risk floor and ceiling (shared by MNAR-Y0 and MNAR-tau).
@@ -224,6 +263,10 @@ quarto render missing/binary/bin_miss_results.qmd   # the same, as a browsable r
 ```
 
 ## Status
+
+**Also re-run for the 2026-09-29 review** (`missing/README.md`, Status): the
+stronger U and `RD_SCALE_MISS` above, U drawn under MAR, the saved
+missingness mask, and imputation within arm with Y.
 
 **Full re-run owed for bug P and the risk-difference DGM.** Bug P changed the
 `bW` calibration, and the risk-difference DGM then changed the outcome model and

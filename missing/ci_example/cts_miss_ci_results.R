@@ -49,6 +49,8 @@ metrics_summary <- summarise_metrics(
            mse = "mse", rmse = "rmse",
            mae = "mae", corr = "corr", spearman = "spearman",
            sign_acc = "sign_acc", mar_cov = "marginal_coverage",
+           mar_cov_cu = "marginal_coverage_cu", mar_cov_iu = "marginal_coverage_iu",
+           rmse_cu = "rmse_cu", rmse_iu = "rmse_iu",
            sim_cov = "simultaneous_coverage", ci_len = "mean_ci_length"),
   binomial = c("sim_cov")
 )
@@ -93,6 +95,18 @@ save_fig("cts_miss_ci_mar_cov_all.png", fig_path)
 mar_cov_sum_plot <- ci_sum_plot(metrics_summary, "mar_cov", "Marginal coverage",
                                 hline = 0.95)
 save_fig("cts_miss_ci_mar_cov_summary.png", fig_path)
+
+# --- marginal coverage, complete vs incomplete units -------------------------
+# the truth is tau at the unamputed covariates, which an incomplete unit's
+# interval cannot pin down, so coverage is shown for the two groups separately
+# (interval_metrics_split() in R/metrics.R)
+mar_cov_cu_sum_plot <- ci_sum_plot(metrics_summary, "mar_cov_cu",
+                                   "Marginal coverage, complete units", hline = 0.95)
+save_fig("cts_miss_ci_mar_cov_cu_summary.png", fig_path)
+
+mar_cov_iu_sum_plot <- ci_sum_plot(metrics_summary, "mar_cov_iu",
+                                   "Marginal coverage, incomplete units", hline = 0.95)
+save_fig("cts_miss_ci_mar_cov_iu_summary.png", fig_path)
 
 # --- simultaneous coverage --------------------------------------------------
 # whether the band covers every unit at once - what the half-sample bootstrap is

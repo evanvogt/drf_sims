@@ -16,11 +16,11 @@ which is where most of the bugs in the ledger below came from.
 |---|---|
 | `utils.R` | `setup_rng_stream`, `collate_predictions`, `scatter_folds`, `trim_ps`, `timed` |
 | `dgm_scenarios.R` | scenario tables + `generate_scenario_data()`, `get_oracle_info()` |
-| `missingness.R` | `introduce_missingness`, `handle_missingness`, `generate_and_process_data` |
+| `missingness.R` | `introduce_missingness`, `handle_missingness` (by-arm imputation via `impute_by_arm`), `generate_and_process_data`, `generate_reference_data`, `amputation_mask`, `u_term_by_completeness` |
 | `cate_models.R` | the DR-learner family, causal forest, `cate_methods()`, `combine_mi` |
 | `sl_library.R` | per-nuisance SuperLearner libraries (`sl_libraries()`), custom learner wrappers, `sl_fit_predict()`, `pretest_superlearner()` |
 | `bootstrap_ci.R` | `cf_half_boot`, `rf_half_boot`, `combine_mi_ci`, `find_optimal_sf` |
-| `metrics.R` | `cate_metrics`, `interval_metrics`, `compute_metrics` |
+| `metrics.R` | `cate_metrics`, `cate_metrics_split` (complete / incomplete units, missing-data studies), `interval_metrics`, `interval_metrics_split`, `compute_metrics` |
 | `pipeline.R` | `study_config`, `get_results`, `check_failed`, `grid_indices` |
 | `figures.R` | display labels, palette/theme, `summarise_metrics`, plot helpers |
 | `regression_check.R` | the old-vs-new equivalence harness |

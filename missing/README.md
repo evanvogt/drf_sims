@@ -94,13 +94,52 @@ neither X nor Y, so it was MCAR in effect, and was dropped; the old "MNAR-Y" is
 MNAR-tau. The old names (and `ci_example`'s older `AUX` / `AUX-Y`) are now
 rejected with an error rather than mapped.
 
+**The mechanisms are paired within a run (since 2026-09-29).** `U` is drawn
+under MAR too, and not used, so a run's three mechanisms share W, every
+covariate, the continuous error and X04/X05; MAR and MNAR outcomes differ by
+`U`'s term alone. The amputation still differs by design.
+
+**Binary `U` is stronger than it was.** `missing/binary` has its own HTE scale
+(`RD_SCALE_MISS`, `R/dgm_scenarios.R`), derived at n = 500 alone, which frees
+room for `bU = 0.12`, `sU = 2` (was 0.08, 1). Complete cases' ATE bias under
+MNAR-tau is now about a fifth of the RD, against a tenth. The binary
+mechanisms stay far weaker than the continuous ones - a Bernoulli outcome's own
+variance dominates - so compare the two outcomes' mechanism effects with that
+in mind (strength table in `ADEMP.md`; `miss_dgm_checks.R`).
+
+### How the methods are scored (since 2026-09-29)
+
+The truth is τ at the *unamputed* covariates, which no method can recover for
+a unit whose effect modifiers are missing. Scored on all analysed units, the
+imputation methods carry an error floor on those units that `complete_cases`
+and `IPW` - scored on their complete units only - never face. So every run now
+saves its missingness mask (`miss_mask`, 500 × 5) and `retained_indices`, and
+every point metric comes on all units, the complete units (`_cu`, the subset
+every method has - the comparison across methods) and the incomplete units
+(`_iu`). `rel_efficiency_cu` replaces the all-unit `rel_efficiency` as the
+headline, and `bias_diff_complete_cu` replaces the unstable ratio
+`rel_bias_complete`. Under MNAR-tau a secondary truth that adds
+E[U-term | complete or incomplete] is scored too (`rmse_r` etc.). Details in
+`ADEMP.md`, "Estimands" and "Performance measures".
+
+`miss_dgm_checks.R` (run from the repo root, `Rscript
+missing/miss_dgm_checks.R`) checks the DGM's claims at n = 20,000: the
+copula, the amputation, how strongly each mechanism selects, the pairing, and
+each handling method's signature on complete and incomplete units.
+
 ### Handling methods
 
 `complete_cases`, `mean_imputation`, `missforest`, `regression`,
 `missing_indicator`, `IPW`, `multiple_imputation`, `none` (let the estimator
 handle it), plus `complete_data` — a reference arm with **no missingness
 introduced at all**, so the others can be scored against complete-data
-performance via `rel_efficiency`.
+performance via `rel_efficiency_cu`. The `complete_data` arm still saves the
+mask the other arms' amputation leaves, so it can be split the same way.
+
+`missforest` and `multiple_imputation` impute **within each treatment arm, with
+Y as a predictor** (since 2026-09-29; `impute_by_arm()` in `R/missingness.R`).
+Before, both left Y and W out of the imputation model, which flattens the
+heterogeneity the study is trying to estimate.
 
 ## Open decision: pooling the `multiple_imputation` arm's HTE tests
 
@@ -175,6 +214,11 @@ the question is settled.
   2026-09-28 redesign: correlated covariates with X01–X03 as auxiliaries, and
   the mechanisms MAR / MNAR-Y0 / MNAR-tau. Every dataset changes, including the
   `complete_data` arm's.
+- All three also for the 2026-09-29 review: `U` drawn under MAR (every MAR
+  dataset changes), the missingness mask saved with every run, imputation
+  within arm with Y (`missforest`, `multiple_imputation`), and - binary only -
+  the stronger `U` and `RD_SCALE_MISS` (scenario 4's HTE is smaller). Any run
+  made before this lacks `miss_mask` and is refused by the metrics scripts.
 
 Archiving first matters here in particular: the old trees use the
 pre-2026-09-26 numbers, so the new scenario 2 would land on the paths of the

@@ -79,6 +79,10 @@ results <- mi_boot(
 plan(metaplan)
 results$data <- data
 results$truth <- gen$truth
+# which covariates the amputation left missing (n x 5), for coverage on the
+# complete and incomplete units separately (cts_miss_ci_metrics.R)
+results$miss_mask <- gen$miss_mask
+results$retained_indices <- gen$retained_indices
 
 # Save results
 out_path <- file.path(dirname(here()), "results", "missing", "ci_example", paste0("scenario_", scenario), n, type, prop, mechanism, method)

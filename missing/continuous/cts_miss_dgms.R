@@ -29,6 +29,12 @@ generate_and_process_continuous_data <- function(scenario, n, return_truth = TRU
                             n_imp = 50)
 }
 
+# the complete_data arm: unamputed data plus the mask the other arms see
+generate_continuous_reference_data <- function(scenario, n, type, prop, mech) {
+  generate_reference_data(scenario, n, set = "continuous_missing",
+                          type = type, prop = prop, mech = mech)
+}
+
 get_continuous_oracle_info <- function(scenario, bW) {
   get_oracle_info(scenario, bW, set = "continuous_missing")
 }

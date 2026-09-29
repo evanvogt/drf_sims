@@ -22,7 +22,13 @@
 # U only for the MNAR mechanisms, and err only for continuous outcomes. The
 # missing-data sets, whose covariates are correlated (a `rho` column - see
 # CORRELATED COVARIATES below), draw instead
-#     W, Z-block (X1-X5, X01-X03), [U], [err], cats
+#     W, Z-block (X1-X5, X01-X03), U, [err], cats
+# with U drawn under EVERY mechanism, MAR included, whenever a mechanism is
+# given (since 2026-09-29). MAR never uses it; drawing it anyway keeps err and
+# cats on the same draws under all three mechanisms, so within a run the MAR
+# and MNAR datasets share W, X, err and cats and differ only by U's term in Y
+# (and by the amputation). Before then U was drawn only under MNAR, which
+# shifted err and cats, so MAR and MNAR were not paired on Y.
 # R/regression_check.R fingerprints the generated dataset precisely to catch a
 # change here.
 #
@@ -38,7 +44,8 @@
 # rate through Cov(X1, X2), which te_grid(), baseline_grid() and
 # calibrate_bW() integrate over the correlated latent.
 #
-# MISSINGNESS MECHANISMS (MISS_MECHS). MAR needs no U. Under both MNAR ones an
+# MISSINGNESS MECHANISMS (MISS_MECHS). MAR needs no U (it is drawn, unused - see
+# DRAW ORDER). Under both MNAR ones an
 # unobserved U ~ N(0, sU), independent of X, drives the missingness
 # (R/missingness.R) and enters the outcome as the set's u_expr: MNAR-Y0 adds it
 # to the control mean (both arms), MNAR-tau to the treatment effect. They
@@ -150,22 +157,39 @@ ORACLE_RD <- paste0(RD_CONTROL, c(
 # The binary modifiers are the continuous ones with the SIGNS REVERSED, scaled
 # onto the risk-difference scale: b = -RD_SCALE[k] * (continuous b). Each
 # RD_SCALE[k] is the largest value, floored to 3 dp, that keeps every treated
-# risk inside [RD_EPS, 1 - RD_EPS]:
+# risk inside [RD_EPS, 1 - RD_EPS] at the binary studies' n:
 #   - at n = 100, where the planned RD (-0.248) is largest: the floor, which
 #     binds in every scenario but 4
 #   - at n = 1000, where it is smallest: the ceiling
-#   - for scenarios 2-6, also under the missing study's MNAR mechanisms at
-#     n = 500, with bU * tanh(U) added (MNAR-tau and MNAR-Y0 share the bound):
-#     its ceiling binds scenario 4
+# EXCEPT scenario 4, frozen at 0.204. Until 2026-09-29 RD_SCALE also had to
+# hold under missing/binary's MNAR mechanisms, whose ceiling capped scenario 4
+# at 0.204. The missing set now has its own scale (RD_SCALE_MISS below), which
+# would let scenario 4 rise to 0.209, but the binary sample_size studies
+# (binary/, confidence_intervals/binary, optimal_sf) were already running on
+# 0.204, so it was left there.
 # Reversing the signs points each asymmetric scenario's larger swing towards
 # LESS benefit, where the bounds leave room - with the continuous signs,
 # scenarios 3, 4, 5, 8 and 10 would have to be much smaller. The price is that
 # the opposite subgroup benefits more than in continuous/, undoing bug P's sign
 # harmonisation. sample_size/binary/bin_verify_hte.R re-derives RD_SCALE from the tables
-# and fails if it drifts: change p0_lo, p0_hi, b0-b2, bU, RD_EPS or the binary
+# and fails if it drifts: change p0_lo, p0_hi, b0-b2, RD_EPS or the binary
 # studies' n, and it must be recomputed.
 RD_SCALE <- c(NA, 0.082, 0.051, 0.204, 0.137, 0.075, 0.082, 0.137, 0.164, 0.596)
 RD_EPS <- 0.01
+
+# missing/binary's own scale, for its scenarios 1-6 at n = 500 (since
+# 2026-09-29; before then it inherited RD_SCALE). Each RD_SCALE_MISS[k] is
+# min(RD_SCALE[k], the largest value, floored to 3 dp, that keeps every treated
+# risk inside [RD_EPS, 1 - RD_EPS] at n = 500 with bU * tanh(U) added under
+# either MNAR mechanism). So the HTE is sample_size/binary's wherever the bounds
+# allow it, and only scenario 4 - where the MNAR ceiling binds - is smaller.
+# BU_MISS is the largest bU, to 2 dp, that leaves every floor-bound scenario
+# (2, 3, 5, 6) its RD_SCALE: n = 500's smaller planned RD frees floor room that
+# n = 100 needs in the main studies, and U spends it. The larger bU is what
+# makes the binary MNAR mechanisms more than MCAR (missing/binary/README.md).
+# bin_verify_hte.R re-derives both.
+BU_MISS <- 0.12
+RD_SCALE_MISS <- c(NA, 0.082, 0.051, 0.179, 0.137, 0.075)
 
 DESC_10 <- c(
   "No HTE",
@@ -271,21 +295,32 @@ SCENARIO_SETS$binary <- transform(
 
 # The binary missing-data table: the binary table's scenarios 1-6, as scenario
 # k of continuous_missing is scenario k of continuous, with the same correlated
-# covariates. Under MNAR-tau the unobserved U enters the treatment effect as
-# bU * tanh(U), under MNAR-Y0 the control risk: bounded, so every risk stays
-# inside [RD_EPS, 1 - RD_EPS] (RD_SCALE allows for it - the control risk is in
-# [p0_lo - bU, p0_hi + bU], and the treated risk has the same bound under
-# either), and mean zero, so the truth given the observed covariates - the
-# U-free m0 + tau - is exactly the average over U, as it is for
-# continuous_missing's bU * U. bU = 0.08 gives U's contribution an SD of
-# 0.050, the size of scenario 2's HTE and of m0's own SD (0.048). (Until the
-# risk-difference DGM U entered a logit, and that average needed quadrature -
-# bug N.)
+# covariates, but with its OWN scale RD_SCALE_MISS (the same as RD_SCALE except
+# scenario 4 - see above). Under MNAR-tau the unobserved U enters the treatment
+# effect as bU * tanh(U), under MNAR-Y0 the control risk: bounded, so every
+# risk stays inside [RD_EPS, 1 - RD_EPS] (RD_SCALE_MISS allows for it - the
+# control risk is in [p0_lo - bU, p0_hi + bU], and the treated risk has the
+# same bound under either), and mean zero, so the truth given the observed
+# covariates - the U-free m0 + tau - is exactly the average over U, as it is
+# for continuous_missing's bU * U.
+# bU = BU_MISS = 0.12 with sU = 2 (since 2026-09-29; was bU = 0.08, sU = 1):
+# tanh(U) at sU = 2 is closer to +-1, so U's contribution has SD 0.095 and the
+# amputation (which standardises U, so is unmoved by sU) selects on it harder.
+# Complete cases' ATE bias under MNAR-tau is about -0.022, 19% of the RD,
+# against 10% before; U is about 4% of Var(Y), against 1%. The bounds cap it
+# there - a Bernoulli outcome's own variance dominates - so the binary
+# mechanisms stay much weaker than continuous_missing's (U 45% of Var(Y)); see
+# missing/miss_dgm_checks.R. (Until the risk-difference DGM U entered a logit,
+# and that average needed quadrature - bug N.)
 SCENARIO_SETS$binary_missing_fixed <- transform(
   SCENARIO_SETS$binary[1:6, ],
   description = DESC_MISS,
+  b3 = -RD_SCALE_MISS * SCENARIO_SETS$continuous$b3[1:6],
+  b4 = -RD_SCALE_MISS * SCENARIO_SETS$continuous$b4[1:6],
+  b34 = -RD_SCALE_MISS * SCENARIO_SETS$continuous$b34[1:6],
+  b45 = -RD_SCALE_MISS * SCENARIO_SETS$continuous$b45[1:6],
   rho = 0.5,
-  bU = 0.08, sU = 1, u_expr = "bU * tanh(U)",
+  bU = BU_MISS, sU = 2, u_expr = "bU * tanh(U)",
   te_expr = c(TE_RD[1], paste(TE_RD[2:6], "+ U_term"))
 )
 
@@ -675,8 +710,13 @@ calibrate_bW <- function(params, n, calibration = c("t", "prop")) {
 #'   unobserved U. The retired names MNAR / MNAR-Y / AUX / AUX-Y are errors
 #'   (check_mech()).
 #' @param seed optional convenience seed; the studies use setup_rng_stream instead
+#' @param calib_n the sample size bW is calibrated at; defaults to n, which is
+#'   what every study does. Diagnostics that simulate a study's DGM at a large
+#'   n (missing/miss_dgm_checks.R) pass the study's own n here, so the true
+#'   ATE is the study's rather than the tiny one 80% power at the large n
+#'   would give. Consumes no RNG.
 generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
-                                   mech = NULL, seed = NULL) {
+                                   mech = NULL, seed = NULL, calib_n = n) {
 
   if (!is.null(seed)) set.seed(seed)
 
@@ -692,6 +732,8 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
 
   if (!is.null(mech)) check_mech(mech)
   needs_U <- !is.null(mech) && mech %in% MNAR_MECHS
+  # drawn under every mechanism, used only under MNAR - see DRAW ORDER
+  draws_U <- !is.null(mech) && !is.null(params$u_expr)
   if (needs_U && is.null(params$u_expr)) {
     stop("mechanism ", mech, " needs a set with an unobserved U (u_expr); '",
          set, "' has none")
@@ -700,7 +742,7 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
     stop("MNAR-tau missingness not applicable to no HTE scenario")
   }
 
-  bW <- calibrate_bW(params, n, calibration_for(set))
+  bW <- calibrate_bW(params, calib_n, calibration_for(set))
 
   # ---- DRAW ORDER: do not reorder, see the file header ----
   W <- rbinom(n, 1, 0.5)
@@ -719,7 +761,7 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
     X4 <- rnorm(n, 0, params$s4)
     X5 <- rnorm(n, 0, params$s5)
   }
-  U <- if (needs_U) rnorm(n, 0, params$sU) else NULL
+  U <- if (draws_U) rnorm(n, 0, params$sU) else NULL
 
   err <- if (!binary) rnorm(n, 0, params$s_err) else NULL
 

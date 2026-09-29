@@ -47,7 +47,10 @@ setup_rng_stream(run)
 
 if (method == "complete_data") {
   # Reference run: complete data without any missingness, for relative efficiency benchmarking
-  gen <- generate_binary_scenario_data(scenario, n, mech = mechanism, return_truth = TRUE)
+  # carries the mask the other methods' amputation leaves, for the complete /
+  # incomplete-unit metrics
+  gen <- generate_binary_reference_data(scenario, n, type = type, prop = prop,
+                                        mech = mechanism)
   data <- gen$dataset
   fmla_info <- get_binary_oracle_info(scenario, gen$bW)
 
@@ -130,6 +133,10 @@ if (method == "complete_data") {
 
 results$data <- data
 results$truth <- gen$truth
+# which covariates the amputation left missing (n x 5), and which of the n
+# units the analysed data keeps - for the complete / incomplete-unit metrics
+results$miss_mask <- gen$miss_mask
+results$retained_indices <- gen$retained_indices
 
 if (param$method == "IPW") {
   results$ipw <- gen$ipw
