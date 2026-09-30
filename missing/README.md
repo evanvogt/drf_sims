@@ -136,16 +136,35 @@ introduced at all**, so the others can be scored against complete-data
 performance via `rel_efficiency_cu`. The `complete_data` arm still saves the
 mask the other arms' amputation leaves, so it can be split the same way.
 
-`missforest` and `multiple_imputation` impute **within each treatment arm, with
-Y as a predictor** (since 2026-09-29; `impute_by_arm()` in `R/missingness.R`).
-Before, both left Y and W out of the imputation model, which flattens the
-heterogeneity the study is trying to estimate.
+`missforest`, `multiple_imputation` (since 2026-09-29) and `regression` (since
+2026-09-30) impute **within each treatment arm, with Y as a predictor**
+(`impute_by_arm()` in `R/missingness.R`). Before, all three left Y and W out of
+the imputation model, which flattens the heterogeneity the study is trying to
+estimate. `regression` stays single and deterministic, predicting each
+incomplete covariate from X01–X05 and Y.
+
+`IPW`'s model for P(complete) is `X01–X05 + W * Y` (since 2026-09-30), and its
+weights are stabilised by the marginal proportion complete. Before, it left Y
+and W out. Under MNAR the weights were then near constant and IPW reproduced
+complete cases. With `W * Y` it halves complete cases' MNAR-tau ATE bias
+(continuous).
+
+The aim is that every handling method is one a researcher could reasonably use
+in a secondary HTE analysis of an RCT. One consequence: under MNAR-Y0 /
+MNAR-tau, `U` drives both the missingness and Y. Any imputation or weighting
+model that conditions on Y (`regression`, `missforest`, `multiple_imputation`,
+`IPW`) therefore opens a collider path, X → Y ← U → R. Only the methods that
+ignore Y (complete cases, mean imputation, the indicator method) keep the
+MCAR-like view of X under MNAR-Y0 - see `ADEMP.md`.
 
 ## Open decision: pooling the `multiple_imputation` arm's HTE tests
 
 `multiple_imputation` runs fit each of the 50 imputed datasets and
 Rubin-combine with `combine_mi()` (`R/cate_models.R`), which pools only `tau`
-and `variance`. Each imputation's fit runs the BLP and independence tests, but
+and `variance`. (Since 2026-09-30 it also keeps what it pooled: `tau_mi`, each
+imputation's CATE estimates, n × 50, and `variance_within` / `variance_between`,
+W̄ and B — for Barnard–Rubin df, the fraction of missing information, or
+another pooling rule.) Each imputation's fit runs the BLP and independence tests, but
 until 2026-09-27 the analysis scripts threw them away, so `BLP_p`, `indep_cate`
 and `indep_po` were `NA` for **every** model on all 1,400 MI runs per study.
 Those runs kept no nuisances either, so the gap could not be patched.
@@ -158,8 +177,15 @@ rule needs:
 | columns | for |
 |---|---|
 | `blp_estimate`, `blp_se`, `blp_df` (β₂ and its residual df) | Rubin's rules on the BLP coefficient |
+| `blp_se_hc3` (β₂'s HC3 SE; same estimate and df) | Rubin's rules for the `BLP_p_os` version of the test |
 | `indep_{cate,po}_stat`, `indep_{cate,po}_df` (chi-square) | a statistic-pooling rule such as D2 |
-| `blp_p`, `indep_cate_p`, `indep_po_p` | a p-value combination rule (Fisher, Stouffer, median p) |
+| `blp_p`, `blp_p_os`, `indep_cate_p`, `indep_po_p` | a p-value combination rule (Fisher, Stouffer, median p) |
+
+`blp_se_hc3` and `blp_p_os` (since 2026-09-30) match the headline `BLP_p_os`
+metric: one-sided, HC3 SEs. For every other arm that is recomputed at metrics
+time from the run's saved nuisances (`blp_inputs()`), but the MI arm keeps no
+per-imputation nuisances, so `mi_test_table()` computes it at estimation time
+instead. MI runs saved before then have only the homoskedastic `blp_se`.
 
 A `NA` BLP row is bug L's degenerate-tau fallback. A failed independence test
 reads `p = 1`, `stat = 0`, `df = NA`. From the `is_constant()` guard on, a
@@ -219,6 +245,11 @@ the question is settled.
   within arm with Y (`missforest`, `multiple_imputation`), and - binary only -
   the stronger `U` and `RD_SCALE_MISS` (scenario 4's HTE is smaller). Any run
   made before this lacks `miss_mask` and is refused by the metrics scripts.
+- Continuous and binary also for 2026-09-30: `IPW` (model `X01–X05 + W * Y`,
+  stabilised weights) and `regression` (within arm, with Y) changed. Only
+  those two methods' rows move. If the re-run was submitted before this
+  change, rerun `method %in% c("IPW", "regression")` by value, keeping the
+  row numbers. `ci_example` runs MI only and is unaffected.
 
 Archiving first matters here in particular: the old trees use the
 pre-2026-09-26 numbers, so the new scenario 2 would land on the paths of the

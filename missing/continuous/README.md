@@ -35,7 +35,9 @@ second block in `cts_miss_config.R`, so rows 1–9900 kept their meaning.
 **`multiple_imputation` returns a list of 50 datasets, not one.** The analysis
 script fits each and Rubin-combines with `combine_mi()`; only
 `causal_forest`, `dr_random_forest` and `dr_semi_oracle` are combined. Each of
-those arms also saves `mi_tests`, the 50 imputations' HTE tests, unpooled: the
+those arms also keeps each imputation's CATE estimates (`tau_mi`, n × 50) and
+the Rubin variance's two components (`variance_within`, `variance_between`),
+and saves `mi_tests`, the 50 imputations' HTE tests, unpooled: the
 pooling rule is still to be decided (`missing/README.md`), so the arm's
 `BLP_p`/`indep_*` metrics stay `NA` until it is.
 
@@ -89,6 +91,11 @@ To run only the `complete_data` reference arm, take
 **Also re-run for the 2026-09-29 review** (`missing/README.md`, Status): U
 drawn under MAR, the saved missingness mask, and imputation within arm with Y.
 `cts_miss_metrics.R` refuses runs without the mask.
+
+**And for 2026-09-30** (`missing/README.md`, Handling methods): the `IPW` model
+now includes `W * Y`, with stabilised weights, and `regression` imputes within
+arm with Y. Only those two methods' rows change: if they have already run, use
+`grid_indices(study, method = c("IPW", "regression"))` (2,800 indices).
 
 **All 12,600 rows re-run** (`cts_miss_1.sh`, then `cts_miss_extra.sh` for
 scenario 2), after archiving the old tree with `R/archive_old_results.R` (root

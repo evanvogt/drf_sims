@@ -7,16 +7,18 @@
 #   1. covariates: prevalences and correlations of the copula
 #   2. amputation: proportion incomplete, missing rate per covariate, patterns
 #   3. selection: how well incompleteness is predicted from X1-X5, from the
-#      always-observed X01-X05 (what IPW and regression imputation see), and
-#      from Y in each arm; how far the missing X4 values sit from the observed;
-#      E[U_term | complete / incomplete] and U's share of Var(Y)
+#      always-observed X01-X05, from the IPW model (X01-X05 + W * Y, since
+#      2026-09-30), and from Y in each arm; the IPW weights' spread; how far
+#      the missing X4 values sit from the observed; E[U_term | complete /
+#      incomplete] and U's share of Var(Y)
 #   4. pairing: within a run, MAR and MNAR-Y0 share W, X, err and cats, and
 #      differ in Y by U's term alone (R/dgm_scenarios.R, DRAW ORDER)
 #   5. mechanism strength on a common scale, both outcomes side by side
 #   6. each handling method's signature: a correctly specified
 #      lm(Y ~ W * covariates) fit on the handled data, its CATE scored on the
 #      complete and the incomplete units separately (bias, slope on the truth,
-#      RMSE). Multiple imputation and missForest at a smaller n, as they are slow.
+#      RMSE). IPW is that lm on the complete cases, weighted. Multiple
+#      imputation and missForest at a smaller n, as they are slow.
 #
 # Writes nothing. Run from the repo root:
 #   Rscript missing/miss_dgm_checks.R [scenario] [n]
@@ -49,12 +51,14 @@ auc <- function(score, y) {
 }
 
 # the CATE of a correctly specified linear model fit to (handled) data: the
-# scenario's modifiers enter through the set's own transform (tanh for binary)
-cate_lm <- function(d, binary) {
+# scenario's modifiers enter through the set's own transform (tanh for binary);
+# `w` optional observation weights (the IPW arm)
+cate_lm <- function(d, binary, w = NULL) {
   d$f4 <- if (binary) tanh(d$X4) else d$X4
   covs <- c("X1", "X2", "X3", "f4", "X5", "X01", "X02", "X03",
             grep("_missing$", names(d), value = TRUE))
-  fit <- lm(as.formula(paste("Y ~ W * (", paste(covs, collapse = " + "), ")")), data = d)
+  fit <- lm(as.formula(paste("Y ~ W * (", paste(covs, collapse = " + "), ")")), data = d,
+            weights = w)
   d1 <- d
   d1$W <- 1
   d0 <- d
@@ -147,11 +151,16 @@ for (set in SETS) {
     cat("3. selection\n")
     auc_x <- auc(fitted(glm(inc ~ X1 + X2 + X3 + X4 + X5, binomial, cd)), inc)
     auc_aux <- auc(fitted(glm(inc ~ X01 + X02 + X03 + X04 + X05, binomial, cd)), inc)
+    auc_ipw <- auc(fitted(glm(inc ~ X01 + X02 + X03 + X04 + X05 + W * Y, binomial, cd)), inc)
     auc_y <- auc(cd$Y, inc)
     auc_y1 <- auc(cd$Y[cd$W == 1], inc[cd$W == 1])
     auc_y0 <- auc(cd$Y[cd$W == 0], inc[cd$W == 0])
-    cat(sprintf("   AUC of incompleteness: from X1-X5 %.3f, from X01-X05 %.3f; from Y %.3f (treated %.3f, control %.3f)\n",
-                auc_x, auc_aux, auc_y, auc_y1, auc_y0))
+    cat(sprintf("   AUC of incompleteness: from X1-X5 %.3f, from X01-X05 %.3f, from the IPW model (X01-X05 + W * Y) %.3f; from Y %.3f (treated %.3f, control %.3f)\n",
+                auc_x, auc_aux, auc_ipw, auc_y, auc_y1, auc_y0))
+    h_ipw <- suppressMessages(handle_missingness(amp, "IPW"))
+    cat(sprintf("   IPW weights (stabilised): mean %.3f, CV %.3f, min %.2f, max %.2f\n",
+                mean(h_ipw$ipw), sd(h_ipw$ipw) / mean(h_ipw$ipw),
+                min(h_ipw$ipw), max(h_ipw$ipw)))
     miss4 <- mask[, "X4"]
     cat(sprintf("   missing X4 values sit %.2f SD above the observed ones\n",
                 (mean(cd$X4[miss4]) - mean(cd$X4[!miss4])) / sd(cd$X4)))
@@ -171,6 +180,8 @@ for (set in SETS) {
     tau_cc[!incomplete] <- cate_lm(cd[!incomplete, ], binary)
     sig[["cc"]] <- signature("complete_cases", tau_cc[!incomplete], tau[!incomplete],
                              incomplete[!incomplete])
+    sig[["ipw"]] <- signature("IPW", cate_lm(h_ipw$data, binary, w = h_ipw$ipw),
+                              tau[!incomplete], incomplete[!incomplete])
     for (m in c("mean_imputation", "missing_indicator", "regression")) {
       h <- suppressMessages(handle_missingness(amp, m))
       sig[[m]] <- signature(m, cate_lm(h$data, binary), tau, incomplete)

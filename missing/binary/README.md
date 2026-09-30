@@ -268,6 +268,11 @@ quarto render missing/binary/bin_miss_results.qmd   # the same, as a browsable r
 stronger U and `RD_SCALE_MISS` above, U drawn under MAR, the saved
 missingness mask, and imputation within arm with Y.
 
+**And for 2026-09-30** (`missing/README.md`, Handling methods): the `IPW` model
+now includes `W * Y`, with stabilised weights, and `regression` imputes within
+arm with Y. Only those two methods' rows change: if they have already run, use
+`grid_indices(study, method = c("IPW", "regression"))` (2,800 indices).
+
 **Full re-run owed for bug P and the risk-difference DGM.** Bug P changed the
 `bW` calibration, and the risk-difference DGM then changed the outcome model and
 every modifier (see "Bug P and the risk-difference DGM" above). Together they

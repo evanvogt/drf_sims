@@ -818,6 +818,14 @@ true_cate_test_row <- function(sim_res) {
 
 #' Rubin-combine CATE estimates across multiply-imputed datasets
 #'
+#' Besides the pooled tau and Rubin variance, keeps what they were pooled
+#' from, so another pooling rule (or Barnard-Rubin df, or the fraction of
+#' missing information) can be applied at metrics time without a re-run:
+#'   tau_mi            n x m, each imputation's own CATE estimate
+#'   variance_within   W-bar, the mean of the per-imputation variances
+#'   variance_between  B, the between-imputation variance of tau
+#' variance = variance_within + (1 + 1/m) * variance_between.
+#'
 #' @param res_list one run_all_cate_methods result per imputation
 #' @param model which model's estimates to combine
 combine_mi <- function(res_list, model) {
@@ -826,13 +834,17 @@ combine_mi <- function(res_list, model) {
   tau_list <- lapply(res_list, function(x) x[[model]][["tau"]])
   tau_mat <- do.call(cbind, tau_list)
   res$tau <- rowMeans(tau_mat)
+  res$tau_mi <- unname(tau_mat)
+
+  b_var <- apply(tau_mat, 1, var)
+  res$variance_between <- b_var
 
   var_list <- lapply(res_list, function(x) x[[model]][["variance"]])
   var_mat <- do.call(cbind, var_list)
   if (!is.null(var_mat)) {
     w_var <- rowMeans(var_mat)
-    b_var <- apply(tau_mat, 1, var)
     res$variance <- w_var + (1 + 1 / length(res_list)) * b_var
+    res$variance_within <- w_var
   }
 
   res
@@ -853,12 +865,27 @@ combine_mi <- function(res_list, model) {
 #' Until then the arm has no BLP_whole / independence_* fields, so
 #' hte_test_metrics() still reports NA for it.
 #'
+#' The saved BLP_whole uses homoskedastic SEs, but the headline BLP metric,
+#' BLP_p_os, is one-sided with HC3 SEs, recomputed at metrics time from a
+#' run's saved nuisances (blp_inputs()). The MI arm saves no per-imputation
+#' nuisances, so that recomputation happens here instead, while they exist:
+#' blp_se_hc3 and blp_p_os are exactly what hte_test_metrics() would give each
+#' imputation as a single-dataset run. blp_estimate is the same under both
+#' SEs (the one OLS fit).
+#'
 #' @param res_list one run_all_cate_methods result per imputation
 #' @param model which model's tests to extract
-mi_test_table <- function(res_list, model) {
+#' @param data_list the imputed datasets res_list was fit on, in the same order
+mi_test_table <- function(res_list, model, data_list) {
+  stopifnot(length(data_list) == length(res_list))
   bind_rows(lapply(seq_along(res_list), function(k) {
     m <- res_list[[k]][[model]]
     blp <- m$BLP_whole
+    # NULL when blp is: the same degenerate tau, no second warning
+    inp <- blp_inputs(c(res_list[[k]], list(data = data_list[[k]])), model)
+    blp_hc3 <- if (is.null(blp) || is.null(inp)) NULL else {
+      run_blp_whole(inp$Y, inp$W, inp$W.hat, inp$Y0.hat, inp$tau, vcov_type = "HC3")
+    }
     # NULL is bug L's degenerate-tau fallback (run_blp_whole) - kept as an NA
     # row rather than dropped, so the table always has one row per imputation
     # by position, not name: a coeftest block is always Estimate, Std. Error,
@@ -875,10 +902,12 @@ mi_test_table <- function(res_list, model) {
       imputation      = k,
       blp_estimate    = blp_col(1),
       blp_se          = blp_col(2),
+      blp_se_hc3      = if (is.null(blp_hc3)) NA_real_ else unname(blp_hc3["beta.2", 2]),
       blp_df          = if (is.null(blp) || is.null(attr(blp, "df"))) {
         NA_real_
       } else as.numeric(attr(blp, "df")),
       blp_p           = blp_col(4),
+      blp_p_os        = blp_p_value(blp_hc3, "one"),
       indep_cate_stat = indep(m$independence_cate, "statistic"),
       indep_cate_df   = indep(m$independence_cate, "df"),
       indep_cate_p    = indep(m$independence_cate, "p_value"),

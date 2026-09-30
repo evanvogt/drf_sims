@@ -113,10 +113,11 @@ if (method == "complete_data") {
     results$dr_semi_oracle <- combine_mi(result_list, "dr_semi_oracle")
 
     # each imputation's HTE tests, unpooled - the pooling rule is decided later,
-    # at metrics time (mi_test_table() in R/cate_models.R)
-    results$causal_forest$mi_tests <- mi_test_table(result_list, "causal_forest")
-    results$dr_random_forest$mi_tests <- mi_test_table(result_list, "dr_random_forest")
-    results$dr_semi_oracle$mi_tests <- mi_test_table(result_list, "dr_semi_oracle")
+    # at metrics time (mi_test_table() in R/cate_models.R). `data` is the list
+    # of imputed datasets, for the HC3 BLP each imputation needs its own
+    results$causal_forest$mi_tests <- mi_test_table(result_list, "causal_forest", data)
+    results$dr_random_forest$mi_tests <- mi_test_table(result_list, "dr_random_forest", data)
+    results$dr_semi_oracle$mi_tests <- mi_test_table(result_list, "dr_semi_oracle", data)
   } else {
     results <- run_all_cate_methods(
       data = data,

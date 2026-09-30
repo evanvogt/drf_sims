@@ -40,7 +40,8 @@ in the main study. So:
   seven;
 - X01–X03 are **auxiliary**: in neither the outcome model nor the CATE, never
   amputated, but correlated with X1–X5 (a latent R² ≈ 0.375 from the three), so
-  they carry information for `regression` imputation and the `IPW` model;
+  they carry information, alongside Y, for `regression` imputation and the
+  `IPW` model;
 - the truth is unchanged as a function: τ(X3, X4, X5) and m0(X1, X2) as in the
   main study, and X01–X03 add nothing to either given X1–X5.
 
@@ -136,12 +137,15 @@ complete cases analysed with a correctly specified
 | | continuous | binary |
 |---|---|---|
 | AUC of incompleteness from X1–X5 (MAR / MNAR) | 0.71 / 0.51 | 0.71 / 0.51 |
-| AUC of incompleteness from X01–X05, what IPW sees (MAR) | 0.66 | 0.66 |
+| AUC of incompleteness from X01–X05 (MAR) | 0.66 | 0.66 |
+| AUC of incompleteness from the IPW model, X01–X05 + W·Y (MAR / MNAR-Y0 / MNAR-τ) | 0.66 / 0.66 / 0.60 | 0.66 / 0.54 / 0.54 |
+| IPW weights (stabilised), CV and max (MAR / MNAR-Y0 / MNAR-τ) | 0.19, 3.0 / 0.19, 3.1 / 0.13, 2.6 | 0.19, 3.4 / 0.05, 1.1 / 0.05, 1.2 |
 | missing X4 minus observed X4, SD (MAR) | +0.30 | +0.36 |
 | AUC of incompleteness from Y (MAR / MNAR-Y0 / MNAR-τ) | 0.54 / 0.66 / 0.58 | 0.52 / 0.54 / 0.52 |
 | `U`'s share of Var(Y) (MNAR-Y0) | 45% | 4% |
 | E[U-term \| complete], E[U-term \| incomplete] | −0.25, +0.60 | −0.02, +0.05 |
-| CC ATE bias under MNAR-τ, % of the ATE | −89% | about −20% |
+| CC ATE bias under MNAR-τ, % of the ATE | −89% | about −20% to −27% |
+| IPW ATE bias under MNAR-τ, % of the ATE | −44% | about −1% |
 
 - **MAR:** units with higher X1–X5 are more often incomplete. With correlated
   covariates the *missing values themselves* are shifted, so mean imputation
@@ -149,17 +153,27 @@ complete cases analysed with a correctly specified
   on X only, so CC stays unbiased for the CATE.
 - **MNAR-Y0:** incompleteness is independent of X but, through `U`, tied to
   the outcome in *both* arms. The shift is the same in both arms (W is
-  randomised), so it differences out of the CATE: CC unbiased, and the
-  imputation methods face MCAR-like X. **Predicted benign for the CATE** -
-  missingness tied to prognosis costs power (U is unplanned outcome variance)
-  and makes the missingness indicators prognostic, not biased. For the binary
-  outcome it is close to MCAR.
+  randomised), so it differences out of the CATE: CC is unbiased, and the
+  methods that ignore Y (mean imputation, the indicator method) face
+  MCAR-like X. For those methods it is **benign for the CATE**: missingness
+  tied to prognosis costs power (U is unplanned outcome variance) and makes
+  the missingness indicators prognostic, not biased. The methods whose
+  imputation or weighting model conditions on Y (`regression`, `missforest`,
+  `multiple_imputation`, `IPW`, since 2026-09-29/30) open a collider path,
+  X → Y ← U → R: among the incomplete units Y is high *because of* U, so the
+  model's X–Y relation is estimated where U is shifted. In continuous
+  scenario 2 this is small: complete-unit CATE bias about −0.02 for
+  `regression` and `IPW`, against 0.003 for mean imputation and −0.003 for
+  CC (τ's SD is about 1). For the binary outcome MNAR-Y0 is close to MCAR anyway.
 - **MNAR-τ:** incompleteness is independent of X but tied to the treated
   arm's outcome only: the units with the largest individual effects are the
   most likely to be incomplete. Against the primary truth (averaged over `U`)
   CC is biased by a constant shift, E[U-term | complete]. No handling method
   that uses only X can remove it; one that uses the missingness itself can
-  learn it (see "Estimands").
+  learn it (see "Estimands"). `IPW`, whose model sees Y by arm, partly
+  corrects it: continuous ATE bias −0.12 against CC's −0.25, and binary
+  −0.001 against −0.032. The imputation models with Y pay the collider
+  price here too: `regression`'s complete-unit bias is −0.05 (continuous).
 
 **Signatures: complete vs incomplete units.** The same check fits the
 correctly specified lm to each handled dataset and scores its CATE on the
@@ -169,8 +183,11 @@ incomplete units it is 0.50–0.66 for every imputation method - the floor from
 scoring against τ at covariates they never saw - while CC has no incomplete
 units to be scored on. Hence the split scoring under "Performance measures".
 By-arm imputation with the outcome brings the slope of the CATE on the truth
-to 0.90 (`multiple_imputation`) and 0.95 (`missforest`), against 0.86 for
-mean imputation and 0.84 for the pre-2026-09-29 MI without Y and W.
+to 0.90 (`multiple_imputation`), 0.91 (`regression`) and 0.95 (`missforest`),
+against 0.86 for mean imputation and 0.84 for the pre-2026-09-29 MI without Y
+and W. Under MAR, `IPW`'s complete-unit CATE bias is −0.014 against CC's
+−0.001: its model is misspecified, and here it has nothing to correct (numbers
+from the 2026-09-30 run).
 
 Before 2026-09-28 (independent covariates, and an "MNAR" arm with `U` in
 neither X nor Y) MAR's missing values were marginally distributed, the old
@@ -230,10 +247,10 @@ run), since each run is seeded by its run index alone.
 |---|---|---|
 | `complete_data` | no amputation; the complete-data reference | 500 |
 | `complete_cases` | drop units with any missing covariate | ≈ 350 |
-| `IPW` | complete cases, weighted by 1 / P̂(complete) | ≈ 350 |
+| `IPW` | complete cases, weighted by P̂(complete) / P̂(complete \| X01–X05, W, Y) | ≈ 350 |
 | `mean_imputation` | each missing value replaced by its column's observed mean | 500 |
 | `missing_indicator` | mean imputation, plus a 0/1 indicator per amputed covariate | 500 |
-| `regression` | single deterministic regression imputation | 500 |
+| `regression` | single deterministic regression imputation, within each arm, Y as a predictor | 500 |
 | `missforest` | single random-forest imputation (`missForest`), within each arm, Y as a predictor | 500 |
 | `multiple_imputation` | 50 imputations by `mice` random forests within each arm, Y as a predictor, analysed separately and pooled | 500 |
 | `none` | NAs passed to the estimator | 500 |
@@ -243,15 +260,24 @@ Per method:
 - **`complete_cases`:** `complete.cases()` over all columns; the truth is
   subset to the same units, so the CATE is scored on the retained units only.
 - **`IPW`:** a logistic regression of the complete-case indicator on the
-  *fully observed* covariates, fit on all 500 units; complete cases are then
-  weighted by the inverse of their fitted probability. Under `both` the fully
-  observed covariates are X01–X05 alone. Under MAR the auxiliaries X01–X03 are
-  correlated with the X1–X5 values that drive missingness, so the model is
-  informative but misspecified (ampute's pattern-wise score is not a logistic
-  function of X01–X05). Under MNAR-Y0 / MNAR-τ missingness depends only on
-  `U`, independent of every covariate, so the weights are close to constant
-  (≈ 1 / 0.7). (Before the 2026-09-28 correlated covariates they were close to
-  constant under every mechanism.)
+  *fully observed* covariates plus `W * Y` (W, Y and their product), fit on
+  all 500 units. Under `both` the fully observed covariates are X01–X05. W on
+  its own cannot predict whether a *baseline* covariate is missing (it is
+  randomised afterwards); it is there so that the relation of missingness to
+  the outcome can differ by arm, which is how selection on the treatment
+  effect shows up. Complete cases are weighted by P̂(complete) / their fitted
+  probability, i.e. stabilised by the marginal proportion so the weights
+  average about 1. That is a constant rescaling, but grf's forests are not
+  invariant to the weights' scale. Constant weights of 1 reproduce the
+  unweighted forest exactly; constant weights of 1 / 0.7 move its predictions
+  by about 0.02, more than a change of seed does. So stabilising keeps the
+  IPW arm's forests comparable with every other arm's. No truncation. Under MAR the auxiliaries X01–X03 are correlated
+  with the X1–X5 values that drive missingness, so the model is informative
+  but misspecified (ampute's pattern-wise score is not a logistic function
+  of X01–X05, W and Y). Under MNAR-Y0 / MNAR-τ the model sees `U` only
+  through Y. Until 2026-09-30 the model left out Y and W, so under MNAR
+  the weights were close to constant (CV about 0.02) and IPW reproduced
+  complete cases.
   The weights reach every fit that accepts them: grf `sample.weights` in every
   forest (per-arm outcome forests, propensity forest, causal forest, stage-2
   forests) and SuperLearner `obsWeights` in every SuperLearner fit. Truth
@@ -261,18 +287,21 @@ Per method:
 - **`missing_indicator`:** as `mean_imputation`, plus `X1_missing`–
   `X5_missing` appended as covariates, so every estimator sees 15 covariates
   instead of 10.
-- **`regression`:** for each incomplete covariate, `VIM::regressionImp` fits
-  a linear model (`lm`; X1 and X3 are numeric, so linear too) of that
-  covariate on the *fully observed* covariates among the observed units and
-  fills in its predictions, with no residual noise. Y and W are excluded from
-  the imputation model. Under `both` the predictors are X01–X05 alone: the
-  auxiliaries X01–X03 explain part of each amputed covariate (latent
-  R² ≈ 0.375), X04/X05 nothing. (Before the 2026-09-28 correlated covariates
-  none of them did, and the imputations were close to the observed means.)
-  This is deliberately the weak single-imputation baseline: no outcome, no
-  other amputed covariate, no arm-specific model.
-- **Imputing within arm, with the outcome (since 2026-09-29).** `missforest`
-  and `multiple_imputation` impute **separately in each treatment arm**, with
+- **`regression`:** within each arm, for each incomplete covariate,
+  `VIM::regressionImp` fits a linear model (`lm`; X1 and X3 are numeric, so
+  linear too) of that covariate on the *fully observed* columns among the
+  arm's observed units and fills in its predictions, with no residual noise.
+  Under `both` the predictors are X01–X05 and Y: the auxiliaries X01–X03
+  explain part of each amputed covariate (latent R² ≈ 0.375), X04/X05
+  nothing, and Y carries the covariate's association with the outcome in
+  that arm. The predictor set is fixed from the whole dataset, so both arms
+  fit the same model. The other amputed covariates are not predictors (no
+  chaining), and the imputations are deterministic, so this remains the
+  simple single-imputation method. Until 2026-09-30 it was one pooled model
+  on X01–X05 alone, with Y and W excluded.
+- **Imputing within arm, with the outcome.** `missforest`,
+  `multiple_imputation` (since 2026-09-29) and `regression` (since
+  2026-09-30) impute **separately in each treatment arm**, with
   Y among the predictors (`impute_by_arm()`, `R/missingness.R`). An imputation
   model that leaves Y out imputes X independently of the outcome, which pulls
   every X-Y association, and so the heterogeneity, towards zero; a pooled
@@ -298,8 +327,10 @@ Per method:
   datasets is analysed separately (no `dr_oracle`, no `dr_superlearner`); per
   unit, the pooled point estimate is the mean of the 50 CATE estimates and the
   pooled variance is Rubin's `W̄ + (1 + 1/50)·B`, with W̄ the mean of grf's
-  per-imputation variance estimates (`R/cate_models.R::combine_mi`). HTE tests
-  are run per imputation and saved unpooled (`mi_test_table`).
+  per-imputation variance estimates (`R/cate_models.R::combine_mi`). The
+  per-imputation CATEs, W̄ and B are saved alongside. HTE tests
+  are run per imputation and saved unpooled (`mi_test_table`), including the
+  one-sided HC3 BLP p-value.
 - **`none`:** the amputed data go straight to the estimators. Only the grf
   estimators accept NAs (grf splits on missingness natively, missing
   incorporated in attributes), so only `causal_forest` and `dr_random_forest`

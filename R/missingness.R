@@ -226,19 +226,24 @@ handle_missingness <- function(data, method, n_imp = 50) {
       list(data = imputed)
     },
     "regression" = {
-      keep <- data %>% select(all_of(c("Y", "W")))
-      df <- data %>% select(-all_of(c("Y", "W")))
-
-      miss <- names(df)[sapply(df, function(x) any(is.na(x)))]
-      complete <- setdiff(names(df), miss)
-      imputed_df <- df
-      for (var in miss) {
-        fmla <- as.formula(paste(var, "~", paste(complete, collapse = " + ")))
-        temp_imputed <- regressionImp(fmla, df)
-        imputed_df[[var]] <- temp_imputed[[var]]
-      }
+      # single deterministic regression imputation, within each arm, each
+      # incomplete covariate regressed (lm) on the fully observed columns: the
+      # always-observed covariates and Y (since 2026-09-30; before then one
+      # pooled model on the covariates alone, Y and W excluded, which flattened
+      # the HTE - see impute_by_arm). The predictor set is fixed from the whole
+      # dataset, so both arms fit the same model even if an arm happens to
+      # observe every value of some covariate.
+      miss <- names(data)[sapply(data, anyNA)]
+      complete <- setdiff(names(data), c(miss, "W"))
+      imputed <- impute_by_arm(data, function(df) {
+        for (var in miss) {
+          fmla <- as.formula(paste(var, "~", paste(complete, collapse = " + ")))
+          df[[var]] <- regressionImp(fmla, df)[[var]]
+        }
+        df
+      })
       message("Imputation via regression complete")
-      list(data = cbind(keep, imputed_df))
+      list(data = imputed)
     },
     "missing_indicator" = {
       miss <- names(data)[sapply(data, function(x) any(is.na(x)))]
@@ -254,18 +259,30 @@ handle_missingness <- function(data, method, n_imp = 50) {
       list(data = imputed_data)
     },
     "IPW" = {
-      df <- data %>% select(-all_of(c("Y", "W")))
+      # P(complete) by logistic regression on the fully observed covariates
+      # plus W * Y, fit on every unit (since 2026-09-30; before then Y and W
+      # were excluded, so under MNAR the weights were near constant and IPW
+      # reproduced complete cases). W alone cannot predict the missingness of
+      # a baseline covariate; W * Y lets its relation to Y differ by arm.
+      covs <- setdiff(names(data), c("Y", "W"))
+      miss <- covs[sapply(data[covs], anyNA)]
+      complete <- setdiff(covs, miss)
+      retained_indices <- complete.cases(data[covs])
+      df <- data
+      df$cc <- as.numeric(retained_indices)
 
-      miss <- names(df)[sapply(df, function(x) any(is.na(x)))]
-      complete <- setdiff(names(df), miss)
-      df$cc <- ifelse(complete.cases(df), 1, 0)
-
-      fmla <- as.formula(paste("cc ~", paste(complete, collapse = " + ")))
+      fmla <- as.formula(paste("cc ~", paste(c(complete, "W * Y"), collapse = " + ")))
       miss_lr <- glm(fmla, family = binomial, data = df)
 
-      retained_indices <- complete.cases(df)
       complete_data <- data[retained_indices, ]
-      ipw <- 1 / miss_lr$fitted.values[retained_indices]
+      # stabilised by the marginal P(complete), so the weights average about 1
+      # over the complete cases. A constant rescaling, but not a no-op: grf
+      # (2.5.0) forests change with the weights' scale - constant weights of 1
+      # reproduce the unweighted forest exactly, constant weights of 1.43
+      # (= 1 / 0.7, the unstabilised scale) do not - so stabilising keeps the
+      # weighted forests on the same footing as every other arm's
+      # (checked 2026-09-30)
+      ipw <- mean(retained_indices) / miss_lr$fitted.values[retained_indices]
 
       message(paste("IPW: removed", nrow(data) - nrow(complete_data), "observations"))
       message(paste("Final sample size:", nrow(complete_data)))
