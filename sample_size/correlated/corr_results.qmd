@@ -1,0 +1,235 @@
+---
+title: "correlated covariates: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 11, fig.height = 6)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(here)
+library(knitr)
+source(here("R", "figures.R"))
+```
+
+## Does correlation between covariates change how well the CATE is recovered?
+
+`continuous/`'s and `binary/`'s scenarios 1–4, with every covariate but the
+categorical pair (X1–X5, X01–X03) drawn from a Gaussian copula with
+exchangeable latent correlation ρ. The design is in `README.md`. Each study
+runs two values of ρ:
+
+- **ρ = 0** is the paired independent arm: the copula with no correlation.
+- **ρ = 0.5** is the correlated arm.
+
+Both values use the same run seeds, so run *r* at ρ = 0 and at ρ = 0.5 share
+W, the raw latent normals, the noise and the categorical covariates. The
+ρ = 0.5 − ρ = 0 differences below are therefore paired per run, with MCSEs
+from the per-run differences. τ(x) is the same function at both values of ρ
+and in the parent studies; only the covariates' joint distribution changes.
+
+What the correlation does to the design (`Rscript R/calibration_report.R`):
+
+- In continuous scenarios 2 and 3, the prognostic part m0 now correlates with τ
+  (about −0.44 and 0.39). In scenario 4 it does not (0.01), because cos(X4) is
+  even.
+- The continuous ATE shrinks slightly, from −0.65 to −0.60 at n = 100.
+- Scenario 3's realised power falls from about 0.62 to about 0.55.
+- The binary RDs and power are unchanged.
+
+```{r data}
+res_root <- file.path(dirname(here()), "results")
+
+read_corr <- function(outcome, prefix) {
+  readRDS(file.path(res_root, "correlated", outcome,
+                    paste0(prefix, "_corr_metrics.RDS"))) %>%
+    mutate(outcome = outcome)
+}
+metrics <- bind_rows(read_corr("continuous", "cts"), read_corr("binary", "bin"))
+
+# the HTE tests' rejections at 0.05, as per-run 0/1 indicators (binomial MCSE)
+metrics <- metrics %>%
+  mutate(rej_BLP = as.numeric(BLP_p < 0.05),
+         rej_BLP_os = as.numeric(BLP_p_os < 0.05),
+         rej_indep_cate = as.numeric(indep_cate < 0.05))
+
+METRIC_COLS <- c(bias = "bias", ate_bias = "ate_bias", mse = "mse",
+                 corr = "corr", spearman = "spearman",
+                 rej_BLP = "rej_BLP", rej_BLP_os = "rej_BLP_os",
+                 rej_indep_cate = "rej_indep_cate")
+REJ_STEMS <- c("rej_BLP", "rej_BLP_os", "rej_indep_cate")
+
+# display labels, applied after any per-run joins
+label_ss <- function(df) {
+  df <- apply_labels(df, SS_SCENARIO_LABELS)
+  if ("rho" %in% names(df)) df$rho_lab <- factor(paste("ρ =", df$rho))
+  df$n <- factor(df$n, levels = c(100, 250, 500, 1000))
+  df
+}
+
+metrics_summary <- metrics %>%
+  summarise_metrics(c("outcome", "rho", "scenario", "n", "model"),
+                    cols = METRIC_COLS, binomial = REJ_STEMS) %>%
+  label_ss()
+
+#' One metric, both rhos: sample size on x, model as colour, rho x scenario
+metric_plot <- function(out, metric, y_lab, hline = 0) {
+  point_range_plot(filter(metrics_summary, outcome == out), metric, y_lab,
+                   x = "n", colour = "model", facet_rows = "rho_lab",
+                   facet_cols = "scenario", line = TRUE, hline = hline) +
+    labs(x = "Sample size", colour = "Model")
+}
+
+#' Paired rho = 0.5 - rho = 0 difference in a per-run metric, by cell
+#'
+#' Runs are joined on (outcome, scenario, n, model, run); the MCSE is
+#' sd(diff) / sqrt(pairs), which is what the shared seeds buy over the unpaired
+#' sqrt(mcse_0^2 + mcse_0.5^2).
+paired_diff <- function(col) {
+  metrics %>%
+    select(outcome, rho, scenario, n, model, run, value = all_of(col)) %>%
+    pivot_wider(names_from = rho, values_from = value, names_prefix = "rho_") %>%
+    mutate(diff = rho_0.5 - rho_0) %>%
+    group_by(outcome, scenario, n, model) %>%
+    summarise(mean_diff = mean(diff, na.rm = TRUE),
+              mcse_diff = sd(diff, na.rm = TRUE) / sqrt(sum(!is.na(diff))),
+              pairs = sum(!is.na(diff)), .groups = "drop") %>%
+    label_ss()
+}
+
+diff_plot <- function(out, col, y_lab) {
+  point_range_plot(filter(paired_diff(col), outcome == out), "diff", y_lab,
+                   x = "n", colour = "model", facet_rows = "outcome",
+                   facet_cols = "scenario", line = TRUE, hline = 0) +
+    labs(x = "Sample size", colour = "Model")
+}
+
+#' Each model's ATE bias minus dr_oracle's on the same run, within each rho
+oracle_relative <- function(out) {
+  m <- filter(metrics, outcome == out)
+  m %>%
+    select(rho, scenario, n, run, model, ate_bias) %>%
+    left_join(m %>% filter(model == "dr_oracle") %>%
+                select(rho, scenario, n, run, oracle = ate_bias),
+              by = c("rho", "scenario", "n", "run")) %>%
+    filter(model != "dr_oracle") %>%
+    mutate(d = ate_bias - oracle) %>%
+    group_by(rho, scenario, n, model) %>%
+    summarise(mean = mean(d, na.rm = TRUE),
+              mcse = sd(d, na.rm = TRUE) / sqrt(sum(!is.na(d))), .groups = "drop") %>%
+    label_ss() %>%
+    transmute(rho, scenario, n, model,
+              `ATE bias − DR-oracle (MCSE)` = sprintf("%.4f (%.4f)", mean, mcse)) %>%
+    arrange(rho, scenario, n, model)
+}
+```
+
+## Continuous
+
+### CATE bias, MSE and correlation with the true CATE
+
+```{r cts-levels, fig.height=8}
+metric_plot("continuous", "bias", "Bias of the CATE")
+metric_plot("continuous", "mse", "MSE of the CATE", hline = NULL)
+metric_plot("continuous", "corr", "Pearson correlation with the true CATE", hline = NULL)
+```
+
+### Paired difference, ρ = 0.5 − ρ = 0
+
+```{r cts-diff, fig.height=4}
+diff_plot("continuous", "mse", "Δ MSE (ρ = 0.5 − ρ = 0)")
+diff_plot("continuous", "corr", "Δ Pearson correlation (ρ = 0.5 − ρ = 0)")
+diff_plot("continuous", "ate_bias", "Δ ATE bias (ρ = 0.5 − ρ = 0)")
+```
+
+### HTE tests
+
+Rejection rate at 0.05: type I error in scenario 1, power in scenarios 2–4.
+
+```{r cts-tests, fig.height=8}
+metric_plot("continuous", "rej_BLP_os", "BLP rejection rate (one-sided, HC3)", hline = 0.05)
+metric_plot("continuous", "rej_indep_cate", "CATE independence test rejection rate", hline = 0.05)
+```
+
+### ATE bias relative to the DR-oracle, within each ρ
+
+```{r cts-oracle}
+kable(oracle_relative("continuous"))
+```
+
+## Binary
+
+### CATE bias, MSE and correlation with the true CATE
+
+```{r bin-levels, fig.height=8}
+metric_plot("binary", "bias", "Bias of the CATE (risk difference)")
+metric_plot("binary", "mse", "MSE of the CATE", hline = NULL)
+metric_plot("binary", "corr", "Pearson correlation with the true CATE", hline = NULL)
+```
+
+### Paired difference, ρ = 0.5 − ρ = 0
+
+```{r bin-diff, fig.height=4}
+diff_plot("binary", "mse", "Δ MSE (ρ = 0.5 − ρ = 0)")
+diff_plot("binary", "corr", "Δ Pearson correlation (ρ = 0.5 − ρ = 0)")
+diff_plot("binary", "ate_bias", "Δ ATE bias (ρ = 0.5 − ρ = 0)")
+```
+
+### HTE tests
+
+```{r bin-tests, fig.height=8}
+metric_plot("binary", "rej_BLP_os", "BLP rejection rate (one-sided, HC3)", hline = 0.05)
+metric_plot("binary", "rej_indep_cate", "CATE independence test rejection rate", hline = 0.05)
+```
+
+### ATE bias relative to the DR-oracle, within each ρ
+
+```{r bin-oracle}
+kable(oracle_relative("binary"))
+```
+
+## Sanity check: ρ = 0 against the parent studies
+
+The ρ = 0 arm has the same distribution as `continuous/` and `binary/`'s
+scenarios 1–4, but different draws, because the copula draws in another order.
+Their means should agree to within the **unpaired** MCSE. `|z| > 3` in more than
+a handful of cells points to a DGM or pipeline difference rather than noise.
+This section is skipped if the parent studies' metrics are not on disk.
+
+```{r sanity}
+parent_files <- c(continuous = file.path(res_root, "continuous", "cts_metrics.RDS"),
+                  binary = file.path(res_root, "binary", "bin_metrics.RDS"))
+have <- file.exists(parent_files)
+if (!any(have)) {
+  cat("Parent metrics not found - skipped.\n")
+} else {
+  parents <- bind_rows(lapply(names(parent_files)[have], function(o) {
+    readRDS(parent_files[[o]]) %>% filter(scenario %in% 1:4) %>% mutate(outcome = o)
+  }))
+  cols <- c(bias = "bias", mse = "mse", corr = "corr")
+  a <- summarise_metrics(filter(metrics, rho == 0),
+                         c("outcome", "scenario", "n", "model"), cols = cols)
+  b <- summarise_metrics(parents, c("outcome", "scenario", "n", "model"), cols = cols)
+  cmp <- inner_join(a, b, by = c("outcome", "scenario", "n", "model"),
+                    suffix = c("_rho0", "_parent"))
+  z <- sapply(names(cols), function(s) {
+    (cmp[[paste0("mean_", s, "_rho0")]] - cmp[[paste0("mean_", s, "_parent")]]) /
+      sqrt(cmp[[paste0("mcse_", s, "_rho0")]]^2 + cmp[[paste0("mcse_", s, "_parent")]]^2)
+  })
+  kable(cmp %>% select(outcome, scenario, n, model) %>%
+          bind_cols(as.data.frame(round(z, 2)) %>% rename_with(~ paste0("z_", .x))) %>%
+          filter(if_any(starts_with("z_"), ~ abs(.x) > 3)),
+        caption = "Cells with |z| > 3 (none expected beyond chance)")
+}
+```

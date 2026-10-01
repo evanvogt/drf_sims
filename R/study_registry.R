@@ -41,7 +41,9 @@ study_registry <- data.frame(
     "missing/binary",
     "missing/ci_example",
     "model_evaluation",
-    "validation/continuous"
+    "validation/continuous",
+    "correlated/continuous",
+    "correlated/binary"
   ),
   config_path = c(
     "sample_size/continuous/cts_config.R",
@@ -57,7 +59,9 @@ study_registry <- data.frame(
     "missing/binary/bin_miss_config.R",
     "missing/ci_example/cts_miss_ci_config.R",
     "model_evaluation/me_config.R",
-    "validation/continuous/cts_val_config.R"
+    "validation/continuous/cts_val_config.R",
+    "sample_size/correlated/continuous/cts_corr_config.R",
+    "sample_size/correlated/binary/bin_corr_config.R"
   ),
   config_var = "study",
   category = c(
@@ -74,7 +78,9 @@ study_registry <- data.frame(
     "crossfit_rerun",
     "crossfit_rerun",
     "dgm_rerun",
-    "crossfit_rerun"
+    "crossfit_rerun",
+    "first_run",
+    "first_run"
   ),
   reason = c(
     "crossfitting strategy change; also bug F (dr_superlearner); plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
@@ -90,11 +96,14 @@ study_registry <- data.frame(
     "crossfitting strategy change; also the DGM was wrong three ways; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run; plus bug P and the risk-difference DGM - all 12,600 rows re-run, which also makes bug N moot; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 missing-data redesign - correlated covariates (X01-X03 auxiliary) and mechanisms MAR / MNAR-Y0 / MNAR-tau (missing/ADEMP.md)",
     "crossfitting strategy change; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 correlated covariates of continuous_missing (missing/ADEMP.md)",
     "its 358/360 runs (the first under single crossfitting, me_models.R) predate bug O, which changed the continuous DGM, and the 2026-09-26 renumbering (1/4/6/9 -> 1/4/6/8); archived with the strategies and split trees, so the count restarts from zero",
-    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models"
+    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models",
+    "new 2026-10-01: continuous/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/correlated/README.md)",
+    "new 2026-10-01: binary/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/correlated/README.md)"
   ),
   blocked = c(
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
+    FALSE, FALSE
   ),
   stringsAsFactors = FALSE
 )

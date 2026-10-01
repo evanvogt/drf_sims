@@ -20,10 +20,11 @@
 # change:
 #     W, X1, X2, X3, X4, X5, [U], [err], X01, X02, X03, cats
 # U only for the MNAR mechanisms, and err only for continuous outcomes. The
-# missing-data sets, whose covariates are correlated (a `rho` column - see
-# CORRELATED COVARIATES below), draw instead
-#     W, Z-block (X1-X5, X01-X03), U, [err], cats
-# with U drawn under EVERY mechanism, MAR included, whenever a mechanism is
+# correlated sets - the missing-data sets and the *_corr_* sets, which have a
+# `rho` column (see CORRELATED COVARIATES below) - draw instead
+#     W, Z-block (X1-X5, X01-X03), [U], [err], cats
+# The *_corr_* sets take no mechanism, so draw no U. The missing-data sets draw
+# U under EVERY mechanism, MAR included, whenever a mechanism is
 # given (since 2026-09-29). MAR never uses it; drawing it anyway keeps err and
 # cats on the same draws under all three mechanisms, so within a run the MAR
 # and MNAR datasets share W, X, err and cats and differ only by U's term in Y
@@ -32,17 +33,21 @@
 # R/regression_check.R fingerprints the generated dataset precisely to catch a
 # change here.
 #
-# CORRELATED COVARIATES (missing-data sets only, since 2026-09-28). The main
-# studies draw every covariate independently. The missing-data sets draw X1-X5
+# CORRELATED COVARIATES (missing-data sets since 2026-09-28; the *_corr_* sets
+# of sample_size/correlated/ since 2026-10-01). The main studies draw every
+# covariate independently. The correlated sets draw X1-X5
 # and X01-X03 from a Gaussian copula with exchangeable latent correlation rho
 # (correlated_covariates()): X1 and X3 thresholded at their prevalences, the
-# rest scaled latent columns. X01-X03 are then auxiliaries - never amputated,
+# rest scaled latent columns. In the missing-data sets X01-X03 are then
+# auxiliaries - never amputated,
 # in neither m0 nor tau, but informative about the amputed covariates. With
 # independent covariates imputation had nothing to impute from and MAR only
 # selected on X. The truth functions m0 and tau are unchanged; what moves is
 # E[g] where tau multiplies two modifiers, and the planned SD / control event
 # rate through Cov(X1, X2), which te_grid(), baseline_grid() and
-# calibrate_bW() integrate over the correlated latent.
+# calibrate_bW() integrate over the correlated latent. rho = 0 still takes the
+# copula branch (the *_corr_0 sets): independent covariates, but drawn in the
+# copula's order, so paired run-for-run with the same run at rho > 0.
 #
 # MISSINGNESS MECHANISMS (MISS_MECHS). MAR needs no U (it is drawn, unused - see
 # DRAW ORDER). Under both MNAR ones an
@@ -174,6 +179,8 @@ ORACLE_RD <- paste0(RD_CONTROL, c(
 # harmonisation. sample_size/binary/bin_verify_hte.R re-derives RD_SCALE from the tables
 # and fails if it drifts: change p0_lo, p0_hi, b0-b2, RD_EPS or the binary
 # studies' n, and it must be recomputed.
+# The binary_corr_* sets keep RD_SCALE, so binary_corr_0.5's scenario 3 floor
+# dips below RD_EPS - see CORRELATED SAMPLE-SIZE SETS below.
 RD_SCALE <- c(NA, 0.082, 0.051, 0.204, 0.137, 0.075, 0.082, 0.137, 0.164, 0.596)
 RD_EPS <- 0.01
 
@@ -324,8 +331,31 @@ SCENARIO_SETS$binary_missing_fixed <- transform(
   te_expr = c(TE_RD[1], paste(TE_RD[2:6], "+ U_term"))
 )
 
+# CORRELATED SAMPLE-SIZE SETS (sample_size/correlated/, since 2026-10-01): the
+# main tables' scenarios 1-4 on the missing sets' copula, one set per rho in
+# CORR_RHOS, named by corr_set() - "continuous_corr_0.5", "binary_corr_0". The
+# truth functions m0 and tau, and every coefficient, are the main tables', so
+# tau(x) is exactly continuous/'s and binary/'s; only the covariates'
+# distribution moves. rho = 0 is the paired independent arm: the same run seed
+# gives the same W, raw latent normals, err and cats at every rho (see DRAW
+# ORDER), and its bW equals the main studies'. At rho = 0.5 bW and the ATE move
+# through E[g] (scenario 3's X4 * X5) and Cov(X1, X2), as in the missing sets.
+# binary_corr_* keeps RD_SCALE rather than taking its own scale, so that tau(x)
+# matches binary/: at rho = 0.5, E[g] rises in scenario 3, bW falls, and the
+# treated-risk floor at n = 100 is 0.007, inside [0, 1] but below RD_EPS
+# (bin_verify_hte.R check 7 exempts it; a scale of 0.049 would restore it).
+CORR_RHOS <- c(0, 0.5)
+corr_set <- function(outcome, rho) paste0(outcome, "_corr_", rho)
+for (r in CORR_RHOS) {
+  SCENARIO_SETS[[corr_set("continuous", r)]] <-
+    transform(SCENARIO_SETS$continuous[1:4, ], rho = r)
+  SCENARIO_SETS[[corr_set("binary", r)]] <-
+    transform(SCENARIO_SETS$binary[1:4, ], rho = r)
+}
+rm(r)
+
 # which sets produce a binary outcome
-BINARY_SETS <- c("binary", "binary_missing")
+BINARY_SETS <- c("binary", "binary_missing", corr_set("binary", CORR_RHOS))
 
 #' Resolve a scenario-set name to its table
 #'

@@ -20,6 +20,12 @@
 #      is the largest bU, to 2 dp, that leaves every floor-bound scenario its
 #      RD_SCALE at n = 500, and RD_SCALE_MISS[k] = min(RD_SCALE[k], the largest
 #      scale feasible at n = 500 with that bU)
+#   7. sample_size/correlated/'s binary_corr_<rho> sets (since 2026-10-01):
+#      binary's coefficients exactly, so tau(x) is binary/'s; oracle vs
+#      generator; SD(tau) the same at every n; the planned RD and 80% power;
+#      rho = 0 reproduces binary's bW; every treated risk inside the bounds
+#      except binary_corr_0.5 scenario 3's floor (0.007 at n = 100), which
+#      only has to stay above 0 - the exception R/dgm_scenarios.R documents
 #
 # Until 2026-09-26 the effect was on the logit scale, and this script measured
 # how much of var(tau) the link handed to X1 and X2 - up to 80% at n = 100.
@@ -210,6 +216,70 @@ check(abs(RD_SCALE_MISS[-1] - pmin(RD_SCALE[miss$scenario[-1]], k_max_miss(BU_MI
       "RD_SCALE_MISS = min(RD_SCALE, the largest scale feasible at n = 500 with BU_MISS)")
 check(isTRUE(all.equal(miss$bU, rep(BU_MISS, nrow(miss)))),
       "missing/binary's table uses BU_MISS")
+
+# ---- 7. sample_size/correlated/'s binary_corr_<rho> sets ----------------------
+# binary/'s scenarios 1-4 on the copula. RD_SCALE is kept so tau(x) matches
+# binary/, which at rho = 0.5 takes scenario 3's floor below RD_EPS: that one
+# cell is held only to (0, RD_EPS).
+
+CORR_FLOOR_EXEMPT <- list(`0.5` = 3)   # rho -> scenarios exempt from RD_EPS
+
+for (rho in CORR_RHOS) {
+  set <- corr_set("binary", rho)
+  ct <- resolve_set(set)
+  coefs <- c("b0", "b1", "b2", "b3", "b4", "b34", "b45", "p0_lo", "p0_hi")
+  check(isTRUE(all.equal(ct[, coefs], tbl[ct$scenario, coefs], check.attributes = FALSE)),
+        sprintf("%s has binary's coefficients, so tau(x) is binary/'s", set))
+
+  gap <- 0
+  for (s in ct$scenario) for (n in ns) {
+    d <- generate_scenario_data(s, n, set = set, seed = s * 1000 + n)
+    oi <- get_oracle_info(s, d$bW, set)
+    risk <- function(w) {
+      eval(parse(text = oi$fmla), envir = c(oi$params, list(X = d$dataset, W = w)))
+    }
+    gap <- max(gap, abs(risk(1) - d$truth$p1), abs(risk(0) - d$truth$p0))
+  }
+  check(gap < 1e-12, sprintf("%s: oracle formula reproduces the generator (max gap %.1e)",
+                             set, gap))
+
+  exempt <- CORR_FLOOR_EXEMPT[[as.character(rho)]]
+  set.seed(2026)
+  cr <- list()
+  for (s in ct$scenario) {
+    p <- ct[ct$scenario == s, ]
+    z <- correlated_covariates(N, p)
+    for (n in ns) {
+      bW <- calibrate_bW(p, n, "prop")
+      p0 <- control_event_rate(p)
+      ate <- bW + te_moments(p)$mean
+      b <- treated_risk_bounds(p, bW)
+      cr[[length(cr) + 1]] <- data.frame(
+        scenario = s, n = n, bW = bW, bW_main = calibrate_bW(tbl[s, ], n, "prop"),
+        ate = ate, planned = planned_rd(p, n),
+        sd_tau = sd(truth_at(p, bW, TRUE, z$X1, z$X2, z$X3, z$X4, z$X5)$tau),
+        power = power.prop.test(n = n / 2, p1 = p0, p2 = p0 + ate)$power,
+        floor = b[1], ceiling = b[2], exempt = s %in% exempt
+      )
+    }
+  }
+  cr <- do.call(rbind, cr)
+  check(tapply(cr$sd_tau, cr$scenario, function(x) diff(range(x))) < 1e-12,
+        sprintf("%s: SD(tau) is the same at every n", set))
+  check(abs(cr$ate - cr$planned) <= ROUNDING + 1e-9,
+        sprintf("%s: the true ATE is the planned RD, to bW's rounding", set))
+  check(abs(cr$power - TARGET_POWER) < 0.01, sprintf("%s: power is 80%% to within 1 point", set))
+  if (rho == 0) {
+    check(cr$bW == cr$bW_main, sprintf("%s: bW is binary's at every n", set))
+  }
+  check(cr$ceiling <= 1 - RD_EPS + ROUNDING &
+          ifelse(cr$exempt, cr$floor > 0, cr$floor >= RD_EPS - ROUNDING),
+        sprintf("%s: every treated risk inside [%.2f, %.2f]%s", set, RD_EPS, 1 - RD_EPS,
+                if (length(exempt)) {
+                  sprintf(" (scenario %s's floor only > 0: min %.3f)",
+                          paste(exempt, collapse = ", "), min(cr$floor[cr$exempt]))
+                } else ""))
+}
 
 # ---- summary ----------------------------------------------------------------
 

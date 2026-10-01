@@ -153,3 +153,27 @@ print(missing_table(resolve_set("binary_missing"), binary_row,
                     c("bW", "p0", "ate", "power", "floor_mnar", "ceiling_mnar"),
                     c("bW", "E[m0]", "true RD", "power", "MNAR floor", "MNAR ceiling"),
                     bW_digits = 3))
+
+# ---- sample_size/correlated/ ------------------------------------------------
+# scenarios 1-4 on the copula at each rho in CORR_RHOS; rho = 0 should repeat
+# the main tables' rows 1-4. At rho = 0.5 binary scenario 3's floor is 0.007,
+# below RD_EPS - the documented exception (R/dgm_scenarios.R)
+
+for (rho in CORR_RHOS) {
+  set <- corr_set("continuous", rho)
+  tbl <- resolve_set(set)
+  rows <- run_table(tbl, continuous_row)
+  show(rows, tbl, set, "bW", "bW", 2)
+  show(rows, tbl, set, "ate", "true ATE (bW + E[g])", 3)
+  show(rows, tbl, set, "realised", "realised power", 3)
+}
+for (rho in CORR_RHOS) {
+  set <- corr_set("binary", rho)
+  tbl <- resolve_set(set)
+  rows <- run_table(tbl, binary_row)
+  show(rows, tbl, set, "bW", "bW", 3)
+  show(rows, tbl, set, "ate", "true ATE (marginal risk difference)", 3)
+  show(rows, tbl, set, "power", "power (planned = realised)", 3)
+  show(rows, tbl, set, "floor", sprintf("treated-risk floor (>= %.2f)", RD_EPS), 3)
+  show(rows, tbl, set, "ceiling", sprintf("treated-risk ceiling (<= %.2f)", 1 - RD_EPS), 3)
+}

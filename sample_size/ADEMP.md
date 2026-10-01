@@ -1,12 +1,13 @@
 # ADEMP — sample size studies
 
-Five studies, sharing one set of data-generating mechanisms
+Seven studies, sharing one set of data-generating mechanisms
 (`R/dgm_scenarios.R`) and one set of estimators (`R/cate_models.R`):
 
 | study | folder | question |
 |---|---|---|
 | continuous | `continuous/` | CATE estimation and HTE tests, continuous outcome |
 | binary | `binary/` | the same, binary outcome (risk-difference scale) |
+| correlated, continuous / binary | `correlated/continuous/`, `correlated/binary/` | the same, scenarios 1–4, with correlated covariates (ρ = 0 vs 0.5, paired) |
 | CI, continuous | `confidence_intervals/continuous/` | bootstrap confidence bands for the CATE |
 | CI, binary | `confidence_intervals/binary/` | the same, binary outcome |
 | optimal_sf | `confidence_intervals/optimal_sf/` | data-driven choice of the bootstrap `sample.fraction`, both outcomes |
@@ -16,6 +17,9 @@ Five studies, sharing one set of data-generating mechanisms
 - **continuous / binary:** assess how well DR-learner and causal forest
   estimators recover the CATE in a two-arm RCT, across CATE structures and
   sample sizes, and the size and power of post-estimation heterogeneity tests.
+- **correlated continuous / binary:** the same, for scenarios 1–4, and how it
+  changes when the covariates are correlated, so that prognosis and effect
+  modification move together.
 - **CI continuous / binary:** assess the coverage and width of half-sample
   bootstrap simultaneous confidence bands for the CATE, and how they depend on
   the bootstrap forests' `sample.fraction` (`CI_sf`).
@@ -70,19 +74,40 @@ Five studies, sharing one set of data-generating mechanisms
 Scenarios 1–4 are the ones reported. Results saved before 2026-09-26 use the
 old numbering (see the header of `R/dgm_scenarios.R`).
 
+### Correlated covariates (correlated continuous / binary)
+
+- Scenarios 1–4 with exactly the coefficients, m0(x) and τ(x) above
+  (`continuous_corr_<ρ>`, `binary_corr_<ρ>`).
+- X1–X5 and X01–X03 come from a Gaussian copula with exchangeable latent
+  correlation ρ (`correlated_covariates()`, as in `missing/`). X1 and X3 are
+  thresholded at 0.4 and 0.7; X2, X4 and X5 are latent columns with SD 1. The
+  marginals are as above. X04 and X05 are independent.
+- ρ ∈ {0, 0.5}. ρ = 0 is the paired independent arm: same seeds, and so the
+  same W, raw normals, noise and categorical covariates as ρ = 0.5.
+- `bW` is calibrated as above, integrating over the correlated latent. At
+  ρ = 0.5 the continuous ATE is −0.60 … −0.19 (n = 100 … 1000), and the
+  binary RD is unchanged.
+- Binary scenario 3's treated-risk floor at ρ = 0.5, n = 100 is 0.007, below
+  `RD_EPS`. This is accepted so that τ(x) matches `binary/`.
+
+Details in `correlated/README.md`.
+
 ### Design
 
 Full factorial over the rows below, per outcome type:
 
-| | continuous / binary | CI continuous / binary | optimal_sf |
-|---|---|---|---|
-| scenarios | 1–10 | 1–10 | 1–4 |
-| n | 100, 250, 500, 1000 | 500, 1000 | 500, 1000 |
-| `CI_sf` | — | 0.05 to 0.5 by 0.05 (design factor) | chosen per run from the same values |
-| repetitions | 100; 500 for scenarios 1–4 | 100 | 100 |
+| | continuous / binary | correlated continuous / binary | CI continuous / binary | optimal_sf |
+|---|---|---|---|---|
+| scenarios | 1–10 | 1–4 | 1–10 | 1–4 |
+| n | 100, 250, 500, 1000 | 100, 250, 500, 1000 | 500, 1000 | 500, 1000 |
+| ρ | — (independent) | 0, 0.5 (design factor) | — | — |
+| `CI_sf` | — | — | 0.05 to 0.5 by 0.05 (design factor) | chosen per run from the same values |
+| repetitions | 100; 500 for scenarios 1–4 | 500 | 100 | 100 |
 
-Each run is seeded by its run index alone (`setup_rng_stream(run)`), so a given
-(scenario, n, run) is the same dataset in every study and every `CI_sf` cell.
+Each run is seeded by its run index alone (`setup_rng_stream(run)`). So a
+given (scenario, n, run) is the same dataset in every independent-covariate
+study and every `CI_sf` cell. The correlated studies draw in the copula's
+order: their runs are paired across ρ, but not with the other studies.
 
 ## Estimands
 
