@@ -110,11 +110,11 @@
 #
 #   Either way the run aborts before saveRDS(), which is why check_failed() sees
 #   no res_sim_<run>.RDS. Scenarios 2 and 5 (bW_1 = 0) never fail; the scenarios
-#   that also carry bW_2 = +0.7 (4, 6, 7) fail most, because that slows the
-#   competing event in the treated arm further.
+#   that also carry bW_2 = +0.7 (4, 6, 7) fail most, because that slows
+#   event 2 in the treated arm further.
 #
 #   All of the above is under the pre-2026-10-01 parameters. The retune
-#   (smaller effects, EOI scale 25) leaves units past the horizon and CEs in the
+#   (smaller effects, E1 scale 25) leaves units past the horizon and E2s in the
 #   treated arm in every cell, so neither route should fire often now - see
 #   ADEMP.md "What the DGM implies".
 #
@@ -521,10 +521,10 @@ probe_index <- function(i) {
     scenario = d$param$scenario,
     censoring = d$param$censoring,
     run = d$param$run,
-    # the driver: how much of the competing event survives to the horizon,
+    # the driver: how much of event 2 survives to the horizon,
     # in each treatment arm
-    ce_before_horizon_W0 = sum(d$D == 2 & Y <= HORIZON & W == 0),
-    ce_before_horizon_W1 = sum(d$D == 2 & Y <= HORIZON & W == 1),
+    e2_before_horizon_W0 = sum(d$D == 2 & Y <= HORIZON & W == 0),
+    e2_before_horizon_W1 = sum(d$D == 2 & Y <= HORIZON & W == 1),
     # the driver of the whole-sample NA route. pseudoyl()'s leave-one-out risk
     # set empties at the tail, so the max-time individual gets NaN - and that
     # only reaches the estimand when the max observed time is at or below the
@@ -660,8 +660,8 @@ if (2L %in% stages) {
       # size of the prize for fixing the three call sites that still omit it
       onlysl_would_fix = sum(!sl_predict_ok & sl_predict_onlysl_ok, na.rm = TRUE),
       median_min_unique = median(min_n_unique, na.rm = TRUE),
-      median_ce_W1 = median(ce_before_horizon_W1, na.rm = TRUE),
-      median_ce_W0 = median(ce_before_horizon_W0, na.rm = TRUE),
+      median_e2_W1 = median(e2_before_horizon_W1, na.rm = TRUE),
+      median_e2_W0 = median(e2_before_horizon_W0, na.rm = TRUE),
       .groups = "drop"
     ) %>% as.data.frame(), row.names = FALSE)
 

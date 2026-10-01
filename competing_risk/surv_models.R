@@ -269,7 +269,7 @@ get_ipw <- function(X, Y, D, W, horizon, censor) {
 
   list(observed = observed, ipw = ipw)
 }
-# CF using IPW weights for censoring and CEs - see GRF tutorial
+# CF using IPW weights for censoring and competing events - see GRF tutorial
 #
 # Whole-sample, grf-internal crossfitting ("cf_default"), matching
 # R/cate_models.R::run_causal_forest. The forest is fit only on `include` -
@@ -288,7 +288,7 @@ cf_ipw <- function(X, Y, D, W, horizon, event = 1) {
     total_observed <- weights_0$observed
     sample_weights <- weights_0$ipw[total_observed]
   } else {
-    # Identify event of interest
+    # Identify the competing event (the cause not targeted)
     all_events <- unique(D[D != 0])
     competing <- setdiff(all_events, event)
 
@@ -321,7 +321,7 @@ cf_ipw <- function(X, Y, D, W, horizon, event = 1) {
 
   return(tau_RMST)
 }
-# CSF - treating CEs as censoring events
+# CSF - treating competing events as censoring events
 # Whole sample; causal_survival_forest cross-fits its own nuisances internally
 # and predict() with no newdata returns OOB predictions.
 csf_cs <- function(X, Y, D, W, horizon, event = 1) {
@@ -344,7 +344,7 @@ csf_cs <- function(X, Y, D, W, horizon, event = 1) {
 
   return(predict(forest)$predictions)
 }
-# CSF - keep CEs in the risk set
+# CSF - keep competing events in the risk set
 # Whole sample, as csf_cs. When censoring is present the forest is fit on the
 # uncensored subset only, so the excluded rows get a newdata prediction - see
 # cf_ipw above for why that is honest.
@@ -811,7 +811,7 @@ pseudo_sl_t_standard <- function(
 #     n_na_fallback below.
 #
 #   * a degenerate library (25 of the 225). Where the treatment effect on the
-#     event of interest is strong (bW_1 = -0.7, scenarios 1/3/4/6/7, under the
+#     event 1 is strong (bW_1 = -0.7, scenarios 1/3/4/6/7, under the
 #     pre-2026-10-01 parameters), nearly
 #     every treated subject has the cause-1 event before the horizon, so the
 #     treated arm's RMTL2 pseudo-values collapse onto a handful of distinct

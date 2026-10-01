@@ -30,25 +30,25 @@ library(purrr)
 library(knitr)
 ```
 
-## Can these estimators recover treatment effects when a competing event can pre-empt the event of interest?
+## Can these estimators recover treatment effects when one event can pre-empt the other?
 
-Event of interest (EOI) and competing event (CE) are generated from Weibull
+Event 1 (E1) and event 2 (E2) are generated from Weibull
 distributions via joint hazards (Beyersmann 2009). Seven scenarios vary
-*where* the treatment acts — on the EOI, the CE, or both, as an average
+*where* the treatment acts — on E1, E2, or both, as an average
 effect (ATE) or heterogeneous one (HTE):
 
 | Scenario | Treatment effect |
 |---|---|
-| 1 | ATE on EOI only |
-| 2 | ATE on CE only |
-| 3 | HTE on EOI, no ATE on CE |
-| 4 | HTE on EOI, ATE on CE |
-| 5 | HTE on CE, no ATE on EOI |
-| 6 | HTE on CE, ATE on EOI |
+| 1 | ATE on E1 only |
+| 2 | ATE on E2 only |
+| 3 | HTE on E1, no ATE on E2 |
+| 4 | HTE on E1, ATE on E2 |
+| 5 | HTE on E2, no ATE on E1 |
+| 6 | HTE on E2, ATE on E1 |
 | 7 | HTE on both |
 
-Scenarios 2, 5 and 6 are the interesting ones: the treatment moves the
-competing event, so a naive analysis of the EOI alone can show an apparent
+Scenarios 2, 5 and 6 are the interesting ones: the treatment moves
+event 2, so a naive analysis of event 1 alone can show an apparent
 effect that is really just a change in who survives long enough to have one.
 Fixed at **n = 500**, censoring **on/off**, **100 runs**, horizon = 28. Full
 design in `competing_risk/README.md`.
@@ -75,7 +75,7 @@ targets RMTL. `surv_metrics.R` already resolves this per row, so `bias`/
 
 **Scenario 5 flips the sign of the `RMTL1` correlation — expect it, it is
 not a bug.** `tau_RMST1_cs` is flat in scenario 5 (no cause-specific effect
-on the EOI at all), so every bit of `RMTL1` heterogeneity there is the
+on event 1 at all), so every bit of `RMTL1` heterogeneity there is the
 competing-risk artefact induced by the (near-mirror-image) `RMTL2`
 heterogeneity. An estimator that tracks the real signal correctly therefore
 lands *anti-correlated* with the induced `RMTL1` estimand. A consequence:

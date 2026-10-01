@@ -9,12 +9,12 @@ library(dplyr)
 survival_scenario_params <- data.frame(
   scenario = 1:7,
   description = c(
-    "ATE on EOI only",
-    "ATE on CE only",
-    "HTE on EOI, no ATE on CE",
-    "HTE on EOI, ATE on CE",
-    "HTE on CE, no ATE on EOI",
-    "HTE on CE, ATE on EOI",
+    "ATE on E1 only",
+    "ATE on E2 only",
+    "HTE on E1, no ATE on E2",
+    "HTE on E1, ATE on E2",
+    "HTE on E2, no ATE on E1",
+    "HTE on E2, ATE on E1",
     "HTE on both events"
   ),
   # Base parameters
@@ -48,7 +48,7 @@ survival_scenario_params <- data.frame(
   # Treatment and predictive effects, written as log-HR / shape: a log-scale
   # coefficient b multiplies the hazard by exp(-shape * b), so dividing by the
   # shape gives both events the same log-HRs (+-0.35 ATE, +-0.7 more if X3).
-  # EOI HR 1.42, 2.86 if X3; CE HR 0.70, 0.35 if X3.
+  # E1 HR 1.42, 2.86 if X3; E2 HR 0.70, 0.35 if X3.
   # Treatment effects
   bW_1 = c(-0.35, 0, -0.35, -0.35, 0, -0.35, -0.35) / 2,
   bW_2 = c(0, 0.35, 0, 0.35, 0.35, 0.35, 0.35) / 1.1,

@@ -73,6 +73,35 @@ the per-run sampled units are not (a fresh sample is drawn every run) — so
 `be_marginal_coverage`/`be_simultaneous_coverage` are `NA` on every non-`_grid`
 row (`optimal_sf/` never builds a query grid, so it has none of this).
 
+## Possible extension: correlated covariates (not built)
+
+Costed 2026-10-01, nothing implemented. A CI arm for
+`sample_size/correlated/`: scenarios 1–4, 100 runs, and this study's design
+otherwise (n ∈ {500, 1000}, the 10-value `CI_sf` sweep).
+
+| | jobs per outcome | continuous + binary |
+|---|---|---|
+| ρ = 0.5 only (4 scen × 2 n × 10 sf × 100 runs) | 8,000 | 16,000 |
+| ρ = 0 and 0.5 | 16,000 | 32,000 |
+
+- The `CI_sf` sweep is the 10× factor: without it, it is 800 jobs per ρ per
+  outcome.
+- Adding n = 100 and 250 (the correlated studies' full n range) doubles every
+  number above.
+- PBS arrays cap at 10,000 subjobs. At 16,000 per outcome, split into two
+  jobscripts (1–10000 / 10001–16000), as `correlated/*_corr_{1,2}.sh` do.
+- For scale: this study is 20,000 per outcome over 10 scenarios. The ρ = 0 and
+  0.5 version is 80% of that for 4 scenarios.
+
+Ways to cut it:
+
+- **Fix `CI_sf`** (the `optimal_sf/` pick, or the best value from this sweep):
+  800 jobs per ρ per outcome, so 1,600 with both ρ.
+- **Coarser sweep**, e.g. 0.1 to 0.5 in steps of 0.1: halves every number.
+- **Drop ρ = 0.** It has the same distribution as this study, but the draws are
+  not paired with these runs, so it loses the paired ρ comparison
+  (`correlated/README.md`, "Pairing").
+
 ## Status
 
 **Archive the old results first** - `R/archive_old_results.R` (root `README.md`, Status, step 0). They predate the current DGM and use the pre-2026-09-26 scenario numbers, so running into that tree would mix old and new results.

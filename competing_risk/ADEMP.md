@@ -9,13 +9,13 @@ machinery from `R/cate_models.R` and `R/sl_library.R`.
 
 - Assess how well forest- and SuperLearner-based estimators recover the
   unit-level CATE on restricted-mean time scales in a two-arm RCT where the
-  event of interest (EOI) can be pre-empted by a competing event (CE), with and
+  event 1 (E1) can be pre-empted by a competing event 2 (E2), with and
   without right censoring.
 - Compare three ways of handling the competing event: as censoring
   (cause-specific / net), kept in the risk set (subdistribution), or through
   pseudo-values of the cumulative incidence (restricted mean time lost, RMTL).
 - Show what an analysis of one event reports when the treatment acts only on
-  the other (scenarios 2, 5 and 6): an apparent effect on the EOI that is
+  the other (scenarios 2, 5 and 6): an apparent effect on event 1 that is
   really a change in who survives long enough to have it.
 - Secondary: how the pseudo-values should be built for a meta-learner -
   whole-sample against leave-one-fold-out pseudo-values, and whole-sample OOB
@@ -41,18 +41,18 @@ binary X3.
 
 ### Event times
 
-Cause-specific hazards are Weibull and proportional, cause k = 1 (EOI) or
-2 (CE):
+Cause-specific hazards are Weibull and proportional, cause k = 1 (E1) or
+2 (E2):
 
 $$\lambda_k(t \mid x, w) = \frac{a_k}{s_k}\left(\frac{t}{s_k}\right)^{a_k - 1}, \qquad \log s_k = \log s_{k0} + b_{1k} X_1 + b_{2k} X_2 + w\,(b_{Wk} + b_{3k} X_3)$$
 
 | | shape a_k | baseline scale s_k0 | b_1k (X1) | b_2k (X2) |
 |---|---|---|---|---|
-| EOI (k = 1) | 2 | 25 | −0.1 | 0.1 |
-| CE (k = 2) | 1.1 | 45 | −0.1 | 0.1 |
+| E1 (k = 1) | 2 | 25 | −0.1 | 0.1 |
+| E2 (k = 2) | 1.1 | 45 | −0.1 | 0.1 |
 
 Effects are on the log *scale*, so a shift b multiplies the hazard by
-exp(−a_k·b): X1 raises the EOI hazard by 1.22 and the CE hazard by 1.12; one
+exp(−a_k·b): X1 raises the E1 hazard by 1.22 and the E2 hazard by 1.12; one
 SD of X2 lowers them by 0.82 and 0.90.
 
 Generation follows Beyersmann et al. (2009): the event time T solves
@@ -70,33 +70,33 @@ more when X3 = 1, and divided by the shape to get the log-scale coefficients
 (`surv_dgm.R` writes them as `c(...) / 2` and `c(...) / 1.1`), so both events
 get the same log-HRs:
 
-| scenario | description | b_W1 | b_31 | b_W2 | b_32 | EOI HR, X3 = 0 / 1 | CE HR, X3 = 0 / 1 |
+| scenario | description | b_W1 | b_31 | b_W2 | b_32 | E1 HR, X3 = 0 / 1 | E2 HR, X3 = 0 / 1 |
 |---|---|---|---|---|---|---|---|
-| 1 | ATE on EOI only | −0.175 | 0 | 0 | 0 | 1.42 / 1.42 | 1 / 1 |
-| 2 | ATE on CE only | 0 | 0 | 0.318 | 0 | 1 / 1 | 0.70 / 0.70 |
-| 3 | HTE on EOI, no ATE on CE | −0.175 | −0.35 | 0 | 0 | 1.42 / 2.86 | 1 / 1 |
-| 4 | HTE on EOI, ATE on CE | −0.175 | −0.35 | 0.318 | 0 | 1.42 / 2.86 | 0.70 / 0.70 |
-| 5 | HTE on CE, no ATE on EOI | 0 | 0 | 0.318 | 0.636 | 1 / 1 | 0.70 / 0.35 |
-| 6 | HTE on CE, ATE on EOI | −0.175 | 0 | 0.318 | 0.636 | 1.42 / 1.42 | 0.70 / 0.35 |
+| 1 | ATE on E1 only | −0.175 | 0 | 0 | 0 | 1.42 / 1.42 | 1 / 1 |
+| 2 | ATE on E2 only | 0 | 0 | 0.318 | 0 | 1 / 1 | 0.70 / 0.70 |
+| 3 | HTE on E1, no ATE on E2 | −0.175 | −0.35 | 0 | 0 | 1.42 / 2.86 | 1 / 1 |
+| 4 | HTE on E1, ATE on E2 | −0.175 | −0.35 | 0.318 | 0 | 1.42 / 2.86 | 0.70 / 0.70 |
+| 5 | HTE on E2, no ATE on E1 | 0 | 0 | 0.318 | 0.636 | 1 / 1 | 0.70 / 0.35 |
+| 6 | HTE on E2, ATE on E1 | −0.175 | 0 | 0.318 | 0.636 | 1.42 / 1.42 | 0.70 / 0.35 |
 | 7 | HTE on both | −0.175 | −0.35 | 0.318 | 0.636 | 1.42 / 2.86 | 0.70 / 0.35 |
 
-The treatment *raises* the EOI hazard and lowers the CE hazard. "ATE" and
+The treatment *raises* the E1 hazard and lowers the E2 hazard. "ATE" and
 "HTE" in the descriptions refer to the hazard scale, i.e. whether X3 modifies
 the effect. On the time scales the estimands use, every effect is
 heterogeneous. X1 and X2 shift the baseline hazards, and a restricted mean is
 not linear in them, so the CATE varies with X1 and X2 even in scenarios 1 and
 2 (see "What the DGM implies" below).
 
-**Why these values (retuned 2026-10-01).** Until 2026-10-01 the EOI scale was
-15 and every effect was ±0.7 on the log scale: EOI HR 4.06 / 16.4, CE HR
+**Why these values (retuned 2026-10-01).** Until 2026-10-01 the E1 scale was
+15 and every effect was ±0.7 on the log scale: E1 HR 4.06 / 16.4, E2 HR
 0.46 / 0.21. That was correct on the hazard scale, but on the RMTL scale,
 which 12 of the 14 arms target, the scenarios ran together. Two things caused
-it. The same coefficient times shape 2 against 1.1 gave the EOI a log-HR 1.8
-times the CE's. And 98% of controls had an event by the horizon, so the two
+it. The same coefficient times shape 2 against 1.1 gave E1 a log-HR 1.8
+times E2's. And 98% of controls had an event by the horizon, so the two
 events competed heavily and an effect on either one moved both CIFs. Scenario 3
-("no ATE on CE") then had more X3-driven RMTL2 heterogeneity than scenario 6
-("HTE on CE"), and scenarios 4 and 6 could not be told apart. The fix was a
-smaller, log-HR-matched set of effects and a lower EOI hazard (scale 25),
+("no ATE on E2") then had more X3-driven RMTL2 heterogeneity than scenario 6
+("HTE on E2"), and scenarios 4 and 6 could not be told apart. The fix was a
+smaller, log-HR-matched set of effects and a lower E1 hazard (scale 25),
 which cuts the competition.
 
 How well the scenarios separate on the RMTL scale is measured as the smallest
@@ -152,11 +152,11 @@ are population values: `truth_individual()` evaluated over the covariate
 distribution (X1 and X3 exactly, X2 on 25 normal quantiles).
 
 **Event mix by the horizon.** The control arm is the same in every scenario:
-EOI 0.52–0.54, CE 0.32–0.34, still event-free at 28 about 0.14. With censoring
-on, that becomes EOI 0.48–0.50, CE 0.30–0.31, censored before 28 about 0.08,
+E1 0.52–0.54, E2 0.32–0.34, still event-free at 28 about 0.14. With censoring
+on, that becomes E1 0.48–0.50, E2 0.30–0.31, censored before 28 about 0.08,
 and about 0.12 observed past 28. Treated arm:
 
-| scenario | EOI by 28 | CE by 28 | event-free at 28 | censored before 28 (censoring on) | observed past 28 (censoring on) |
+| scenario | E1 by 28 | E2 by 28 | event-free at 28 | censored before 28 (censoring on) | observed past 28 (censoring on) |
 |---|---|---|---|---|---|
 | 1 | 0.63 | 0.29 | 0.083 | 0.073 | 0.071 |
 | 2 | 0.58 | 0.25 | 0.168 | 0.091 | 0.139 |
@@ -174,7 +174,7 @@ and about 0.12 observed past 28. Treated arm:
   nobody is past 28 in a run of 500 is below 1e-17 in every cell, so route C
   (README "Known issues", NA whole-sample pseudo-values) should not recur. It
   needed scenarios where no treated unit reached 28.
-- The fewest treated CEs are in scenario 7, about 13% or roughly 32 units, against 3% before.
+- The fewest treated E2s are in scenario 7, about 13% or roughly 32 units, against 3% before.
   So the near-constant treated-arm RMTL2 pseudo-values behind route A' should
   be much rarer.
 
@@ -195,8 +195,8 @@ RMST2 21.2.
 τ_RMST1 and τ_RMST2 (subdistribution) are −τ_RMTL1 and −τ_RMTL2 exactly.
 
 - **An effect on one cause moves the other's CIF.** In scenarios 2 and 5 the
-  treatment does not touch the EOI hazard, yet τ_RMTL1 is +0.5 and +1.0: fewer
-  CEs leave more units at risk of the EOI. The net truth τ_RMST1_cs is
+  treatment does not touch the E1 hazard, yet τ_RMTL1 is +0.5 and +1.0: fewer
+  E2s leave more units at risk of E1. The net truth τ_RMST1_cs is
   identically 0 there. Likewise τ_RMTL2 is −0.35 and −0.94 in scenarios 1 and
   3, where τ_RMST2_cs is identically 0.
 - **Scenario 5's RMTL1 heterogeneity is all induced** (cor −0.91 with
@@ -210,7 +210,7 @@ RMST2 21.2.
 - **"ATE" scenarios are close to null on the time scale, but not null.**
   Scenario 1's τ_RMTL1 has SD 0.09 and τ_RMST1_cs 0.10, all from X1 and X2
   (see "Performance measures").
-- **Scenario 6's composite effect averages out.** The EOI and CE effects
+- **Scenario 6's composite effect averages out.** The E1 and E2 effects
   offset on RMSTc, so τ_RMSTc has mean 0.08 but changes sign with X3: −0.67
   at X3 = 0 and +0.39 at X3 = 1.
 
@@ -247,11 +247,11 @@ Each CATE is the treated minus the control value at the same x.
 Implementation: `surv_models.R::all_cate_surv_models()`, called once per run
 by `surv_analysis.R` with `n_folds = 10`, `horizon = 28` and
 `sl_libraries(500)`. Inputs are X (the 8 covariates as generated, no scaling),
-W, the observed time Y and the status D ∈ {0 censored, 1 EOI, 2 CE}.
+W, the observed time Y and the status D ∈ {0 censored, 1 E1, 2 E2}.
 
 Fourteen arms (`framework` in the results):
 
-| arm | family | how the CE is handled | targets | fitting | pseudo-values |
+| arm | family | how the competing event is handled | targets | fitting | pseudo-values |
 |---|---|---|---|---|---|
 | `ipw` | IPCW causal forest | censoring, inverse-probability weighted | net RMST1, RMST2; RMSTc | grf-internal (`cf_default`) | — |
 | `csf_cs` | causal survival forest | censoring | net RMST1, RMST2; RMSTc | grf-internal | — |
@@ -292,11 +292,11 @@ forests' internal propensities are not.
     OOB τ̂ for them, a newdata prediction for the dropped ones.
   - Composite: censoring weights only, every uncensored unit kept.
 - **`csf_cs`**: `causal_survival_forest(X, Y, W, 1{D = k}, target = "RMST",
-  horizon = 28)` on the whole sample, the CE treated as censoring (grf
+  horizon = 28)` on the whole sample, the competing event treated as censoring (grf
   estimates the covariate-dependent censoring itself). Composite: event =
   either cause. OOB predictions.
-- **`csf_sh`**: event indicator 1{D = k}, with a CE's time moved to τ + 1, so
-  that the unit stays in the risk set and never has the EOI before the
+- **`csf_sh`**: event indicator 1{D = k}, with a competing event's time moved to τ + 1, so
+  that the unit stays in the risk set and never has event k before the
   horizon. That targets τ − RMTL_k. If any unit is censored before τ, every
   censored unit is dropped and the rest weighted by the censoring weights
   above; dropped units get a newdata prediction. Otherwise, whole sample, no

@@ -1,8 +1,7 @@
 # Competing risks
 
-CATE estimation when the event of interest can be pre-empted by a competing
-event. This is the study the rest of the repo builds towards, and the only one
-whose estimators are genuinely different rather than a configuration of the
+CATE estimation when event 1 can be pre-empted by a competing event 2. This
+is the study the rest of the repo builds towards, and the only one whose estimators are genuinely different rather than a configuration of the
 shared ones.
 
 | | |
@@ -31,27 +30,27 @@ Same `surv_analysis.R`, same results, 4 rows at a time (2 cores each, matching
 
 ## Design
 
-Event of interest (EOI) and competing event (CE) are generated from Weibull
+Event 1 (E1) and event 2 (E2) are generated from Weibull
 distributions via joint hazards (Beyersmann 2009). Scenarios vary where the
 treatment acts:
 
 | # | |
 |---|---|
-| 1 | ATE on EOI only |
-| 2 | ATE on CE only |
-| 3 | HTE on EOI, no ATE on CE |
-| 4 | HTE on EOI, ATE on CE |
-| 5 | HTE on CE, no ATE on EOI |
-| 6 | HTE on CE, ATE on EOI |
+| 1 | ATE on E1 only |
+| 2 | ATE on E2 only |
+| 3 | HTE on E1, no ATE on E2 |
+| 4 | HTE on E1, ATE on E2 |
+| 5 | HTE on E2, no ATE on E1 |
+| 6 | HTE on E2, ATE on E1 |
 | 7 | HTE on both |
 
-Scenarios 2, 5 and 6 are the interesting ones: the treatment moves the competing
-event, so a naive analysis of the EOI can show an apparent effect that is really
-a change in who survives long enough to have one.
+Scenarios 2, 5 and 6 are the interesting ones: the treatment moves event 2, so
+a naive analysis of event 1 can show an apparent effect that is really a change
+in who survives long enough to have one.
 
-**Parameters retuned 2026-10-01.** The EOI baseline scale went from 15 to 25,
-and the effects became log-HR-matched across events (HR 1.42 / 2.86 on the
-EOI, 0.70 / 0.35 on the CE, at X3 = 0 / 1). Under the old values the scenarios
+**Parameters retuned 2026-10-01.** The event 1 baseline scale went from 15 to 25,
+and the effects became log-HR-matched across events (HR 1.42 / 2.86 on
+event 1, 0.70 / 0.35 on event 2, at X3 = 0 / 1). Under the old values the scenarios
 held on the hazard scale but ran together on the RMTL scale. ADEMP.md "Why
 these values" has the numbers. **Every result, failure count and smoke-test
 figure below that predates 2026-10-01 comes from the old DGM**, and the full
@@ -69,7 +68,7 @@ recovering `tau_RMTL2` correctly and positively (+0.10 to +0.42). This is a
 property of the scenario, not a bug, and three things pin that down:
 
 - **The cause-specific truth is flat.** `tau_RMST1_cs` has zero variance in
-  scenario 5 — the treatment has no cause-specific effect on the EOI at all.
+  scenario 5 — the treatment has no cause-specific effect on event 1 at all.
   Every bit of `tau_RMTL1` heterogeneity is the competing-risk artefact: the
   treatment changes who is still at risk for event 1, nothing else.
 - **The two truths are near-mirror images.** `cor(tau_RMTL1, tau_RMTL2) = −0.93`
@@ -208,7 +207,7 @@ than trusting that.
 > past 28. Under the current parameters about 30 controls and at least about 8
 > treated units are past 28 in every cell, so route C should not recur. Route
 > A' needed a near-constant treated-arm RMTL2 cell, which is now much less
-> likely (at least about 13% treated CEs, against 3% before). Neither code
+> likely (at least about 13% treated E2s, against 3% before). Neither code
 > path is guarded, so both remain possible in principle. Confirm against the
 > new array's `failed_ids.txt`.
 
