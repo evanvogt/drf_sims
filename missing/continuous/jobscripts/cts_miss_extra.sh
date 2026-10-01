@@ -19,4 +19,4 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script with parameters
-Rscript cts_miss_analysis.R "${PBS_ARRAY_INDEX}"
+Rscript cts_miss_analysis.R "${PBS_ARRAY_INDEX}" 1 1

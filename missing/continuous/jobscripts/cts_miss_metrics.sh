@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -l walltime=01:00:00  
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=100gb
-#PBS -N ci_miss_metrics
+#PBS -N cts_miss_metrics
 
 module purge
 module add tools/prod
