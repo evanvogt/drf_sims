@@ -45,14 +45,16 @@ shared module handles presentation, not analysis.
 
 ## `thesis_tables/`
 
-Booktabs `longtable`s for the sample-size studies, written to
-`../results/thesis_tables/`, one table for scenarios 1–4 (`*_main.tex`) and
-one for 5–10 (`*_supp.tex`) per outcome:
+Booktabs `longtable`s, written to `../results/thesis_tables/`. For the
+sample-size studies, one table for scenarios 1–4 (`*_main.tex`) and one for
+5–10 (`*_supp.tex`) per outcome; for the missing-covariate studies, the
+appendix's full grid, one table per metric per outcome:
 
 | script | writes | rows × columns |
 |---|---|---|
 | `ss_tables.R` | `{cts,bin}_ss_{main,supp}.tex` | scenario / n / model × estimation metrics |
 | `ss_test_tables.R` | `{cts,bin}_ss_tests_{main,supp}.tex` | scenario / test / model × n, HTE test rejection rates, with a True CATE reference row |
+| `miss_tables.R` | `{cts,bin}_miss_<metric>.tex`, `{cts,bin}_miss_tests_<test>.tex` | mechanism / scenario / method × model, one metric (or HTE test, with a True CATE column) per table |
 
 Each cell is `mean (MCSE)`, summarised with the figures' `summarise_metrics()`;
 the layout helpers are in `R/tables.R`. Run from
@@ -61,6 +63,7 @@ the layout helpers are in `R/tables.R`. Run from
 ```
 Rscript ss_tables.R
 Rscript ss_test_tables.R
+Rscript miss_tables.R
 ```
 
 The thesis preamble needs `\usepackage{booktabs, longtable, pdflscape, array}`.

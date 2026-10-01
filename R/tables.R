@@ -201,3 +201,55 @@ ss_test_table <- function(summary, tests, digits = 3, ...) {
     ...
   )
 }
+
+#' Missing-data table: rows mechanism x scenario x method, one column per model
+#'
+#' One metric per table, with the estimators across the columns, so the
+#' missing-data studies' 40 method x model cells per scenario and mechanism
+#' fold into 9 rows. Rows are grouped under a mechanism header, then by
+#' scenario. A row whose cells are all undefined is dropped (complete case and
+#' IPW in an incomplete-units table, multiple imputation in a test table), and
+#' so is such a column (the causal forest's PO independence test).
+#'
+#' @param summary output of summarise_metrics(), with `mechanism`, `scenario`,
+#'   `method` and `model` as factors in display order (apply_labels()), and
+#'   mean_<stem>/mcse_<stem>
+#' @param stem the metric
+#' @param digits decimals for every cell
+#' @param ... passed to grouped_longtable()
+miss_latex_table <- function(summary, stem, digits, ...) {
+  defined <- function(cell) !is.na(cell) & cell != "---"
+
+  long <- summary %>%
+    transmute(
+      mechanism, scenario, method, model,
+      cell = fmt_mcse(.data[[paste0("mean_", stem)]],
+                      .data[[paste0("mcse_", stem)]], digits)
+    ) %>%
+    group_by(model) %>%
+    filter(any(defined(cell))) %>%
+    group_by(mechanism, scenario, method) %>%
+    filter(any(defined(cell))) %>%
+    ungroup()
+
+  # arranged by model first, so the columns come out in its level order
+  body <- long %>%
+    arrange(model) %>%
+    pivot_wider(names_from = model, values_from = cell) %>%
+    mutate(across(-c(mechanism, scenario, method), ~ coalesce(.x, "---"))) %>%
+    arrange(mechanism, scenario, method)
+
+  model_cols <- setdiff(names(body), c("mechanism", "scenario", "method"))
+  tab <- body %>%
+    transmute(scenario = as.character(scenario), method = as.character(method),
+              across(all_of(model_cols)))
+
+  grouped_longtable(
+    tab,
+    col_names = c("Scenario", "Method", model_cols),
+    group = body$mechanism,
+    block = body$scenario,
+    header_above = c(" " = 2, "Estimator" = length(model_cols)),
+    ...
+  )
+}
