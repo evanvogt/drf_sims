@@ -49,9 +49,21 @@ Scenarios 2, 5 and 6 are the interesting ones: the treatment moves the competing
 event, so a naive analysis of the EOI can show an apparent effect that is really
 a change in who survives long enough to have one.
 
+**Parameters retuned 2026-10-01.** The EOI baseline scale went from 15 to 25,
+and the effects became log-HR-matched across events (HR 1.42 / 2.86 on the
+EOI, 0.70 / 0.35 on the CE, at X3 = 0 / 1). Under the old values the scenarios
+held on the hazard scale but ran together on the RMTL scale. ADEMP.md "Why
+these values" has the numbers. **Every result, failure count and smoke-test
+figure below that predates 2026-10-01 comes from the old DGM**, and the full
+array has to be rerun. `R/archive_old_results.R` skips this study, so archive
+the old tree by hand before resubmitting. From `results/`:
+`tar -cf _archive/pre_2026-10-01/competing_risk.tar competing_risk`, then
+remove `competing_risk/` so `surv_check.R` and `surv_collect.R` don't mix the
+two DGMs.
+
 ### Scenario 5 flips the sign of the RMTL1 CATE — expect it
 
-On the smoke-tested scenario-5 replicate (n = 500, censoring on), **almost every
+On the smoke-tested scenario-5 replicate (old DGM, n = 500, censoring on), **almost every
 arm correlates *negatively* with `tau_RMTL1`**, between −0.05 and −0.29, while
 recovering `tau_RMTL2` correctly and positively (+0.10 to +0.42). This is a
 property of the scenario, not a bug, and three things pin that down:
@@ -61,7 +73,7 @@ property of the scenario, not a bug, and three things pin that down:
   Every bit of `tau_RMTL1` heterogeneity is the competing-risk artefact: the
   treatment changes who is still at risk for event 1, nothing else.
 - **The two truths are near-mirror images.** `cor(tau_RMTL1, tau_RMTL2) = −0.93`
-  in the truth itself, because the RMTL1 heterogeneity is mechanically induced by
+  in the truth itself (−0.91 under the current parameters), because the RMTL1 heterogeneity is mechanically induced by
   the RMTL2 heterogeneity. So an estimator that tracks the real (event-2) signal
   correctly lands anti-correlated with the *induced* RMTL1 estimand.
 - **It is consistent across arms**, including `sl_t_split`, whose internals were
@@ -190,6 +202,15 @@ than trusting that.
 ## Known issues
 
 ### 19 runs still fail — two routes the round-1 fix left open
+
+> **Old DGM.** Everything in this section was measured under the
+> pre-2026-10-01 parameters. Route C needed a run where nobody was observed
+> past 28. Under the current parameters about 30 controls and at least about 8
+> treated units are past 28 in every cell, so route C should not recur. Route
+> A' needed a near-constant treated-arm RMTL2 cell, which is now much less
+> likely (at least about 13% treated CEs, against 3% before). Neither code
+> path is guarded, so both remain possible in principle. Confirm against the
+> new array's `failed_ids.txt`.
 
 **Open.** After the split-T-learner fix below, a full rerun left 398 missing
 runs, and a rerun of those at 4h/20gb left **19**. All 19 were in the original

@@ -28,8 +28,11 @@ survival_scenario_params <- data.frame(
   event_horizon = 28,
   
   # Baseline Weibull parameters for event 1
+  # (25 rather than 15 since 2026-10-01: at 15 nearly everyone had an event by
+  # the horizon, and the competition between the events swamped the X3 effects
+  # on the RMTL scale - see ADEMP.md)
   shape1 = 2,
-  scale1_base = 15,
+  scale1_base = 25,
   
   # Baseline Weibull parameters for event 2
   shape2 = 1.1,
@@ -42,13 +45,17 @@ survival_scenario_params <- data.frame(
   b1_2 = -0.1,
   b2_2 = 0.1,
   
+  # Treatment and predictive effects, written as log-HR / shape: a log-scale
+  # coefficient b multiplies the hazard by exp(-shape * b), so dividing by the
+  # shape gives both events the same log-HRs (+-0.35 ATE, +-0.7 more if X3).
+  # EOI HR 1.42, 2.86 if X3; CE HR 0.70, 0.35 if X3.
   # Treatment effects
-  bW_1 = c(-0.7, 0, -0.7, -0.7, 0, -0.7, -0.7),
-  bW_2 = c(0, 0.7, 0, 0.7, 0.7, 0.7, 0.7),
-  
+  bW_1 = c(-0.35, 0, -0.35, -0.35, 0, -0.35, -0.35) / 2,
+  bW_2 = c(0, 0.35, 0, 0.35, 0.35, 0.35, 0.35) / 1.1,
+
   # predictive effects
-  b3_1 = c(0, 0, -0.7, -0.7, 0, 0, -0.7),
-  b3_2 = c(0, 0, 0, 0, 0.7, 0.7, 0.7),
+  b3_1 = c(0, 0, -0.7, -0.7, 0, 0, -0.7) / 2,
+  b3_2 = c(0, 0, 0, 0, 0.7, 0.7, 0.7) / 1.1,
   
   stringsAsFactors = FALSE
 )

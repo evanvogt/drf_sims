@@ -76,7 +76,7 @@
 #
 #   MODE A - degenerate library (mostly censoring = FALSE)
 #
-#   In the scenarios with bW_1 = -0.7 (1, 3, 4, 6, 7 - see
+#   In the scenarios with bW_1 = -0.7 (1, 3, 4, 6, 7 - the pre-2026-10-01
 #   survival_scenario_params in surv_dgm.R) almost every treated subject has the
 #   cause-1 event well before horizon = 28, so cause-2 events before the horizon
 #   collapse in the treated arm: on index 67, 5 of the 500 subjects against 53
@@ -112,6 +112,11 @@
 #   no res_sim_<run>.RDS. Scenarios 2 and 5 (bW_1 = 0) never fail; the scenarios
 #   that also carry bW_2 = +0.7 (4, 6, 7) fail most, because that slows the
 #   competing event in the treated arm further.
+#
+#   All of the above is under the pre-2026-10-01 parameters. The retune
+#   (smaller effects, EOI scale 25) leaves units past the horizon and CEs in the
+#   treated arm in every cell, so neither route should fire often now - see
+#   ADEMP.md "What the DGM implies".
 #
 #   Stage 2 measures both routes per index and labels which one it predicts, so
 #   the split between them is read off the data rather than assumed.
@@ -284,7 +289,7 @@ if (1L %in% stages) {
   print(as.data.frame(by_scenario), row.names = FALSE)
   cat(
     "\n  bW_1 is the treatment effect on the log scale of the EVENT OF INTEREST.\n",
-    " The scenarios with bW_1 == 0 are the ones that never fail.\n\n"
+    " Under the pre-2026-10-01 parameters the scenarios with bW_1 == 0 never failed.\n\n"
   )
 
   cat("failures by censoring:\n")

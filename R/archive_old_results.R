@@ -29,7 +29,9 @@
 # model_evaluation's strategies and split trees, which share me_config.R. A
 # res_path inside another (optimal_sf's sf_calibration/, inside the CI studies')
 # goes into its parent's .tar. Left alone: competing_risk/, whose DGM is its own
-# (competing_risk/surv_dgm.R) and unchanged, and anything no study config names -
+# (competing_risk/surv_dgm.R) and was unchanged by the 2026-09-26 change (its
+# own 2026-10-01 retune is archived separately, by hand - competing_risk/
+# README.md), and anything no study config names -
 # the figure directories, and ../collected_metrics/, which is outside results/.
 #
 # Safe to re-run: a tree whose .tar already exists is skipped, and every

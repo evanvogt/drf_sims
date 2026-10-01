@@ -48,7 +48,7 @@ $$\lambda_k(t \mid x, w) = \frac{a_k}{s_k}\left(\frac{t}{s_k}\right)^{a_k - 1}, 
 
 | | shape a_k | baseline scale s_k0 | b_1k (X1) | b_2k (X2) |
 |---|---|---|---|---|
-| EOI (k = 1) | 2 | 15 | −0.1 | 0.1 |
+| EOI (k = 1) | 2 | 25 | −0.1 | 0.1 |
 | CE (k = 2) | 1.1 | 45 | −0.1 | 0.1 |
 
 Effects are on the log *scale*, so a shift b multiplies the hazard by
@@ -65,17 +65,20 @@ horizon of 28 matters to the estimands.
 
 ### Scenarios
 
-Treatment effects on the log scale, and the hazard ratios they imply:
+Treatment effects are set as log hazard ratios, ±0.35 for the ATE and ±0.7
+more when X3 = 1, and divided by the shape to get the log-scale coefficients
+(`surv_dgm.R` writes them as `c(...) / 2` and `c(...) / 1.1`), so both events
+get the same log-HRs:
 
 | scenario | description | b_W1 | b_31 | b_W2 | b_32 | EOI HR, X3 = 0 / 1 | CE HR, X3 = 0 / 1 |
 |---|---|---|---|---|---|---|---|
-| 1 | ATE on EOI only | −0.7 | 0 | 0 | 0 | 4.06 / 4.06 | 1 / 1 |
-| 2 | ATE on CE only | 0 | 0 | 0.7 | 0 | 1 / 1 | 0.46 / 0.46 |
-| 3 | HTE on EOI, no ATE on CE | −0.7 | −0.7 | 0 | 0 | 4.06 / 16.4 | 1 / 1 |
-| 4 | HTE on EOI, ATE on CE | −0.7 | −0.7 | 0.7 | 0 | 4.06 / 16.4 | 0.46 / 0.46 |
-| 5 | HTE on CE, no ATE on EOI | 0 | 0 | 0.7 | 0.7 | 1 / 1 | 0.46 / 0.21 |
-| 6 | HTE on CE, ATE on EOI | −0.7 | 0 | 0.7 | 0.7 | 4.06 / 4.06 | 0.46 / 0.21 |
-| 7 | HTE on both | −0.7 | −0.7 | 0.7 | 0.7 | 4.06 / 16.4 | 0.46 / 0.21 |
+| 1 | ATE on EOI only | −0.175 | 0 | 0 | 0 | 1.42 / 1.42 | 1 / 1 |
+| 2 | ATE on CE only | 0 | 0 | 0.318 | 0 | 1 / 1 | 0.70 / 0.70 |
+| 3 | HTE on EOI, no ATE on CE | −0.175 | −0.35 | 0 | 0 | 1.42 / 2.86 | 1 / 1 |
+| 4 | HTE on EOI, ATE on CE | −0.175 | −0.35 | 0.318 | 0 | 1.42 / 2.86 | 0.70 / 0.70 |
+| 5 | HTE on CE, no ATE on EOI | 0 | 0 | 0.318 | 0.636 | 1 / 1 | 0.70 / 0.35 |
+| 6 | HTE on CE, ATE on EOI | −0.175 | 0 | 0.318 | 0.636 | 1.42 / 1.42 | 0.70 / 0.35 |
+| 7 | HTE on both | −0.175 | −0.35 | 0.318 | 0.636 | 1.42 / 2.86 | 0.70 / 0.35 |
 
 The treatment *raises* the EOI hazard and lowers the CE hazard. "ATE" and
 "HTE" in the descriptions refer to the hazard scale, i.e. whether X3 modifies
@@ -83,6 +86,36 @@ the effect. On the time scales the estimands use, every effect is
 heterogeneous. X1 and X2 shift the baseline hazards, and a restricted mean is
 not linear in them, so the CATE varies with X1 and X2 even in scenarios 1 and
 2 (see "What the DGM implies" below).
+
+**Why these values (retuned 2026-10-01).** Until 2026-10-01 the EOI scale was
+15 and every effect was ±0.7 on the log scale: EOI HR 4.06 / 16.4, CE HR
+0.46 / 0.21. That was correct on the hazard scale, but on the RMTL scale,
+which 12 of the 14 arms target, the scenarios ran together. Two things caused
+it. The same coefficient times shape 2 against 1.1 gave the EOI a log-HR 1.8
+times the CE's. And 98% of controls had an event by the horizon, so the two
+events competed heavily and an effect on either one moved both CIFs. Scenario 3
+("no ATE on CE") then had more X3-driven RMTL2 heterogeneity than scenario 6
+("HTE on CE"), and scenarios 4 and 6 could not be told apart. The fix was a
+smaller, log-HR-matched set of effects and a lower EOI hazard (scale 25),
+which cuts the competition.
+
+How well the scenarios separate on the RMTL scale is measured as the smallest
+X3 difference in the true CATE on an event the label says is heterogeneous,
+divided by the largest *induced* X3 difference on an event the label says is
+not (population values, X3 = 1 minus X3 = 0, in days):
+
+| scenario | RMTL1 X3 diff, old | RMTL1, now | RMTL2 X3 diff, old | RMTL2, now |
+|---|---|---|---|---|
+| 3 | 4.15 | 3.97 | −1.29 (induced) | −0.85 (induced) |
+| 4 | 3.68 | 4.10 | −0.63 (induced) | −0.65 (induced) |
+| 5 | 0.70 (induced) | 0.68 (induced) | −1.17 | −1.99 |
+| 6 | 0.57 (induced) | 0.80 (induced) | −0.69 | −1.87 |
+| 7 | 4.01 | 5.05 | −0.99 | −2.22 |
+| **separation** | 5.3 | 4.9 | **0.53** | **2.2** |
+
+The induced differences can't be removed: in competing risks an effect on one
+cause always moves the other cause's CIF. What the retune achieves is that every
+labelled effect is now at least twice the size of any induced one.
 
 ### Design
 
@@ -98,7 +131,9 @@ not linear in them, so the CATE varies with X1 and X2 even in scenarios 1 and
 
 Runs 1–100 are the original 1,400-job array. Runs 101–500 were added later,
 through `jobscripts/surv_extra.sh` or `surv_run.R` (see `README.md`). The
-results report's text (`surv_results.qmd`) still says 100 runs.
+results report's text (`surv_results.qmd`) still says 100 runs. **All results
+produced before 2026-10-01 come from the old parameters** (see "Why these
+values") and have to be regenerated, with the full 7,000-job array.
 
 **Seeding.** Each run is seeded by its run index alone
 (`setup_rng_stream(run)`). Draw order: `W, X1, X2, X3, U, cause, [C], X01–X03,
@@ -110,67 +145,74 @@ between the two censoring settings of a run.
 
 ### What the DGM implies
 
-From `generate_surv_data()` at n = 20,000 per cell (event mix) and one draw at
-n = 500 (truth). Seeded once, not with the study's streams, so these numbers
-are illustrative.
+For the parameters as of 2026-10-01. The event mix comes from
+`generate_surv_data()` at n = 20,000 per (scenario, censoring) cell, seeded
+once rather than with the study's streams, so it is illustrative. The truths
+are population values: `truth_individual()` evaluated over the covariate
+distribution (X1 and X3 exactly, X2 on 25 normal quantiles).
 
 **Event mix by the horizon.** The control arm is the same in every scenario:
-EOI 0.76, CE 0.22, still event-free at 28 about 0.015. With censoring on that
-becomes EOI 0.71–0.72, CE 0.21–0.22, censored before 28 about 0.055, and
-about 0.014 observed past 28. Treated arm:
+EOI 0.52–0.54, CE 0.32–0.34, still event-free at 28 about 0.14. With censoring
+on, that becomes EOI 0.48–0.50, CE 0.30–0.31, censored before 28 about 0.08,
+and about 0.12 observed past 28. Treated arm:
 
 | scenario | EOI by 28 | CE by 28 | event-free at 28 | censored before 28 (censoring on) | observed past 28 (censoring on) |
 |---|---|---|---|---|---|
-| 1 | 0.89 | 0.11 | 0.000 | 0.028 | 0.000 |
-| 2 | 0.87 | 0.11 | 0.023 | 0.061 | 0.019 |
-| 3 | 0.93 | 0.07 | 0.000 | 0.014 | 0.000 |
-| 4 | 0.97 | 0.03 | 0.000 | 0.019 | 0.000 |
-| 5 | 0.90 | 0.07 | 0.026 | 0.064 | 0.020 |
-| 6 | 0.97 | 0.03 | 0.000 | 0.032 | 0.000 |
-| 7 | 0.97 | 0.03 | 0.000 | 0.015 | 0.000 |
+| 1 | 0.63 | 0.29 | 0.083 | 0.073 | 0.071 |
+| 2 | 0.58 | 0.25 | 0.168 | 0.091 | 0.139 |
+| 3 | 0.72 | 0.24 | 0.035 | 0.058 | 0.031 |
+| 4 | 0.78 | 0.18 | 0.038 | 0.062 | 0.036 |
+| 5 | 0.63 | 0.17 | 0.197 | 0.099 | 0.165 |
+| 6 | 0.74 | 0.15 | 0.114 | 0.081 | 0.100 |
+| 7 | 0.83 | 0.13 | 0.045 | 0.068 | 0.039 |
 
-- Almost everyone has an event before the horizon. The horizon, not the
-  censoring, truncates the restricted means, and censoring is light: at most
-  6% of a treated arm, 6% of controls.
-- Wherever the treatment acts on the EOI (scenarios 1, 3, 4, 6, 7), no treated
-  unit reaches 28, and about 1.5% of controls do: 3–4 units of 500. The data
-  past the horizon are therefore thin. When there are none, the
-  `pseudo::pseudoyl()` leave-one-out risk set empties at the horizon and
-  returns NA pseudo-values (README "Known issues", route C).
-- In the same scenarios the treated arm has few CEs (3–11%), so its RMTL2
-  pseudo-values take only a handful of distinct values. That is the
-  degenerate SuperLearner cell of route A'.
+- The horizon still truncates most of the restricted means, but 4–20% of each
+  arm is event-free at 28. Censoring now matters more than it did: 6–10% of
+  an arm is censored before the horizon.
+- Every cell has units observed past 28: about 30 controls per run and at
+  least about 8 treated, even in scenario 3 with censoring on. The chance that
+  nobody is past 28 in a run of 500 is below 1e-17 in every cell, so route C
+  (README "Known issues", NA whole-sample pseudo-values) should not recur. It
+  needed scenarios where no treated unit reached 28.
+- The fewest treated CEs are in scenario 7, about 13% or roughly 32 units, against 3% before.
+  So the near-constant treated-arm RMTL2 pseudo-values behind route A' should
+  be much rarer.
 
-**The true CATEs.** Mean (SD) over the 500 units, in days. Control-arm levels:
-RMTL1 12.5, RMTL2 4.5, RMSTc 11.0 (they sum to 28), net RMST1 12.8, net
+**The true CATEs.** Population mean (SD), in days. Control-arm levels:
+RMTL1 6.9, RMTL2 5.7, RMSTc 15.4 (they sum to 28), net RMST1 19.1, net
 RMST2 21.2.
 
 | scenario | τ_RMTL1 | τ_RMTL2 | τ_RMSTc | τ_RMST1_cs | τ_RMST2_cs | cor(τ_RMTL1, τ_RMTL2) |
 |---|---|---|---|---|---|---|
-| 1 | 6.85 (0.37) | −1.79 (0.14) | −5.05 (0.51) | −6.40 (0.62) | 0 | +1.00 |
-| 2 | 1.36 (0.18) | −2.28 (0.09) | 0.91 (0.08) | 0 | 3.32 (0.30) | −1.00 |
-| 3 | 9.80 (1.93) | −2.72 (0.62) | −7.08 (1.46) | −8.67 (1.65) | 0 | −0.83 |
-| 4 | 10.58 (1.76) | −3.65 (0.35) | −6.93 (1.56) | −8.62 (1.69) | 3.32 (0.30) | −0.64 |
-| 5 | 1.87 (0.40) | −3.11 (0.55) | 1.23 (0.24) | 0 | 4.62 (0.93) | −0.92 |
-| 6 | 8.41 (0.40) | −3.69 (0.36) | −4.73 (0.48) | −6.40 (0.63) | 4.58 (0.92) | −0.20 |
-| 7 | 10.73 (1.93) | −3.89 (0.50) | −6.84 (1.57) | −8.56 (1.72) | 4.56 (0.96) | −0.79 |
+| 1 | 1.82 (0.09) | −0.35 (0.07) | −1.47 (0.03) | −2.16 (0.10) | 0 | −0.96 |
+| 2 | 0.51 (0.11) | −1.49 (0.08) | 0.97 (0.03) | 0 | 1.74 (0.14) | −0.99 |
+| 3 | 4.59 (1.82) | −0.94 (0.42) | −3.65 (1.43) | −5.24 (2.02) | 0 | −0.94 |
+| 4 | 5.29 (1.89) | −2.21 (0.37) | −3.08 (1.58) | −5.24 (2.02) | 1.74 (0.14) | −0.86 |
+| 5 | 0.99 (0.38) | −2.88 (0.93) | 1.89 (0.60) | 0 | 3.41 (1.14) | −0.91 |
+| 6 | 2.98 (0.48) | −3.06 (0.88) | 0.08 (0.50) | −2.16 (0.10) | 3.41 (1.14) | −0.90 |
+| 7 | 5.96 (2.33) | −3.31 (1.05) | −2.65 (1.30) | −5.24 (2.02) | 3.41 (1.14) | −0.99 |
 
 τ_RMST1 and τ_RMST2 (subdistribution) are −τ_RMTL1 and −τ_RMTL2 exactly.
 
 - **An effect on one cause moves the other's CIF.** In scenarios 2 and 5 the
-  treatment does not touch the EOI hazard, yet τ_RMTL1 is +1.4 and +1.9: fewer
+  treatment does not touch the EOI hazard, yet τ_RMTL1 is +0.5 and +1.0: fewer
   CEs leave more units at risk of the EOI. The net truth τ_RMST1_cs is
-  identically 0 there. Likewise τ_RMTL2 is −1.8 and −2.7 in scenarios 1 and 3,
-  where τ_RMST2_cs is identically 0.
-- **Scenario 5's RMTL1 heterogeneity is all induced** (cor −0.92 with
+  identically 0 there. Likewise τ_RMTL2 is −0.35 and −0.94 in scenarios 1 and
+  3, where τ_RMST2_cs is identically 0.
+- **Scenario 5's RMTL1 heterogeneity is all induced** (cor −0.91 with
   τ_RMTL2), so an estimator that tracks the real, event-2, signal lands
   anti-correlated with τ_RMTL1. See README "Scenario 5 flips the sign".
-- **"ATE" scenarios are not null on the time scale.** Scenario 1's τ_RMTL1
-  has SD 0.37 and τ_RMST1_cs 0.62, all from X1 and X2. That is weak
-  heterogeneity, but not zero (see "Performance measures").
-- **Where X3 acts.** Mean τ_RMTL1 by X3 = 0 / 1 is 6.9 / 11.0 in scenario 3
-  and 8.0 / 12.0 in scenario 7, but 8.0 / 8.6 in scenario 6: X3 modifying the
-  CE barely reaches the EOI's RMTL (SD 0.40 against scenario 1's 0.37).
+- **Where X3 acts.** See the separation table under "Why these values": on
+  RMTL1 the X3 difference is 4.0–5.1 in scenarios 3, 4 and 7 against an induced
+  0.7–0.8 in 5 and 6. On RMTL2 it is 1.9–2.2 in scenarios 5, 6 and 7 against
+  an induced 0.65–0.85 in 3 and 4. On the net scale, X3 acts only where the
+  labels say.
+- **"ATE" scenarios are close to null on the time scale, but not null.**
+  Scenario 1's τ_RMTL1 has SD 0.09 and τ_RMST1_cs 0.10, all from X1 and X2
+  (see "Performance measures").
+- **Scenario 6's composite effect averages out.** The EOI and CE effects
+  offset on RMSTc, so τ_RMSTc has mean 0.08 but changes sign with X3: −0.67
+  at X3 = 0 and +0.39 at X3 = 1.
 
 ## Estimands
 
@@ -195,8 +237,8 @@ Each CATE is the treated minus the control value at the same x.
 - **Sign.** An RMTL CATE is positive when the event comes sooner; an RMST
   CATE is negative. Each arm is scored against its own truth, so the sign of a
   correlation means the same in every family, but the families' "Event 1" rows
-  are different estimands with different spreads (scenario 1: SD 0.37 for
-  τ_RMTL1, 0.62 for τ_RMST1_cs). Absolute errors therefore do not compare
+  are different estimands with different spreads (scenario 3: SD 1.82 for
+  τ_RMTL1, 2.02 for τ_RMST1_cs). Absolute errors therefore do not compare
   directly across families.
 - No HTE tests and no intervals: the study is point estimation only.
 
@@ -388,18 +430,19 @@ failures. The README notes this for scenario 5's Event 1 only.
 **Scenario 1 is treated as null, but is not.** `cate_metrics()` and
 `c_statistic()` hard-code scenario 1 as the no-heterogeneity scenario (the
 `sample_size/` convention): Pearson and Spearman are set to 0 and the
-C-statistic to 0.5. Here scenario 1's CATE varies with X1 and X2 (SD 0.37 for
-τ_RMTL1, 0.62 for τ_RMST1_cs), so those three columns are placeholders in
+C-statistic to 0.5. Here scenario 1's CATE varies with X1 and X2 (SD 0.09 for
+τ_RMTL1, 0.10 for τ_RMST1_cs), so those three columns are placeholders in
 scenario 1, not measurements. Bias and the error measures are unaffected.
 Fixing it needs only a metrics rerun, not a simulation rerun.
 
 **Failed runs.** Runs that error produce no results and drop out of every
-summary. `jobscripts/failed_ids.txt` lists 169 indices of 7,000 at the last
-check. The deterministic failures are not random: route C fires only with
-nobody observed past the horizon, which happens with censoring on and in
-scenarios 1, 3, 4, 6 and 7. So the summaries for those cells are conditional
-on someone surviving to 28. Check the coverage table in `surv_results.qmd`
-before reading anything else.
+summary. Under the pre-2026-10-01 parameters, `jobscripts/failed_ids.txt`
+listed 169 indices of 7,000. Those failures were not random: route C fires
+only when nobody is observed past the horizon, which happened with censoring on
+and in scenarios 1, 3, 4, 6 and 7, so those cells' summaries were conditional
+on someone surviving to 28. Under the current parameters route C should not
+fire (see "What the DGM implies"), but check the coverage table in
+`surv_results.qmd` before reading anything else.
 
 **Diagnostics, not performance measures:** `n_na_fallback` (how much the cvps
 and split arms leaned on whole-sample pseudo-values), and the nuisance

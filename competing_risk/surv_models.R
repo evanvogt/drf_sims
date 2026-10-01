@@ -811,7 +811,8 @@ pseudo_sl_t_standard <- function(
 #     n_na_fallback below.
 #
 #   * a degenerate library (25 of the 225). Where the treatment effect on the
-#     event of interest is strong (bW_1 = -0.7, scenarios 1/3/4/6/7), nearly
+#     event of interest is strong (bW_1 = -0.7, scenarios 1/3/4/6/7, under the
+#     pre-2026-10-01 parameters), nearly
 #     every treated subject has the cause-1 event before the horizon, so the
 #     treated arm's RMTL2 pseudo-values collapse onto a handful of distinct
 #     values - 3 across 195 rows on array index 67. SL.glmnet then dies inside
