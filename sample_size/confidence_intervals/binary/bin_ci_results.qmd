@@ -20,7 +20,6 @@ library(tidyr)
 library(ggplot2)
 library(paletteer)
 library(here)
-library(patchwork)
 library(purrr)
 library(knitr)
 ```
@@ -51,7 +50,7 @@ enough — so this study sweeps it: 0.05, 0.10, ..., 0.50.
 Ten scenarios vary the structure of the CATE, crossed with two sample sizes and
 the ten-point `CI_sf` sweep, 100 runs each. Full design in
 `confidence_intervals/README.md`; the grid itself is defined once, in
-`bin_ci_config.R`.
+`bin_ci_config.R`. The results below are restricted to the main scenarios 1–4.
 
 | | |
 |---|---|
@@ -92,12 +91,12 @@ bootstrap already dominates the runtime.
 ### Performance measures
 
 * **Marginal coverage** — the proportion of units their own interval covers.
-  Shown both per run and as the mean across runs.
+  Shown as the mean across runs.
 * **Simultaneous coverage** — 0/1 per run: did the band cover *every* unit at
   once. This is the guarantee the half-sample bootstrap is constructed to
   control, and the much stricter target.
-* **CI length** — mean interval length within a run. Shown per run and as the
-  mean across runs.
+* **CI length** — mean interval length within a run. Shown as the mean across
+  runs.
 
 Nominal is 0.95 for both coverages.
 
@@ -205,32 +204,16 @@ metrics_summary <- metrics %>%
   )
 
 # everything below the interval-kind comparison is about the per-unit bootstrap
-metrics_hb <- filter(metrics, interval == interval_labels[["half_boot"]])
 summary_hb <- filter(metrics_summary, interval == interval_labels[["half_boot"]])
 ```
 
 ```{r plot-helpers, include=FALSE}
-# helpers: the house pair of plots, per-run distribution and mean with MCSE
-# error bars - see cts_results.qmd's summary_plot for the pattern. The sweep
-# goes on x and the design on the facets, so scenario x n is a facet_grid
-# rather than cts_results.qmd's facet_wrap(~scenario).
+# helpers: mean with MCSE error bars - see cts_results.qmd's summary_plot for
+# the pattern. The sweep goes on x and the design on the facets, so scenario x n
+# is a facet_grid rather than cts_results.qmd's facet_wrap(~scenario).
 #
 # hline is optional rather than defaulting to 0 (as in cf_ci_results.qmd): the
 # coverages have a nominal 0.95 to sit against, CI width has no target at all.
-box_plot <- function(df, metric, title, ylab, hline = NULL) {
-  p <- ggplot(df, aes(x = CI_sf, y = .data[[metric]], colour = model))
-  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
-  p +
-    geom_boxplot(fill = "transparent", outlier.shape = NA) +
-    facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
-    scale_colour_paletteer_d("rcartocolor::Safe") +
-    theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
-    labs(title = title, y = ylab, x = "Subsampling ratio", colour = "Model")
-}
-
 summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alpha = 0.05) {
   z <- qnorm(1 - alpha / 2)
   df <- df %>%
@@ -247,7 +230,8 @@ summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alph
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
           strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
+          strip.text = element_text(colour = "black"),
+          legend.position = "bottom") +
     labs(title = title, y = ylab, x = "Subsampling ratio", colour = "Model")
 }
 
@@ -271,7 +255,9 @@ interval_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alp
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
           strip.background = element_rect(fill = "white"),
-          strip.text = element_text(colour = "black")) +
+          strip.text = element_text(colour = "black"),
+          legend.position = "bottom",
+          legend.box = "vertical") +
     labs(title = title, y = ylab, x = "Subsampling ratio",
          colour = "Interval kind", shape = "Sample size")
 }
@@ -282,25 +268,21 @@ interval_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL, alp
 The proportion of units their own interval covers, against the nominal 95%
 (dashed line), across the sweep.
 
-```{r marg-cov-plot, fig.height=22}
-marg_cov_plot <- box_plot(metrics_hb, "marginal_coverage",
-                          "Marginal coverage", "Marginal coverage", hline = 0.95)
-
+```{r marg-cov-plot, fig.height=5}
 marg_cov_sum_plot <- summary_plot(summary_hb, "mean_marg_cov", "mcse_marg_cov",
                                   "Mean marginal coverage", "Marginal coverage",
                                   hline = 0.95)
 
-(marg_cov_plot / marg_cov_sum_plot) + plot_layout(guides = "collect")
+marg_cov_sum_plot
 ```
 
 ## Simultaneous coverage
 
 Whether the band covers every unit at once — what the half-sample bootstrap is
-actually constructed to control. This is a per-run 0/1 indicator, so only the
-mean-proportion summary is shown: a boxplot of a binary outcome carries no
-information.
+actually constructed to control. This is a per-run 0/1 indicator, so the mean
+is the proportion of runs whose band covered every unit.
 
-```{r simul-cov-plot, fig.height=18}
+```{r simul-cov-plot, fig.height=5}
 simul_cov_sum_plot <- summary_plot(summary_hb, "mean_simul_cov", "mcse_simul_cov",
                                    "Mean simultaneous coverage",
                                    "Simultaneous coverage", hline = 0.95)
@@ -314,14 +296,11 @@ The width that coverage is bought with. No reference line — there is no target
 width, only the trade-off against the two coverage sections above. A ratio that
 reaches nominal coverage by producing enormous bands has not solved anything.
 
-```{r ci-len-plot, fig.height=22}
-ci_len_plot <- box_plot(metrics_hb, "mean_ci_length", "CI length across runs",
-                        "CI length")
-
+```{r ci-len-plot, fig.height=5}
 ci_len_sum_plot <- summary_plot(summary_hb, "mean_ci_len", "mcse_ci_len",
                                 "Mean CI length", "Mean CI length")
 
-(ci_len_plot / ci_len_sum_plot) + plot_layout(guides = "collect")
+ci_len_sum_plot
 ```
 
 ## The three interval kinds
@@ -344,19 +323,19 @@ one.** It takes its supremum over the fixed covariate grid from
 the easier of the two and the numbers are not directly comparable to the per-unit
 band.
 
-```{r interval-marg-cov, fig.height=22}
+```{r interval-marg-cov, fig.height=10}
 interval_plot(metrics_summary, "mean_marg_cov", "mcse_marg_cov",
               "Mean marginal coverage by interval kind", "Marginal coverage",
               hline = 0.95)
 ```
 
-```{r interval-simul-cov, fig.height=22}
+```{r interval-simul-cov, fig.height=10}
 interval_plot(metrics_summary, "mean_simul_cov", "mcse_simul_cov",
               "Mean simultaneous coverage by interval kind",
               "Simultaneous coverage", hline = 0.95)
 ```
 
-```{r interval-ci-len, fig.height=22}
+```{r interval-ci-len, fig.height=10}
 interval_plot(metrics_summary, "mean_ci_len", "mcse_ci_len",
               "Mean CI length by interval kind", "Mean CI length")
 ```
@@ -373,7 +352,7 @@ The plot is the distance from nominal, `|mean simultaneous coverage - 0.95|`, so
 arg-min per scenario, sample size and estimator, and reports the width that
 choice costs.
 
-```{r sf-distance-plot, fig.height=18}
+```{r sf-distance-plot, fig.height=8}
 sf_dist <- summary_hb %>%
   mutate(dist = abs(mean_simul_cov - 0.95))
 
@@ -387,7 +366,8 @@ sf_dist %>%
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = "white"),
-        strip.text = element_text(colour = "black")) +
+        strip.text = element_text(colour = "black"),
+        legend.position = "bottom") +
   labs(title = "Distance from nominal simultaneous coverage",
        subtitle = "Lower is better; zero is exactly nominal",
        y = "|mean simultaneous coverage - 0.95|", x = "Subsampling ratio",
