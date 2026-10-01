@@ -139,41 +139,27 @@ metrics_summary <- summarise_metrics(
 )
 ```
 
-```{r box-plot-helper, include=FALSE}
-# the per-run distribution behind each summary panel. distribution_plot() in
-# R/figures.R is the sample-size studies' shape (x = n, facet_wrap(~scenario));
-# this study has n fixed and two extra factors, so it needs its own. Faceting
-# matches point_range_plot() so the two stack cleanly.
-miss_box_plot <- function(metrics, metric, y_lab, hline = 0,
-                          facet_scales = "free") {
-  p <- ggplot(metrics, aes(x = model, y = .data[[metric]], colour = method)) +
-    geom_boxplot(fill = "transparent", outlier.shape = NA) +
-    facet_grid(rows = vars(mechanism), cols = vars(scenario),
-               scales = facet_scales) +
-    drf_scale() +
-    drf_theme(rotate_x = TRUE) +
-    labs(y = y_lab, x = "Model", colour = "Method")
-  if (!is.null(hline)) {
-    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
-  }
-  p
-}
+```{r plot-helpers, include=FALSE}
+# every summary panel's legend: along the bottom, wrapped over three rows so
+# the nine method labels fit the figure width
+legend_bottom <- list(
+  theme(legend.position = "bottom"),
+  guides(colour = guide_legend(nrow = 3)),
+  labs(colour = "Method")
+)
 ```
 
-Every section below pairs the per-run distribution (top) with the mean ± Monte
-Carlo standard error across runs (bottom). Rows are the missingness mechanism,
-columns the scenario, colour the handling method.
+Every panel below shows the mean across runs with its 95% Monte Carlo interval
+(mean ± 1.96 × MCSE). Rows are the missingness mechanism, columns the scenario,
+colour the handling method.
 
 ## Bias
 
 Average bias in the estimated CATE (estimate minus truth), per unit and per run,
 against the known truth.
 
-```{r bias-plot, fig.height=16}
-bias_plot <- miss_box_plot(metrics, "bias", "Bias")
-bias_sum_plot <- point_range_plot(metrics_summary, "bias", "Bias")
-
-(bias_plot / bias_sum_plot) + plot_layout(guides = "collect")
+```{r bias-plot, fig.height=9}
+point_range_plot(metrics_summary, "bias", "Bias") + legend_bottom
 ```
 
 ## ATE bias
@@ -182,11 +168,8 @@ Bias of the *average* treatment effect (`mean(est) - mean(true)`), as opposed to
 Bias's per-unit average — the two can differ in sign or magnitude when errors
 don't average out evenly across units.
 
-```{r ate-bias-plot, fig.height=16}
-ate_bias_plot <- miss_box_plot(metrics, "ate_bias", "ATE bias")
-ate_bias_sum_plot <- point_range_plot(metrics_summary, "ate_bias", "ATE bias")
-
-(ate_bias_plot / ate_bias_sum_plot) + plot_layout(guides = "collect")
+```{r ate-bias-plot, fig.height=9}
+point_range_plot(metrics_summary, "ate_bias", "ATE bias") + legend_bottom
 ```
 
 ## MSE of CATE estimates
@@ -196,12 +179,9 @@ analysed units — about 350 for complete cases and IPW, 500 for the rest, so
 not comparable across the two. The comparison across methods is the
 complete-units section below.
 
-```{r mse-plot, fig.height=16}
-mse_plot <- miss_box_plot(metrics, "mse", "MSE", facet_scales = "free_y")
-mse_sum_plot <- point_range_plot(metrics_summary, "mse", "MSE",
-                                 facet_scales = "free_y")
-
-(mse_plot / mse_sum_plot) + plot_layout(guides = "collect")
+```{r mse-plot, fig.height=9}
+point_range_plot(metrics_summary, "mse", "MSE", facet_scales = "free_y") +
+  legend_bottom
 ```
 
 ## RMSE of CATE estimates
@@ -209,24 +189,18 @@ mse_sum_plot <- point_range_plot(metrics_summary, "mse", "MSE",
 `sqrt(mse)` — the same ranking as MSE, shown on the outcome's own scale rather
 than squared.
 
-```{r rmse-plot, fig.height=16}
-rmse_plot <- miss_box_plot(metrics, "rmse", "RMSE", facet_scales = "free_y")
-rmse_sum_plot <- point_range_plot(metrics_summary, "rmse", "RMSE",
-                                  facet_scales = "free_y")
-
-(rmse_plot / rmse_sum_plot) + plot_layout(guides = "collect")
+```{r rmse-plot, fig.height=9}
+point_range_plot(metrics_summary, "rmse", "RMSE", facet_scales = "free_y") +
+  legend_bottom
 ```
 
 ## MAE of CATE estimates
 
 Mean absolute error — a robustness check on MSE, less sensitive to outlying runs.
 
-```{r mae-plot, fig.height=16}
-mae_plot <- miss_box_plot(metrics, "mae", "MAE", facet_scales = "free_y")
-mae_sum_plot <- point_range_plot(metrics_summary, "mae", "MAE",
-                                 facet_scales = "free_y")
-
-(mae_plot / mae_sum_plot) + plot_layout(guides = "collect")
+```{r mae-plot, fig.height=9}
+point_range_plot(metrics_summary, "mae", "MAE", facet_scales = "free_y") +
+  legend_bottom
 ```
 
 ## Complete and incomplete units
@@ -236,20 +210,24 @@ incomplete units (bottom: complete cases and IPW have none, so draw nothing).
 The incomplete-unit error of the imputation methods is mostly the floor that
 comes from scoring against τ at covariates they never saw.
 
-```{r rmse-split-plot, fig.height=16}
+```{r rmse-split-plot, fig.height=17}
 rmse_cu_sum_plot <- point_range_plot(metrics_summary, "rmse_cu",
                                      "RMSE, complete units", facet_scales = "free_y")
 rmse_iu_sum_plot <- point_range_plot(metrics_summary, "rmse_iu",
                                      "RMSE, incomplete units", facet_scales = "free_y")
 
-(rmse_cu_sum_plot / rmse_iu_sum_plot) + plot_layout(guides = "collect")
+# the collected legend's position comes from the patchwork's own theme, which
+# only `& theme()` sets - legend_bottom on each panel isn't enough on its own
+((rmse_cu_sum_plot + legend_bottom) / (rmse_iu_sum_plot + legend_bottom)) +
+  plot_layout(guides = "collect") & theme(legend.position = "bottom")
 ```
 
-```{r bias-split-plot, fig.height=16}
+```{r bias-split-plot, fig.height=17}
 bias_cu_sum_plot <- point_range_plot(metrics_summary, "bias_cu", "Bias, complete units")
 bias_iu_sum_plot <- point_range_plot(metrics_summary, "bias_iu", "Bias, incomplete units")
 
-(bias_cu_sum_plot / bias_iu_sum_plot) + plot_layout(guides = "collect")
+((bias_cu_sum_plot + legend_bottom) / (bias_iu_sum_plot + legend_bottom)) +
+  plot_layout(guides = "collect") & theme(legend.position = "bottom")
 ```
 
 ## Relative efficiency
@@ -263,16 +241,11 @@ mechanisms compare: MNAR-Y0's `U` adds outcome variance to the `complete_data`
 arm as well. The all-unit ratio is not defined for complete cases and IPW,
 which analyse fewer units than `complete_data`.
 
-```{r rel-eff-plot, fig.height=16}
-rel_eff_cu_plot <- miss_box_plot(metrics, "rel_efficiency_cu",
-                                 "Relative efficiency, complete units", hline = 1,
-                                 facet_scales = "free_y")
-rel_eff_cu_sum_plot <- point_range_plot(metrics_summary, "rel_eff_cu",
-                                        "Relative efficiency, complete units",
-                                        facet_scales = "free_y") +
-  geom_hline(yintercept = 1, linetype = "dashed")
-
-(rel_eff_cu_plot / rel_eff_cu_sum_plot) + plot_layout(guides = "collect")
+```{r rel-eff-plot, fig.height=9}
+point_range_plot(metrics_summary, "rel_eff_cu",
+                 "Relative efficiency, complete units",
+                 facet_scales = "free_y", hline = 1) +
+  legend_bottom
 ```
 
 ## Bias difference (vs complete data)
@@ -283,15 +256,11 @@ the handling method add. A difference rather than a ratio — the complete-data
 bias is often near zero, which made the old ratio `rel_bias_complete`
 unstable.
 
-```{r bias-diff-plot, fig.height=16}
-bias_diff_plot <- miss_box_plot(metrics, "bias_diff_complete_cu",
-                                "Bias minus complete-data bias, complete units",
-                                facet_scales = "free_y")
-bias_diff_sum_plot <- point_range_plot(metrics_summary, "bias_diff_cu",
-                                       "Bias minus complete-data bias, complete units",
-                                       facet_scales = "free_y")
-
-(bias_diff_plot / bias_diff_sum_plot) + plot_layout(guides = "collect")
+```{r bias-diff-plot, fig.height=9}
+point_range_plot(metrics_summary, "bias_diff_cu",
+                 "Bias minus complete-data bias, complete units",
+                 facet_scales = "free_y") +
+  legend_bottom
 ```
 
 ## Relative ATE bias (vs true)
@@ -302,17 +271,11 @@ the simulation literature. Unlike the panel above, this is a *bias fraction*,
 not an arm-to-arm ratio, so the reference line is 0 (dashed), the same
 convention as the plain Bias/ATE bias panels.
 
-```{r rel-ate-bias-plot, fig.height=16}
+```{r rel-ate-bias-plot, fig.height=9}
 if ("rel_ate_bias" %in% names(metrics)) {
-  rel_ate_bias_plot <- miss_box_plot(metrics, "rel_ate_bias",
-                                     "Relative ATE bias (vs true)", hline = 0,
-                                     facet_scales = "free_y")
-  rel_ate_bias_sum_plot <- point_range_plot(metrics_summary, "rel_ate_bias",
-                                            "Relative ATE bias (vs true)",
-                                            facet_scales = "free_y") +
-    geom_hline(yintercept = 0, linetype = "dashed")
-
-  (rel_ate_bias_plot / rel_ate_bias_sum_plot) + plot_layout(guides = "collect")
+  point_range_plot(metrics_summary, "rel_ate_bias",
+                   "Relative ATE bias (vs true)", facet_scales = "free_y") +
+    legend_bottom
 } else {
   cat("rel_ate_bias is not present in this metrics file.")
 }
@@ -332,12 +295,13 @@ incomplete] instead, which rewards a method that learns the shift from the
 missingness itself (missing indicators, inbuilt handling). See
 `missing/ADEMP.md`, "Estimands".
 
-```{r rmse-r-plot, fig.height=8}
+```{r rmse-r-plot, fig.height=5}
 mnar_tau_summary <- filter(metrics_summary, mechanism == "MNAR-tau")
 if (nrow(mnar_tau_summary) > 0 && "mean_rmse_r" %in% names(mnar_tau_summary)) {
   point_range_plot(mnar_tau_summary, "rmse_r",
                    "RMSE against the truth given completeness",
-                   facet_scales = "free_y")
+                   facet_scales = "free_y") +
+    legend_bottom
 } else {
   cat("No MNAR-tau rows with the secondary truth in this metrics file.")
 }
@@ -349,16 +313,12 @@ Pearson correlation between estimated and true CATEs. Undefined, and reported as
 0, in the Null scenario since there is no heterogeneity to correlate with — so
 that scenario is excluded here.
 
-```{r corr-plot, fig.height=16}
-corr_metrics <- filter(metrics, scenario != "Null")
+```{r corr-plot, fig.height=9}
 corr_summary <- filter(metrics_summary, scenario != "Null")
 
-corr_plot <- miss_box_plot(corr_metrics, "corr", "Pearson correlation",
-                           hline = NULL, facet_scales = "free_y")
-corr_sum_plot <- point_range_plot(corr_summary, "corr", "Pearson correlation",
-                                  facet_scales = "free_y", hline = NULL)
-
-(corr_plot / corr_sum_plot) + plot_layout(guides = "collect")
+point_range_plot(corr_summary, "corr", "Pearson correlation",
+                 facet_scales = "free_y", hline = NULL) +
+  legend_bottom
 ```
 
 ## Spearman rank correlation with the true CATE
@@ -367,14 +327,10 @@ Rank correlation alongside the Pearson correlation above — less sensitive to
 outlying CATE estimates and to non-linear-but-monotone miscalibration. Same
 Null-undefined convention, so that scenario is excluded here too.
 
-```{r spearman-plot, fig.height=16}
-spearman_plot <- miss_box_plot(corr_metrics, "spearman", "Spearman correlation",
-                               hline = NULL, facet_scales = "free_y")
-spearman_sum_plot <- point_range_plot(corr_summary, "spearman",
-                                      "Spearman correlation",
-                                      facet_scales = "free_y", hline = NULL)
-
-(spearman_plot / spearman_sum_plot) + plot_layout(guides = "collect")
+```{r spearman-plot, fig.height=9}
+point_range_plot(corr_summary, "spearman", "Spearman correlation",
+                 facet_scales = "free_y", hline = NULL) +
+  legend_bottom
 ```
 
 ## Sign accuracy
@@ -383,15 +339,10 @@ Proportion of units where the estimated CATE has the correct sign — a
 direction-detection metric, distinct from magnitude accuracy. 0.5 (dashed line)
 is the chance level for a coin-flip on sign.
 
-```{r sign-acc-plot, fig.height=16}
-sign_acc_plot <- miss_box_plot(metrics, "sign_acc", "Proportion correct sign",
-                               hline = 0.5, facet_scales = "free_x")
-sign_acc_sum_plot <- point_range_plot(metrics_summary, "sign_acc",
-                                      "Proportion correct sign",
-                                      facet_scales = "free_x") +
-  geom_hline(yintercept = 0.5, linetype = "dashed")
-
-(sign_acc_plot / sign_acc_sum_plot) + plot_layout(guides = "collect")
+```{r sign-acc-plot, fig.height=9}
+point_range_plot(metrics_summary, "sign_acc", "Proportion correct sign",
+                 facet_scales = "free_x", hline = 0.5) +
+  legend_bottom
 ```
 
 ## True-CATE HTE test evaluation
@@ -446,12 +397,10 @@ true_cate_summary <- true_cate_tests %>%
   ) %>%
   mutate(model = "True CATE")
 
-true_cate_raw <- true_cate_tests %>% mutate(model = "True CATE")
-
 model_levels_true <- c(levels(metrics$model), "True CATE")
 
-# row-bind the true-CATE reference series onto a per-run or summarised data
-# frame, extending `model`'s levels so it becomes one more x-axis category
+# row-bind the true-CATE reference series onto a summarised data frame,
+# extending `model`'s levels so it becomes one more x-axis category
 bind_true_cate <- function(df, true_df, extra_cols) {
   bind_rows(
     mutate(df, model = factor(as.character(model), levels = model_levels_true)),
@@ -473,44 +422,31 @@ constant-variance SEs, as computed when the models were fitted; `BLP_p_os` is
 one-sided (H1: beta.2 > 0) with HC3 SEs, recomputed at metrics time from the
 saved nuisances.
 
-```{r blp-plot, fig.height=16}
-BLP_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p"),
-                          "BLP_p", "p-value", hline = 0.05, facet_scales = "free_x")
-BLP_sum_plot <- point_range_plot(
+```{r blp-plot, fig.height=9}
+point_range_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP", "mcse_BLP")),
-  "BLP", "p-value", facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
-
-(BLP_plot / BLP_sum_plot) + plot_layout(guides = "collect") +
-  plot_annotation(title = "BLP test (two-sided, constant variance)")
+  "BLP", "p-value", facet_scales = "free_x", hline = 0.05) +
+  labs(title = "BLP test (two-sided, constant variance)") +
+  legend_bottom
 ```
 
-```{r blp-os-plot, fig.height=16}
-BLP_os_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p_os"),
-                             "BLP_p_os", "p-value", hline = 0.05, facet_scales = "free_x")
-BLP_os_sum_plot <- point_range_plot(
+```{r blp-os-plot, fig.height=9}
+point_range_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP_os", "mcse_BLP_os")),
-  "BLP_os", "p-value", facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
-
-(BLP_os_plot / BLP_os_sum_plot) + plot_layout(guides = "collect") +
-  plot_annotation(title = "BLP test (one-sided, HC3)")
+  "BLP_os", "p-value", facet_scales = "free_x", hline = 0.05) +
+  labs(title = "BLP test (one-sided, HC3)") +
+  legend_bottom
 ```
 
 ## CATE permutation test p-values
 
 Omnibus independence test of the estimated CATEs against the covariates.
 
-```{r indep-cate-plot, fig.height=16}
-indep_cate_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "indep_cate"),
-                                 "indep_cate", "p-value", hline = 0.05,
-                                 facet_scales = "free_x")
-indep_cate_sum_plot <- point_range_plot(
+```{r indep-cate-plot, fig.height=9}
+point_range_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_indep_cate", "mcse_indep_cate")),
-  "indep_cate", "p-value", facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
-
-(indep_cate_plot / indep_cate_sum_plot) + plot_layout(guides = "collect")
+  "indep_cate", "p-value", facet_scales = "free_x", hline = 0.05) +
+  legend_bottom
 ```
 
 ## PO permutation test p-values
@@ -520,14 +456,10 @@ fitted CATEs. The causal forest has no series here: its pseudo-outcome is
 DR-RandomForest's (both use the same random-forest nuisances), so the test is
 reported once.
 
-```{r indep-po-plot, fig.height=16}
-indep_po_plot <- miss_box_plot(metrics, "indep_po", "p-value", hline = 0.05,
-                               facet_scales = "free_x")
-indep_po_sum_plot <- point_range_plot(metrics_summary, "indep_po", "p-value",
-                                      facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
-
-(indep_po_plot / indep_po_sum_plot) + plot_layout(guides = "collect")
+```{r indep-po-plot, fig.height=9}
+point_range_plot(metrics_summary, "indep_po", "p-value",
+                 facet_scales = "free_x", hline = 0.05) +
+  legend_bottom
 ```
 
 ## HTE test power
@@ -539,29 +471,29 @@ The true-CATE reference series applies to BLP and the CATE permutation test
 only, same as the p-value panels above; PO has no true-CATE counterpart
 anywhere in this evaluation (`dr_oracle`'s own `indep_po` already covers it).
 
-```{r power-plot, fig.height=16}
+```{r power-plot, fig.height=9}
 BLP_power_plot <- point_range_plot(
   bind_true_cate(metrics_summary, true_cate_summary, c("mean_power_BLP", "mcse_power_BLP")),
-  "power_BLP", "Power", facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed") +
-  labs(title = "BLP test (two-sided, constant variance)")
+  "power_BLP", "Power", facet_scales = "free_x", hline = 0.05) +
+  labs(title = "BLP test (two-sided, constant variance)") +
+  legend_bottom
 
 BLP_os_power_plot <- point_range_plot(
   bind_true_cate(metrics_summary, true_cate_summary,
                 c("mean_power_BLP_os", "mcse_power_BLP_os")),
-  "power_BLP_os", "Power", facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed") +
-  labs(title = "BLP test (one-sided, HC3)")
+  "power_BLP_os", "Power", facet_scales = "free_x", hline = 0.05) +
+  labs(title = "BLP test (one-sided, HC3)") +
+  legend_bottom
 
 indep_cate_power_plot <- point_range_plot(
   bind_true_cate(metrics_summary, true_cate_summary,
                 c("mean_power_indep_cate", "mcse_power_indep_cate")),
-  "power_indep_cate", "Power", facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
+  "power_indep_cate", "Power", facet_scales = "free_x", hline = 0.05) +
+  legend_bottom
 
 indep_po_power_plot <- point_range_plot(metrics_summary, "power_indep_po", "Power",
-                                        facet_scales = "free_x") +
-  geom_hline(yintercept = 0.05, linetype = "dashed")
+                                        facet_scales = "free_x", hline = 0.05) +
+  legend_bottom
 
 BLP_power_plot
 BLP_os_power_plot
