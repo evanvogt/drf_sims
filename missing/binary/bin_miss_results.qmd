@@ -302,7 +302,8 @@ missingness itself (missing indicators, inbuilt handling). See
 `missing/ADEMP.md`, "Estimands".
 
 ```{r rmse-r-plot, fig.height=5}
-mnar_tau_summary <- filter(metrics_summary, mechanism == "MNAR-tau")
+mnar_tau_summary <- filter(metrics_summary,
+                           mechanism == MECHANISM_LABELS[["MNAR-tau"]])
 if (nrow(mnar_tau_summary) > 0 && "mean_rmse_r" %in% names(mnar_tau_summary)) {
   point_range_plot(mnar_tau_summary, "rmse_r",
                    "RMSE against the truth given completeness",
