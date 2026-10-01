@@ -28,9 +28,7 @@ dir.create(fig_path, recursive = TRUE, showWarnings = FALSE)
 
 metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS"))
 
-# tidy up. Unlike the chapter script this keeps all five scenarios - this study's
-# grid runs 1 and 3-6, and scenario 6 ("Two HTE vars") exists here even though
-# missing/continuous and missing/binary never run it.
+# tidy up. This study's grid runs the four main scenarios, 1-4.
 metrics <- metrics %>%
   apply_labels(MISS_SCENARIO_LABELS) %>%
   mutate(n = factor(n), prop = factor(prop)) %>%

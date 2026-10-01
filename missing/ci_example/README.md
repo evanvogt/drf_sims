@@ -6,13 +6,13 @@ each imputation be combined?**
 
 | | |
 |---|---|
-| scenarios | 1, 3, 4, 5, 6 (of the missing-data set, which uses the main study's numbers; 1–5 before 2026-09-26) |
+| scenarios | 1–4, the main scenarios (of the missing-data set, which uses the main study's numbers; 1 and 3–6 until 2026-10-01) |
 | n | 500, MAR, `prop = 0.3`, `type = both` |
 | method | `multiple_imputation` only |
 | runs | 100 |
-| array | **500 jobs** |
+| array | **400 jobs** |
 | results | `../results/missing/ci_example/scenario_<k>/500/both/0.3/MAR/multiple_imputation/` |
-| figures | `cts_miss_ci_results.R` / `.qmd` — every metric, to `results/all_figures/`; the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts_ci.R`. Keeps all five scenarios, where the chapter script shows four. |
+| figures | `cts_miss_ci_results.R` / `.qmd` — every metric, to `results/all_figures/`; the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts_ci.R`. Both show all four scenarios. |
 
 The grid is ordered by `(scenario, run)` rather than left in `expand.grid` order.
 That was already true and is preserved — the array index is a row number, so

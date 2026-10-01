@@ -205,8 +205,8 @@ DESC_10 <- c(
 )
 
 # the missing-data studies use the first six scenarios above: scenario k here
-# is scenario k of the main study. The missing grids run 1-5 (ci_example: 1 and
-# 3-6), not all six.
+# is scenario k of the main study. The missing grids run 1-5 (ci_example: the
+# four main scenarios, 1-4), not all six.
 # U_term carries the unobserved U's contribution under MNAR-tau (0 otherwise).
 TE_MISS <- c(
   "rep(bW, n)",

@@ -22,7 +22,7 @@ metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS"))
 # R/figures.R; `strategy` is what cts_miss_ci_metrics.R actually writes (this
 # script used to name it CI_method, a column the metrics file never had).
 metrics <- metrics %>%
-  filter(scenario %in% c(1, 3, 4, 5)) %>%
+  filter(scenario %in% c(1, 2, 3, 4)) %>%
   apply_labels(MISS_SCENARIO_LABELS) %>%
   mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
 

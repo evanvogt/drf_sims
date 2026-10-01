@@ -30,7 +30,7 @@ handling method; what varies is the **pooling strategy**.
 
 | | |
 |---|---|
-| scenarios | 1–5 (the reduced set — all five, unlike the other two studies) |
+| scenarios | 1–4 (the main scenarios) |
 | n | 500 |
 | type | `both` |
 | prop | 0.3 |
@@ -52,8 +52,7 @@ pools them three ways so they can be compared:
 `dr_oracle` (`CI_MODELS` — this study has no SuperLearner arm).
 
 Scenario numbering is the main study's: scenario *k* here is scenario *k* in
-`continuous/`. This study runs 1 and 3–6. Scenario 6 ("Two HTE vars") appears
-here but not in `missing/continuous` or `missing/binary`, whose grids run 1–5.
+`continuous/`. This study runs the four main scenarios, 1–4.
 
 ### Two things to know before reading the figures
 
@@ -74,8 +73,7 @@ res_path <- file.path(dirname(path), "results", "missing", "ci_example")
 
 metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS"))
 
-# unlike the chapter script this keeps all five scenarios - this study's grid
-# runs 1 and 3-6
+# this study's grid runs the four main scenarios, 1-4
 metrics <- metrics %>%
   apply_labels(MISS_SCENARIO_LABELS) %>%
   mutate(n = factor(n), prop = factor(prop)) %>%
