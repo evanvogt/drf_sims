@@ -16,7 +16,9 @@ source(here("R", "metrics.R"))
 #   whole_scf  whole-sample pseudo-values, single crossfit (the control)
 #   cvps_scf   leave-one-fold-out pseudo-values, single crossfit
 # The SuperLearner arms have no OOB analogue, so they are scf throughout and vary
-# the pseudo-values only (sl_*_whole vs sl_*_cvps).
+# the pseudo-values only (sl_*_whole vs sl_*_cvps). The random survival forest
+# DR-learner fits (Y, D) rather than pseudo-values, so it varies the fitting only
+# (rsf_dr_oob vs rsf_dr_scf) - but it targets the same RMTL truth.
 #
 # NOTE: frameworks_run below is intersect(names(sim_res), frameworks), so a
 # framework missing from ANY of these three lists is dropped silently rather than
@@ -29,7 +31,8 @@ frameworks <- c(
   paste0("pseudo_dr_", pseudo_arms),
   "sl_t_whole", "sl_t_cvps",
   "sl_dr_whole", "sl_dr_cvps",
-  "sl_t_split"
+  "sl_t_split",
+  "rsf_dr_oob", "rsf_dr_scf"
 )
 
 # every pseudo-value framework shares the same targets and truth columns
@@ -75,8 +78,8 @@ metrics <- all_results_df %>%
          sim_res = map(results,     ~ .x$result)) %>%
   select(-results) %>%
   mutate(metrics = pmap(
-    list(scenario, n, censoring, run, sim_res),
-    function(scenario, n, censoring, run, sim_res) {
+    list(rho, scenario, n, censoring, run, sim_res),
+    function(rho, scenario, n, censoring, run, sim_res) {
 
       truth          <- sim_res$truth
       frameworks_run <- intersect(names(sim_res), frameworks)
@@ -92,7 +95,8 @@ metrics <- all_results_df %>%
           true_tau  <- truth[[framework_truth_map[[framework]][[target]]]]
 
           bind_cols(
-            tibble(scenario = scenario, n = n, censoring = censoring, run = run,
+            tibble(rho = rho, scenario = scenario, n = n, censoring = censoring,
+                   run = run,
                    framework = framework, target = target),
             cate_metrics(model_tau, true_tau, scenario),
             tibble(c_stat = c_statistic(model_tau, true_tau, scenario))

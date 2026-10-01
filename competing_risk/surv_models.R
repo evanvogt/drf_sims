@@ -9,6 +9,7 @@ library(SuperLearner)
 library(ranger)
 library(glmnet)
 library(gam)
+library(randomForestSRC)
 
 # sl_libraries, sl_fit_predict, pretest_superlearner. Also arrives via
 # R/cate_models.R, but sourced here too so the diagnostic scripts that load
@@ -187,6 +188,29 @@ all_cate_surv_models <- function(
     pseudo_dr_sl(X, nuis_sl$cvps[[e]]$po, fold_indices, fold_list, sl_library)
   })
 
+  # Last of the fitted arms on purpose: rfsrc() draws its seed from R's RNG, so
+  # placing it here leaves every arm above on the stream it had before.
+  message("Random survival forest DR-learner (oob, scf)...")
+  nuis_rsf <- list(
+    oob = nuisance_rsf_oob(X, Y, D, W, horizon, pseudo_whole),
+    scf = nuisance_rsf_scf(
+      X,
+      Y,
+      D,
+      W,
+      horizon,
+      pseudo_whole,
+      fold_indices,
+      fold_list
+    )
+  )
+  results$rsf_dr_oob <- by_estimand(function(e) {
+    stage2_whole_rf(X, nuis_rsf$oob[[e]]$po)$tau
+  })
+  results$rsf_dr_scf <- by_estimand(function(e) {
+    stage_2_rf_scf(X, nuis_rsf$scf[[e]]$po, fold_indices, fold_list)
+  })
+
   # SuperLearner DR-learner (split pseudo-obs) - DISABLED for now, see
   # README.md "Known issues": compute_split_pseudoyl()/compute_split_pseudomean()
   # (below) hit an unpatched NaN in pseudo::pseudoyl()'s internal ci.omit()
@@ -240,7 +264,7 @@ all_cate_surv_models <- function(
   # is nothing left to aggregate with rowMeans - the same simplification
   # R/cate_models.R made when it dropped its aggregate_nuisances axis. Nested by
   # arm, then estimand.
-  results$nuisances <- list(rf = nuis_dr, sl = nuis_sl)
+  results$nuisances <- list(rf = nuis_dr, sl = nuis_sl, rsf = nuis_rsf)
 
   results$fold_indices <- fold_indices
 
@@ -689,6 +713,197 @@ stage_2_rf_scf <- function(X, po, fold_indices, fold_list) {
     tau[fold_indices == result$fold] <- result$predictions
   }
   return(tau)
+}
+
+# Random survival forest DR-learner (randomForestSRC)
+#
+# The outcome model is a competing-risks random survival forest fit to the
+# observed (Y, D), not a regression on pseudo-values: one forest per arm
+# (T-learner), default composite Gray splitting (splitrule = "logrankCR"), so a
+# single fit gives both CIFs and, from them, all three estimands. Pseudo-values
+# enter only the DR correction term, as whole-sample values, so the whole/cvps
+# factor the grf arms vary has nothing to act on here - rsf_dr_oob and
+# rsf_dr_scf differ in fitting alone. Valid because censoring in this DGM is
+# independent of X, so E[pseudo | X, W] is the conditional RMTL the forest
+# estimates. W.hat and stage 2 are the grf ones the pseudo_dr arms use, so the
+# outcome model is the only thing that differs from pseudo_dr_whole_*.
+RSF_ESTIMANDS <- c("RMTL1", "RMTL2", "RMSTc")
+RSF_NUISANCES <- c("po", "pseudo.hat", "pseudo0.hat", "pseudo.hat.cf", "W.hat")
+
+#' Competing-risks forest on (Y, D), censored at the horizon
+#'
+#' Censoring at the horizon leaves F_j(t) on [0, horizon] unchanged and keeps
+#' Gray's split statistic to the estimand's window. ntime = 0 keeps every event
+#' time in time.interest (the default, 150, thins it to a grid), which
+#' rsf_rmtl's tail term relies on. rfsrc() draws its seed from R's runif() when
+#' none is given, so it follows setup_rng_stream() and furrr's seeds as the grf
+#' fits do. The event codes present are kept as attr(, "causes") for rsf_rmtl's
+#' single-cause fallback, since a predict() object does not carry them.
+rsf_fit <- function(X, Y, D, horizon) {
+  status <- as.integer(ifelse(Y > horizon, 0L, D))
+  df <- data.frame(time = pmin(Y, horizon), status = status, X)
+  fit <- rfsrc(Surv(time, status) ~ ., data = df, ntime = 0)
+  attr(fit, "causes") <- sort(unique(status[status > 0]))
+  fit
+}
+
+#' RMTL1, RMTL2 and RMSTc to the horizon from an rfsrc grow or predict object
+#'
+#' For family "surv-CR", predicted / predicted.oob is the package's "expected
+#' number of life years lost due to cause j": sum_{q<T} CIF_j(t_q) (t_{q+1} -
+#' t_q) over time.interest (src/survival.c, getMortality), the step-function CIF
+#' integrated from the first event time to the LAST one, t_T. That upper limit
+#' cannot be set - ntime only snaps to observed event times - so the piece from
+#' t_T to the horizon, (horizon - t_T) * CIF_j(t_T), is added here. Nothing is
+#' missing below t_1, where the CIF is 0. The package's own get.rmst() is not
+#' used: it is unexported, "surv" family only, and takes the in-bag survival
+#' whenever the OOB one exists. CIF columns are in sorted event-code order.
+#'
+#' @param o rfsrc grow object (oob = TRUE) or predict() object (oob = FALSE)
+#' @param causes event codes in the training rows - attr(fit, "causes")
+#' @return n x 3 matrix, columns RSF_ESTIMANDS
+rsf_rmtl <- function(o, horizon, oob, causes) {
+  times <- o$time.interest
+  n_t <- length(times)
+  tail <- horizon - times[n_t]
+
+  if (o$family == "surv-CR") {
+    years_lost <- if (oob) o$predicted.oob else o$predicted
+    cif <- if (oob) o$cif.oob else o$cif
+    rmtl <- years_lost + tail * matrix(cif[, n_t, ], ncol = dim(cif)[3])
+  } else {
+    # Only one cause in the training rows: rfsrc falls back to a plain survival
+    # forest, whose `predicted` is ensemble mortality, not years lost. 1 - S is
+    # then the present cause's CIF; the absent cause's AJ estimate is 0.
+    warning("rsf_rmtl: only cause ", paste(causes, collapse = ", "),
+            " in the training rows; the other cause's RMTL is set to 0.")
+    surv <- if (oob) o$survival.oob else o$survival
+    surv <- matrix(surv, ncol = n_t)
+    rmtl <- matrix(0, nrow(surv), 2)
+    rmtl[, causes] <- (1 - surv) %*% c(diff(times), tail)
+  }
+
+  cbind(RMTL1 = rmtl[, 1], RMTL2 = rmtl[, 2],
+        RMSTc = horizon - rmtl[, 1] - rmtl[, 2])
+}
+
+#' Predict RMTLs at new rows from a fitted rsf_fit() forest
+rsf_predict_rmtl <- function(fit, X_new, horizon) {
+  pred <- predict(fit, newdata = as.data.frame(X_new))
+  rsf_rmtl(pred, horizon, oob = FALSE, causes = attr(fit, "causes"))
+}
+
+#' The DR nuisance list for each estimand, from n x 3 outcome-model matrices
+#'
+#' Same fields as nuisance_pseudo_rf_oob / _scf return, so
+#' surv_nuisance_extract.R reads these arms unchanged. `pseudo` is
+#' pseudo_all()'s list (ps_RMTL1, ps_RMTL2, ps_RMSTc), already subset to the
+#' rows in hand.
+rsf_dr_nuisances <- function(pseudo, W, mu0, mu1, mu_cf, W.hat) {
+  setNames(lapply(RSF_ESTIMANDS, function(e) {
+    list(
+      po = dr_pseudo(pseudo[[paste0("ps_", e)]], W, mu1[, e], mu0[, e], W.hat),
+      pseudo.hat = W * mu1[, e] + (1 - W) * mu0[, e],
+      pseudo0.hat = mu0[, e],
+      pseudo.hat.cf = mu_cf[, e],
+      W.hat = W.hat
+    )
+  }), RSF_ESTIMANDS)
+}
+
+#' Whole-sample OOB RSF nuisances ("oob")
+#'
+#' The rfsrc counterpart of t_learner_rf (R/cate_models.R): one forest per arm,
+#' each unit's own-arm prediction from predicted.oob / cif.oob and its other-arm
+#' prediction from a forest that never saw it. pseudo.hat.cf comes from a pooled
+#' forest on X alone (OOB), as nuisance_pseudo_rf_oob's does from grf.
+nuisance_rsf_oob <- function(X, Y, D, W, horizon, pseudo_whole) {
+  n_obs <- nrow(X)
+
+  arm_fit <- function(arm) {
+    in_arm <- W == arm
+    fit <- rsf_fit(X[in_arm, , drop = FALSE], Y[in_arm], D[in_arm], horizon)
+    pred <- matrix(NA_real_, n_obs, length(RSF_ESTIMANDS),
+                   dimnames = list(NULL, RSF_ESTIMANDS))
+    pred[in_arm, ] <- rsf_rmtl(fit, horizon, oob = TRUE,
+                               causes = attr(fit, "causes"))
+    pred[!in_arm, ] <- rsf_predict_rmtl(fit, X[!in_arm, , drop = FALSE], horizon)
+    pred
+  }
+  # control arm first, as t_learner_rf
+  mu0 <- arm_fit(0)
+  mu1 <- arm_fit(1)
+
+  cf_fit <- rsf_fit(X, Y, D, horizon)
+  mu_cf <- rsf_rmtl(cf_fit, horizon, oob = TRUE, causes = attr(cf_fit, "causes"))
+
+  W.hat <- trim_ps(predict(regression_forest(X, W))$predictions)
+
+  rsf_dr_nuisances(pseudo_whole, W, mu0, mu1, mu_cf, W.hat)
+}
+
+#' Single leave-one-fold-out RSF nuisances ("scf")
+#'
+#' The crossfit twin of nuisance_rsf_oob, on the shape of nuisance_pseudo_rf_scf:
+#' every forest is fit on the training folds and predicts the held-out fold.
+#' Whole-sample pseudo-values stay in the correction term, as in every DR arm.
+nuisance_rsf_scf <- function(
+  X,
+  Y,
+  D,
+  W,
+  horizon,
+  pseudo_whole,
+  fold_indices,
+  fold_list
+) {
+  cross_fits <- future_map(
+    seq_along(fold_list),
+    function(i) {
+      # rfsrc's OpenMP would otherwise take every core in each fold worker
+      op <- options(rf.cores = 1)
+      on.exit(options(op), add = TRUE)
+
+      fold <- fold_list[i]
+      in_train <- fold_indices != fold
+      in_test <- !in_train
+
+      X_train <- X[in_train, , drop = FALSE]
+      X_test <- X[in_test, , drop = FALSE]
+      W_train <- W[in_train]
+
+      fit_predict <- function(rows) {
+        fit <- rsf_fit(X_train[rows, , drop = FALSE], Y[in_train][rows],
+                       D[in_train][rows], horizon)
+        rsf_predict_rmtl(fit, X_test, horizon)
+      }
+      # control arm first, as nuisance_rsf_oob
+      mu0 <- fit_predict(W_train == 0)
+      mu1 <- fit_predict(W_train == 1)
+      mu_cf <- fit_predict(rep(TRUE, sum(in_train)))
+
+      W.hat.model <- regression_forest(X_train, W_train)
+      W.hat <- trim_ps(predict(W.hat.model, newdata = X_test)$predictions)
+
+      list(
+        fold = fold,
+        nuis = rsf_dr_nuisances(
+          lapply(pseudo_whole, `[`, in_test),
+          W[in_test],
+          mu0,
+          mu1,
+          mu_cf,
+          W.hat
+        )
+      )
+    },
+    .options = furrr_options(seed = TRUE)
+  )
+
+  setNames(lapply(RSF_ESTIMANDS, function(e) {
+    per_fold <- lapply(cross_fits, function(r) c(list(fold = r$fold), r$nuis[[e]]))
+    scatter_folds(per_fold, fold_indices, RSF_NUISANCES)
+  }), RSF_ESTIMANDS)
 }
 
 # Split pseudo-observation helpers (Cwiling et al. 2025, Eq. 3)

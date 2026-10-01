@@ -1,7 +1,7 @@
 ##########
-# title: run competing-risk simulations 101-500 inside one RStudio session
+# title: run competing-risk simulations inside one RStudio session
 ##########
-# The no-queue alternative to `qsub jobscripts/surv_1.sh`. Same grid, same
+# The no-queue alternative to `qsub jobscripts/surv_1.sh` / `surv_2.sh`. Same grid, same
 # results, but run directly inside an interactive session rather than
 # waiting on array-job scheduling.
 #
@@ -31,16 +31,16 @@
 # Memory is not the constraint (surv_1.sh asks mem=2gb per task; 4 rows is
 # ~8GB against a 64GB session).
 #
-# ---- default target is runs 101-500, not "every missing row" ----------------
-# Unlike cts_val_run.R/me_strategies_run.R, which default to "every row
-# without a results file", this script exists specifically to backfill the
-# newly widened grid (surv_config.R's run = 1:500, was 1:100) without
-# resweeping the original 100 runs per combo, which already have results.
-# grid_indices(study, run = 101:500) selects exactly those rows by row
-# number - safe, because it does not filter study$grid (R/pipeline.R's
-# grid_indices() docs: filtering the grid itself renumbers every row).
+# ---- default target is every row without a results file ---------------------
+# As cts_val_run.R/me_strategies_run.R. (Until 2026-10-01 it defaulted to runs
+# 101-500, to backfill the widened grid; the retune and the rho factor made
+# every earlier result obsolete, so that backfill no longer exists.) The full
+# grid is 14,000 rows, far more than one session gets through, so pick a
+# subset below - e.g. ids <- grid_indices(study, rho = 0.5) - and let the array
+# do the bulk. grid_indices() selects rows by row number without filtering
+# study$grid (R/pipeline.R: filtering the grid itself renumbers every row).
 #
-# Rows whose results file already exists are still skipped (intersected with
+# Rows whose results file already exists are skipped (intersected with
 # check_failed()), so a session that is interrupted - or hits its walltime -
 # is resumed by sourcing this file again.
 #
@@ -66,11 +66,11 @@ row_timeout   <- 1800   # seconds before a row is killed; 0 disables
 poll_interval <- 2      # seconds between checks for a finished row
 
 # EDIT ME to run a different subset - e.g. ids <- grid_indices(study, run = 1)
-# for a single run across every combo, or ids <- 1401 for a single row. NULL
-# means "runs 101-500, minus whatever already has a results file". Never
+# for a single run across every combo, or ids <- 7003 for a single row. NULL
+# means "every row without a results file". Never
 # filter study$grid to make a subset: the index is a row number, so filtering
 # renumbers every row (R/pipeline.R). Trailing arguments override this, so
-# the same file also runs non-interactively: Rscript surv_run.R 1401 1402
+# the same file also runs non-interactively: Rscript surv_run.R 7003 7004
 ids <- NULL
 
 # ---- what to run --------------------------------------------------------
@@ -78,7 +78,7 @@ cli_ids <- suppressWarnings(as.integer(commandArgs(trailingOnly = TRUE)))
 if (length(cli_ids) > 0 && !anyNA(cli_ids)) {
   ids <- cli_ids
 } else if (is.null(ids)) {
-  target <- grid_indices(study, run = 101:500)
+  target <- seq_len(nrow(study$grid))
   ids <- if (overwrite) target else intersect(target, check_failed(study, write = FALSE))
 } else if (!overwrite) {
   # an explicit subset still honours the skip rule, so re-sourcing after an
@@ -224,7 +224,7 @@ run_rows <- function(ids) {
 
 # ---- go ---------------------------------------------------------------------
 if (length(ids) == 0) {
-  cat("runs 101-500 already have a results file for every combo - nothing to run.\n")
+  cat("every requested row already has a results file - nothing to run.\n")
 } else {
   started <- Sys.time()
   outcome <- run_rows(ids)
@@ -242,14 +242,13 @@ if (length(ids) == 0) {
   }
 
   # prints "All simulations complete!" itself when nothing is missing
-  missing_after <- intersect(grid_indices(study, run = 101:500),
-                              check_failed(study, write = FALSE))
+  missing_after <- intersect(ids, check_failed(study, write = FALSE))
   if (length(missing_after) > 0) {
-    cat(sprintf("%d row(s) in runs 101-500 still have no results file - ",
+    cat(sprintf("%d requested row(s) still have no results file - ",
                 length(missing_after)),
         "source this file again to retry them\n", sep = "")
   } else {
-    cat("every row in runs 101-500 has a results file - nothing missing.\n")
+    cat("every requested row has a results file - nothing missing.\n")
   }
   cat("next: Rscript competing_risk/surv_check.R, then surv_collect.R / surv_metrics.R\n")
 }

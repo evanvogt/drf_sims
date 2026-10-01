@@ -20,6 +20,9 @@ machinery from `R/cate_models.R` and `R/sl_library.R`.
 - Secondary: how the pseudo-values should be built for a meta-learner -
   whole-sample against leave-one-fold-out pseudo-values, and whole-sample OOB
   against single crossfit fitting.
+- Secondary: whether that recovery changes when the effect modifier is
+  correlated with the prognostic covariates and with the noise (ρ = 0.5
+  against ρ = 0, same τ(x)).
 
 ## Data-generating mechanisms
 
@@ -28,16 +31,29 @@ Implementation: `surv_dgm.R::generate_surv_data()`, parameters in
 
 ### Covariates and treatment
 
-- `W ~ Bernoulli(0.5)`
+- `W ~ Bernoulli(0.5)`, independent of everything (an RCT)
 - Prognostic for both events: `X1 ~ Bernoulli(0.4)`, `X2 ~ N(0, 1)`
 - Effect modifier (drawn in every scenario, whether or not it is used):
   `X3 ~ Bernoulli(0.7)`
 - Noise: `X01`–`X03 ~ N(0, 1)`; `X04`, `X05` indicators of a 3-level factor
   (0.45 / 0.30 / 0.25)
 
-So every estimator sees 8 covariates (X1, X2, X3, X01–X05), all independent.
-Unlike `sample_size/` there is no X4 / X5: the only effect modifier is the
-binary X3.
+So every estimator sees 8 covariates (X1, X2, X3, X01–X05). Unlike
+`sample_size/` there is no X4 / X5: the only effect modifier is the binary X3.
+
+**Correlation (since 2026-10-01).** X1, X2, X3 and X01–X03 come from the
+Gaussian copula the missing-data and `sample_size/correlated/` sets use
+(`correlated_covariates()`, `R/dgm_scenarios.R`). A latent
+`Z ~ N(0, R)` over X1–X5 and X01–X03, with R exchangeable at ρ, is drawn. X1
+and X3 are Z thresholded at their prevalences, while X2 and X01–X03 are Z
+itself, so every marginal is as above. This study drops the copula's X4 and
+X5 columns. X04 / X05 are independent of everything. ρ ∈ `CORR_RHOS` = {0,
+0.5} is a design factor. ρ = 0 (independent) is the primary analysis. At ρ =
+0.5 the observed correlations are about 0.5 between continuous covariates and
+0.3–0.4 for pairs involving X1 or X3. The noise X01–X03 are then partial
+proxies for X3 (and X1, X2), although they never enter a hazard. The hazards,
+the coefficients and so τ(x) are the same at both ρ. Only the covariates'
+joint distribution moves.
 
 ### Event times
 
@@ -117,6 +133,19 @@ The induced differences can't be removed: in competing risks an effect on one
 cause always moves the other cause's CIF. What the retune achieves is that every
 labelled effect is now at least twice the size of any induced one.
 
+The parameters were tuned at ρ = 0 and are not retuned for ρ = 0.5. That keeps
+τ(x) a single function across ρ. Under correlation the plain X3 = 1 minus
+X3 = 0 contrast also picks up the X1/X2-driven heterogeneity of whoever has
+X3 = 1, so `surv_dgm_check.R` reports it two ways:
+
+- **marginal**: the plain X3 = 1 minus X3 = 0 contrast;
+- **standardised**: X3 switched, with (X1, X2) held at their own
+  distribution.
+
+At ρ = 0 the two agree. At ρ = 0.5 the separation is 5.7 (marginal) / 4.96
+(standardised) for RMTL1, and 2.23 / 2.20 for RMTL2. So the labels hold at
+both ρ.
+
 ### Design
 
 | | |
@@ -124,32 +153,42 @@ labelled effect is now at least twice the size of any induced one.
 | scenarios | 1–7 |
 | n | 500 |
 | censoring | TRUE (uniform + administrative), FALSE (administrative only) |
+| covariate correlation ρ | 0 (primary), 0.5 |
 | horizon | 28 |
-| repetitions | 500 per (scenario, censoring) |
-| array | 7,000 jobs (`surv_config.R`) |
+| repetitions | 500 per (ρ, scenario, censoring) |
+| array | 14,000 jobs (`surv_config.R`): rows 1–7000 are ρ = 0 (`surv_1.sh`), 7001–14000 are ρ = 0.5 (`surv_2.sh`) |
 | folds | V = 10 (`n_folds = 10` at n ≥ 300), contiguous blocks of 50 rows |
 
-Runs 1–100 are the original 1,400-job array. Runs 101–500 were added later,
-through `jobscripts/surv_extra.sh` or `surv_run.R` (see `README.md`). The
-results report's text (`surv_results.qmd`) still says 100 runs. **All results
-produced before 2026-10-01 come from the old parameters** (see "Why these
-values") and have to be regenerated, with the full 7,000-job array.
+**All results produced before 2026-10-01 come from the old parameters** (see
+"Why these values") and the old, independent draw order. The whole grid has
+to be regenerated. The new results go to
+`results/competing_risk/rho_<ρ>/scenario_<k>/500/censor_<TRUE|FALSE>/`, a
+tree separate from the old one.
 
 **Seeding.** Each run is seeded by its run index alone
-(`setup_rng_stream(run)`). Draw order: `W, X1, X2, X3, U, cause, [C], X01–X03,
-cats`. So within a run all 14 (scenario, censoring) cells share W, X1–X3 and
-the uniform the event time is solved from. Scenarios differ only by their
-parameters, so comparisons across scenarios are paired. `censoring = TRUE`
-consumes n more uniforms before the noise covariates, so X01–X05 differ
-between the two censoring settings of a run.
+(`setup_rng_stream(run)`). Draw order: `W, Z (n × 8 copula normals), cats, U,
+cause, [C]`. So within a run all 28 (ρ, scenario, censoring) cells share W, the
+raw latent normals, the categorical noise and the uniform the event time is
+solved from:
+
+- Scenarios differ only by their parameters, so comparisons across scenarios
+  are paired.
+- The two ρ differ only by the Cholesky factor the normals are multiplied by,
+  so ρ = 0.5 against ρ = 0 is paired too. Compare them with per-run
+  differences, MCSE = sd(diff)/√runs.
+- The two censoring settings share every covariate. C is drawn last.
+
+The ρ = 0 runs are not paired with any pre-2026-10-01 run: the draw order
+changed.
 
 ### What the DGM implies
 
-For the parameters as of 2026-10-01. The event mix comes from
-`generate_surv_data()` at n = 20,000 per (scenario, censoring) cell, seeded
-once rather than with the study's streams, so it is illustrative. The truths
-are population values: `truth_individual()` evaluated over the covariate
-distribution (X1 and X3 exactly, X2 on 25 normal quantiles).
+For the parameters as of 2026-10-01, from `Rscript surv_dgm_check.R`. The
+event mix comes from `generate_surv_data()` at n = 20,000 per (ρ, scenario,
+censoring) cell, seeded once rather than with the study's streams, so it is
+illustrative. The truths are population values: `truth_individual()` on an
+X1 × X3 × 41-point X2 grid, interpolated in X2 over 200,000 copula draws per
+ρ. The tables are for ρ = 0. The ρ = 0.5 values follow them.
 
 **Event mix by the horizon.** The control arm is the same in every scenario:
 E1 0.52–0.54, E2 0.32–0.34, still event-free at 28 about 0.14. With censoring
@@ -214,6 +253,27 @@ RMST2 21.2.
   offset on RMSTc, so τ_RMSTc has mean 0.08 but changes sign with X3: −0.67
   at X3 = 0 and +0.39 at X3 = 1.
 
+**At ρ = 0.5 almost nothing above moves.**
+
+- **Event mix:** within about 0.01 of the ρ = 0 tables, both arms and both
+  censoring settings. The marginals are the same, and only the covariates'
+  joint distribution changes. A check at n = 100,000 in scenario 4 gives
+  treated E1 0.779 / 0.782 and event-free 0.042 / 0.037 at ρ = 0 / 0.5. The
+  script's n = 20,000 cells carry up to about ±0.01 of simulation noise, so
+  read single cells loosely.
+- **τ means:** within 0.03 days of ρ = 0 everywhere.
+- **τ SDs:** the same or slightly smaller. The largest drops are τ_RMTL2 in
+  scenario 4 (0.37 → 0.31) and τ_RMTL1 in scenario 5 (0.38 → 0.33). X1 raises
+  both hazards and X2 lowers them, so positive correlation between X1 and X2
+  partly cancels their prognostic heterogeneity.
+- **Correlations:** cor(τ_RMTL1, τ_RMTL2) is within 0.02 of ρ = 0.
+- **Scenario 6's RMSTc:** −0.69 / +0.41 at X3 = 0 / 1.
+- **Separation:** the RMTL scale still separates as labelled (see "Why these
+  values").
+
+What ρ does change is the estimation problem. X3 now travels with the
+prognostic X1 and X2, and the noise X01–X03 become proxies for all three.
+
 ## Estimands
 
 The unit-level CATE on four restricted-mean time scales, horizon τ = 28,
@@ -249,7 +309,7 @@ by `surv_analysis.R` with `n_folds = 10`, `horizon = 28` and
 `sl_libraries(500)`. Inputs are X (the 8 covariates as generated, no scaling),
 W, the observed time Y and the status D ∈ {0 censored, 1 E1, 2 E2}.
 
-Fourteen arms (`framework` in the results):
+Sixteen arms (`framework` in the results):
 
 | arm | family | how the competing event is handled | targets | fitting | pseudo-values |
 |---|---|---|---|---|---|
@@ -267,13 +327,17 @@ Fourteen arms (`framework` in the results):
 | `sl_t_split` | 〃 | 〃 | 〃 | 3-way split | recomputed on V − 2 folds |
 | `sl_dr_whole` | SuperLearner DR-learner | 〃 | 〃 | single crossfit, both stages (`scf_scf`) | whole |
 | `sl_dr_cvps` | 〃 | 〃 | 〃 | single crossfit, both stages | leave-one-fold-out (training only) |
+| `rsf_dr_oob` | RSF DR-learner (randomForestSRC) | Aalen–Johansen CIF in the forest's leaves | 〃 | whole-sample OOB outcome model, grf ê and stage 2 | whole (correction term only) |
+| `rsf_dr_scf` | 〃 | 〃 | 〃 | single crossfit, both stages | whole (correction term only) |
 
-A fifteenth, `sl_dr_split` (DR-learner on split pseudo-observations, Cwiling
+A seventeenth, `sl_dr_split` (DR-learner on split pseudo-observations, Cwiling
 et al. 2025), is **disabled**: `pseudoyl()` returns NA for the max-time unit
 of each split, and nothing guards it (README "Known issues").
 
 All forests are grf at its defaults (as in `sample_size/ADEMP.md`: 2000 trees,
-honest, `min.node.size` 5, `mtry` = all 8 covariates here). Every estimated
+honest, `min.node.size` 5, `mtry` = all 8 covariates here), apart from the
+`rsf_dr_*` outcome models, which are randomForestSRC at its defaults (500
+trees, `nodesize` 15, composite Gray splitting). Every estimated
 propensity in a DR-learner is trimmed to [0.05, 0.95] (`trim_ps`); the causal
 forests' internal propensities are not.
 
@@ -346,6 +410,16 @@ The outcome model is fit separately in each arm (a T-learner), as in
   k.
 - **`sl_dr_*`**: as `*_scf`, with SuperLearner for the per-arm outcome models,
   the propensity and stage 2 (`stage_2_sl`), on the same folds.
+- **`rsf_dr_oob`, `rsf_dr_scf`**: the per-arm outcome model is a
+  competing-risks random survival forest (`randomForestSRC::rfsrc`) on the
+  observed (Y, D), censored at τ, not a regression on θ. μ̂ is the forest's
+  CIF integrated to τ: rfsrc's own "expected years lost due to cause j"
+  (`predicted.oob` / `predicted`, which stops at the last event time) plus
+  (τ − t_last)·CIF_j(t_last). RMSTc = τ − RMTL1 − RMTL2 from the same fit.
+  `_oob` takes own-arm predictions OOB and other-arm ones from the forest that
+  never saw the unit; `_scf` fits every forest on the rows outside k. ê and
+  stage 2 are the grf ones of `pseudo_dr_whole_oob` / `pseudo_dr_*_scf`. θ
+  enters only the correction term, so these arms have no cvps variant.
 - **The correction term always uses the whole-sample θ.** cvps has no
   pseudo-value for the held-out rows, so in the DR arms "cvps" changes only the
   pseudo-values the nuisance regressions are *trained* on. Do not report the

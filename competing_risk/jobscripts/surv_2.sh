@@ -1,10 +1,10 @@
 #!/bin/bash
 #PBS -l walltime=01:00:00
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=2gb
-#PBS -J 1-7000%100
-#PBS -N surv_1
-#PBS -o logs_1/
-#PBS -e logs_1/
+#PBS -J 7001-14000%100
+#PBS -N surv_2
+#PBS -o logs_2/
+#PBS -e logs_2/
 
 
 module purge

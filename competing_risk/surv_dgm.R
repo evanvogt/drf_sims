@@ -3,6 +3,9 @@
 ##########
 library(future.apply)
 library(dplyr)
+# correlated_covariates(): the Gaussian copula the missing-data and correlated
+# sample-size sets draw from (see CORRELATED COVARIATES in that file)
+source(here::here("R", "dgm_scenarios.R"))
 # generating data from weibull distributions
 
 # create dataframe of survival parameters
@@ -143,25 +146,51 @@ truth_individual <- function(shape1, shape2, scale1_1, scale1_0, scale2_1, scale
 #' Generate Competing Risks Survival Data
 #'
 #' @param scenario Integer 1-7 specifying the data generation scenario
+#' Covariates come from the copula (correlated_covariates(), R/dgm_scenarios.R)
+#' at every rho, 0 included, so a run at rho = 0 and at rho = 0.5 is paired.
+#' The copula draws X1-X5 and X01-X03; this study keeps X1, X2, X3 and X01-X03
+#' (exchangeable correlation rho among those six) and drops X4/X5. X04/X05, the
+#' categorical pair, are independent of everything. Marginals are unchanged:
+#' X1 ~ Bernoulli(0.4), X2 ~ N(0, 1), X3 ~ Bernoulli(0.7), X01-X03 ~ N(0, 1).
+#'
+#' DRAW ORDER (part of the contract - runs are reproduced by index):
+#'     W, Z-block (n x 8), cats, U, cause, [C]
+#' cats comes before U so that both censoring settings of a run share every
+#' covariate; only C is extra under censoring = TRUE, and it is drawn last.
+#'
+#' @param scenario Integer 1-7 specifying the data generation scenario
 #' @param n Sample size
+#' @param rho Exchangeable latent correlation of the copula (0 = independent)
 #' @param return_truth Logical, whether to calculate true treatment effects
 #' @param censoring Logical, whether to add uniform uninformative censoring
 #' @return List containing dataset and optionally truth
-generate_surv_data <- function(scenario, n, return_truth = TRUE, censoring = FALSE) {
+generate_surv_data <- function(scenario, n, rho = 0, return_truth = TRUE,
+                               censoring = FALSE) {
   # scenario check
   if (!scenario %in% 1:7) {
     stop("Scenario must be between 1 and 7")
   }
-  
+
   # Get parameters for this scenario
   params <- survival_scenario_params[survival_scenario_params$scenario == scenario, ]
-  
+
   # Generate treatment and covariates
   W <- rbinom(n, 1, 0.5)
-  X1 <- rbinom(n, 1, params$X1_prob)
-  X2 <- rnorm(n, 0, 1)
-  X3 <- rbinom(n, 1, params$X3_prob)
-  
+  cv <- correlated_covariates(n, list(X1_prob = params$X1_prob,
+                                      X3_prob = params$X3_prob, rho = rho,
+                                      s2 = 1, s4 = 1, s5 = 1))
+  X1 <- cv$X1
+  X2 <- cv$X2
+  X3 <- cv$X3
+  # noise: X01-X03 correlated with X1-X3 (proxies, never in the hazards),
+  # X04/X05 indicators of an independent 3-level factor
+  X01 <- cv$X01
+  X02 <- cv$X02
+  X03 <- cv$X03
+  cats <- sample(c("A", "B", "C"), size = n, replace = TRUE, prob = c(0.45, 0.3, 0.25))
+  X04 <- as.integer(cats == "A")
+  X05 <- as.integer(cats == "B")
+
   # Shape values (fixed)
   shape1 <- params$shape1
   shape2 <- params$shape2
@@ -197,15 +226,7 @@ generate_surv_data <- function(scenario, n, return_truth = TRUE, censoring = FAL
     D <- ifelse(Y > censor_time, 0, D)
     Y <- pmin(Y, censor_time)
   }
-  
-  # Add extra non-informative covariates
-  X01 <- rnorm(n, 0, 1)
-  X02 <- rnorm(n, 0, 1) 
-  X03 <- rnorm(n, 0, 1)
-  cats <- sample(c("A", "B", "C"), size = n, replace = TRUE, prob = c(0.45, 0.3, 0.25))
-  X04 <- as.integer(cats == "A")
-  X05 <- as.integer(cats == "B")
-  
+
   # Dataset for analysis
   dataset <- data.frame(
     Y = Y,
@@ -225,34 +246,47 @@ generate_surv_data <- function(scenario, n, return_truth = TRUE, censoring = FAL
   
   # truth calculation for RMST
   if (return_truth) {
-    # scales under each treatment
-    log_scale1_0 <- log(params$scale1_base) + params$b1_1 * X1 + params$b2_1 * X2 
-    log_scale1_1 <- log_scale1_0 + (params$bW_1 + params$b3_1 * X3)
-    
-    log_scale2_0 <- log(params$scale2_base) + params$b1_2 * X1 + params$b2_2 * X2
-    log_scale2_1 <- log_scale2_0 + (params$bW_2 + params$b3_2 * X3)
-    
-    scale1_0 <- exp(log_scale1_0)
-    scale1_1 <- exp(log_scale1_1)
-    
-    scale2_0 <- exp(log_scale2_0)
-    scale2_1 <- exp(log_scale2_1)
-    
-    horizon <- params$event_horizon
-    truth <- future_mapply(truth_individual, shape1, shape2, scale1_1, scale1_0, scale2_1, scale2_0, horizon, SIMPLIFY = FALSE)
-    truth <- bind_rows(truth)
-
-    truth  <- truth %>%
-      mutate(
-        tau_RMTL1 = RMTL1_1 - RMTL1_0,
-        tau_RMTL2 = RMTL2_1 - RMTL2_0,
-        tau_RMSTc = RMSTc_1 - RMSTc_0,
-        tau_RMST1 = RMST1_1 - RMST1_0,
-        tau_RMST2 = RMST2_1 - RMST2_0,
-        tau_RMST1_cs = RMST1_cs_1 - RMST1_cs_0,
-        tau_RMST2_cs = RMST2_cs_1 - RMST2_cs_0
-        )
-    result$truth <- truth
+    result$truth <- surv_truth(params, X1, X2, X3)
   }
   return(result)
+}
+
+#' True potential-outcome restricted means and CATEs at given covariates
+#'
+#' Per unit, by numerical integration (truth_individual()), so it is exact
+#' whatever the covariates' joint distribution. generate_surv_data() calls it
+#' at the sampled units; surv_dgm_check.R at a covariate grid.
+#'
+#' @param params one row of survival_scenario_params
+#' @param X1,X2,X3 covariate vectors of equal length
+#' @return tibble, one row per unit: the RMTL / RMST levels under each arm and
+#'   the tau_* contrasts
+surv_truth <- function(params, X1, X2, X3) {
+  # scales under each treatment
+  log_scale1_0 <- log(params$scale1_base) + params$b1_1 * X1 + params$b2_1 * X2
+  log_scale1_1 <- log_scale1_0 + (params$bW_1 + params$b3_1 * X3)
+
+  log_scale2_0 <- log(params$scale2_base) + params$b1_2 * X1 + params$b2_2 * X2
+  log_scale2_1 <- log_scale2_0 + (params$bW_2 + params$b3_2 * X3)
+
+  scale1_0 <- exp(log_scale1_0)
+  scale1_1 <- exp(log_scale1_1)
+
+  scale2_0 <- exp(log_scale2_0)
+  scale2_1 <- exp(log_scale2_1)
+
+  horizon <- params$event_horizon
+  truth <- future_mapply(truth_individual, params$shape1, params$shape2, scale1_1, scale1_0, scale2_1, scale2_0, horizon, SIMPLIFY = FALSE)
+  truth <- bind_rows(truth)
+
+  truth %>%
+    mutate(
+      tau_RMTL1 = RMTL1_1 - RMTL1_0,
+      tau_RMTL2 = RMTL2_1 - RMTL2_0,
+      tau_RMSTc = RMSTc_1 - RMSTc_0,
+      tau_RMST1 = RMST1_1 - RMST1_0,
+      tau_RMST2 = RMST2_1 - RMST2_0,
+      tau_RMST1_cs = RMST1_cs_1 - RMST1_cs_0,
+      tau_RMST2_cs = RMST2_cs_1 - RMST2_cs_0
+      )
 }

@@ -12,7 +12,10 @@
 #
 # Facets are already crowded (7 scenarios x 5 arms x 3 estimands x 2
 # censoring), so each plot below picks one slice of that (one censoring value,
-# sometimes one estimand) rather than crossing everything into one panel.
+# sometimes one estimand) rather than crossing everything into one panel. The
+# covariate correlation is one more such slice: everything is drawn for a
+# single rho (`rho_value`, default 0 - the primary analysis), into
+# nuisance_figs/rho_<rho>/.
 
 library(here)
 library(dplyr)
@@ -32,13 +35,19 @@ NUISANCE_ARM_LABELS <- c(
   rf_whole_scf = "RF (whole, single crossfit)",
   rf_cvps_scf = "RF (cvps, single crossfit)",
   sl_whole = "SuperLearner (whole)",
-  sl_cvps = "SuperLearner (cvps)"
+  sl_cvps = "SuperLearner (cvps)",
+  rsf_oob = "RSF (OOB)",
+  rsf_scf = "RSF (single crossfit)"
 )
 
-fig_dir <- file.path(study$res_path, "nuisance_figs")
+# which covariate correlation to draw - one of CORR_RHOS
+rho_value <- 0
+
+fig_dir <- file.path(study$res_path, "nuisance_figs", paste0("rho_", rho_value))
 dir.create(fig_dir, showWarnings = FALSE, recursive = TRUE)
 
 indiv <- readRDS(file.path(study$res_path, "nuisance_indiv_sample.RDS")) %>%
+  filter(rho == rho_value) %>%
   mutate(
     scenario = factor(scenario),
     arm_label = label_factor(arm_label, NUISANCE_ARM_LABELS),
@@ -46,6 +55,7 @@ indiv <- readRDS(file.path(study$res_path, "nuisance_indiv_sample.RDS")) %>%
   )
 
 run_summary <- readRDS(file.path(study$res_path, "nuisance_run_summary.RDS")) %>%
+  filter(rho == rho_value) %>%
   mutate(
     scenario = factor(scenario),
     arm_label = label_factor(arm_label, NUISANCE_ARM_LABELS),

@@ -9,22 +9,42 @@ shared ones.
 | scenarios | 1–7 |
 | n | 500 |
 | censoring | TRUE, FALSE |
+| covariate correlation ρ | 0 (primary), 0.5 |
 | runs | 500 |
-| array | **7,000 jobs** |
+| array | **14,000 jobs**: 1–7000 ρ = 0 (`surv_1.sh`), 7001–14000 ρ = 0.5 (`surv_2.sh`) |
 | horizon | 28 |
-| results | `../results/competing_risk/scenario_<k>/<n>/censor_<TRUE\|FALSE>/` |
+| results | `../results/competing_risk/rho_<ρ>/scenario_<k>/<n>/censor_<TRUE\|FALSE>/` |
+
+On the cluster, from `competing_risk/jobscripts/` (run `Rscript make_log_dirs.R`
+from the repo root first, for `logs_1/` and `logs_2/`):
+
+```bash
+qsub surv_1.sh               # 1-7000, rho = 0
+qsub surv_2.sh               # 7001-14000, rho = 0.5
+Rscript ../surv_check.R      # writes failed_ids.txt, points surv_rerun.sh at it
+qsub surv_rerun.sh           # only if the check found failures
+qsub surv_collect.sh
+qsub surv_metrics.sh
+```
+
+Local smoke test, from `competing_risk/`: `Rscript surv_analysis.R 3`
+(scenario 3, censoring on, run 1, ρ = 0), then `Rscript surv_analysis.R 7003`
+(the same run at ρ = 0.5).
 
 ## Without the queue
 
-Runs 101–500 (the grid was widened from 100 to 500 runs per combo) can be
-produced inside one interactive RStudio session instead of resubmitting the
-array: request an RStudio session with 8 cores and 64gb, then
+Any subset of the grid can be produced inside one interactive RStudio session
+instead of the array: request an RStudio session with 8 cores and 64gb, set
+`ids` in `surv_run.R` (e.g. `grid_indices(study, rho = 0.5, scenario = 7)`),
+then
 
 ```r
 source(here::here("competing_risk", "surv_run.R"))
 ```
 
-Same `surv_analysis.R`, same results, 4 rows at a time (2 cores each, matching
+With `ids <- NULL` it targets every row without a results file, which for a
+fresh grid is all 14,000, far more than a session gets through. Same
+`surv_analysis.R`, same results, 4 rows at a time (2 cores each, matching
 `surv_1.sh`'s `ncpus=2`). See `surv_run.R`'s header for why 4 and not 8, and
 `validation/continuous/cts_val_run.R` for the pattern this follows.
 
@@ -59,6 +79,20 @@ the old tree by hand before resubmitting. From `results/`:
 `tar -cf _archive/pre_2026-10-01/competing_risk.tar competing_risk`, then
 remove `competing_risk/` so `surv_check.R` and `surv_collect.R` don't mix the
 two DGMs.
+
+**Correlated covariates added 2026-10-01.** X1, X2, X3 and the noise X01–X03
+now come from the copula `sample_size/correlated/` uses
+(`correlated_covariates()` in `R/dgm_scenarios.R`), at ρ ∈ {0, 0.5}. That
+makes ρ a grid factor and a `rho_<ρ>/` level in the results path. Key points:
+
+- ρ = 0 is the independent, primary analysis. It has the same distribution as
+  before but a new draw order, so it is not paired with any older run.
+- τ(x) is identical at both ρ, and the scenario labels still separate on the
+  RMTL scale at ρ = 0.5. `Rscript surv_dgm_check.R` gives the numbers (ADEMP
+  "What the DGM implies").
+- The two ρ share each run's seed, so compare them with paired per-run
+  differences. `surv_results.qmd`, "Correlated covariates", does this.
+- Every other section of the report is ρ = 0.
 
 ### Scenario 5 flips the sign of the RMTL1 CATE — expect it
 
@@ -131,6 +165,8 @@ choice rests on:
 | `ipw`, `csf_cs`, `csf_sh`, `pseudo_cf_whole_oob` | grf's own internal crossfitting, **`cf_default`** | plain `causal_forest`/`causal_survival_forest`, OOB `tau` |
 | `pseudo_dr_whole_oob` | whole-sample OOB, T-learner (one forest per arm), **`oob_oob`** | `nuisance_pseudo_rf_oob` + `stage2_whole_rf` |
 | the SuperLearner arms | single leave-one-fold-out, **`scf_scf`**; DR outcome model per arm | `nuisance_pseudo_sl` + `stage_2_sl`, sharing one `fold_indices` |
+| `rsf_dr_oob` | whole-sample OOB, T-learner (one competing-risks RSF per arm) | `nuisance_rsf_oob` + `stage2_whole_rf` |
+| `rsf_dr_scf` | single leave-one-fold-out, the OOB arm's crossfit twin | `nuisance_rsf_scf` + `stage_2_rf_scf` |
 
 Every DR-learner outcome model (pseudo-value on X) is fit separately in each
 arm - a T-learner, as in `R/cate_models.R`. Until 2026-09-27 they were
@@ -163,6 +199,8 @@ role `scf_oob_t` plays in `crossfitting/`.
 | `pseudo_cf_cvps_scf`, `pseudo_dr_cvps_scf` | crossfit | single CF | comparison |
 | `sl_t_whole`, `sl_dr_whole` | whole | single CF | |
 | `sl_t_cvps`, `sl_dr_cvps` | crossfit | single CF | |
+| `rsf_dr_oob` | whole (correction term only) | whole-sample OOB | |
+| `rsf_dr_scf` | whole (correction term only) | single CF | |
 
 SuperLearner has no OOB analogue — `crossfitting/README.md` drops the OOB arms
 from its SuperLearner comparison for the same reason — so the SL families stay
@@ -190,6 +228,43 @@ that fired, per estimand, so the comparison can be qualified rather than
 assumed clean. It was `0` on the first smoke-tested replicate (scenario 1,
 n = 500, V = 10, censoring on), but it is seed-dependent — check it rather
 than trusting that.
+
+### The RSF DR-learner (`rsf_dr_oob`, `rsf_dr_scf`)
+
+Added 2026-10-01. The outcome model is a **competing-risks random survival
+forest** (randomForestSRC) fit to the observed `(Y, D)`, rather than a
+regression on pseudo-values. There is one forest per arm (T-learner), with the
+default composite Gray split rule (`splitrule = "logrankCR"`), so a single fit
+gives both CIFs and all three estimands (RMSTc = 28 − RMTL1 − RMTL2). Ŵ and the
+stage-2 forest are the grf ones the `pseudo_dr` arms use, so the outcome model
+is the only thing that differs from `pseudo_dr_whole_*`.
+
+- **Pseudo-values enter only the correction term**, as whole-sample values. The
+  whole/cvps factor therefore has nothing to act on, and the two arms differ in
+  fitting alone. `rsf_dr_oob` takes each unit's own-arm prediction from
+  `cif.oob`/`predicted.oob`, with the same honesty argument as `t_learner_rf`.
+  `rsf_dr_scf` is its crossfit twin, kept to check that OOB is adequate for
+  rfsrc, since `crossfitting/` only showed it for grf.
+- **Valid because censoring here is independent of X**, so E[θ | X, W] is the
+  conditional RMTL that the forest estimates.
+- **RMTL to the horizon.** For competing risks, rfsrc's `predicted` /
+  `predicted.oob` is "expected life years lost due to cause j": the step CIF
+  integrated over `time.interest`, but only up to the **last event time**.
+  (Checked against `src/survival.c::getMortality` in 3.9.0.) τ can't be set,
+  because `ntime` snaps to observed event times. So `rsf_fit` censors at the
+  horizon and uses `ntime = 0`, and `rsf_rmtl` adds the tail
+  (28 − t_T)·CIF_j(t_T). This matches a manual integration of `cif.oob` to
+  1e-14. The package's own `get.rmst()` is not used: it is unexported, works
+  for the `"surv"` family only, and takes the in-bag survival whenever the OOB
+  one exists.
+- **Single-cause guard.** If a training subset has only one event type, rfsrc
+  silently becomes a plain survival forest, whose `predicted` is not years
+  lost. `rsf_rmtl` then integrates 1 − S for that cause, sets the other to 0,
+  and warns.
+- **Threads.** The fold workers set `options(rf.cores = 1)`. The OOB fits run in
+  the main process and follow `OMP_NUM_THREADS`, which the jobscript's
+  `ompthreads=2` sets.
+- **Needs `randomForestSRC` in `sim-env`.**
 
 ### Two behaviour changes that came with this
 
@@ -377,6 +452,8 @@ Rscript R/regression_check.R baseline competing_risk
 `surv_config.R` (grid), `surv_dgm.R`, `surv_models.R`, `surv_analysis.R`,
 `surv_run.R` (the no-queue RStudio-session alternative, see "Without the
 queue" above), `surv_check.R`, `surv_collect.R`, `surv_metrics.R`.
+`surv_dgm_check.R` produces ADEMP's "What the DGM implies" numbers (event mix,
+population truths, X3 separation) for each ρ.
 `scratch_dgm_params_check.R` is exploratory.
 `surv_dr_split_na_diagnose.R` reproduces and traces the split-DR-learner
 NA bug documented in "Known issues" above.

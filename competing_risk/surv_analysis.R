@@ -67,10 +67,11 @@ scenario <- param$scenario
 n <- param$n
 censoring <- param$censoring
 run <- param$run
+rho <- param$rho
 
 n_folds <- ifelse(n < 300, 5, 10)
 t0 <- Sys.time()
-# Set up simulation seed
+# Set up simulation seed - the run alone, so each rho sees the same draws
 setup_rng_stream(run)
 
 # Dataset Generation
@@ -80,6 +81,7 @@ on.exit(plan(metaplan), add = TRUE)
 gen <- generate_surv_data(
   scenario = scenario,
   n = n,
+  rho = rho,
   censoring = censoring
 )
 
@@ -96,8 +98,8 @@ t1 <- Sys.time()
 results$data <- data
 results$truth <- gen$truth
 print(t1-t0)
-# save results
-output_dir <- file.path(dirname(path), "results", "competing_risk", paste0("scenario_", scenario), n, paste0("censor_", censoring))
+# save results, under the path check/collect expect (combo_dir())
+output_dir <- combo_dir(study, param)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
 

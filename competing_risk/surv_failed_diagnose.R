@@ -245,6 +245,7 @@ index_data <- function(i, return_truth = FALSE) {
   gen <- generate_surv_data(
     scenario = param$scenario,
     n = param$n,
+    rho = param$rho,
     return_truth = return_truth,
     censoring = param$censoring
   )
@@ -294,6 +295,9 @@ if (1L %in% stages) {
 
   cat("failures by censoring:\n")
   print(table(censoring = failed_grid$censoring))
+
+  cat("\nfailures by covariate correlation:\n")
+  print(table(rho = failed_grid$rho))
 
   runs <- table(failed_grid$run)
   cat(sprintf(

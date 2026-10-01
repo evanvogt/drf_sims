@@ -50,8 +50,14 @@ effect (ATE) or heterogeneous one (HTE):
 Scenarios 2, 5 and 6 are the interesting ones: the treatment moves
 event 2, so a naive analysis of event 1 alone can show an apparent
 effect that is really just a change in who survives long enough to have one.
-Fixed at **n = 500**, censoring **on/off**, **100 runs**, horizon = 28. Full
+Fixed at **n = 500**, censoring **on/off**, **500 runs**, horizon = 28. Full
 design in `competing_risk/README.md`.
+
+Covariates are drawn from a Gaussian copula at two latent correlations,
+**ρ = 0** (independent: the primary analysis, and every section below except
+"Correlated covariates") and **ρ = 0.5** (X1, X2, X3 and the noise X01–X03
+correlated). τ(x) is the same function at both; the runs share their seeds, so
+that section compares the two ρ with paired per-run differences.
 
 **Five estimator frameworks**, several shipping in multiple arms that vary
 how their pseudo-values/nuisances are built (see `README.md`'s
@@ -66,6 +72,7 @@ how their pseudo-values/nuisances are built (see `README.md`'s
 | Pseudovalue DR RF | `whole_oob`, `whole_scf`, `cvps_scf` | RMTL |
 | SL T-learner | `whole`, `cvps`, `split` | RMTL |
 | Pseudovalue DR SL | `whole`, `cvps` | RMTL |
+| Pseudovalue DR RSF | `whole_oob`, `whole_scf` | RMTL |
 
 **The truth column depends on the family**: `ipw`/`csf_cs` remove competing
 events and target the cause-specific (net) RMST; `csf_sh` keeps them in the
@@ -104,7 +111,7 @@ scenario_labels <- c(
 
 # framework is split into family (the estimator) and variant (the arm),
 # mirroring crossfitting/cf_results.qmd's family/variant split - keeps
-# facets legible instead of one flat 14-level factor
+# facets legible instead of one flat 16-level factor
 framework_family <- c(
   ipw = "IPW",
   csf_cs = "CSF (cause-specific)",
@@ -119,7 +126,9 @@ framework_family <- c(
   sl_t_cvps = "SL T-learner",
   sl_t_split = "SL T-learner",
   sl_dr_whole = "Pseudovalue DR SL",
-  sl_dr_cvps = "Pseudovalue DR SL"
+  sl_dr_cvps = "Pseudovalue DR SL",
+  rsf_dr_oob = "Pseudovalue DR RSF",
+  rsf_dr_scf = "Pseudovalue DR RSF"
 )
 family_levels <- c(
   "IPW",
@@ -127,6 +136,7 @@ family_levels <- c(
   "Augmented CSF",
   "Pseudo-value CF",
   "Pseudovalue DR RF",
+  "Pseudovalue DR RSF",
   "SL T-learner",
   "Pseudovalue DR SL"
 )
@@ -145,7 +155,11 @@ framework_variant <- c(
   sl_t_cvps = "cvps",
   sl_t_split = "split",
   sl_dr_whole = "whole",
-  sl_dr_cvps = "cvps"
+  sl_dr_cvps = "cvps",
+  # the RSF outcome model fits (Y, D), so only the correction term uses
+  # pseudo-values, and those are whole-sample - hence whole_oob / whole_scf
+  rsf_dr_oob = "whole_oob",
+  rsf_dr_scf = "whole_scf"
 )
 variant_levels <- c(
   "single",
@@ -167,7 +181,7 @@ variant_labels <- c(
 )
 
 # tidy up
-metrics <- metrics %>%
+metrics_all <- metrics %>%
   mutate(
     family = factor(
       recode(framework, !!!framework_family),
@@ -193,7 +207,7 @@ metrics <- metrics %>%
   droplevels()
 
 # remove boring bits
-metrics <- metrics %>%
+metrics_all <- metrics_all %>%
   # remove CSH stuff for conference presentations
   #filter(!(family %in% c("CSF (cause-specific)", "IPW", "SL T-learner"))) %>%
   # remove combined event
@@ -209,6 +223,9 @@ metrics <- metrics %>%
   #     ))
   # ) %>%
   droplevels()
+
+# every section but "Correlated covariates" is the primary analysis, rho = 0
+metrics <- filter(metrics_all, rho == 0)
 
 # per (scenario, censoring, target, family, variant) summaries
 #
@@ -252,23 +269,23 @@ metrics_summary <- metrics %>%
 
 ### Results coverage
 
-The array job set is 1,400 runs (7 scenarios x 2 censoring settings x 100
-runs); `competing_risk/README.md` documents known partial-failure routes, so
-this table is worth checking before reading anything else below.
+The array job set is 14,000 runs (2 ρ x 7 scenarios x 2 censoring settings x
+500 runs); `competing_risk/README.md` documents known partial-failure routes,
+so this table is worth checking before reading anything else below.
 
 ```{r completeness-table}
-completeness <- metrics %>%
-  group_by(scenario, censoring) %>%
+completeness <- metrics_all %>%
+  group_by(rho, scenario, censoring) %>%
   summarise(
     n_runs = n_distinct(run),
     n_frameworks = n_distinct(family, variant),
     .groups = "drop"
   ) %>%
-  arrange(scenario, censoring)
+  arrange(rho, scenario, censoring)
 
 kable(
   completeness,
-  col.names = c("Scenario", "Censoring", "Runs collected", "Arms present")
+  col.names = c("ρ", "Scenario", "Censoring", "Runs collected", "Arms present")
 )
 ```
 
@@ -555,6 +572,69 @@ if (nrow(na_table) > 0) {
 } else {
   cat("No missing CATE estimates in any collected run.")
 }
+```
+
+## Correlated covariates: ρ = 0.5 against ρ = 0
+
+At ρ = 0.5 the modifier X3 is correlated with the prognostic X1 and X2 (about
+0.3–0.4) and with the noise X01–X03, which become partial proxies for it. The
+true CATE function, the event mix and the scenarios' X3 separation barely move
+(`surv_dgm_check.R`; ADEMP "What the DGM implies"), so a change here is the
+estimators' doing, not the truth's.
+
+Each run is seeded by its run index alone, so run *r* at the two ρ shares W,
+the copula's raw normals, the categorical noise and the event-time uniforms.
+The differences below are therefore paired: per run, ρ = 0.5 minus ρ = 0, then
+averaged, with MCSE = sd(diff) / √pairs (as `sample_size/correlated/`). A
+positive MSE difference means correlation made that arm worse. Scenario 1 is
+dropped from the correlation and C-statistic panels, as above.
+
+```{r corr-paired}
+paired_rho <- metrics_all %>%
+  select(rho, scenario, censoring, target, family, variant, run,
+         mse, corr, c_stat) %>%
+  pivot_longer(c(mse, corr, c_stat), names_to = "metric") %>%
+  pivot_wider(names_from = rho, values_from = value, names_prefix = "rho_") %>%
+  mutate(diff = rho_0.5 - rho_0) %>%
+  group_by(metric, scenario, censoring, target, family, variant) %>%
+  summarise(
+    mean_diff = mean(diff, na.rm = TRUE),
+    mcse_diff = sd(diff, na.rm = TRUE) / sqrt(sum(!is.na(diff))),
+    pairs = sum(!is.na(diff)),
+    .groups = "drop"
+  )
+```
+
+```{r corr-mse-plot, fig.height=10}
+summary_plot(
+  filter(paired_rho, metric == "mse"),
+  "mean_diff",
+  "mcse_diff",
+  "Paired difference in MSE, ρ = 0.5 − ρ = 0",
+  "MSE difference"
+)
+ggsave("surv_rho_mse_diff.png", path = figdir, height = 20, width = 30,
+       units = "cm")
+```
+
+```{r corr-corr-plot, fig.height=10}
+summary_plot(
+  filter(paired_rho, metric == "corr", scenario != scenario_labels[["1"]]),
+  "mean_diff",
+  "mcse_diff",
+  "Paired difference in correlation with the true CATE, ρ = 0.5 − ρ = 0",
+  "Correlation difference"
+)
+```
+
+```{r corr-cstat-plot, fig.height=10}
+summary_plot(
+  filter(paired_rho, metric == "c_stat", scenario != scenario_labels[["1"]]),
+  "mean_diff",
+  "mcse_diff",
+  "Paired difference in C-statistic, ρ = 0.5 − ρ = 0",
+  "C-statistic difference"
+)
 ```
 
 ## Headline table

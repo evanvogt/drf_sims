@@ -405,7 +405,9 @@ check_mech <- function(mech) {
        "effect and was dropped, the old MNAR-Y is MNAR-tau.", call. = FALSE)
 }
 
-# ---- correlated covariates (missing-data sets only) ---------------------------
+# ---- correlated covariates ----------------------------------------------------
+# Used by the missing-data sets, the correlated sample-size sets, and
+# competing_risk/surv_dgm.R (which keeps X1-X3 and X01-X03 and drops X4/X5).
 
 # the copula's latent columns, in draw order
 COPULA_VARS <- c("X1", "X2", "X3", "X4", "X5", "X01", "X02", "X03")
@@ -422,7 +424,7 @@ exch_cor <- function(k, rho) {
   R
 }
 
-#' Draw the correlated covariates of a missing-data set
+#' Draw the correlated covariates of a missing-data or correlated set
 #'
 #' Gaussian copula: latent Z ~ N(0, exch_cor(8, rho)) over COPULA_VARS, one
 #' rnorm() call of n * 8 draws. X1 and X3 are Z thresholded so that
