@@ -54,6 +54,10 @@ library(furrr)
 library(pseudo)
 library(SuperLearner)
 
+# Same source order as surv_analysis.R: nuisance_pseudo_sl_split needs
+# trim_ps (R/utils.R) and dr_pseudo (R/cate_models.R)
+source(here::here("R", "utils.R"))
+source(here::here("R", "cate_models.R"))
 source("surv_dgm.R")
 source("surv_models.R")
 

@@ -124,8 +124,9 @@ choice rests on:
 Every DR-learner outcome model (pseudo-value on X) is fit separately in each
 arm - a T-learner, as in `R/cate_models.R`. Until 2026-09-27 they were
 S-learners on `cbind(W, X)`, and `pseudo_dr_whole_oob` was the `oob_oob_s`
-arm. The disabled split-pseudo DR arm (`nuisance_pseudo_sl_split`) is still an
-S-learner. SuperLearner libraries are per nuisance, from `R/sl_library.R`.
+arm. The disabled split-pseudo DR arm (`nuisance_pseudo_sl_split`) followed on
+2026-10-01, along with a trimmed propensity. SuperLearner libraries are per
+nuisance, from `R/sl_library.R`.
 
 ### The pseudo-value comparison
 

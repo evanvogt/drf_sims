@@ -706,31 +706,23 @@ compute_split_pseudomean <- function(Y_km, D_km, Y_val, D_val, horizon) {
   )
 }
 
+# One pseudoyl() call per validation unit returns both causes; this used to
+# make two identical calls, one per cause.
 compute_split_pseudoyl <- function(Y_km, D_km, Y_val, D_val, horizon) {
   n_km <- length(Y_km)
-  cause1 <- vapply(
+  ps <- vapply(
     seq_along(Y_val),
     function(j) {
-      pseudoyl(
+      p <- pseudoyl(
         c(Y_km, Y_val[j]),
         as.integer(c(D_km, D_val[j])),
         horizon
-      )$pseudo$cause1[n_km + 1]
+      )$pseudo
+      c(p$cause1[n_km + 1], p$cause2[n_km + 1])
     },
-    numeric(1)
+    numeric(2)
   )
-  cause2 <- vapply(
-    seq_along(Y_val),
-    function(j) {
-      pseudoyl(
-        c(Y_km, Y_val[j]),
-        as.integer(c(D_km, D_val[j])),
-        horizon
-      )$pseudo$cause2[n_km + 1]
-    },
-    numeric(1)
-  )
-  list(cause1 = cause1, cause2 = cause2)
+  list(cause1 = ps[1, ], cause2 = ps[2, ])
 }
 
 # SuperLearner T-learner, single leave-one-fold-out ("scf_scf").
@@ -1111,10 +1103,17 @@ pseudo_dr_sl <- function(
 }
 
 # SuperLearner DR-learner nuisances: split pseudo-obs
-# DISABLED arm (see all_cate_surv_models) and still an S-learner outcome model
-# on cbind(W, X): it was left out of the move to per-arm outcome models.
+# DISABLED arm (see all_cate_surv_models).
 # 3-way split per fold: training (V-2 folds), KM set (fold k+1), validation (fold k)
 # Validation pseudo-obs are split pseudo-obs (independent of training), per Algorithm 2
+#
+# Nuisances as nuisance_pseudo_sl: one outcome model per arm (T-learner,
+# pretested) and a pretested binomial propensity, trimmed by trim_ps. Until
+# 2026-10-01 the outcome model was an S-learner on cbind(W, X), the propensity
+# was untrimmed, and it was refit once per estimand on identical data; it is
+# now fit once per fold. The all-zero failsafes use isTRUE() so that an NA
+# training pseudo-value (pseudoyl's max-time bug) still flows through to NA in
+# po rather than erroring here - surv_dr_split_na_diagnose.R relies on that.
 nuisance_pseudo_sl_split <- function(
   X,
   Y,
@@ -1166,33 +1165,44 @@ nuisance_pseudo_sl_split <- function(
         horizon
       )
 
+      # propensity: does not depend on the estimand, so fit once per fold
+      W.hat <- sl_fit_predict(
+        W_train,
+        X_train,
+        list(val = X_val),
+        pretest_superlearner(W_train, X_train, libs$W, binomial()),
+        family = binomial(),
+        cvControl = list(V = 5)
+      )$pred$val
+      if (isTRUE(all(W.hat == 0))) {
+        warning("SuperLearner failed for W.hat. Using mean(W).")
+        W.hat <- rep(mean(W_train, na.rm = TRUE), sum(in_val))
+      }
+      W.hat <- trim_ps(W.hat)
+
       make_dr_po <- function(pseudo_train, pseudo_val_split) {
-        sl_ps <- sl_fit_predict(
-          pseudo_train,
-          cbind(W = W_train, X_train),
-          list(y0 = cbind(W = 0, X_val), y1 = cbind(W = 1, X_val)),
-          libs$Y,
-          cvControl = list(V = 5)
-        )
-        sl_W <- sl_fit_predict(
-          W_train,
-          X_train,
-          list(val = X_val),
-          libs$W,
-          family = binomial(),
-          cvControl = list(V = 5)
-        )
+        # one outcome model per arm (T-learner), control arm first
+        arm_pred <- function(arm) {
+          y <- pseudo_train[W_train == arm]
+          x <- X_train[W_train == arm, , drop = FALSE]
+          pred <- sl_fit_predict(
+            y,
+            x,
+            list(val = X_val),
+            pretest_superlearner(y, x, libs$Y, gaussian()),
+            cvControl = list(V = 5)
+          )$pred$val
+          if (isTRUE(all(pred == 0))) {
+            warning("SuperLearner failed for pseudo.hat in arm W = ", arm,
+                    ". Using its mean.")
+            pred <- rep(mean(y, na.rm = TRUE), sum(in_val))
+          }
+          pred
+        }
+        pseudo0.hat <- arm_pred(0)
+        pseudo1.hat <- arm_pred(1)
 
-        pseudo0.hat <- sl_ps$pred$y0
-        pseudo1.hat <- sl_ps$pred$y1
-        W.hat <- sl_W$pred$val
-
-        cate <- pseudo1.hat - pseudo0.hat
-        pseudo.hat <- W_val * pseudo1.hat + (1 - W_val) * pseudo0.hat
-        po <- cate +
-          ((pseudo_val_split - pseudo.hat) * (W_val - W.hat)) /
-            (W.hat * (1 - W.hat))
-        po
+        dr_pseudo(pseudo_val_split, W_val, pseudo1.hat, pseudo0.hat, W.hat)
       }
 
       list(
