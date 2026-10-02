@@ -2,15 +2,17 @@
 # Title: Competing risks CATEs
 ##########
 
-# Report failures on STDOUT, not stderr.
+# Report failures on STDOUT, with the call stack.
 #
-# The cluster is currently keeping only the PBS `.o` files, and R sends errors -
+# Added when the cluster was keeping only the PBS `.o` files: R sends errors -
 # and every message() in all_cate_surv_models() - to stderr, so when 225 array
 # indices died there was nothing in the logs to say why and it took a local
-# reproduction to find out (see surv_failed_diagnose.R). This handler puts the
-# condition message and the call stack where PBS will keep them. It still exits
-# non-zero, so a failed job is still a failed job as far as the scheduler and
-# check_failed() are concerned.
+# reproduction to find out (see surv_failed_diagnose.R). The jobscripts now use
+# `#PBS -j oe`, so stderr is merged into the `.o` file and R's own "Error in"
+# line lands there too (the message appears twice). The handler is kept for
+# what R does not print by default: the array args and the call stack. It still
+# exits non-zero, so a failed job is still a failed job as far as the scheduler
+# and check_failed() are concerned.
 #
 # It is armed before the library()/source() calls, and uses only base functions,
 # so a missing package or an unparseable source file is reported the same way.

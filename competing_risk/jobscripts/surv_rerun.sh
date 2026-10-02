@@ -4,7 +4,7 @@
 #PBS -J 1-169%100
 #PBS -N surv_rerun
 #PBS -o logs_rerun/
-#PBS -e logs_rerun/
+#PBS -j oe
 
 module purge
 module add tools/prod

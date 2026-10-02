@@ -6,6 +6,7 @@
 #PBS -l walltime=01:00:00
 #PBS -l select=1:ncpus=1:ompthreads=1:mem=32gb
 #PBS -N surv_metrics
+#PBS -j oe
 
 
 module purge

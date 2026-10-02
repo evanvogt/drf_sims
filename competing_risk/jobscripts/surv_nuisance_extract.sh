@@ -2,6 +2,7 @@
 #PBS -l walltime=02:00:00
 #PBS -l select=1:ncpus=7:ompthreads=7:mem=48gb
 #PBS -N surv_nuisance_extract
+#PBS -j oe
 
 
 module purge

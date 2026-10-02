@@ -388,6 +388,10 @@ files for this rerun were deleted before anyone read them, so stage 4 had no
 input and the whole diagnosis had to be rebuilt from local reproduction under
 R 4.5.3 rather than the cluster's 4.3.2. Keep `logs_rerun/` next time.
 
+Since then the jobscripts use `#PBS -j oe`, so there is no separate `.e` file:
+stderr (R's own error line and `all_cate_surv_models()`'s `message()`s) is
+merged into the `.o` file alongside the handler's call stack.
+
 ### SuperLearner DR-learner, split pseudo-obs (disabled)
 
 `all_cate_surv_models()` used to abort with:

@@ -4,7 +4,7 @@
 #PBS -J 7001-14000%100
 #PBS -N surv_2
 #PBS -o logs_2/
-#PBS -e logs_2/
+#PBS -j oe
 
 
 module purge

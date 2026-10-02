@@ -134,7 +134,8 @@
 # which writes the message and call stack to stdout precisely so a lost .e does
 # not lose the cause - had nothing left to be read from. That is why round 2 is
 # entirely local reproduction. Keep logs_rerun/ next time and most of stages 2
-# and 3 becomes unnecessary.
+# and 3 becomes unnecessary. (The jobscripts now use `#PBS -j oe`, so there is
+# no separate .e any more - stdout and stderr are both in the one .o file.)
 #
 # Costs, measured on R 4.5.3 locally with plan(sequential):
 #   stage 1  instant
@@ -939,9 +940,11 @@ if (4L %in% stages) {
     stop("stage 4 needs --logs=<directory of PBS .o files>")
   }
 
-  # all_cate_surv_models()'s progress message()s go to stderr, so a .o file only
-  # carries surv_analysis.R's three print() calls. That is still enough to say
-  # whether the job died in the models, at saveRDS, or never ran.
+  # The jobscripts use `#PBS -j oe`, so a .o file carries stderr too:
+  # all_cate_surv_models()'s progress message()s and R's own "Error in" line
+  # as well as surv_analysis.R's print() calls. Logs from before that change
+  # carry only the print() calls - still enough to say whether the job died in
+  # the models, at saveRDS, or never ran.
   files <- list.files(log_dir, pattern = "\\.o[0-9]", full.names = TRUE)
   cat(sprintf("%d log files in %s\n\n", length(files), log_dir))
 
