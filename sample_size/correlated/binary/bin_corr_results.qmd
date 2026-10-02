@@ -1,0 +1,623 @@
+---
+title: "Correlated binary outcome study: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 9)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(here)
+library(knitr)
+source(here("R", "figures.R"))
+```
+
+## Does correlation between covariates change how well the CATE is recovered?
+
+`binary/`'s scenarios 1–4, with X1–X5 and X01–X03 drawn from a Gaussian
+copula with exchangeable latent correlation ρ, at four sample sizes (100, 250,
+500, 1000) and 500 runs each. Every marginal, τ(x) and m0(x) are
+`binary/`'s; only the covariates' joint distribution changes. Full design
+in `../README.md`.
+
+| Scenario | true CATE $\tau(x)$, a risk difference |
+|---|---|
+| 1: No HTE | $b_W$ |
+| 2: Continuous HTE | $b_W + b_4 \tanh(X_4)$ |
+| 3: Two vars + cts x cts | $b_W + b_3 X_3 + b_4 \tanh(X_4) + b_{45} \tanh(X_4) \tanh(X_5)$ |
+| 4: Cosine HTE | $b_W + b_4 \cos(X_4)$ |
+
+The outcome is $P(Y = 1 \mid x, W) = m_0(x) + W \tau(x)$, with the control risk
+$m_0(x) = 0.34 + 0.36\,\mathrm{plogis}(b_0 + b_1 X_1 + b_2 X_2)$, as in
+`binary/` (see `binary/README.md` for the coefficients).
+
+Two values of ρ:
+
+- **ρ = 0**: the copula with no correlation, the paired independent arm.
+- **ρ = 0.5**: the correlated arm. The prognostic X1, X2 now move with the
+  modifiers X3–X5, and the noise covariates X01–X03 become partial proxies for
+  them.
+
+What the correlation does to the design (`Rscript R/calibration_report.R`):
+
+| | ρ = 0 | ρ = 0.5 |
+|---|---|---|
+| true RD, n = 100 / 1000 | −0.248 / −0.085 | −0.247 / −0.085 |
+| power | 0.80 | 0.80 |
+| cor(m0, τ), scenarios 2 / 3 / 4 | 0 / 0 / 0 | 0.39 / −0.34 / 0.06 |
+| treated-risk floor, scenario 3, n = 100 | 0.011 | **0.007** |
+
+The ATE and power barely move, so a change below is not the target getting
+larger or smaller: what ρ adds is prognosis (m0) moving with the effect
+modifiers. Scenario 3's treated-risk floor at ρ = 0.5, n = 100 is below
+`RD_EPS` = 0.01 on purpose, to keep `binary/`'s τ(x) (`../README.md`, "Binary
+scenario 3 floor").
+
+**Pairing.** Both values of ρ use the same run seeds, so run *r* shares W, the
+raw latent normals and the categorical covariates across ρ. Y is coupled only
+through `rbinom`'s shared uniforms (about 91–99% of outcomes agree across ρ),
+so the pairing is a little looser than in the continuous study.
+Every ρ = 0.5 − ρ = 0 comparison below is a per-run difference, with the
+paired MCSE sd(diff)/√runs. The level plots show each ρ's own (unpaired) MCSE,
+so the paired differences are the place to judge whether ρ matters.
+
+**Estimators**: as `binary/`: `causal_forest`, `dr_random_forest`,
+`dr_oracle`, `dr_semi_oracle`, `dr_superlearner`, and the T-learners
+`t_random_forest` and `t_superlearner`, recovered at metrics time from the DR
+learners' saved per-arm outcome models (`R/metrics.R::add_t_learners()`).
+
+```{r data}
+# paths
+path <- here()
+res_path <- file.path(dirname(path), "results", "correlated", "binary")
+
+metrics <- readRDS(file.path(res_path, "bin_corr_metrics.RDS"))
+
+# the parent study's labels, so the two reports read side by side
+scenario_labels <- c(
+  `1` = "1: No HTE",
+  `2` = "2: Continuous HTE",
+  `3` = "3: Two vars + cts x cts",
+  `4` = "4: Cosine HTE"
+)
+
+# rho stays numeric (the paired differences pivot on it); rho_lab is for facets.
+# Also used on the parent study's metrics, which have no rho.
+label_corr <- function(df) {
+  df <- df %>%
+    mutate(
+      scenario = factor(scenario, levels = names(scenario_labels) %>% as.integer(),
+                        labels = unname(scenario_labels)),
+      n = factor(n, levels = c(100, 250, 500, 1000))
+    )
+  if ("rho" %in% names(df)) df$rho_lab <- factor(paste("ρ =", df$rho))
+  droplevels(df)
+}
+
+metrics <- metrics %>%
+  mutate(model = label_factor(model, MODEL_LABELS),
+         # each HTE test's rejection at alpha = 0.05, as a per-run 0/1
+         # indicator: its mean is the power, with the binomial MCSE, and its
+         # per-run difference across rho is what the paired power MCSE needs
+         rej_BLP = as.numeric(BLP_p < 0.05),
+         rej_BLP_os = as.numeric(BLP_p_os < 0.05),
+         rej_indep_cate = as.numeric(indep_cate < 0.05),
+         rej_indep_po = as.numeric(indep_po < 0.05)) %>%
+  label_corr()
+
+METRIC_COLS <- c(
+  bias = "bias", ate_bias = "ate_bias", rel_ate_bias = "rel_ate_bias",
+  rel_bias_cate = "rel_bias_cate", mse = "mse", rmse = "rmse", mae = "mae",
+  corr = "corr", spearman = "spearman", sign_acc = "sign_acc",
+  BLP = "BLP_p", BLP_os = "BLP_p_os", indep_cate = "indep_cate",
+  indep_po = "indep_po",
+  power_BLP = "rej_BLP", power_BLP_os = "rej_BLP_os",
+  power_indep_cate = "rej_indep_cate", power_indep_po = "rej_indep_po"
+)
+POWER_STEMS <- c("power_BLP", "power_BLP_os", "power_indep_cate", "power_indep_po")
+
+# per (rho, scenario, model, n) mean and MCSE of every metric
+# (R/figures.R::summarise_metrics), plus the n_na diagnostic and the count of
+# runs with an NA test p-value, which the power and mean p leave out
+metrics_summary <- metrics %>%
+  summarise_metrics(c("rho", "rho_lab", "scenario", "model", "n"),
+                    cols = METRIC_COLS, binomial = POWER_STEMS) %>%
+  left_join(metrics %>%
+              group_by(rho, scenario, model, n) %>%
+              summarise(mean_n_na = mean(n_na, na.rm = T),
+                        total_n_na = sum(n_na, na.rm = T), .groups = "drop"),
+            by = c("rho", "scenario", "model", "n"))
+```
+
+```{r plot-helpers, include=FALSE}
+# scenario in rows, rho in columns: facet_grid frees y by row, so each scenario
+# keeps its own scale (as the parent report's facet_wrap does) while its two
+# rho panels share one, and compare by eye
+facet_rho <- function(free_y = TRUE) {
+  facet_grid(rows = vars(scenario), cols = vars(rho_lab),
+             scales = if (free_y) "free_y" else "fixed")
+}
+
+house_style <- function() {
+  list(drf_scale(), drf_theme(),
+       theme(axis.text.x = element_text(angle = 45, hjust = 1),
+             legend.position = "bottom"))
+}
+
+# per-run distribution, one box per (n, model)
+box_plot <- function(df, col, title, ylab, hline = 0, free_y = TRUE) {
+  df %>%
+    ggplot(aes(x = n, y = .data[[col]], colour = model)) +
+    (if (!is.null(hline)) geom_hline(yintercept = hline, linetype = "dashed")) +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    facet_rho(free_y) +
+    house_style() +
+    labs(title = title, y = ylab, x = "Sample size", colour = "Model")
+}
+
+# the parent report's summary_plot: mean with a 95% CI (mean +/- qnorm(1 -
+# alpha/2) x MCSE, not a raw +/- 1x MCSE - see continuous/cts_results.qmd)
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05,
+                         free_y = TRUE) {
+  z <- qnorm(1 - alpha / 2)
+  df %>%
+    mutate(est = .data[[mean_col]],
+           lo = .data[[mean_col]] - z * .data[[mcse_col]],
+           hi = .data[[mean_col]] + z * .data[[mcse_col]]) %>%
+    ggplot(aes(x = n, y = est, colour = model, ymin = lo, ymax = hi)) +
+    (if (!is.null(hline)) geom_hline(yintercept = hline, linetype = "dashed")) +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    facet_rho(free_y) +
+    house_style() +
+    labs(title = title, y = ylab, x = "Sample size", colour = "Model")
+}
+
+#' Paired rho = 0.5 - rho = 0 difference in a per-run column, by cell
+#'
+#' Runs are matched on (by, run). The MCSE is sd(diff) / sqrt(pairs), which is
+#' what the shared seeds buy over the unpaired sqrt(mcse_0^2 + mcse_0.5^2). A
+#' run with the column NA at either rho (e.g. a failed dr_superlearner fit)
+#' drops out of its cell.
+paired_diff <- function(df, col, by = c("scenario", "n", "model")) {
+  df %>%
+    select(all_of(c(by, "run", "rho")), value = all_of(col)) %>%
+    pivot_wider(names_from = rho, values_from = value, names_prefix = "rho_") %>%
+    mutate(diff = rho_0.5 - rho_0) %>%
+    group_by(across(all_of(by))) %>%
+    summarise(mean_diff = mean(diff, na.rm = TRUE),
+              mcse_diff = sd(diff, na.rm = TRUE) / sqrt(sum(!is.na(diff))),
+              pairs = sum(!is.na(diff)), .groups = "drop")
+}
+
+# one row of scenarios, as the parent report's summary plots
+diff_plot <- function(df, title, ylab, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
+  df %>%
+    ggplot(aes(x = n, y = mean_diff, colour = model,
+               ymin = mean_diff - z * mcse_diff, ymax = mean_diff + z * mcse_diff)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    facet_wrap(~scenario, nrow = 1, scales = "free_y") +
+    house_style() +
+    labs(title = title, y = ylab, x = "Sample size", colour = "Model")
+}
+```
+
+## Effect of the correlation: paired ρ = 0.5 − ρ = 0 differences
+
+Each point is the mean over runs of a run's metric at ρ = 0.5 minus the same
+run's at ρ = 0, with a 95% CI from the paired MCSE. A CI clear of the dashed
+line is a change the correlation made, not Monte Carlo noise. Scenario 1 is
+left out of the correlation panels, where its correlation is fixed at 0.
+
+```{r diff-plots, fig.height=4}
+diff_plot(paired_diff(metrics, "bias"), "Bias of the CATE", "Δ bias (ρ = 0.5 − ρ = 0)")
+diff_plot(paired_diff(metrics, "ate_bias"), "ATE bias", "Δ ATE bias (ρ = 0.5 − ρ = 0)")
+diff_plot(paired_diff(metrics, "mse"), "MSE of the CATE", "Δ MSE (ρ = 0.5 − ρ = 0)")
+diff_plot(paired_diff(filter(metrics, scenario != scenario_labels[["1"]]), "corr"),
+          "Correlation with the true CATE", "Δ Pearson correlation (ρ = 0.5 − ρ = 0)")
+diff_plot(paired_diff(filter(metrics, scenario != scenario_labels[["1"]]), "spearman"),
+          "Spearman correlation with the true CATE",
+          "Δ Spearman correlation (ρ = 0.5 − ρ = 0)")
+diff_plot(paired_diff(metrics, "sign_acc"), "Sign accuracy",
+          "Δ proportion correct sign (ρ = 0.5 − ρ = 0)")
+```
+
+The tests' rejection rates at 0.05: a change in type I error in scenario 1,
+in power in scenarios 2–4.
+
+```{r diff-power-plots, fig.height=4}
+diff_plot(paired_diff(metrics, "rej_BLP_os"), "BLP test power (one-sided, HC3)",
+          "Δ rejection rate (ρ = 0.5 − ρ = 0)")
+diff_plot(paired_diff(metrics, "rej_indep_cate"), "CATE permutation test power",
+          "Δ rejection rate (ρ = 0.5 − ρ = 0)")
+```
+
+## Bias
+
+Average bias in the estimated CATE (estimate minus truth), per unit and per
+run, against the known truth.
+
+```{r bias-plot}
+box_plot(metrics, "bias", "Bias in CATE estimates", "Bias")
+summary_plot(metrics_summary, "mean_bias", "mcse_bias",
+             "Mean bias in CATE estimates", "Mean bias")
+```
+
+## ATE bias
+
+Bias of the *average* treatment effect (`mean(est) - mean(true)`), as
+opposed to Bias's per-unit average.
+
+```{r ate-bias-plot}
+box_plot(metrics, "ate_bias", "Bias in the average treatment effect", "ATE bias")
+summary_plot(metrics_summary, "mean_ate_bias", "mcse_ate_bias",
+             "Mean ATE bias", "Mean ATE bias")
+```
+
+## Bias relative to the DR-oracle
+
+Each run's ATE bias minus the DR-oracle's on the same dataset, within each ρ.
+Every model is fitted to the same dataset in a run, and scenarios share random
+numbers, so the noise in a run's outcomes shifts every model's bias together.
+The DR-oracle uses the true outcome model and propensity, so its bias is zero
+by construction and its realised bias is that common noise. Subtracting it
+leaves what each estimator adds, with a paired MCSE much tighter than the ATE
+bias section's. The DR-oracle sits at exactly 0 as the reference.
+
+```{r bias-vs-oracle-plot}
+oracle_ate_bias <- metrics %>%
+  filter(model == "DR-oracle") %>%
+  select(rho, scenario, n, run, oracle_ate_bias = ate_bias)
+
+# NA wherever the model's ate_bias is NA, so those runs drop out of the mean
+# and the MCSE denominator
+metrics_vs_oracle <- metrics %>%
+  left_join(oracle_ate_bias, by = c("rho", "scenario", "n", "run")) %>%
+  mutate(ate_bias_vs_oracle = ate_bias - oracle_ate_bias)
+
+vs_oracle_summary <- metrics_vs_oracle %>%
+  summarise_metrics(c("rho", "rho_lab", "scenario", "model", "n"),
+                    cols = c(ate_bias_vs_oracle = "ate_bias_vs_oracle"),
+                    count_na = character())
+
+box_plot(metrics_vs_oracle, "ate_bias_vs_oracle", "ATE bias relative to the DR-oracle",
+         "ATE bias - DR-oracle's")
+summary_plot(vs_oracle_summary, "mean_ate_bias_vs_oracle", "mcse_ate_bias_vs_oracle",
+             "Mean ATE bias relative to the DR-oracle", "Mean ATE bias - DR-oracle's")
+```
+
+## Relative bias
+
+`rel_ate_bias` is the parameter-level relative bias (ATE bias divided by the
+true ATE); `rel_bias_cate` is the per-unit version, `(est - true) / true`
+averaged over units (`NA` wherever the true CATE is exactly 0 for a unit — see
+`R/metrics.R::cate_metrics()`).
+
+```{r rel-bias-plot}
+summary_plot(metrics_summary, "mean_rel_ate_bias", "mcse_rel_ate_bias",
+             "Mean relative bias in the ATE", "Mean relative ATE bias")
+summary_plot(metrics_summary, "mean_rel_bias_cate", "mcse_rel_bias_cate",
+             "Mean relative bias in the CATE", "Mean relative CATE bias")
+```
+
+## MSE of CATE estimates
+
+The headline metric: mean squared error of the estimated CATE against the
+known truth.
+
+```{r mse-plot}
+box_plot(metrics, "mse", "MSE of CATE estimates", "MSE")
+summary_plot(metrics_summary, "mean_mse", "mcse_mse", "Mean MSE of CATE estimates",
+             "Mean MSE")
+```
+
+## RMSE of CATE estimates
+
+```{r rmse-plot}
+box_plot(metrics, "rmse", "RMSE of CATE estimates", "RMSE")
+summary_plot(metrics_summary, "mean_rmse", "mcse_rmse", "Mean RMSE of CATE estimates",
+             "Mean RMSE")
+```
+
+## MAE of CATE estimates
+
+Mean absolute error — a robustness check on MSE, less sensitive to outlying
+runs.
+
+```{r mae-plot}
+box_plot(metrics, "mae", "MAE of CATE estimates", "MAE")
+summary_plot(metrics_summary, "mean_mae", "mcse_mae", "Mean MAE of CATE estimates",
+             "Mean MAE")
+```
+
+## Correlation with the true CATE
+
+Pearson correlation between estimated and true CATEs (undefined, and forced
+to 0, in scenario 1 — excluded from these plots).
+
+```{r corr-plot, fig.height=7}
+corr_df <- filter(metrics, scenario != scenario_labels[["1"]])
+corr_summary <- filter(metrics_summary, scenario != scenario_labels[["1"]])
+
+box_plot(corr_df, "corr", "Correlation between estimated and true CATEs",
+         "Pearson correlation", hline = NULL, free_y = FALSE)
+summary_plot(corr_summary, "mean_corr", "mcse_corr",
+             "Mean correlation with the true CATE", "Mean correlation",
+             hline = NULL, free_y = FALSE)
+```
+
+## Spearman rank correlation with the true CATE
+
+Same scenario-1 convention, so scenario 1 is excluded here too.
+
+```{r spearman-plot, fig.height=7}
+box_plot(corr_df, "spearman", "Spearman rank correlation between estimated and true CATEs",
+         "Spearman correlation", hline = NULL, free_y = FALSE)
+summary_plot(corr_summary, "mean_spearman", "mcse_spearman",
+             "Mean Spearman correlation with the true CATE",
+             "Mean Spearman correlation", hline = NULL, free_y = FALSE)
+```
+
+## Sign accuracy
+
+Proportion of units where the estimated CATE has the correct sign. 0.5 (dashed
+line) is the chance level.
+
+```{r sign-acc-plot}
+box_plot(metrics, "sign_acc", "Sign accuracy of CATE estimates",
+         "Proportion correct sign", hline = 0.5, free_y = FALSE)
+summary_plot(metrics_summary, "mean_sign_acc", "mcse_sign_acc",
+             "Mean sign accuracy", "Mean proportion correct sign",
+             hline = 0.5, free_y = FALSE)
+```
+
+## True-CATE HTE test evaluation
+
+The BLP and CATE independence tests re-run on the true CATE and true
+nuisances (`bin_corr_true_cate_tests.RDS`, `R/cate_models.R::true_cate_test_row()`):
+the ceiling each model's own test is chasing. Shown as an extra "True CATE"
+series in the test sections below. In scenario 1 the true CATE is constant,
+so neither test is defined there and "True CATE" has no scenario-1 series.
+
+```{r true-cate-data}
+true_cate_tests <- readRDS(file.path(res_path, "bin_corr_true_cate_tests.RDS")) %>%
+  mutate(rej_BLP = as.numeric(BLP_p < 0.05),
+         rej_BLP_os = as.numeric(BLP_p_os < 0.05),
+         rej_indep_cate = as.numeric(indep_cate < 0.05)) %>%
+  label_corr()
+
+true_cate_summary <- true_cate_tests %>%
+  summarise_metrics(c("rho", "rho_lab", "scenario", "n"),
+                    cols = METRIC_COLS, binomial = POWER_STEMS) %>%
+  mutate(model = "True CATE")
+
+true_cate_raw <- true_cate_tests %>% mutate(model = "True CATE")
+
+model_levels_true <- c(levels(metrics$model), "True CATE")
+
+# row-bind the true-CATE reference series onto a per-run or summarised data
+# frame, extending `model`'s levels so it becomes one more colour
+bind_true_cate <- function(df, true_df, extra_cols) {
+  bind_rows(
+    mutate(df, model = factor(as.character(model), levels = model_levels_true)),
+    true_df %>%
+      mutate(model = factor(model, levels = model_levels_true)) %>%
+      select(rho, rho_lab, scenario, n, model, all_of(extra_cols))
+  )
+}
+```
+
+## BLP test p-values
+
+Best linear predictor test of heterogeneity, against the nominal 5% threshold
+(dashed line). `BLP_p` is two-sided with constant-variance SEs, as computed
+when the models were fitted; `BLP_p_os` is one-sided (H1: beta.2 > 0) with HC3
+SEs, recomputed at metrics time (see `binary/README.md`, "HTE tests").
+
+```{r blp-plot}
+box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p"), "BLP_p",
+         "BLP test p-values (two-sided, constant variance)", "p-value",
+         hline = 0.05, free_y = FALSE)
+summary_plot(bind_true_cate(metrics_summary, true_cate_summary, c("mean_BLP", "mcse_BLP")),
+             "mean_BLP", "mcse_BLP", "Mean BLP test p-value (two-sided, constant variance)",
+             "Mean p-value", hline = 0.05, free_y = FALSE)
+```
+
+```{r blp-os-plot}
+box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p_os"), "BLP_p_os",
+         "BLP test p-values (one-sided, HC3)", "p-value", hline = 0.05, free_y = FALSE)
+summary_plot(bind_true_cate(metrics_summary, true_cate_summary,
+                            c("mean_BLP_os", "mcse_BLP_os")),
+             "mean_BLP_os", "mcse_BLP_os", "Mean BLP test p-value (one-sided, HC3)",
+             "Mean p-value", hline = 0.05, free_y = FALSE)
+```
+
+## CATE permutation test p-values
+
+```{r indep-cate-plot}
+box_plot(bind_true_cate(metrics, true_cate_raw, "indep_cate"), "indep_cate",
+         "CATE permutation test p-values", "p-value", hline = 0.05, free_y = FALSE)
+summary_plot(bind_true_cate(metrics_summary, true_cate_summary,
+                            c("mean_indep_cate", "mcse_indep_cate")),
+             "mean_indep_cate", "mcse_indep_cate", "Mean CATE permutation test p-value",
+             "Mean p-value", hline = 0.05, free_y = FALSE)
+```
+
+## PO permutation test p-values
+
+No causal forest series: its pseudo-outcome is DR-RandomForest's, so the test
+is reported once. Likewise the T-learners share their DR learner's.
+
+```{r indep-po-plot}
+box_plot(metrics, "indep_po", "PO permutation test p-values", "p-value",
+         hline = 0.05, free_y = FALSE)
+summary_plot(metrics_summary, "mean_indep_po", "mcse_indep_po",
+             "Mean PO permutation test p-value", "Mean p-value",
+             hline = 0.05, free_y = FALSE)
+```
+
+## HTE test power
+
+Proportion of runs rejecting at alpha = 0.05 (type I error in scenario 1),
+with the binomial 95% CI.
+
+```{r power-plot}
+summary_plot(bind_true_cate(metrics_summary, true_cate_summary,
+                            c("mean_power_BLP", "mcse_power_BLP")),
+             "mean_power_BLP", "mcse_power_BLP",
+             "BLP test power (two-sided, constant variance)", "Power",
+             hline = 0.05, free_y = FALSE)
+summary_plot(bind_true_cate(metrics_summary, true_cate_summary,
+                            c("mean_power_BLP_os", "mcse_power_BLP_os")),
+             "mean_power_BLP_os", "mcse_power_BLP_os", "BLP test power (one-sided, HC3)",
+             "Power", hline = 0.05, free_y = FALSE)
+summary_plot(bind_true_cate(metrics_summary, true_cate_summary,
+                            c("mean_power_indep_cate", "mcse_power_indep_cate")),
+             "mean_power_indep_cate", "mcse_power_indep_cate",
+             "CATE permutation test power", "Power", hline = 0.05, free_y = FALSE)
+summary_plot(metrics_summary, "mean_power_indep_po", "mcse_power_indep_po",
+             "PO permutation test power", "Power", hline = 0.05, free_y = FALSE)
+```
+
+The true CATE's own power, paired across ρ: how much of a model's change in
+power is the HTE itself getting harder to detect (the design's power is 0.80
+at both values of ρ, so this should sit near 0).
+
+```{r true-cate-power-diff}
+true_cate_diff <- bind_rows(
+  paired_diff(true_cate_tests, "rej_BLP_os", by = c("scenario", "n")) %>%
+    mutate(test = "BLP (one-sided, HC3)"),
+  paired_diff(true_cate_tests, "rej_indep_cate", by = c("scenario", "n")) %>%
+    mutate(test = "CATE permutation")
+) %>%
+  filter(pairs > 0) %>%
+  transmute(scenario, n, test,
+            `Δ power (MCSE)` = sprintf("%.3f (%.3f)", mean_diff, mcse_diff)) %>%
+  pivot_wider(names_from = test, values_from = `Δ power (MCSE)`) %>%
+  arrange(scenario, n)
+
+kable(true_cate_diff, caption = "True-CATE test power, ρ = 0.5 − ρ = 0 (paired)")
+```
+
+Runs with an `NA` test p-value are left out of that test's power and mean
+p-value: a degenerate (constant) CATE estimate, or a test that wasn't run.
+Cells with any are listed below.
+
+```{r test-na-table}
+test_na_table <- metrics_summary %>%
+  select(rho, scenario, model, n, n_na_BLP_p, n_na_BLP_p_os, n_na_indep_cate) %>%
+  filter(n_na_BLP_p > 0 | n_na_BLP_p_os > 0 | n_na_indep_cate > 0) %>%
+  arrange(scenario, n, rho, model)
+
+if (nrow(test_na_table) > 0) {
+  kable(test_na_table,
+        col.names = c("ρ", "Scenario", "Model", "n", "NA BLP p",
+                      "NA BLP p (one-sided, HC3)", "NA CATE perm. p"))
+} else {
+  cat("No NA HTE test p-values in any run.")
+}
+```
+
+## Missing estimates
+
+`n_na` is the count of `NA` CATE estimates within a run; only cells with at
+least one are listed.
+
+```{r na-table}
+na_table <- metrics_summary %>%
+  select(rho, scenario, model, n, mean_n_na, total_n_na) %>%
+  filter(total_n_na > 0) %>%
+  arrange(scenario, n, rho, model)
+
+if (nrow(na_table) > 0) {
+  kable(na_table, digits = 3,
+        col.names = c("ρ", "Scenario", "Model", "n", "Mean NA count per run",
+                      "Total NA count"))
+} else {
+  cat("No missing CATE estimates in any run.")
+}
+```
+
+## Sanity check: ρ = 0 against `binary/`
+
+The ρ = 0 arm has the same distribution as `binary/`'s scenarios 1–4, but
+different draws: the copula draws in another order, so the two are **not**
+paired and the z-scores below use the unpaired MCSE. With this many cells a
+few `|z| > 3` are expected by chance; many more point to a DGM or pipeline
+difference. Skipped if `binary/`'s metrics are not on disk.
+
+```{r sanity}
+parent_file <- file.path(dirname(path), "results", "binary", "bin_metrics.RDS")
+
+if (!file.exists(parent_file)) {
+  cat("binary/'s metrics not found - skipped.\n")
+} else {
+  parent <- readRDS(parent_file) %>%
+    filter(scenario %in% c(1:4)) %>%
+    mutate(model = label_factor(model, MODEL_LABELS),
+           rej_BLP_os = as.numeric(BLP_p_os < 0.05)) %>%
+    label_corr()
+  cols <- c(bias = "bias", ate_bias = "ate_bias", mse = "mse", corr = "corr",
+            power_BLP_os = "rej_BLP_os")
+  keys <- c("scenario", "model", "n")
+  rho0 <- summarise_metrics(filter(metrics, rho == 0), keys, cols = cols,
+                            binomial = "power_BLP_os", count_na = character())
+  par <- summarise_metrics(parent, keys, cols = cols, binomial = "power_BLP_os",
+                           count_na = character())
+  cmp <- inner_join(rho0, par, by = keys, suffix = c("_rho0", "_parent"))
+  z <- sapply(names(cols), function(s) {
+    (cmp[[paste0("mean_", s, "_rho0")]] - cmp[[paste0("mean_", s, "_parent")]]) /
+      sqrt(cmp[[paste0("mcse_", s, "_rho0")]]^2 + cmp[[paste0("mcse_", s, "_parent")]]^2)
+  })
+  z_df <- bind_cols(select(cmp, all_of(keys)),
+                    as.data.frame(round(z, 2)) %>% rename_with(~ paste0("z_", .x)))
+  # scenario 1's corr is fixed at 0 in both, so its z is NaN - not a flag
+  n_z <- sum(is.finite(z))
+  n_big <- sum(abs(z) > 3, na.rm = TRUE)
+  cat(sprintf("%d of %d finite z-scores have |z| > 3 (%.1f expected by chance).\n",
+              n_big, n_z, n_z * 2 * pnorm(-3)))
+  kable(filter(z_df, if_any(starts_with("z_"), ~ abs(.x) > 3)) %>%
+          arrange(scenario, n, model),
+        caption = "Cells with |z| > 3, ρ = 0 vs binary/")
+}
+```
+
+## Headline table
+
+Arranged by scenario, sample size, ρ and mean MSE (best model first within
+each cell). The ATE bias relative to the DR-oracle is shown with its paired
+MCSE.
+
+```{r headline-table}
+headline <- metrics_summary %>%
+  left_join(select(vs_oracle_summary, rho, scenario, model, n,
+                   mean_ate_bias_vs_oracle, mcse_ate_bias_vs_oracle),
+            by = c("rho", "scenario", "model", "n")) %>%
+  select(scenario, n, rho, model, mean_bias, mean_ate_bias, mean_ate_bias_vs_oracle,
+         mcse_ate_bias_vs_oracle, mean_rel_ate_bias, mean_rel_bias_cate, mean_mse,
+         mean_rmse, mean_mae, mean_sign_acc, mean_corr, mean_power_BLP,
+         mean_power_BLP_os, mean_power_indep_cate, mean_power_indep_po) %>%
+  arrange(scenario, n, rho, mean_mse)
+
+kable(headline, digits = 4,
+      col.names = c("Scenario", "n", "ρ", "Model", "Mean bias", "Mean ATE bias",
+                    "Mean ATE bias vs DR-oracle", "MCSE (vs DR-oracle)",
+                    "Mean relative ATE bias", "Mean relative CATE bias",
+                    "Mean MSE", "Mean RMSE", "Mean MAE", "Mean sign accuracy",
+                    "Mean correlation", "BLP power", "BLP power (one-sided, HC3)",
+                    "CATE perm. power", "PO perm. power"))
+```

@@ -102,6 +102,7 @@ outcomes agree across ρ.
 | `*_corr_analysis.R` | the parent's analysis script; reuses `../continuous/cts_models.R` / `../binary/bin_models.R`, and writes to `combo_dir()` |
 | `*_corr_check.R`, `*_corr_collect.R`, `*_corr_metrics.R` | as the parent's; outputs `*_corr_all.RDS`, `*_corr_metrics.RDS` and `*_corr_true_cate_tests.RDS`, all with a `rho` column |
 | `corr_results.qmd` | both outcomes: levels by ρ, paired differences, tests, DR-oracle-relative ATE bias, and the ρ = 0 sanity check |
+| `continuous/cts_corr_results.qmd`, `binary/bin_corr_results.qmd` | one outcome each, in the shape of the parent's `*_results.qmd`: every metric by ρ, the paired ρ = 0.5 − ρ = 0 differences, true-CATE tests, NA tables, the ρ = 0 sanity check and a headline table |
 
 ## Running it
 
