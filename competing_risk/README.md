@@ -262,8 +262,9 @@ is the only thing that differs from `pseudo_dr_whole_*`.
   lost. `rsf_rmtl` then integrates 1 − S for that cause, sets the other to 0,
   and warns.
 - **Threads.** The fold workers set `options(rf.cores = 1)`. The OOB fits run in
-  the main process and follow `OMP_NUM_THREADS`, which the jobscript's
-  `ompthreads=2` sets.
+  the main process and follow `OMP_NUM_THREADS`, which `surv_analysis.R` sets
+  to `grf_threads` (default 1) before starting its workers. The grf forests
+  take `num.threads = grf_threads` directly.
 - **Needs `randomForestSRC` in `sim-env`.**
 
 ### Two behaviour changes that came with this

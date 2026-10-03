@@ -21,10 +21,11 @@
 # before.
 #
 # ---- workers = 4, not 8 ------------------------------------------------------
-# surv_analysis.R hardcodes its own internal `workers <- 2` (the
-# plan(multisession, workers = workers) it uses for data generation) - not
-# exposed as a CLI arg, so it cannot be lowered from here without editing
-# that script. jobscripts/surv_1.sh matches it with ncpus=2 per array task.
+# surv_analysis.R defaults its own internal `workers` to 2 (the
+# plan(multisession, workers = workers) it uses for data generation), and
+# this script calls it with the index alone, so every row gets that default -
+# along with grf_threads = 1, so each of those 2 processes uses one core.
+# jobscripts/surv_1.sh matches it with ncpus=2 per array task.
 # 8 concurrent rows here would therefore ask for 8 x 2 = 16 cores against the
 # 8 the session actually has - a 2x oversubscription that measures contention
 # rather than running faster. 4 rows x 2 cores each is the true 8-core budget.
@@ -94,8 +95,9 @@ if (length(ids) && (min(ids) < 1 || max(ids) > nrow(study$grid))) {
 # ---- guards -----------------------------------------------------------------
 # A row asking for more cores than the session has would measure contention
 # rather than run faster - the same check cts_val_run.R/me_strategies_run.R
-# make. surv_analysis.R's own workers <- 2 is fixed, so it is baked into
-# inner_workers here rather than read from a knob above.
+# make. surv_analysis.R's default workers = 2 is what every row runs with
+# (see the header), so it is baked into inner_workers here rather than read
+# from a knob above.
 inner_workers <- 2
 requested <- workers * inner_workers
 available_cores <- as.integer(parallelly::availableCores())

@@ -21,11 +21,20 @@ source(here::here("R", "sl_library.R"))
 # vector c("SL.glm", "SL.glmnet", "SL.ranger", "SL.gam") for every nuisance.
 DEFAULT_SL_LIBRARY <- sl_libraries(Inf)
 
+# num.threads is grf's thread count, forwarded to every grf fit and predict()
+# below, as R/cate_models.R::cate_methods does. NULL (default) is grf's own
+# default (all visible cores), so callers that omit it - the diagnostic scripts,
+# R/regression_check.R - behave as before. surv_analysis.R passes grf_threads.
+# The SuperLearner arms are single-threaded already (SL.ranger's num.threads = 1).
+# rfsrc has no thread argument: its fold workers set rf.cores = 1 (see
+# nuisance_rsf_scf), and its main-process OOB fits follow OMP_NUM_THREADS, which
+# surv_analysis.R sets to grf_threads.
 all_cate_surv_models <- function(
   data,
   n_folds = 10,
   horizon = 30,
-  sl_library = DEFAULT_SL_LIBRARY
+  sl_library = DEFAULT_SL_LIBRARY,
+  num.threads = NULL
 ) {
   # data formatting
   X <- as.matrix(data[, !(names(data) %in% c("Y", "D", "W"))])
@@ -44,20 +53,20 @@ all_cate_surv_models <- function(
 
   message("Causal Forest IPW approaches (RMST1, RMST2, RMSTc)...")
   results$ipw <- list()
-  results$ipw$RMST1 <- cf_ipw(X, Y, D, W, horizon, event = 1)
-  results$ipw$RMST2 <- cf_ipw(X, Y, D, W, horizon, event = 2)
-  results$ipw$RMSTc <- cf_ipw(X, Y, D, W, horizon, event = "composite")
+  results$ipw$RMST1 <- cf_ipw(X, Y, D, W, horizon, event = 1, num.threads)
+  results$ipw$RMST2 <- cf_ipw(X, Y, D, W, horizon, event = 2, num.threads)
+  results$ipw$RMSTc <- cf_ipw(X, Y, D, W, horizon, event = "composite", num.threads)
 
   message("Causal Survival Forest cs approaches (RMST1, RMST2, RMSTc)...")
   results$csf_cs <- list()
-  results$csf_cs$RMST1 <- csf_cs(X, Y, D, W, horizon, event = 1)
-  results$csf_cs$RMST2 <- csf_cs(X, Y, D, W, horizon, event = 2)
-  results$csf_cs$RMSTc <- csf_cs(X, Y, D, W, horizon, event = "composite")
+  results$csf_cs$RMST1 <- csf_cs(X, Y, D, W, horizon, event = 1, num.threads)
+  results$csf_cs$RMST2 <- csf_cs(X, Y, D, W, horizon, event = 2, num.threads)
+  results$csf_cs$RMSTc <- csf_cs(X, Y, D, W, horizon, event = "composite", num.threads)
 
   message("Causal Survival Forest sh approaches (RMST1, RMST2)...")
   results$csf_sh <- list()
-  results$csf_sh$RMST1 <- csf_sh(X, Y, D, W, horizon, event = 1)
-  results$csf_sh$RMST2 <- csf_sh(X, Y, D, W, horizon, event = 2)
+  results$csf_sh$RMST1 <- csf_sh(X, Y, D, W, horizon, event = 1, num.threads)
+  results$csf_sh$RMST2 <- csf_sh(X, Y, D, W, horizon, event = 2, num.threads)
 
   # ---- pseudo-value arms ----------------------------------------------------
   # Two factors, crossed as far as they can be (see README):
@@ -84,19 +93,19 @@ all_cate_surv_models <- function(
 
   message("Pseudo-value Causal Forest (whole_oob, whole_scf, cvps_scf)...")
   results$pseudo_cf_whole_oob <- by_estimand(function(e) {
-    pseudo_cf_whole_oob(X, ps_whole(e), W)
+    pseudo_cf_whole_oob(X, ps_whole(e), W, num.threads)
   })
   results$pseudo_cf_whole_scf <- by_estimand(function(e) {
-    pseudo_cf_scf(X, ps_whole(e), W, fold_indices, fold_list)
+    pseudo_cf_scf(X, ps_whole(e), W, fold_indices, fold_list, num.threads)
   })
   results$pseudo_cf_cvps_scf <- by_estimand(function(e) {
-    pseudo_cf_scf(X, ps_cv(e), W, fold_indices, fold_list)
+    pseudo_cf_scf(X, ps_cv(e), W, fold_indices, fold_list, num.threads)
   })
 
   message("Pseudo-value DR Learner nuisances (whole_oob, whole_scf, cvps_scf)...")
   nuis_dr <- list(
     whole_oob = by_estimand(function(e) {
-      nuisance_pseudo_rf_oob(X, ps_whole(e), W)
+      nuisance_pseudo_rf_oob(X, ps_whole(e), W, num.threads)
     }),
     whole_scf = by_estimand(function(e) {
       nuisance_pseudo_rf_scf(
@@ -105,7 +114,8 @@ all_cate_surv_models <- function(
         W,
         ps_whole(e),
         fold_indices,
-        fold_list
+        fold_list,
+        num.threads
       )
     }),
     cvps_scf = by_estimand(function(e) {
@@ -115,20 +125,21 @@ all_cate_surv_models <- function(
         W,
         ps_whole(e),
         fold_indices,
-        fold_list
+        fold_list,
+        num.threads
       )
     })
   )
 
   message("DR second stage regression (RMTL1, RMTL2, RMSTc)...")
   results$pseudo_dr_whole_oob <- by_estimand(function(e) {
-    stage2_whole_rf(X, nuis_dr$whole_oob[[e]]$po)$tau
+    stage2_whole_rf(X, nuis_dr$whole_oob[[e]]$po, num.threads = num.threads)$tau
   })
   results$pseudo_dr_whole_scf <- by_estimand(function(e) {
-    stage_2_rf_scf(X, nuis_dr$whole_scf[[e]]$po, fold_indices, fold_list)
+    stage_2_rf_scf(X, nuis_dr$whole_scf[[e]]$po, fold_indices, fold_list, num.threads)
   })
   results$pseudo_dr_cvps_scf <- by_estimand(function(e) {
-    stage_2_rf_scf(X, nuis_dr$cvps_scf[[e]]$po, fold_indices, fold_list)
+    stage_2_rf_scf(X, nuis_dr$cvps_scf[[e]]$po, fold_indices, fold_list, num.threads)
   })
 
   message("SuperLearner T-learner (whole and cvps pseudo-obs)...")
@@ -192,7 +203,7 @@ all_cate_surv_models <- function(
   # placing it here leaves every arm above on the stream it had before.
   message("Random survival forest DR-learner (oob, scf)...")
   nuis_rsf <- list(
-    oob = nuisance_rsf_oob(X, Y, D, W, horizon, pseudo_whole),
+    oob = nuisance_rsf_oob(X, Y, D, W, horizon, pseudo_whole, num.threads),
     scf = nuisance_rsf_scf(
       X,
       Y,
@@ -201,14 +212,15 @@ all_cate_surv_models <- function(
       horizon,
       pseudo_whole,
       fold_indices,
-      fold_list
+      fold_list,
+      num.threads
     )
   )
   results$rsf_dr_oob <- by_estimand(function(e) {
-    stage2_whole_rf(X, nuis_rsf$oob[[e]]$po)$tau
+    stage2_whole_rf(X, nuis_rsf$oob[[e]]$po, num.threads = num.threads)$tau
   })
   results$rsf_dr_scf <- by_estimand(function(e) {
-    stage_2_rf_scf(X, nuis_rsf$scf[[e]]$po, fold_indices, fold_list)
+    stage_2_rf_scf(X, nuis_rsf$scf[[e]]$po, fold_indices, fold_list, num.threads)
   })
 
   # SuperLearner DR-learner (split pseudo-obs) - DISABLED for now, see
@@ -273,17 +285,18 @@ all_cate_surv_models <- function(
 
 # Helper Functions
 # get IPW weights for specific event (censoring or the competing event)
-get_ipw <- function(X, Y, D, W, horizon, censor) {
+get_ipw <- function(X, Y, D, W, horizon, censor, num.threads = NULL) {
   # select censoring event
   D_event <- as.numeric(D == censor)
 
   # fit survival forest for time to censoring event
-  sf_censor <- survival_forest(cbind(X, W), Y, D_event)
+  sf_censor <- survival_forest(cbind(X, W), Y, D_event, num.threads = num.threads)
 
   censor_prob <- predict(
     sf_censor,
     failure.times = pmin(Y, horizon),
-    prediction.times = "time"
+    prediction.times = "time",
+    num.threads = num.threads
   )$predictions
 
   # get weights for non censored (clipped)
@@ -301,12 +314,12 @@ get_ipw <- function(X, Y, D, W, horizon, censor) {
 # exist for those rows only; the excluded rows never entered the forest at all,
 # so a plain newdata prediction for them is honest. Same pattern as
 # crossfitting/cf_models.R::nuisance_oob_rf.
-cf_ipw <- function(X, Y, D, W, horizon, event = 1) {
+cf_ipw <- function(X, Y, D, W, horizon, event = 1, num.threads = NULL) {
   n_obs <- nrow(X)
 
   # get ipw weights. get_ipw()'s predict() call passes no newdata, so the
   # censoring probabilities are already grf OOB predictions.
-  weights_0 <- get_ipw(X, Y, D, W, horizon, 0) # all 1's when there is no censoring
+  weights_0 <- get_ipw(X, Y, D, W, horizon, 0, num.threads) # all 1's when there is no censoring
 
   if (event == "composite") {
     total_observed <- weights_0$observed
@@ -316,7 +329,7 @@ cf_ipw <- function(X, Y, D, W, horizon, event = 1) {
     all_events <- unique(D[D != 0])
     competing <- setdiff(all_events, event)
 
-    weights_competing <- get_ipw(X, Y, D, W, horizon, competing)
+    weights_competing <- get_ipw(X, Y, D, W, horizon, competing, num.threads)
 
     total_observed <- weights_0$observed & weights_competing$observed
     sample_weights <- weights_0$ipw * weights_competing$ipw
@@ -331,15 +344,17 @@ cf_ipw <- function(X, Y, D, W, horizon, event = 1) {
     X[include, ],
     pmin(Y[include], horizon),
     W[include],
-    sample.weights = sample_weights
+    sample.weights = sample_weights,
+    num.threads = num.threads
   )
 
   tau_RMST <- rep(NA_real_, n_obs)
-  tau_RMST[include] <- predict(forest)$predictions # OOB for the rows it was fit on
+  tau_RMST[include] <- predict(forest, num.threads = num.threads)$predictions # OOB for the rows it was fit on
   if (length(include) < n_obs) {
     tau_RMST[-include] <- predict(
       forest,
-      newdata = X[-include, , drop = FALSE]
+      newdata = X[-include, , drop = FALSE],
+      num.threads = num.threads
     )$predictions
   }
 
@@ -348,7 +363,7 @@ cf_ipw <- function(X, Y, D, W, horizon, event = 1) {
 # CSF - treating competing events as censoring events
 # Whole sample; causal_survival_forest cross-fits its own nuisances internally
 # and predict() with no newdata returns OOB predictions.
-csf_cs <- function(X, Y, D, W, horizon, event = 1) {
+csf_cs <- function(X, Y, D, W, horizon, event = 1, num.threads = NULL) {
   if (event == "composite") {
     # Modify event to include 1 and 2
     D_event <- as.numeric(D %in% c(1, 2))
@@ -363,16 +378,17 @@ csf_cs <- function(X, Y, D, W, horizon, event = 1) {
     W,
     D_event,
     target = "RMST",
-    horizon = horizon
+    horizon = horizon,
+    num.threads = num.threads
   )
 
-  return(predict(forest)$predictions)
+  return(predict(forest, num.threads = num.threads)$predictions)
 }
 # CSF - keep competing events in the risk set
 # Whole sample, as csf_cs. When censoring is present the forest is fit on the
 # uncensored subset only, so the excluded rows get a newdata prediction - see
 # cf_ipw above for why that is honest.
-csf_sh <- function(X, Y, D, W, horizon, event = 1) {
+csf_sh <- function(X, Y, D, W, horizon, event = 1, num.threads = NULL) {
   n_obs <- nrow(X)
 
   # move competing events after horizon (keep them in the risk set)
@@ -384,7 +400,7 @@ csf_sh <- function(X, Y, D, W, horizon, event = 1) {
   # if there is censoring for event horizon, account for this
   cens <- any(D == 0 & Y < horizon)
   if (cens) {
-    weights_0 <- get_ipw(X, Y, D, W, horizon, 0)
+    weights_0 <- get_ipw(X, Y, D, W, horizon, 0, num.threads)
     include <- which(weights_0$observed)
     sample_weights <- weights_0$ipw[weights_0$observed]
   }
@@ -396,15 +412,17 @@ csf_sh <- function(X, Y, D, W, horizon, event = 1) {
     D_sh[include],
     target = "RMST",
     horizon = horizon,
-    sample.weights = sample_weights
+    sample.weights = sample_weights,
+    num.threads = num.threads
   )
 
   tau_RMST <- rep(NA_real_, n_obs)
-  tau_RMST[include] <- predict(forest)$predictions
+  tau_RMST[include] <- predict(forest, num.threads = num.threads)$predictions
   if (length(include) < n_obs) {
     tau_RMST[-include] <- predict(
       forest,
-      newdata = X[-include, , drop = FALSE]
+      newdata = X[-include, , drop = FALSE],
+      num.threads = num.threads
     )$predictions
   }
 
@@ -529,9 +547,9 @@ pseudo_crossfit <- function(
 # causal forest using pseudo values - whole sample, grf's own internal
 # crossfitting ("cf_default"), matching R/cate_models.R::run_causal_forest.
 # `pseudo` is the whole-sample pseudo-value vector.
-pseudo_cf_whole_oob <- function(X, pseudo, W) {
-  forest <- causal_forest(X, pseudo, W)
-  predict(forest)$predictions
+pseudo_cf_whole_oob <- function(X, pseudo, W, num.threads = NULL) {
+  forest <- causal_forest(X, pseudo, W, num.threads = num.threads)
+  predict(forest, num.threads = num.threads)$predictions
 }
 
 # causal forest using pseudo values - single leave-one-fold-out ("scf").
@@ -540,7 +558,7 @@ pseudo_cf_whole_oob <- function(X, pseudo, W) {
 # n x V crossfit matrix from pseudo_crossfit (the cvps_scf arm). Branching on
 # is.matrix() here is what lets one function serve both arms, so that the two
 # differ in the pseudo-values alone and in nothing else.
-pseudo_cf_scf <- function(X, pseudo, W, fold_indices, fold_list) {
+pseudo_cf_scf <- function(X, pseudo, W, fold_indices, fold_list, num.threads = NULL) {
   n_obs <- nrow(X)
   cvps <- is.matrix(pseudo)
 
@@ -556,10 +574,11 @@ pseudo_cf_scf <- function(X, pseudo, W, fold_indices, fold_list) {
       forest <- causal_forest(
         X[in_train, ],
         pseudo_train,
-        W[in_train]
+        W[in_train],
+        num.threads = num.threads
       )
 
-      pred <- predict(forest, newdata = X[in_fold, ])
+      pred <- predict(forest, newdata = X[in_fold, ], num.threads = num.threads)
 
       list(fold = fold, tau = pred$predictions)
     },
@@ -586,13 +605,13 @@ pseudo_cf_scf <- function(X, pseudo, W, fold_indices, fold_list) {
 # `pseudo` is the whole-sample pseudo-value vector, and it is also the outcome in
 # the DR correction term - there is no separate `pseudo_whole` argument here
 # because with no split the two coincide.
-nuisance_pseudo_rf_oob <- function(X, pseudo, W) {
-  mu <- t_learner_rf(X, pseudo, W)
+nuisance_pseudo_rf_oob <- function(X, pseudo, W, num.threads = NULL) {
+  mu <- t_learner_rf(X, pseudo, W, num.threads = num.threads)
   pseudo0.hat <- mu$Y0.hat
   pseudo1.hat <- mu$Y1.hat
 
-  W.hat <- trim_ps(predict(regression_forest(X, W))$predictions)
-  pseudo.hat.cf <- predict(regression_forest(X, pseudo))$predictions
+  W.hat <- trim_ps(predict(regression_forest(X, W, num.threads = num.threads))$predictions)
+  pseudo.hat.cf <- predict(regression_forest(X, pseudo, num.threads = num.threads))$predictions
 
   pseudo.hat <- W * pseudo1.hat + (1 - W) * pseudo0.hat
   po <- dr_pseudo(pseudo, W, pseudo1.hat, pseudo0.hat, W.hat)
@@ -623,7 +642,8 @@ nuisance_pseudo_rf_scf <- function(
   W,
   pseudo_whole,
   fold_indices,
-  fold_list
+  fold_list,
+  num.threads = NULL
 ) {
   cvps <- is.matrix(pseudo)
 
@@ -641,19 +661,23 @@ nuisance_pseudo_rf_scf <- function(
       # one outcome forest per arm (T-learner), control arm first
       arm_forest <- function(arm) {
         regression_forest(X_train[W_train == arm, , drop = FALSE],
-                          pseudo_train[W_train == arm])
+                          pseudo_train[W_train == arm],
+                          num.threads = num.threads)
       }
       ps0.model <- arm_forest(0)
       ps1.model <- arm_forest(1)
-      ps.hat.cf.model <- regression_forest(X_train, pseudo_train)
-      W.hat.model <- regression_forest(X_train, W_train)
+      ps.hat.cf.model <- regression_forest(X_train, pseudo_train, num.threads = num.threads)
+      W.hat.model <- regression_forest(X_train, W_train, num.threads = num.threads)
 
       X_test <- X[in_test, ]
 
-      pseudo0.hat <- predict(ps0.model, newdata = X_test)$predictions
-      pseudo1.hat <- predict(ps1.model, newdata = X_test)$predictions
-      pseudo.hat.cf <- predict(ps.hat.cf.model, newdata = X_test)$predictions
-      W.hat <- trim_ps(predict(W.hat.model, newdata = X_test)$predictions)
+      pred_test <- function(model) {
+        predict(model, newdata = X_test, num.threads = num.threads)$predictions
+      }
+      pseudo0.hat <- pred_test(ps0.model)
+      pseudo1.hat <- pred_test(ps1.model)
+      pseudo.hat.cf <- pred_test(ps.hat.cf.model)
+      W.hat <- trim_ps(pred_test(W.hat.model))
 
       # DR learner pseudo outcome (not the same as the pseudo values we already have)
       W_test <- W[in_test]
@@ -688,7 +712,7 @@ nuisance_pseudo_rf_scf <- function(
 # Leave-one-fold-out second stage on a po VECTOR. R/cate_models.R no longer has a
 # fold-wise RF stage 2 to borrow (it moved to whole-sample OOB, stage2_whole_rf),
 # so the scf arms keep this local one. The whole_oob arm uses stage2_whole_rf.
-stage_2_rf_scf <- function(X, po, fold_indices, fold_list) {
+stage_2_rf_scf <- function(X, po, fold_indices, fold_list, num.threads = NULL) {
   n_obs <- nrow(X)
 
   tau_results <- future_map(
@@ -698,9 +722,9 @@ stage_2_rf_scf <- function(X, po, fold_indices, fold_list) {
       in_train <- fold_indices != fold
       in_fold <- !in_train
 
-      forest <- regression_forest(X[in_train, ], po[in_train])
+      forest <- regression_forest(X[in_train, ], po[in_train], num.threads = num.threads)
 
-      tau_pred <- predict(forest, newdata = X[in_fold, ])$predictions
+      tau_pred <- predict(forest, newdata = X[in_fold, ], num.threads = num.threads)$predictions
 
       list(fold = fold, predictions = tau_pred)
     },
@@ -817,7 +841,7 @@ rsf_dr_nuisances <- function(pseudo, W, mu0, mu1, mu_cf, W.hat) {
 #' each unit's own-arm prediction from predicted.oob / cif.oob and its other-arm
 #' prediction from a forest that never saw it. pseudo.hat.cf comes from a pooled
 #' forest on X alone (OOB), as nuisance_pseudo_rf_oob's does from grf.
-nuisance_rsf_oob <- function(X, Y, D, W, horizon, pseudo_whole) {
+nuisance_rsf_oob <- function(X, Y, D, W, horizon, pseudo_whole, num.threads = NULL) {
   n_obs <- nrow(X)
 
   arm_fit <- function(arm) {
@@ -837,7 +861,7 @@ nuisance_rsf_oob <- function(X, Y, D, W, horizon, pseudo_whole) {
   cf_fit <- rsf_fit(X, Y, D, horizon)
   mu_cf <- rsf_rmtl(cf_fit, horizon, oob = TRUE, causes = attr(cf_fit, "causes"))
 
-  W.hat <- trim_ps(predict(regression_forest(X, W))$predictions)
+  W.hat <- trim_ps(predict(regression_forest(X, W, num.threads = num.threads))$predictions)
 
   rsf_dr_nuisances(pseudo_whole, W, mu0, mu1, mu_cf, W.hat)
 }
@@ -855,7 +879,8 @@ nuisance_rsf_scf <- function(
   horizon,
   pseudo_whole,
   fold_indices,
-  fold_list
+  fold_list,
+  num.threads = NULL
 ) {
   cross_fits <- future_map(
     seq_along(fold_list),
@@ -882,8 +907,9 @@ nuisance_rsf_scf <- function(
       mu1 <- fit_predict(W_train == 1)
       mu_cf <- fit_predict(rep(TRUE, sum(in_train)))
 
-      W.hat.model <- regression_forest(X_train, W_train)
-      W.hat <- trim_ps(predict(W.hat.model, newdata = X_test)$predictions)
+      W.hat.model <- regression_forest(X_train, W_train, num.threads = num.threads)
+      W.hat <- trim_ps(predict(W.hat.model, newdata = X_test,
+                               num.threads = num.threads)$predictions)
 
       list(
         fold = fold,
