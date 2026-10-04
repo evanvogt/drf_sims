@@ -21,7 +21,8 @@ Nothing here reads per-run simulation output directly — run the study's
 |---|---|
 | `sample_size.R` | the correlated sample-size studies at ρ = 0.5 (main chapter): bias and RMSE, one figure per outcome |
 | `cts_ss.R`, `bin_ss.R` | the independent-covariate sample-size studies (appendix) |
-| `miss_cts.R`, `miss_bin.R` | the missing-data studies |
+| `missing.R` | the continuous missing-data study (main chapter), scenarios 1–4: bias and RMSE as separate figures, complete vs incomplete units by point shape |
+| `miss_cts.R`, `miss_bin.R` | the missing-data studies (pre-2026-09-29 metrics: all-unit bias/MSE) |
 | `cts_ci.R` | continuous confidence intervals |
 | `miss_cts_ci.R` | MI confidence intervals |
 | `surv.R` | competing risks |
