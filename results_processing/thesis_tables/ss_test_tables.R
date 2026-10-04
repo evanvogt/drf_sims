@@ -3,16 +3,14 @@
 ##########
 # Rejection rates of the four heterogeneity tests, as "rate (MCSE)", with
 # sample size across the columns so each test's power reads left to right.
-# One table for the reported scenarios 1-4 and one for the supplementary 5-10,
-# per outcome. The correlated-covariate studies (sample_size/correlated/) get
-# the supplementary table only, once per rho: their scenarios 1-4 are the main
-# text's figures (thesis_figures/sample_size.R). The estimation metrics are in
-# ss_tables.R.
+# The correlated-covariate studies (sample_size/correlated/), per outcome and
+# rho: one table for the reported scenarios 1-4 and one for the supplementary
+# 5-10. The independent-covariate studies (sample_size/continuous/, binary/)
+# are no longer tabulated. The estimation metrics are in ss_tables.R.
 #
 # Writes to ../results/thesis_tables/:
-#   cts_ss_tests_main.tex, cts_ss_tests_supp.tex,
-#   bin_ss_tests_main.tex, bin_ss_tests_supp.tex,
-#   {cts,bin}_corr_rho0_ss_tests_supp.tex, {cts,bin}_corr_rho05_ss_tests_supp.tex
+#   {cts,bin}_corr_rho0_ss_tests_main.tex, {cts,bin}_corr_rho0_ss_tests_supp.tex,
+#   {cts,bin}_corr_rho05_ss_tests_main.tex, {cts,bin}_corr_rho05_ss_tests_supp.tex
 # \input{} them into a document with
 #   \usepackage{booktabs, longtable, pdflscape, array}
 #
@@ -20,10 +18,10 @@
 #   with an NA p-value (a constant CATE estimate, or a test not run) are left
 #   out of the denominator, as in the figures.
 # - "True CATE" is each test run on the true CATE and nuisances
-#   ({cts,bin}_true_cate_tests.RDS, from *_metrics.R): the ceiling the models'
-#   own tests are chasing. It has no PO independence test (the DR-oracle's is
-#   already the true pseudo-outcome's), and in scenario 1 the true CATE is
-#   constant, so none of its tests are defined there.
+#   ({cts,bin}_corr_true_cate_tests.RDS, from *_corr_metrics.R): the ceiling
+#   the models' own tests are chasing. It has no PO independence test (the
+#   DR-oracle's is already the true pseudo-outcome's), and in scenario 1 the
+#   true CATE is constant, so none of its tests are defined there.
 # - A row with no defined cell is dropped: the PO independence test for the
 #   causal forest and T-learners (they share another estimator's
 #   pseudo-outcome, R/metrics.R), and the True CATE in scenario 1.
@@ -39,36 +37,28 @@ path <- here()
 tab_path <- file.path(dirname(path), "results", "thesis_tables")
 dir.create(tab_path, showWarnings = FALSE, recursive = TRUE)
 
-# Per entry: `dir` and `prefix` locate the metrics; `out` names the output
-# files and LaTeX labels; `label` is the caption's outcome text; `rho` (the
-# correlated studies only) is the rho kept; `tables` is which of main (1-4)
-# and supp (5-10) to write; `note` is appended to the caption.
+# `supp_note` is appended to the 5-10 table's caption: binary scenario 9 runs
+# on a smaller scale than binary/'s (RD_SCALE_CORR in R/dgm_scenarios.R)
 outcomes <- list(
-  list(dir = "continuous", prefix = "cts", out = "cts",
-       label = "continuous outcome", tables = c("main", "supp"), note = ""),
-  list(dir = "binary", prefix = "bin", out = "bin",
-       label = "binary outcome", tables = c("main", "supp"), note = "")
+  list(dir = "continuous", prefix = "cts", label = "continuous outcome",
+       supp_note = ""),
+  list(dir = "binary", prefix = "bin", label = "binary outcome",
+       supp_note = paste0(
+         " In scenario 9 the heterogeneity is scaled by 0.139 rather than the",
+         " independent-covariate study's 0.164, so that every treated risk",
+         " stays within $[0.01, 0.99]$ at $\\rho = 0.5$."
+       ))
 )
 
-# the correlated studies, at each rho (CORR_RHOS in R/dgm_scenarios.R).
-# Binary scenario 9 runs on a smaller scale than binary/'s (RD_SCALE_CORR)
-BIN_CORR_NOTE <- paste0(
-  " In scenario 9 the heterogeneity is scaled by 0.139 rather than the",
-  " independent-covariate study's 0.164, so that every treated risk stays",
-  " within $[0.01, 0.99]$ at $\\rho = 0.5$."
-)
-corr_outcomes <- lapply(outcomes, function(o) {
+# one entry per outcome and rho (CORR_RHOS in R/dgm_scenarios.R): `out` names
+# the output files and LaTeX labels, `label` is the caption's outcome text
+outcomes <- unlist(lapply(outcomes, function(o) {
   lapply(c(0, 0.5), function(r) modifyList(o, list(
-    dir = file.path("correlated", o$dir),
-    prefix = paste0(o$prefix, "_corr"),
     out = paste0(o$prefix, "_corr_rho", sub(".", "", r, fixed = TRUE)),
     label = paste0(o$label, ", correlated covariates ($\\rho = ", r, "$)"),
-    rho = r,
-    tables = "supp",
-    note = if (o$dir == "binary") BIN_CORR_NOTE else ""
+    rho = r
   )))
-})
-outcomes <- c(outcomes, unlist(corr_outcomes, recursive = FALSE))
+}), recursive = FALSE)
 
 # p-value column -> row label, in row order
 tests <- c(
@@ -101,29 +91,25 @@ short_caption_text <- function(o, scenarios) {
   paste0("HTE tests, ", o$label, ", scenarios ", scenarios)
 }
 
-caption_text <- function(o, scenarios, runs) {
+caption_text <- function(o, scenarios, runs, note = "") {
   paste0(
     "HTE tests, sample-size study, ", o$label, ", scenarios ", scenarios,
     ": rejection rate at $\\alpha = ", ALPHA, "$ (Monte Carlo SE) over ", runs,
     " runs per cell, by sample size. Type I error in the null scenario, power ",
     "otherwise. Runs with an undefined p-value are left out. True CATE: the ",
-    "test applied to the true CATE and nuisances.", o$note
+    "test applied to the true CATE and nuisances.", note
   )
 }
 
-# the rho this entry keeps, if it is a correlated study
-keep_rho <- function(df, o) if (is.null(o$rho)) df else filter(df, rho == o$rho)
-
 for (o in outcomes) {
-  res_path <- file.path(dirname(path), "results", o$dir)
-  metrics <- readRDS(file.path(res_path, paste0(o$prefix, "_metrics.RDS"))) %>%
-    keep_rho(o) %>%
-    add_rejections()
-  true_cate_tests <- readRDS(
-    file.path(res_path, paste0(o$prefix, "_true_cate_tests.RDS"))
-  ) %>%
-    keep_rho(o) %>%
-    add_rejections()
+  res_path <- file.path(dirname(path), "results", "correlated", o$dir)
+  read_corr <- function(stem) {
+    readRDS(file.path(res_path, paste0(o$prefix, "_corr_", stem, ".RDS"))) %>%
+      filter(rho == o$rho) %>%
+      add_rejections()
+  }
+  metrics <- read_corr("metrics")
+  true_cate_tests <- read_corr("true_cate_tests")
 
   test_summary <- bind_rows(
     summarise_rejections(metrics, c("scenario", "n", "model")),
@@ -133,14 +119,14 @@ for (o in outcomes) {
 
   tables <- list(
     main = list(scenarios = 1:4, labels = SS_SCENARIO_LABELS,
-                text = "1--4"),
+                text = "1--4", note = ""),
     supp = list(scenarios = 5:10, labels = SS_SUPP_SCENARIO_LABELS,
-                text = "5--10")
+                text = "5--10", note = o$supp_note)
   )
 
-  for (nm in o$tables) {
+  for (nm in names(tables)) {
     t <- tables[[nm]]
-    # the correlated studies' 5-10 were added after their 1-4 had run
+    # 5-10 were added to the studies after 1-4 had run
     if (!any(metrics$scenario %in% t$scenarios)) {
       message(o$out, ": no scenario ", t$text, " metrics yet - ", nm, " table skipped")
       next
@@ -155,7 +141,8 @@ for (o in outcomes) {
         digits = 3,
         caption.short = short_caption_text(o, t$text),
         caption = caption_text(
-          o, t$text, runs_per_cell(filter(metrics, scenario %in% t$scenarios))
+          o, t$text, runs_per_cell(filter(metrics, scenario %in% t$scenarios)),
+          t$note
         ),
         label = paste0(o$out, "_ss_tests_", nm),
         landscape = FALSE
