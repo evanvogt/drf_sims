@@ -5,9 +5,12 @@
 # (sample_size/correlated/) at rho = 0.5. The independent-covariate studies
 # (cts_ss.R, bin_ss.R) are the appendix's.
 #
-# One figure per outcome: CATE bias on the top row, RMSE on the bottom, the
-# four scenarios across. Labels, palette, summaries and figure sizing come from
-# R/figures.R. This script carries only the paths and this study's filters.
+# Two figures per outcome, the four scenarios across in each:
+#   - CATE bias on the top row, RMSE on the bottom;
+#   - each HTE test's rejection rate at 0.05, one row per test, with the same
+#     tests run on the true values as a reference series.
+# Labels, palette, summaries and figure sizing come from R/figures.R. This
+# script carries only the paths and this study's filters.
 
 library(here)
 library(patchwork)
@@ -65,3 +68,89 @@ bias_rmse_figure <- function(outcome, prefix, scale_lab = "") {
 
 cts_fig <- bias_rmse_figure("continuous", "cts")
 bin_fig <- bias_rmse_figure("binary", "bin")
+
+# the HTE tests, in facet-row order
+HTE_TESTS <- c(
+  BLP_p = "BLP (two-sided)",
+  BLP_p_os = "BLP (one-sided, HC3)",
+  indep_cate = "CATE permutation",
+  indep_po = "PO permutation"
+)
+TRUE_LAB <- "True values"
+
+#' Rejection rate at 0.05 by sample size, one row per test, one column per
+#' scenario
+#'
+#' The "True values" series is the BLP and CATE permutation tests run on the
+#' true CATE and true nuisances (<prefix>_corr_true_cate_tests.RDS, see
+#' true_cate_test_row() in R/cate_models.R). The true CATE is constant in the
+#' null scenario, so those tests have no true series there. There is no
+#' true-value PO test: DR-oracle's own indep_po already tests the true
+#' pseudo-outcome, so it stands in as the PO row's true series rather than as a
+#' model of its own. Causal forest and the T-learners have no indep_po (see
+#' hte_test_metrics() in R/metrics.R), so they draw nothing in that row.
+#'
+#' @param outcome results folder, "continuous" or "binary"
+#' @param prefix file prefix, "cts" or "bin"
+rejection_figure <- function(outcome, prefix) {
+  read_corr <- function(stem) {
+    readRDS(file.path(res_path, outcome, paste0(prefix, "_corr_", stem, ".RDS"))) %>%
+      filter(rho == RHO)
+  }
+  metrics <- read_corr("metrics")
+  true_tests <- read_corr("true_cate_tests")
+
+  est <- metrics %>%
+    transmute(scenario, n, model = as.character(model),
+              across(all_of(names(HTE_TESTS)))) %>%
+    pivot_longer(all_of(names(HTE_TESTS)), names_to = "test", values_to = "p") %>%
+    filter(!(model == "dr_oracle" & test == "indep_po"))
+
+  true_cols <- c("BLP_p", "BLP_p_os", "indep_cate")
+  truth <- bind_rows(
+    true_tests %>%
+      select(scenario, n, all_of(true_cols)) %>%
+      pivot_longer(all_of(true_cols), names_to = "test", values_to = "p"),
+    metrics %>%
+      filter(model == "dr_oracle") %>%
+      transmute(scenario, n, test = "indep_po", p = indep_po)
+  ) %>%
+    mutate(model = TRUE_LAB)
+
+  # NA p-values (a constant CATE, or a test with no value for that model) are
+  # left out, as summarise_metrics()'s na.rm would anyway
+  rejections <- bind_rows(est, truth) %>%
+    filter(!is.na(p)) %>%
+    mutate(rej = as.numeric(p < 0.05),
+           test = factor(test, levels = names(HTE_TESTS), labels = HTE_TESTS)) %>%
+    apply_labels(SS_SCENARIO_LABELS) %>%
+    mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
+
+  # rejection is a per-run 0/1 indicator, so the binomial MCSE
+  rej_summary <- summarise_metrics(rejections, c("test", "scenario", "n", "model"),
+                                   cols = c(rej = "rej"), binomial = "rej",
+                                   count_na = character())
+
+  # the models keep their colours from the bias/RMSE figure (Safe, in level
+  # order); the true series, label_factor()'s last level, is black
+  model_levels <- levels(rej_summary$model)
+  pal <- scale_colour_manual(values = setNames(
+    c(as.character(paletteer_d("rcartocolor::Safe", length(model_levels) - 1)),
+      "black"),
+    model_levels
+  ))
+
+  fig <- point_range_plot(rej_summary, "rej", "Rejection rate at 0.05",
+                          x = "n", colour = "model", facet_rows = "test",
+                          facet_cols = "scenario", facet_scales = "fixed",
+                          line = TRUE, ci_alpha = 0.7, hline = 0.05,
+                          palette = pal) +
+    labs(x = "Sample size", colour = "Model") +
+    theme(legend.position = "bottom") +
+    guides(colour = guide_legend(nrow = 2))
+  save_fig(paste0(prefix, "_corr_rejection.png"), fig_path, height = 21, plot = fig)
+  fig
+}
+
+cts_rej_fig <- rejection_figure("continuous", "cts")
+bin_rej_fig <- rejection_figure("binary", "bin")
