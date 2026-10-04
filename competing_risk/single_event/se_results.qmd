@@ -1,0 +1,158 @@
+---
+title: "Single-event survival: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 11,
+  fig.height = 7
+)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(here)
+library(knitr)
+```
+
+## Pseudo-values, causal survival forest and RSF DR-learner on one event
+
+One time-to-event outcome, distributed as event 1 of the competing-risk study
+with event 2 removed (Weibull shape 2, scale 25, X1 and X2 prognostic, X3 the
+effect modifier). The estimand is the CATE on RMST to day 28, which is the
+competing-risk study's net RMST1 (`tau_RMST1_cs`).
+
+| Scenario | Treatment effect | True τ, mean (SD) |
+|---|---|---|
+| 1 | none | 0 (0) |
+| 2 | constant on the hazard scale, HR 1.42 | −2.16 (0.10) |
+| 3 | heterogeneous, HR 1.42 / 2.86 at X3 = 0 / 1 | −5.24 (2.02) |
+
+n = 500, censoring on (uniform + administrative at 180) or off (administrative
+only), 500 runs. Design and arms in `ADEMP.md`.
+
+- **Scenario 2's correlation and C-statistic** are measured against a truth
+  with SD 0.10, all from X1 and X2. Read bias and RMSE there.
+- **Scenario 1** has τ ≡ 0: correlation and C-statistic are set to 0 and 0.5
+  by `cate_metrics()`. `tau_sd`, the within-run spread of the estimates, is the
+  spurious heterogeneity each arm reports.
+- **Without censoring** the pseudo-values are exactly min(Y, 28), so the
+  pseudo-value arms are regressions on the observed truncated time.
+
+```{r data}
+res_path <- file.path(dirname(here()), "results", "single_event")
+metrics <- readRDS(file.path(res_path, "se_metrics.RDS"))
+
+scenario_labels <- c(`1` = "Null", `2` = "Constant", `3` = "Heterogeneous")
+learner_levels <- c("CSF", "CF", "DR", "T")
+nuisance_levels <- c("grf", "RF", "SL", "RSF", "RSF (scf)")
+
+metrics <- metrics %>%
+  mutate(
+    scenario = factor(scenario, levels = 1:3, labels = unname(scenario_labels)),
+    censoring = factor(censoring, levels = c(TRUE, FALSE),
+                       labels = c("Censored", "Uncensored")),
+    learner = factor(learner, levels = learner_levels),
+    nuisance = factor(nuisance, levels = nuisance_levels)
+  )
+
+mcse <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
+
+metrics_summary <- metrics %>%
+  group_by(scenario, censoring, learner, nuisance, framework) %>%
+  summarise(
+    across(c(bias, ate_bias, rmse, corr, c_stat, tau_sd),
+           list(mean = ~ mean(.x, na.rm = TRUE), mcse = mcse)),
+    total_n_na = sum(n_na, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+### Results coverage
+
+3,000 runs in all (3 scenarios × 2 censoring settings × 500 runs). Check this
+before reading anything below.
+
+```{r completeness-table}
+metrics %>%
+  group_by(scenario, censoring) %>%
+  summarise(n_runs = n_distinct(run), n_arms = n_distinct(framework),
+            n_na = sum(n_na), .groups = "drop") %>%
+  kable(col.names = c("Scenario", "Censoring", "Runs collected",
+                      "Arms present", "Missing estimates"))
+```
+
+```{r summary-plot-helper, include=FALSE}
+# points with mean +/- 1.96 MCSE, coloured by the nuisance model, faceted
+# scenario x censoring
+summary_plot <- function(measure, title, ylab, hline = 0, scenarios = NULL) {
+  df <- metrics_summary
+  if (!is.null(scenarios)) df <- filter(df, scenario %in% scenarios)
+  df %>%
+    mutate(est = .data[[paste0(measure, "_mean")]],
+           lo = est - 1.96 * .data[[paste0(measure, "_mcse")]],
+           hi = est + 1.96 * .data[[paste0(measure, "_mcse")]]) %>%
+    ggplot(aes(x = learner, y = est, ymin = lo, ymax = hi, colour = nuisance)) +
+    { if (!is.null(hline)) geom_hline(yintercept = hline, linetype = "dashed") } +
+    geom_point(position = position_dodge(width = 0.6), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.6), width = 0.3,
+                  linewidth = 0.3) +
+    facet_grid(censoring ~ scenario, scales = "free_y") +
+    labs(title = title, x = NULL, y = ylab, colour = "Nuisance model") +
+    theme_bw() +
+    theme(legend.position = "bottom")
+}
+```
+
+### Bias
+
+```{r bias}
+summary_plot("bias", "Mean CATE bias", "Bias (days)")
+```
+
+### RMSE
+
+```{r rmse}
+summary_plot("rmse", "RMSE against the true CATE", "RMSE (days)", hline = NULL)
+```
+
+### Spurious heterogeneity in the null
+
+```{r tau-sd}
+summary_plot("tau_sd", "Within-run SD of the estimated CATE (truth: 0)",
+             "SD (days)", scenarios = "Null")
+```
+
+### Ranking (heterogeneous scenario)
+
+```{r corr}
+summary_plot("corr", "Correlation with the true CATE", "Pearson r",
+             hline = NULL, scenarios = "Heterogeneous")
+```
+
+```{r c-stat}
+summary_plot("c_stat", "C-statistic", "C", hline = 0.5,
+             scenarios = "Heterogeneous")
+```
+
+### Table
+
+```{r table}
+metrics_summary %>%
+  select(scenario, censoring, framework, bias_mean, rmse_mean, corr_mean,
+         c_stat_mean, tau_sd_mean) %>%
+  arrange(scenario, censoring) %>%
+  kable(digits = 3)
+```

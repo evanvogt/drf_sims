@@ -47,7 +47,8 @@ study_registry <- data.frame(
     "correlated/confidence_intervals/continuous",
     "correlated/confidence_intervals/binary",
     "correlated/confidence_intervals/optimal_sf (cts)",
-    "correlated/confidence_intervals/optimal_sf (bin)"
+    "correlated/confidence_intervals/optimal_sf (bin)",
+    "competing_risk/single_event"
   ),
   config_path = c(
     "sample_size/continuous/cts_config.R",
@@ -69,7 +70,8 @@ study_registry <- data.frame(
     "sample_size/correlated/confidence_intervals/continuous/cts_corr_ci_config.R",
     "sample_size/correlated/confidence_intervals/binary/bin_corr_ci_config.R",
     "sample_size/correlated/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R",
-    "sample_size/correlated/confidence_intervals/optimal_sf/bin_corr_ci_sf_config.R"
+    "sample_size/correlated/confidence_intervals/optimal_sf/bin_corr_ci_sf_config.R",
+    "competing_risk/single_event/se_config.R"
   ),
   config_var = "study",
   category = c(
@@ -87,6 +89,7 @@ study_registry <- data.frame(
     "crossfit_rerun",
     "dgm_rerun",
     "crossfit_rerun",
+    "first_run",
     "first_run",
     "first_run",
     "first_run",
@@ -114,12 +117,14 @@ study_registry <- data.frame(
     "new 2026-10-04: confidence_intervals/continuous/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
     "new 2026-10-04: confidence_intervals/binary/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
     "new 2026-10-04: confidence_intervals/optimal_sf (cts) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
-    "new 2026-10-04: confidence_intervals/optimal_sf (bin) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)"
+    "new 2026-10-04: confidence_intervals/optimal_sf (bin) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
+    "new 2026-10-04: competing_risk/'s event 1 without event 2 - pseudo-value CF / DR / T, SuperLearner DR / T, RSF DR / T and the causal survival forest on the RMST, scenarios 1-3 (null, constant, heterogeneous), censoring on/off, 500 runs (competing_risk/single_event/README.md)"
   ),
   blocked = c(
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
+    FALSE
   ),
   stringsAsFactors = FALSE
 )

@@ -221,6 +221,33 @@ STUDIES <- list(
     }
   ),
 
+  # competing_risk/single_event reuses most of competing_risk/surv_models.R's
+  # arms, so a change there shows up here too. Same sizes as competing_risk
+  # (n = 400 for the causal survival forest's censoring bound), with the small
+  # SL_LIB so the SuperLearner arms stay fast. rf.cores = 1 because the rsf_*_oob
+  # fits run in this process, and rfsrc's multithreaded sums differ in the last
+  # bit from run to run - enough to move rsf_dr_oob's stage-2 forest splits. The
+  # analysis script gets the same from OMP_NUM_THREADS = grf_threads = 1.
+  single_event = list(
+    sources = c("utils.R", "R/cate_models.R", "competing_risk/surv_models.R",
+                "competing_risk/single_event/se_dgm.R",
+                "competing_risk/single_event/se_models.R"),
+    run = function() {
+      op <- options(rf.cores = 1)
+      on.exit(options(op), add = TRUE)
+      setup_rng_stream(3)
+      gen <- generate_se_data(scenario = 3, n = 400, censoring = TRUE)
+      setup_rng_stream(3)
+      res <- suppressMessages(
+        all_cate_se_models(gen$dataset, n_folds = 3, horizon = 28,
+                           sl_library = SL_LIB))
+      keep <- setdiff(names(res), c("pseudos", "nuisances", "fold_indices"))
+      c(list(dataset = gen$dataset, truth = gen$truth,
+             pseudos = res$pseudos$whole, fold_indices = res$fold_indices),
+        flatten_numeric(res[keep]))
+    }
+  ),
+
   crossfitting = list(
     sources = c("crossfitting/cf_models.R"),
     run = function() {

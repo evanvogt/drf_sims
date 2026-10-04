@@ -460,6 +460,8 @@ queue" above), `surv_check.R`, `surv_collect.R`, `surv_metrics.R`.
 `surv_dgm_check.R` produces ADEMP's "What the DGM implies" numbers (event mix,
 population truths, X3 separation) for each ρ.
 `scratch_dgm_params_check.R` is exploratory.
+`single_event/` is a separate, smaller study: event 1 with event 2 removed,
+reusing this study's arms (see its README).
 `surv_dr_split_na_diagnose.R` reproduces and traces the split-DR-learner
 NA bug documented in "Known issues" above.
 `surv_failed_diagnose.R` is the diagnostic that found both the 225-run failure
