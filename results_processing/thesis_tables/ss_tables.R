@@ -17,12 +17,13 @@
 # Metric choices:
 # - Bias is `ate_bias`. `bias` (mean of est - true over units) is the same
 #   number unless a run has NA estimates, so it is not repeated.
-# - Relative bias is the ATE's, in %. The true ATE is recalibrated per n for
-#   80% power and shrinks with n, so this is what makes the n rows comparable.
-#   The per-unit `rel_bias_cate` is left out: the true CATE crosses or
-#   approaches zero in several scenarios, and those units dominate its mean.
-# - Correlations are undefined in scenario 1 (stored as 0, R/metrics.R), so
-#   they are set to NA and print as a dash.
+# - No relative bias. The true ATE is recalibrated per n for 80% power and
+#   shrinks with n, so the bias rows are not on a common scale across n.
+# - MSE, not RMSE, and Pearson, not Spearman: the missing-data chapter's
+#   tables report Pearson too (miss_tables.R), and in scenarios 5 and 7 the
+#   true CATE is mostly ties, which muddies Spearman's ranks.
+# - Pearson is undefined in scenario 1 (stored as 0, R/metrics.R), so it is
+#   set to NA and prints as a dash.
 
 library(here)
 source(here("R", "figures.R"))
@@ -66,11 +67,8 @@ table_cols <- function(o) {
   tibble::tribble(
     ~stem,             ~header1,    ~header2,    ~digits,
     "ate_bias",        "Bias",      "",          o$digits_bias,
-    "rel_ate_bias",    "Rel. bias", "(\\%)",     1,
     "mse",             "MSE",       "",          o$digits_mse,
-    "rmse",            "RMSE",      "",          3,
     "corr",            "Pearson",   "",          2,
-    "spearman",        "Spearman",  "",          2,
     "sign_acc",        "Sign",      "accuracy",  2
   ) %>%
     mutate(header = ifelse(
@@ -87,7 +85,7 @@ caption_text <- function(o, scenarios, runs, note = "") {
   paste0(
     "CATE estimation, sample-size study, ", o$label, ", scenarios ",
     scenarios, ": mean (Monte Carlo SE) over ", runs, " runs per cell. ",
-    "Bias and relative bias are for the ATE. --- : not defined (correlation ",
+    "Bias is for the ATE. --- : not defined (correlation ",
     "under no heterogeneity).", note
   )
 }
@@ -98,11 +96,7 @@ for (o in outcomes) {
     filter(rho == o$rho)
 
   metrics <- metrics %>%
-    mutate(
-      rel_ate_bias = 100 * rel_ate_bias,
-      corr = if_else(scenario == 1, NA_real_, corr),
-      spearman = if_else(scenario == 1, NA_real_, spearman)
-    )
+    mutate(corr = if_else(scenario == 1, NA_real_, corr))
 
   cols <- table_cols(o)
 
@@ -139,11 +133,11 @@ for (o in outcomes) {
           t$note
         ),
         label = paste0(o$out, "_ss_", nm),
-        # portrait fits the 7 columns within 16cm (A4, 2.5cm margins) with
-        # 2pt column padding; the 4-decimal binary table needs it. Set
-        # landscape = TRUE instead if the thesis margins are wider
+        # the 4 columns fit portrait within 16cm (A4, 2.5cm margins) at 10pt
+        # with LaTeX's own column padding, the 4-decimal binary table included
         landscape = FALSE,
-        tabcolsep = "2pt"
+        font_size = 10,
+        tabcolsep = NULL
       )
     out_file <- file.path(tab_path, paste0(o$out, "_ss_", nm, ".tex"))
     writeLines(tex, out_file)

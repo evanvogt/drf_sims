@@ -59,7 +59,7 @@ runs_per_cell <- function(metrics, group_cols = c("scenario", "n", "model")) {
 #' @param font_size in pt
 #' @param tabcolsep inter-column padding, narrower than LaTeX's 6pt default so
 #'   wide tables fit. Set inside the table's own group, so it does not leak
-#'   into the rest of the document
+#'   into the rest of the document. NULL leaves the document's own padding
 #' @param landscape rotate onto a landscape page (pdflscape)
 #' @return the LaTeX source, as a single string
 grouped_longtable <- function(tab, col_names, group, block, header_above = NULL,
@@ -106,6 +106,7 @@ grouped_longtable <- function(tab, col_names, group, block, header_above = NULL,
   # edits them. Done editing, so drop the tags: in a cell they add a space.
   out <- gsub(" ?\\\\vphantom\\{[0-9]+\\}", "", out)
 
+  if (is.null(tabcolsep)) return(paste0(out, "\n"))
   paste0("{\\setlength{\\tabcolsep}{", tabcolsep, "}\n", out, "\n}\n")
 }
 
