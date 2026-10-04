@@ -1,17 +1,16 @@
 ##########
 # title: LaTeX tables for the thesis chapter - sample size, both outcomes
 ##########
-# One table for the reported scenarios 1-4 and one for the supplementary 5-10,
-# per outcome, each estimation metric as "mean (MCSE)". The correlated-covariate
-# studies (sample_size/correlated/) get the supplementary table only, once per
-# rho: their scenarios 1-4 are the main text's figures
-# (thesis_figures/sample_size.R). The HTE tests have their own tables,
-# ss_test_tables.R. Labels and the summary come from R/figures.R, the table
-# layout from R/tables.R.
+# The correlated-covariate studies (sample_size/correlated/), per outcome and
+# rho: one table for the reported scenarios 1-4 and one for the supplementary
+# 5-10, each estimation metric as "mean (MCSE)". The independent-covariate
+# studies (sample_size/continuous/, binary/) are no longer tabulated. The HTE
+# tests have their own tables, ss_test_tables.R. Labels and the summary come
+# from R/figures.R, the table layout from R/tables.R.
 #
 # Writes to ../results/thesis_tables/:
-#   cts_ss_main.tex, cts_ss_supp.tex, bin_ss_main.tex, bin_ss_supp.tex,
-#   {cts,bin}_corr_rho0_ss_supp.tex, {cts,bin}_corr_rho05_ss_supp.tex
+#   {cts,bin}_corr_rho0_ss_main.tex, {cts,bin}_corr_rho0_ss_supp.tex,
+#   {cts,bin}_corr_rho05_ss_main.tex, {cts,bin}_corr_rho05_ss_supp.tex
 # \input{} them into a document with
 #   \usepackage{booktabs, longtable, pdflscape, array}
 #
@@ -35,40 +34,30 @@ tab_path <- file.path(dirname(path), "results", "thesis_tables")
 dir.create(tab_path, showWarnings = FALSE, recursive = TRUE)
 
 # the binary outcome's errors are on the risk-difference scale, an order of
-# magnitude smaller, so bias and MSE get an extra decimal
-#
-# Per entry: `dir` and `prefix` locate the metrics; `out` names the output
-# files and LaTeX labels; `label` is the caption's outcome text; `rho` (the
-# correlated studies only) is the rho kept; `tables` is which of main (1-4)
-# and supp (5-10) to write; `note` is appended to the caption.
+# magnitude smaller, so bias and MSE get an extra decimal. `supp_note` is
+# appended to the 5-10 table's caption: binary scenario 9 runs on a smaller
+# scale than binary/'s (RD_SCALE_CORR in R/dgm_scenarios.R)
 outcomes <- list(
-  list(dir = "continuous", prefix = "cts", out = "cts",
-       label = "continuous outcome", tables = c("main", "supp"), note = "",
-       digits_bias = 3, digits_mse = 3),
-  list(dir = "binary", prefix = "bin", out = "bin",
-       label = "binary outcome", tables = c("main", "supp"), note = "",
-       digits_bias = 4, digits_mse = 4)
+  list(dir = "continuous", prefix = "cts", label = "continuous outcome",
+       digits_bias = 3, digits_mse = 3, supp_note = ""),
+  list(dir = "binary", prefix = "bin", label = "binary outcome",
+       digits_bias = 4, digits_mse = 4,
+       supp_note = paste0(
+         " In scenario 9 the heterogeneity is scaled by 0.139 rather than the",
+         " independent-covariate study's 0.164, so that every treated risk",
+         " stays within $[0.01, 0.99]$ at $\\rho = 0.5$."
+       ))
 )
 
-# the correlated studies, at each rho (CORR_RHOS in R/dgm_scenarios.R).
-# Binary scenario 9 runs on a smaller scale than binary/'s (RD_SCALE_CORR)
-BIN_CORR_NOTE <- paste0(
-  " In scenario 9 the heterogeneity is scaled by 0.139 rather than the",
-  " independent-covariate study's 0.164, so that every treated risk stays",
-  " within $[0.01, 0.99]$ at $\\rho = 0.5$."
-)
-corr_outcomes <- lapply(outcomes, function(o) {
+# one entry per outcome and rho (CORR_RHOS in R/dgm_scenarios.R): `out` names
+# the output files and LaTeX labels, `label` is the caption's outcome text
+outcomes <- unlist(lapply(outcomes, function(o) {
   lapply(c(0, 0.5), function(r) modifyList(o, list(
-    dir = file.path("correlated", o$dir),
-    prefix = paste0(o$prefix, "_corr"),
     out = paste0(o$prefix, "_corr_rho", sub(".", "", r, fixed = TRUE)),
     label = paste0(o$label, ", correlated covariates ($\\rho = ", r, "$)"),
-    rho = r,
-    tables = "supp",
-    note = if (o$dir == "binary") BIN_CORR_NOTE else ""
+    rho = r
   )))
-})
-outcomes <- c(outcomes, unlist(corr_outcomes, recursive = FALSE))
+}), recursive = FALSE)
 
 # the table's columns, left to right. Drop a row here to drop a column.
 table_cols <- function(o) {
@@ -94,19 +83,19 @@ short_caption_text <- function(o, scenarios) {
   paste0("CATE estimation, ", o$label, ", scenarios ", scenarios)
 }
 
-caption_text <- function(o, scenarios, runs) {
+caption_text <- function(o, scenarios, runs, note = "") {
   paste0(
     "CATE estimation, sample-size study, ", o$label, ", scenarios ",
     scenarios, ": mean (Monte Carlo SE) over ", runs, " runs per cell. ",
     "Bias and relative bias are for the ATE. --- : not defined (correlation ",
-    "under no heterogeneity).", o$note
+    "under no heterogeneity).", note
   )
 }
 
 for (o in outcomes) {
-  metrics <- readRDS(file.path(dirname(path), "results", o$dir,
-                               paste0(o$prefix, "_metrics.RDS")))
-  if (!is.null(o$rho)) metrics <- filter(metrics, rho == o$rho)
+  metrics <- readRDS(file.path(dirname(path), "results", "correlated", o$dir,
+                               paste0(o$prefix, "_corr_metrics.RDS"))) %>%
+    filter(rho == o$rho)
 
   metrics <- metrics %>%
     mutate(
@@ -126,14 +115,14 @@ for (o in outcomes) {
 
   tables <- list(
     main = list(scenarios = 1:4, labels = SS_SCENARIO_LABELS,
-                text = "1--4"),
+                text = "1--4", note = ""),
     supp = list(scenarios = 5:10, labels = SS_SUPP_SCENARIO_LABELS,
-                text = "5--10")
+                text = "5--10", note = o$supp_note)
   )
 
-  for (nm in o$tables) {
+  for (nm in names(tables)) {
     t <- tables[[nm]]
-    # the correlated studies' 5-10 were added after their 1-4 had run
+    # 5-10 were added to the studies after 1-4 had run
     if (!any(metrics$scenario %in% t$scenarios)) {
       message(o$out, ": no scenario ", t$text, " metrics yet - ", nm, " table skipped")
       next
@@ -146,7 +135,8 @@ for (o in outcomes) {
         cols,
         caption.short = short_caption_text(o, t$text),
         caption = caption_text(
-          o, t$text, runs_per_cell(filter(metrics, scenario %in% t$scenarios))
+          o, t$text, runs_per_cell(filter(metrics, scenario %in% t$scenarios)),
+          t$note
         ),
         label = paste0(o$out, "_ss_", nm),
         # portrait fits the 7 columns within 16cm (A4, 2.5cm margins) with
