@@ -70,12 +70,14 @@ cts_fig <- bias_rmse_figure("continuous", "cts")
 bin_fig <- bias_rmse_figure("binary", "bin")
 
 # the HTE tests, in facet-row order
+# the HTE tests, in facet-row order
 HTE_TESTS <- c(
-  BLP_p = "BLP (two-sided)",
   BLP_p_os = "BLP (one-sided, HC3)",
-  indep_cate = "CATE permutation",
-  indep_po = "PO permutation"
+  BLP_p = "BLP (two-sided)",
+  indep_po = "PO independence",
+  indep_cate = "CATE independence"
 )
+
 TRUE_LAB <- "True values"
 
 #' Rejection rate at 0.05 by sample size, one row per test, one column per
@@ -121,7 +123,7 @@ rejection_figure <- function(outcome, prefix) {
   # left out, as summarise_metrics()'s na.rm would anyway
   rejections <- bind_rows(est, truth) %>%
     filter(!is.na(p)) %>%
-    mutate(rej = as.numeric(p < 0.05),
+    mutate(rej = as.numeric(p < 0.1),
            test = factor(test, levels = names(HTE_TESTS), labels = HTE_TESTS)) %>%
     apply_labels(SS_SCENARIO_LABELS) %>%
     mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
@@ -140,15 +142,15 @@ rejection_figure <- function(outcome, prefix) {
     model_levels
   ))
 
-  fig <- point_range_plot(rej_summary, "rej", "Rejection rate at 0.05",
+  fig <- point_range_plot(rej_summary, "rej", "Rejection rate at 0.1",
                           x = "n", colour = "model", facet_rows = "test",
                           facet_cols = "scenario", facet_scales = "fixed",
-                          line = TRUE, ci_alpha = 0.7, hline = 0.05,
+                          line = TRUE, ci_alpha = 0.7, hline = 0.1,
                           palette = pal) +
     labs(x = "Sample size", colour = "Model") +
-    theme(legend.position = "bottom") +
-    guides(colour = guide_legend(nrow = 2))
-  save_fig(paste0(prefix, "_corr_rejection.png"), fig_path, height = 21, plot = fig)
+    theme(legend.position = "right") #+ # figures are too long with legend at the bottom
+    #guides(colour = guide_legend(nrow = 2))
+  save_fig(paste0(prefix, "_corr_rejection.png"), fig_path, height = 18, plot = fig)
   fig
 }
 
