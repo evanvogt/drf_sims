@@ -40,7 +40,7 @@ bias_rmse_figure <- function(outcome, prefix, scale_lab = "") {
   bias_row <- point_range_plot(metrics_summary, "bias",
                                paste0("Bias of the CATE", scale_lab),
                                x = "n", colour = "model", facet_rows = NULL,
-                               facet_cols = "scenario", line = TRUE, hline = 0,
+                               facet_cols = "scenario", line = TRUE, ci_alpha = 0.7, hline = 0,
                                blank_x = TRUE) +
     labs(x = NULL)
 
@@ -48,7 +48,7 @@ bias_rmse_figure <- function(outcome, prefix, scale_lab = "") {
   rmse_row <- point_range_plot(metrics_summary, "rmse",
                                paste0("RMSE of the CATE", scale_lab),
                                x = "n", colour = "model", facet_rows = NULL,
-                               facet_cols = "scenario", line = TRUE,
+                               facet_cols = "scenario", line = TRUE, ci_alpha = 0.7,
                                hline = NULL) +
     labs(x = "Sample size") +
     theme(strip.text.x = element_blank(),

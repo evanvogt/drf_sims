@@ -21,11 +21,11 @@ library(paletteer)
 # One place to rename an estimator for the write-up.
 
 MODEL_LABELS <- c(
-  causal_forest = "Causal forest",
-  dr_random_forest = "DR-RandomForest",
   dr_oracle = "DR-oracle",
   dr_semi_oracle = "DR-semi-oracle",
+  dr_random_forest = "DR-RandomForest",
   dr_superlearner = "DR-SuperLearner",
+  causal_forest = "Causal forest",
   t_random_forest = "T-RandomForest",
   t_superlearner = "T-SuperLearner",
   causal_forest_inbuilt = "Causal forest (inbuilt CI)"
@@ -361,12 +361,13 @@ point_range_plot <- function(
   }
 
   p <- p +
-    geom_point(position = position_dodge(width = 0.5), size = 1.5) +
     geom_errorbar(
       position = position_dodge(width = 0.5),
       linewidth = 0.3,
+      width = 0.3,
       alpha = ci_alpha
     ) +
+    geom_point(position = position_dodge(width = 0.5), size = 1) +
     facet_grid(
       rows = vars(!!!rlang::syms(facet_rows)),
       cols = vars(!!!rlang::syms(facet_cols)),
