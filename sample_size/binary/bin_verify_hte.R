@@ -20,12 +20,15 @@
 #      is the largest bU, to 2 dp, that leaves every floor-bound scenario its
 #      RD_SCALE at n = 500, and RD_SCALE_MISS[k] = min(RD_SCALE[k], the largest
 #      scale feasible at n = 500 with that bU)
-#   7. sample_size/correlated/'s binary_corr_<rho> sets (since 2026-10-01):
-#      binary's coefficients exactly, so tau(x) is binary/'s; oracle vs
-#      generator; SD(tau) the same at every n; the planned RD and 80% power;
-#      rho = 0 reproduces binary's bW; every treated risk inside the bounds
-#      except binary_corr_0.5 scenario 3's floor (0.007 at n = 100), which
-#      only has to stay above 0 - the exception R/dgm_scenarios.R documents
+#   7. sample_size/correlated/'s binary_corr_<rho> sets (since 2026-10-01;
+#      scenarios 5-10 since 2026-10-04): binary's coefficients exactly, so
+#      tau(x) is binary/'s, except scenario 9, scaled by RD_SCALE_CORR - which
+#      is re-derived as the largest scale feasible at rho = 0.5, floored to
+#      3 dp; oracle vs generator; SD(tau) the same at every n; the planned RD
+#      and 80% power; rho = 0 reproduces binary's bW; every treated risk inside
+#      the bounds except binary_corr_0.5 scenario 3's and 8's floors (0.007 and
+#      0.003 at n = 100), which only have to stay above 0 - the exceptions
+#      R/dgm_scenarios.R documents
 #
 # Until 2026-09-26 the effect was on the logit scale, and this script measured
 # how much of var(tau) the link handed to X1 and X2 - up to 80% at n = 100.
@@ -218,18 +221,42 @@ check(isTRUE(all.equal(miss$bU, rep(BU_MISS, nrow(miss)))),
       "missing/binary's table uses BU_MISS")
 
 # ---- 7. sample_size/correlated/'s binary_corr_<rho> sets ----------------------
-# binary/'s scenarios 1-4 on the copula. RD_SCALE is kept so tau(x) matches
-# binary/, which at rho = 0.5 takes scenario 3's floor below RD_EPS: that one
-# cell is held only to (0, RD_EPS).
+# binary/'s scenarios 1-10 on the copula. RD_SCALE is kept so tau(x) matches
+# binary/, which at rho = 0.5 takes scenario 3's and 8's floors below RD_EPS:
+# those cells are held only to (0, RD_EPS). Scenario 9's floor went below 0, so
+# it has its own scale, RD_SCALE_CORR: the largest feasible at rho = 0.5, as
+# check 5 derives RD_SCALE.
 
-CORR_FLOOR_EXEMPT <- list(`0.5` = 3)   # rho -> scenarios exempt from RD_EPS
+CORR_FLOOR_EXEMPT <- list(`0.5` = c(3, 8))   # rho -> scenarios exempt from RD_EPS
+CORR_RHO_MAX <- max(CORR_RHOS)               # the rho whose bounds bind
+
+own_scale <- which(RD_SCALE_CORR != RD_SCALE)   # scenarios off RD_SCALE (NA's dropped)
+k_max_corr <- vapply(own_scale, function(s) {
+  unit <- unit_scale(s, CORR_RHO_MAX)
+  dev <- te_range(unit) - te_moments(unit)$mean
+  caps <- vapply(ns, function(n) {
+    d <- planned_rd(unit, n)
+    min((unit$p0_lo + d - RD_EPS) / -dev[1], (1 - RD_EPS - unit$p0_hi - d) / dev[2])
+  }, numeric(1))
+  floor(min(caps) * 1000) / 1000
+}, numeric(1))
+check(abs(RD_SCALE_CORR[own_scale] - k_max_corr) < 1e-9 &
+        RD_SCALE[own_scale] > k_max_corr,
+      sprintf("RD_SCALE_CORR is RD_SCALE except scenario %s, where RD_SCALE is infeasible at rho = %.1f and RD_SCALE_CORR is the largest feasible scale, floored to 3 dp (%s)",
+              paste(own_scale, collapse = ", "), CORR_RHO_MAX,
+              paste(RD_SCALE_CORR[own_scale], collapse = ", ")))
+
+# binary's table with RD_SCALE_CORR in place of RD_SCALE
+corr_tbl <- tbl
+for (nm in c("b3", "b4", "b34", "b45")) corr_tbl[[nm]] <- -RD_SCALE_CORR * cts[[nm]]
 
 for (rho in CORR_RHOS) {
   set <- corr_set("binary", rho)
   ct <- resolve_set(set)
   coefs <- c("b0", "b1", "b2", "b3", "b4", "b34", "b45", "p0_lo", "p0_hi")
-  check(isTRUE(all.equal(ct[, coefs], tbl[ct$scenario, coefs], check.attributes = FALSE)),
-        sprintf("%s has binary's coefficients, so tau(x) is binary/'s", set))
+  check(isTRUE(all.equal(ct[, coefs], corr_tbl[ct$scenario, coefs], check.attributes = FALSE)),
+        sprintf("%s has binary's coefficients, so tau(x) is binary/'s, except scenario %s's RD_SCALE_CORR",
+                set, paste(own_scale, collapse = ", ")))
 
   gap <- 0
   for (s in ct$scenario) for (n in ns) {
@@ -276,8 +303,11 @@ for (rho in CORR_RHOS) {
           ifelse(cr$exempt, cr$floor > 0, cr$floor >= RD_EPS - ROUNDING),
         sprintf("%s: every treated risk inside [%.2f, %.2f]%s", set, RD_EPS, 1 - RD_EPS,
                 if (length(exempt)) {
-                  sprintf(" (scenario %s's floor only > 0: min %.3f)",
-                          paste(exempt, collapse = ", "), min(cr$floor[cr$exempt]))
+                  sprintf(" (scenarios %s: floor only > 0, min %s)",
+                          paste(exempt, collapse = ", "),
+                          paste(sprintf("%.3f", tapply(cr$floor[cr$exempt],
+                                                       cr$scenario[cr$exempt], min)),
+                                collapse = ", "))
                 } else ""))
 }
 

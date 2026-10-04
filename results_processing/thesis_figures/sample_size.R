@@ -2,10 +2,13 @@
 # title: figures for the thesis chapter - sample size, correlated covariates
 ##########
 # The main chapter's sample-size figures: the correlated-covariate studies
-# (sample_size/correlated/) at rho = 0.5. The independent-covariate studies
-# (cts_ss.R, bin_ss.R) are the appendix's.
+# (sample_size/correlated/) at rho = 0.5, scenarios 1-4. The same figures for
+# scenarios 5-10, also at rho = 0.5, are the appendix's (*_corr_supp_*.png;
+# the appendix's tables, at both rhos, are thesis_tables/ss_tables.R and
+# ss_test_tables.R). The independent-covariate studies (cts_ss.R, bin_ss.R)
+# are the appendix's too.
 #
-# Two figures per outcome, the four scenarios across in each:
+# Two figures per outcome and scenario set, the scenarios across in each:
 #   - CATE bias on the top row, RMSE on the bottom;
 #   - each HTE test's rejection rate at 0.1, one row per test, with the same
 #     tests run on the true values as a reference series.
@@ -24,16 +27,25 @@ dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
 RHO <- 0.5
 
+# the appendix's scenarios: six panels across rather than four, so wider
+SUPP_SCENARIOS <- 5:10
+SUPP_WIDTH <- 29
+
 #' Bias (top) and RMSE (bottom) by sample size, one panel per scenario
 #'
 #' @param outcome results folder, "continuous" or "binary"
 #' @param prefix file prefix, "cts" or "bin"
 #' @param scale_lab appended to the y labels, e.g. " (risk difference)"
-bias_rmse_figure <- function(outcome, prefix, scale_lab = "") {
+#' @param scenarios,labels the scenarios to plot, and their strip labels
+#' @param suffix inserted into the file name, e.g. "_supp"
+#' @param width figure width in cm, as save_fig()
+bias_rmse_figure <- function(outcome, prefix, scale_lab = "",
+                             scenarios = 1:4, labels = SS_SCENARIO_LABELS,
+                             suffix = "", width = 21) {
   metrics <- readRDS(file.path(res_path, outcome,
                                paste0(prefix, "_corr_metrics.RDS"))) %>%
-    filter(rho == RHO) %>%
-    apply_labels(SS_SCENARIO_LABELS) %>%
+    filter(rho == RHO, scenario %in% scenarios) %>%
+    apply_labels(labels) %>%
     mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
 
   # rmse isn't in summarise_metrics()'s default cols
@@ -62,7 +74,8 @@ bias_rmse_figure <- function(outcome, prefix, scale_lab = "") {
     labs(colour = "Model") &
     theme(legend.position = "bottom") &
     guides(colour = guide_legend(nrow = 2))
-  save_fig(paste0(prefix, "_corr_bias_rmse.png"), fig_path, plot = fig)
+  save_fig(paste0(prefix, "_corr", suffix, "_bias_rmse.png"), fig_path,
+           width = width, plot = fig)
   fig
 }
 
@@ -101,10 +114,13 @@ TRUE_LAB <- "True values"
 #'
 #' @param outcome results folder, "continuous" or "binary"
 #' @param prefix file prefix, "cts" or "bin"
-rejection_figure <- function(outcome, prefix) {
+#' @param scenarios,labels,suffix,width as bias_rmse_figure()
+rejection_figure <- function(outcome, prefix,
+                             scenarios = 1:4, labels = SS_SCENARIO_LABELS,
+                             suffix = "", width = 21) {
   read_corr <- function(stem) {
     readRDS(file.path(res_path, outcome, paste0(prefix, "_corr_", stem, ".RDS"))) %>%
-      filter(rho == RHO)
+      filter(rho == RHO, scenario %in% scenarios)
   }
   metrics <- read_corr("metrics")
   true_tests <- read_corr("true_cate_tests")
@@ -132,7 +148,7 @@ rejection_figure <- function(outcome, prefix) {
     filter(!is.na(p)) %>%
     mutate(rej = as.numeric(p < ALPHA),
            test = factor(test, levels = names(HTE_TESTS), labels = HTE_TESTS)) %>%
-    apply_labels(SS_SCENARIO_LABELS) %>%
+    apply_labels(labels) %>%
     mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
 
   # rejection is a per-run 0/1 indicator, so the binomial MCSE
@@ -150,6 +166,7 @@ rejection_figure <- function(outcome, prefix) {
   ))
 
   # nominal size where there is no HTE, the power target everywhere else
+  # (scenarios 5-10 all have HTE)
   scenario_levels <- levels(rej_summary$scenario)
   ref_lines <- tibble(
     scenario = factor(scenario_levels, levels = scenario_levels),
@@ -165,9 +182,33 @@ rejection_figure <- function(outcome, prefix) {
     labs(x = "Sample size", colour = "Model") +
     theme(legend.position = "right") #+ # figures are too long with legend at the bottom
     #guides(colour = guide_legend(nrow = 2))
-  save_fig(paste0(prefix, "_corr_rejection.png"), fig_path, height = 18, plot = fig)
+  save_fig(paste0(prefix, "_corr", suffix, "_rejection.png"), fig_path,
+           width = width, height = 18, plot = fig)
   fig
 }
 
 cts_rej_fig <- rejection_figure("continuous", "cts")
 bin_rej_fig <- rejection_figure("binary", "bin")
+
+# ---- appendix: scenarios 5-10 --------------------------------------------------
+# Last, and per outcome only once its metrics have scenarios 5-10 (they were
+# added to the study after 1-4 had run), so the main figures above never wait
+# on them.
+
+for (o in list(c(outcome = "continuous", prefix = "cts"),
+               c(outcome = "binary", prefix = "bin"))) {
+  has_supp <- readRDS(file.path(res_path, o[["outcome"]],
+                                paste0(o[["prefix"]], "_corr_metrics.RDS"))) %>%
+    filter(rho == RHO, scenario %in% SUPP_SCENARIOS) %>%
+    nrow() > 0
+  if (!has_supp) {
+    message(o[["outcome"]], ": no scenario 5-10 metrics yet - appendix figures skipped")
+    next
+  }
+  bias_rmse_figure(o[["outcome"]], o[["prefix"]], scenarios = SUPP_SCENARIOS,
+                   labels = SS_SUPP_SCENARIO_PLOT_LABELS, suffix = "_supp",
+                   width = SUPP_WIDTH)
+  rejection_figure(o[["outcome"]], o[["prefix"]], scenarios = SUPP_SCENARIOS,
+                   labels = SS_SUPP_SCENARIO_PLOT_LABELS, suffix = "_supp",
+                   width = SUPP_WIDTH)
+}

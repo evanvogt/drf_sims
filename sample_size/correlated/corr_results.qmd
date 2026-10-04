@@ -202,7 +202,9 @@ kable(oracle_relative("binary"))
 ## Sanity check: ρ = 0 against the parent studies
 
 The ρ = 0 arm has the same distribution as `continuous/` and `binary/`'s
-scenarios 1–4, but different draws, because the copula draws in another order.
+scenarios 1–10, but different draws, because the copula draws in another order.
+Binary scenario 9 is left out: it runs on its own scale (`RD_SCALE_CORR`), so
+it is not the same distribution.
 Their means should agree to within the **unpaired** MCSE. `|z| > 3` in more than
 a handful of cells points to a DGM or pipeline difference rather than noise.
 This section is skipped if the parent studies' metrics are not on disk.
@@ -215,7 +217,9 @@ if (!any(have)) {
   cat("Parent metrics not found - skipped.\n")
 } else {
   parents <- bind_rows(lapply(names(parent_files)[have], function(o) {
-    readRDS(parent_files[[o]]) %>% filter(scenario %in% 1:4) %>% mutate(outcome = o)
+    readRDS(parent_files[[o]]) %>%
+      filter(!(o == "binary" & scenario == 9)) %>%
+      mutate(outcome = o)
   }))
   cols <- c(bias = "bias", mse = "mse", corr = "corr")
   a <- summarise_metrics(filter(metrics, rho == 0),

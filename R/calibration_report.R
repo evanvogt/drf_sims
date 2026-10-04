@@ -155,9 +155,10 @@ print(missing_table(resolve_set("binary_missing"), binary_row,
                     bW_digits = 3))
 
 # ---- sample_size/correlated/ ------------------------------------------------
-# scenarios 1-4 on the copula at each rho in CORR_RHOS; rho = 0 should repeat
-# the main tables' rows 1-4. At rho = 0.5 binary scenario 3's floor is 0.007,
-# below RD_EPS - the documented exception (R/dgm_scenarios.R)
+# scenarios 1-10 on the copula at each rho in CORR_RHOS; rho = 0 should repeat
+# the main tables' bW in every row. At rho = 0.5 binary scenario 3's and 8's
+# floors are 0.007 and 0.003, below RD_EPS - the documented exceptions - and
+# binary scenario 9 runs on its own scale, RD_SCALE_CORR (R/dgm_scenarios.R)
 
 for (rho in CORR_RHOS) {
   set <- corr_set("continuous", rho)

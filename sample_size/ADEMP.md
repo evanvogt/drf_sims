@@ -7,7 +7,7 @@ Ten studies, sharing one set of data-generating mechanisms
 |---|---|---|
 | continuous | `continuous/` | CATE estimation and HTE tests, continuous outcome |
 | binary | `binary/` | the same, binary outcome (risk-difference scale) |
-| correlated, continuous / binary | `correlated/continuous/`, `correlated/binary/` | the same, scenarios 1–4, with correlated covariates (ρ = 0 vs 0.5, paired) |
+| correlated, continuous / binary | `correlated/continuous/`, `correlated/binary/` | the same, scenarios 1–4 (5–10 for the appendix), with correlated covariates (ρ = 0 vs 0.5, paired) |
 | CI, continuous | `confidence_intervals/continuous/` | bootstrap confidence bands for the CATE |
 | CI, binary | `confidence_intervals/binary/` | the same, binary outcome |
 | optimal_sf | `confidence_intervals/optimal_sf/` | data-driven choice of the bootstrap `sample.fraction`, both outcomes |
@@ -19,7 +19,7 @@ Ten studies, sharing one set of data-generating mechanisms
 - **continuous / binary:** assess how well DR-learner and causal forest
   estimators recover the CATE in a two-arm RCT, across CATE structures and
   sample sizes, and the size and power of post-estimation heterogeneity tests.
-- **correlated continuous / binary:** the same, for scenarios 1–4, and how it
+- **correlated continuous / binary:** the same, for scenarios 1–4 (and 5–10 for the appendix), and how it
   changes when the covariates are correlated, so that prognosis and effect
   modification move together.
 - **CI continuous / binary:** assess the coverage and width of half-sample

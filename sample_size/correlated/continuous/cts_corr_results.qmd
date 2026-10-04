@@ -546,7 +546,7 @@ if (nrow(na_table) > 0) {
 
 ## Sanity check: ρ = 0 against `continuous/`
 
-The ρ = 0 arm has the same distribution as `continuous/`'s scenarios 1–4, but
+The ρ = 0 arm has the same distribution as `continuous/`'s scenarios 1–10, but
 different draws: the copula draws in another order, so the two are **not**
 paired and the z-scores below use the unpaired MCSE. With this many cells a
 few `|z| > 3` are expected by chance; many more point to a DGM or pipeline
@@ -559,7 +559,6 @@ if (!file.exists(parent_file)) {
   cat("continuous/'s metrics not found - skipped.\n")
 } else {
   parent <- readRDS(parent_file) %>%
-    filter(scenario %in% c(1:4)) %>%
     mutate(model = label_factor(model, MODEL_LABELS),
            rej_BLP_os = as.numeric(BLP_p_os < 0.05)) %>%
     label_corr()

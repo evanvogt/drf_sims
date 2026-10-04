@@ -72,6 +72,10 @@ SS_SUPP_SCENARIO_LABELS <- c(
   `10` = "Exponential"
 )
 
+# the same, in plain text for figure strips (ggplot doesn't render LaTeX)
+SS_SUPP_SCENARIO_PLOT_LABELS <- sub(" $\\times$ ", " × ", SS_SUPP_SCENARIO_LABELS,
+                                    fixed = TRUE)
+
 # the missing-data studies' six-scenario set, numbered as the main study's
 # scenarios 1-6. Was copy-pasted verbatim into all three thesis_figures/miss_*.R
 # scripts, minus scenario 6. continuous/ and binary/ never run 6 (their grid is

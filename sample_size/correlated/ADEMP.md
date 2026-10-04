@@ -2,7 +2,9 @@
 
 Six studies, all on one data-generating mechanism: scenarios 1–4 of the
 sample-size studies, with the covariates drawn from a Gaussian copula at
-latent correlation ρ ∈ {0, 0.5}. Each study is a parent sample-size study rerun
+latent correlation ρ ∈ {0, 0.5}. The correlated cts/bin studies also run
+scenarios 5–10 for the appendix (since 2026-10-04), at 100 repetitions, as
+their parents do. Each study is a parent sample-size study rerun
 on this DGM. Its estimators, intervals, tests and metrics are the parent's
 code, unchanged. Only the covariates' joint distribution differs.
 
@@ -28,7 +30,8 @@ and then how that performance changes from ρ = 0 to ρ = 0.5.
 
 - **Correlated continuous / binary:**
   - how well DR-learner, T-learner and causal forest estimators recover the
-    CATE in a two-arm RCT, across scenarios 1–4 and n = 100 to 1000;
+    CATE in a two-arm RCT, across scenarios 1–4 (5–10 in the appendix) and
+    n = 100 to 1000;
   - the size and power of the post-estimation heterogeneity tests, on both the
     estimated and the true CATE;
   - whether separating prognosis from effect modification gets harder when the
@@ -69,8 +72,10 @@ estimator sees all ten.
 - Control risk: `m0(x) = 0.34 + 0.36·plogis(−1.72 − 0.5·X1 + X2)`.
   - E[m0] = 0.40, and m0 lies in [0.34, 0.70].
   - X1 and X2 are therefore only weakly prognostic.
-- g is the continuous g with its signs reversed and scaled by `RD_SCALE`
-  (0.082, 0.051, 0.204 for scenarios 2, 3, 4).
+- g is the continuous g with its signs reversed and scaled by `RD_SCALE_CORR`.
+  That is `RD_SCALE` (0.082, 0.051, 0.204 for scenarios 2, 3, 4) in every
+  scenario except 9, which takes 0.139 instead of 0.164 (see the binary
+  floors below).
 - X4 and X5 enter g through tanh (t4 = tanh(X4), t5 = tanh(X5)), which
   keeps the risks bounded without changing the covariates' distributions.
 - The event is harmful, and treatment lowers its risk.
@@ -83,11 +88,17 @@ estimator sees all ten.
 | 2 | simple, continuous | −X4 | 0.082·t4 |
 | 3 | complex | 2·X3 + 0.5·X4 − 0.5·X4·X5 | −0.102·X3 − 0.026·t4 + 0.026·t4·t5 |
 | 4 | non-linear | cos(X4) | −0.204·cos(X4) |
+| 5 | simple, binary | 2·X3 | −0.274·X3 |
+| 6 | two variables | 0.3·X3 − X4 | −0.0225·X3 + 0.075·t4 |
+| 7 | binary × continuous | X3·X4 | −0.082·X3·t4 |
+| 8 | single effects + interaction | 2·X3 + 0.5·X4 − 0.5·X3·X4 | −0.274·X3 − 0.0685·t4 + 0.0685·X3·t4 |
+| 9 | continuous × continuous | −0.5·X4·X5 | 0.0695·t4·t5 (`binary/`: 0.082·t4·t5) |
+| 10 | exponential | 0.3·X3 + 0.1·exp(−\|X4\|) | −0.1788·X3 − 0.0596·exp(−\|X4\|) |
 
-These are coefficient for coefficient the parent studies' scenarios 1–4
-(`SCENARIO_SETS$continuous[1:4, ]` and `SCENARIO_SETS$binary[1:4, ]`, plus a
-`rho` column). τ(x) and m0(x) are therefore the same functions as in the parent
-studies.
+These are coefficient for coefficient the parent studies' scenarios
+(`SCENARIO_SETS$continuous` and `SCENARIO_SETS$binary`, plus a `rho` column),
+except binary scenario 9's scale. τ(x) and m0(x) are therefore the same
+functions as in the parent studies, apart from that one cell.
 
 ### Covariates: the copula
 
@@ -134,7 +145,8 @@ have 80% power to detect at that n, planned as if the effect were homogeneous
 
 At ρ = 0.5, bW and the ATE move through two channels:
 
-- E[g], in scenario 3, where g contains the product X4·X5;
+- E[g], wherever g contains a product of two modifiers: scenarios 3 and 9
+  (X4·X5), and 7 and 8 (X3·X4);
 - the planned SD or control event rate, through Cov(X1, X2).
 
 From `R/calibration_report.R`, plus a large-sample simulation for SD(τ) and
@@ -158,16 +170,24 @@ ignores Var(g), as a trial planned under homogeneity would. For the binary
 outcome, realised power equals planned power, because each arm's variance is
 fixed by its marginal risk.
 
-**Binary scenario 3 floor.**
+The table covers scenarios 1–4. `R/calibration_report.R` prints all ten.
 
-- Every treated risk stays within [0.01, 0.99] (`RD_EPS` = 0.01), with one
-  exception: at ρ = 0.5, E[g] rises in scenario 3 and bW falls, so the lowest
-  treated risk over the covariate support at n = 100 is 0.007.
-- That is inside [0, 1] but below `RD_EPS`. It is accepted on purpose, so that
-  τ(x) stays the parent binary study's τ(x): a scale of 0.049 would restore
-  the floor, at the cost of a smaller HTE.
-- `sample_size/binary/bin_verify_hte.R` check 7 holds this one cell to > 0, and
-  every other cell to `RD_EPS`.
+**Binary floors at ρ = 0.5.**
+
+- Every treated risk stays within [0.01, 0.99] (`RD_EPS` = 0.01), with two
+  exceptions. At ρ = 0.5, E[g] rises in scenarios 3 and 8 and bW falls, so the
+  lowest treated risk over the covariate support at n = 100 is 0.007 and
+  0.003 respectively.
+- Both are inside [0, 1] but below `RD_EPS`. They are accepted on purpose, so
+  that τ(x) stays the parent binary study's τ(x). Scales of 0.049 and 0.127
+  would restore the floors, at the cost of a smaller HTE.
+- Under `RD_SCALE`, scenario 9's floor would be −0.004, which the generator
+  cannot produce. So scenario 9 takes `RD_SCALE_CORR[9]` = 0.139, the largest
+  scale (floored to 3 dp) that keeps its floor at `RD_EPS` at ρ = 0.5. The
+  same scale is used at both ρ, so the arms stay paired.
+- `sample_size/binary/bin_verify_hte.R` check 7 re-derives 0.139, holds
+  scenarios 3 and 8 at ρ = 0.5 to > 0, and holds every other cell to
+  `RD_EPS`.
 
 ### Design
 
@@ -175,16 +195,18 @@ Full factorial, per outcome:
 
 | | correlated cts / bin | correlated CI cts / bin | correlated optimal_sf cts / bin |
 |---|---|---|---|
-| scenarios | 1–4 | 1–4 | 1–4 |
+| scenarios | 1–4; 5–10 | 1–4 | 1–4 |
 | n | 100, 250, 500, 1000 | 500, 1000 | 500, 1000 |
 | ρ | 0, 0.5 | 0, 0.5 | 0, 0.5 |
 | `CI_sf` | — | 0.05 to 0.5 by 0.05 (design factor) | chosen per run from the same 10 values |
-| repetitions | 500 | 100 | 100 |
-| grid rows per outcome | 16,000 | 16,000 | 1,600 |
-| ρ boundary in the grid | rows 1–8000 / 8001–16000 | rows 1–8000 / 8001–16000 | rows 1–800 / 801–1600 |
+| repetitions | 500; 100 | 100 | 100 |
+| grid rows per outcome | 16,000 + 4,800 = 20,800 | 16,000 | 1,600 |
+| ρ boundary in the grid | rows 1–8000 / 8001–16000; 16001–18400 / 18401–20800 | rows 1–8000 / 8001–16000 | rows 1–800 / 801–1600 |
 
-ρ varies slowest in every grid. The jobscripts split at the PBS array cap
-(1–10000, 10001–16000), not at the ρ boundary.
+ρ varies slowest in every grid, and in each of the cts/bin grid's two blocks.
+The jobscripts split at the PBS array cap (1–10000, 10001–16000), not at the
+ρ boundary. The cts/bin scenario 5–10 block (16001–20800) is one jobscript,
+`*_corr_extra.sh`.
 
 ### Seeding and pairing
 

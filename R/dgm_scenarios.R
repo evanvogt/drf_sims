@@ -179,9 +179,10 @@ ORACLE_RD <- paste0(RD_CONTROL, c(
 # harmonisation. sample_size/binary/bin_verify_hte.R re-derives RD_SCALE from the tables
 # and fails if it drifts: change p0_lo, p0_hi, b0-b2, RD_EPS or the binary
 # studies' n, and it must be recomputed.
-# The binary_corr_* sets keep RD_SCALE, so binary_corr_0.5's scenario 3 floor
-# dips below RD_EPS - see CORRELATED SAMPLE-SIZE SETS below.
-RD_SCALE <- c(NA, 0.082, 0.051, 0.204, 0.137, 0.075, 0.082, 0.137, 0.164, 0.596)
+# The binary_corr_* sets keep RD_SCALE except in scenario 9 (RD_SCALE_CORR
+# below), so binary_corr_0.5's scenario 3 and 8 floors dip below RD_EPS - see
+# CORRELATED SAMPLE-SIZE SETS below.
+RD_SCALE <-c(NA, 0.082, 0.051, 0.204, 0.137, 0.075, 0.082, 0.137, 0.164, 0.596)
 RD_EPS <- 0.01
 
 # missing/binary's own scale, for its scenarios 1-6 at n = 500 (since
@@ -197,6 +198,17 @@ RD_EPS <- 0.01
 # bin_verify_hte.R re-derives both.
 BU_MISS <- 0.12
 RD_SCALE_MISS <- c(NA, 0.082, 0.051, 0.179, 0.137, 0.075)
+
+# sample_size/correlated/binary's scale (since 2026-10-04, when its scenarios
+# 5-10 were added): RD_SCALE, except scenario 9. At rho = 0.5, E[g] in
+# scenario 9 (tanh(X4) * tanh(X5)) rises, bW falls, and under RD_SCALE the
+# treated-risk floor at n = 100 is -0.004 - generate_scenario_data() would stop.
+# 0.139 is the largest value, floored to 3 dp, that keeps that floor at RD_EPS
+# (derived as RD_SCALE is, before bW's rounding). It is used at both rhos, so
+# the rho = 0 and rho = 0.5 arms stay paired on tau; scenario 9 is therefore
+# the one binary_corr_* scenario whose tau(x) is not binary/'s.
+# bin_verify_hte.R re-derives it.
+RD_SCALE_CORR <- replace(RD_SCALE, 9, 0.139)
 
 DESC_10 <- c(
   "No HTE",
@@ -332,25 +344,36 @@ SCENARIO_SETS$binary_missing_fixed <- transform(
 )
 
 # CORRELATED SAMPLE-SIZE SETS (sample_size/correlated/, since 2026-10-01): the
-# main tables' scenarios 1-4 on the missing sets' copula, one set per rho in
-# CORR_RHOS, named by corr_set() - "continuous_corr_0.5", "binary_corr_0". The
-# truth functions m0 and tau, and every coefficient, are the main tables', so
-# tau(x) is exactly continuous/'s and binary/'s; only the covariates'
-# distribution moves. rho = 0 is the paired independent arm: the same run seed
-# gives the same W, raw latent normals, err and cats at every rho (see DRAW
-# ORDER), and its bW equals the main studies'. At rho = 0.5 bW and the ATE move
-# through E[g] (scenario 3's X4 * X5) and Cov(X1, X2), as in the missing sets.
-# binary_corr_* keeps RD_SCALE rather than taking its own scale, so that tau(x)
-# matches binary/: at rho = 0.5, E[g] rises in scenario 3, bW falls, and the
-# treated-risk floor at n = 100 is 0.007, inside [0, 1] but below RD_EPS
-# (bin_verify_hte.R check 7 exempts it; a scale of 0.049 would restore it).
+# main tables' scenarios 1-10 on the missing sets' copula, one set per rho in
+# CORR_RHOS, named by corr_set() - "continuous_corr_0.5", "binary_corr_0".
+# (Scenarios 1-4 only until 2026-10-04; 5-10 were added for the appendix, and
+# rows 1-4 are unchanged.) The truth functions m0 and tau, and every
+# coefficient, are the main tables' - binary scenario 9's scale aside, below -
+# so tau(x) is continuous/'s and binary/'s; only the covariates' distribution
+# moves. rho = 0 is the paired independent arm: the same run seed gives the
+# same W, raw latent normals, err and cats at every rho (see DRAW ORDER), and
+# its bW equals the main studies'. At rho = 0.5 bW and the ATE move through
+# E[g] (wherever g multiplies two modifiers: scenarios 3, 7, 8 and 9) and
+# Cov(X1, X2), as in the missing sets.
+# binary_corr_* takes RD_SCALE_CORR, which is RD_SCALE except scenario 9, so
+# that tau(x) matches binary/ wherever the bounds allow it. At rho = 0.5 two
+# floors at n = 100 fall inside [0, 1] but below RD_EPS, and are accepted:
+# scenario 3's, 0.007 (a scale of 0.049 would restore it), and scenario 8's,
+# 0.003 (0.127 would). bin_verify_hte.R check 7 exempts both. Scenario 9's
+# floor went below 0, so it takes its own scale (RD_SCALE_CORR).
 CORR_RHOS <- c(0, 0.5)
 corr_set <- function(outcome, rho) paste0(outcome, "_corr_", rho)
 for (r in CORR_RHOS) {
   SCENARIO_SETS[[corr_set("continuous", r)]] <-
-    transform(SCENARIO_SETS$continuous[1:4, ], rho = r)
-  SCENARIO_SETS[[corr_set("binary", r)]] <-
-    transform(SCENARIO_SETS$binary[1:4, ], rho = r)
+    transform(SCENARIO_SETS$continuous, rho = r)
+  SCENARIO_SETS[[corr_set("binary", r)]] <- transform(
+    SCENARIO_SETS$binary,
+    b3 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b3,
+    b4 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b4,
+    b34 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b34,
+    b45 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b45,
+    rho = r
+  )
 }
 rm(r)
 
