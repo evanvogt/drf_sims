@@ -3,7 +3,7 @@
 # data-laden surv_all.RDS (~729MB serialized locally) and unnests it further.
 # Single core: unlike surv_collect.R's get_results(workers = 2), this script
 # does no parallel work.
-#PBS -l walltime=01:00:00
+#PBS -l walltime=02:00:00
 #PBS -l select=1:ncpus=1:ompthreads=1:mem=32gb
 #PBS -N surv_metrics
 #PBS -j oe
