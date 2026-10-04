@@ -56,10 +56,12 @@ bias_rmse_figure <- function(outcome, prefix, scale_lab = "") {
 
   fig <- (bias_row / rmse_row) +
     plot_layout(guides = "collect") &
-    labs(colour = "Model")
+    labs(colour = "Model") &
+    theme(legend.position = "bottom") &
+    guides(colour = guide_legend(nrow = 2))
   save_fig(paste0(prefix, "_corr_bias_rmse.png"), fig_path, plot = fig)
   fig
 }
 
 cts_fig <- bias_rmse_figure("continuous", "cts")
-bin_fig <- bias_rmse_figure("binary", "bin", " (risk difference)")
+bin_fig <- bias_rmse_figure("binary", "bin")
