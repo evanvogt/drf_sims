@@ -30,6 +30,9 @@ bootstrap's *self-consistency*, not its true coverage. The `CI_sf` sweep in
 `confidence_intervals/{continuous,binary}/` is what measures actual coverage
 against the known truth.
 
+A correlated-covariates version of both studies, with a metrics script these
+two lack, lives in `sample_size/correlated/confidence_intervals/optimal_sf/`.
+
 ## Files
 
 | file | role |

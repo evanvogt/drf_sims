@@ -1,0 +1,580 @@
+---
+title: "Correlated continuous CI study: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(purrr)
+library(knitr)
+```
+
+## Do the bootstrap bands still cover when the covariates are correlated?
+
+`confidence_intervals/continuous/`'s design, with the half-sample bootstrap's
+`CI_sf` sweep and the same estimators, run on `correlated/continuous/`'s
+scenarios 1–4. X1–X5 and X01–X03 are drawn from a Gaussian copula with
+exchangeable latent correlation ρ. τ(x) and m0(x) are the parent studies'
+functions, so only the covariates' joint distribution changes. Full design in
+`../README.md`. The grid itself is defined once, in `cts_corr_ci_config.R`.
+
+| | |
+|---|---|
+| scenarios | 1–4 |
+| ρ | 0, 0.5 |
+| n | 500, 1000 |
+| `CI_sf` | 0.05 to 0.50 in steps of 0.05 |
+| runs | 100 |
+| array | **16,000 jobs**, split across two jobscripts |
+
+| Scenario | CATE structure |
+|---|---|
+| 1: No HTE | $b_0 + b_1 X_1 + b_2 X_2 + W b_W$ |
+| 2: Continuous HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_4 X_4)$ |
+| 3: Two vars + cts x cts | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{45} X_4 X_5)$ |
+| 4: Cosine HTE | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_4 \cos(X_4))$ |
+
+- **ρ = 0** is the paired independent arm: the copula with no correlation.
+- **ρ = 0.5** is the correlated arm. The prognostic X1 and X2 move with the
+  modifiers X3–X5 (cor(m0, τ) is −0.44 / 0.39 / 0.01 in scenarios 2 / 3 / 4),
+  so the forests have to separate prognosis from effect modification.
+  Scenario 3's SD(τ) rises from 1.16 to 1.36, so its CI length is on a
+  different footing at the two values of ρ.
+
+**Pairing.** A run is seeded by its run index alone. Run *r* is the same
+dataset at every `CI_sf`, and at the two values of ρ it shares W, the raw
+latent normals, the noise and the categorical covariates (`../../README.md`,
+"Pairing"). Every ρ = 0.5 − ρ = 0 comparison below is a per-run difference
+with MCSE sd(diff)/√pairs. The level plots show each ρ's own (unpaired) MCSE,
+so the paired differences are where to judge whether ρ matters.
+
+**Estimators**: `causal_forest`, `dr_random_forest`, `dr_oracle`,
+`dr_semi_oracle` (`CI_MODELS` in `R/metrics.R`), on the parent's
+`profile = "ci"` (`confidence_intervals/continuous/cts_ci_models.R`).
+
+### Performance measures
+
+* **Marginal coverage**: the proportion of units their own interval covers.
+* **Simultaneous coverage**: 0/1 per run, whether the band covered every unit
+  at once. This is what the half-sample bootstrap is constructed to control.
+* **CI length**: mean interval length within a run.
+
+Nominal is 0.95 for both coverages.
+
+### Three interval kinds, and the query grid at ρ = 0.5
+
+As in the parent report, `cts_corr_ci_metrics.R` scores the per-unit bootstrap
+band, grf's pointwise variance interval (`causal_forest` only) and the
+bootstrap band over the fixed query grid (`build_query_grid()`).
+
+**The query grid extrapolates at ρ = 0.5.** It crosses X4 and X5 over
+[−2, 2] independently and holds every other covariate at 0. The true τ at
+those points is still exact, but under correlation a corner like
+(X4 = 2, X5 = −2) sits far out in the joint distribution, so the forests are
+extrapolating there. A fall in grid coverage at ρ = 0.5 can be that, not a
+bootstrap failure. **The per-unit band is the primary ρ comparison.**
+
+```{r data}
+# paths
+path <- here()
+res_root <- file.path(dirname(path), "results")
+res_path <- file.path(res_root, "correlated", "confidence_intervals", "continuous")
+
+# the parent CI report's labels, so the two reports read side by side
+scenario_labels <- c(
+  `1` = "1: No HTE",
+  `2` = "2: Continuous HTE",
+  `3` = "3: Two vars + cts x cts",
+  `4` = "4: Cosine HTE"
+)
+
+model_labels <- c(
+  causal_forest = "Causal forest",
+  dr_random_forest = "DR-RandomForest",
+  dr_oracle = "DR-oracle",
+  dr_semi_oracle = "DR-semi-oracle"
+)
+
+interval_labels <- c(
+  half_boot      = "Half-sample bootstrap (per unit)",
+  grf_normal     = "Causal forest variance (pointwise)",
+  half_boot_grid = "Half-sample bootstrap (query grid)"
+)
+
+#' Split `model` into estimator x interval kind and apply the display labels
+#'
+#' The metrics scripts write the alternative intervals as extra rows of
+#' `model` ("causal_forest_inbuilt", "<model>_grid"), as the parent study's do.
+#' rho stays numeric (the paired differences pivot on it); rho_lab is for
+#' facets. Also used on the parent study's metrics (no rho) and on the
+#' optimal_sf metrics (no CI_sf).
+tidy_ci <- function(df) {
+  df <- df %>%
+    filter(scenario %in% c(1:4)) %>%
+    mutate(
+      interval = case_when(
+        model == "causal_forest_inbuilt" ~ "grf_normal",
+        grepl("_grid$", model)           ~ "half_boot_grid",
+        TRUE                             ~ "half_boot"
+      ),
+      model = sub("_inbuilt$|_grid$", "", model)
+    ) %>%
+    mutate(
+      scenario = factor(scenario, levels = names(scenario_labels) %>% as.integer(),
+                        labels = unname(scenario_labels)),
+      n = factor(n, levels = c(500, 1000)),
+      model = factor(recode(model, !!!model_labels), levels = unname(model_labels)),
+      interval = factor(recode(interval, !!!interval_labels),
+                        levels = unname(interval_labels))
+    )
+  # the same seq() the study config uses, so the doubles match exactly
+  if ("CI_sf" %in% names(df)) df$CI_sf <- factor(df$CI_sf, levels = seq(0.05, 0.5, 0.05))
+  if ("rho" %in% names(df)) df$rho_lab <- factor(paste("ρ =", df$rho))
+  droplevels(df)
+}
+
+#' Mean and MCSE of the three interval metrics per cell
+#'
+#' MCSE denominators are the non-NA counts, as the parent report: one failed
+#' CI bound makes a run's marginal coverage and length NA (interval_metrics()
+#' has no na.rm). Simultaneous coverage is a per-run 0/1 indicator, so it gets
+#' the binomial MCSE.
+summarise_ci <- function(df, by) {
+  df %>%
+    group_by(across(all_of(by))) %>%
+    summarise(
+      mean_marg_cov = mean(marginal_coverage, na.rm = T),
+      mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(sum(!is.na(marginal_coverage))),
+      mean_simul_cov = mean(simultaneous_coverage, na.rm = T),
+      mcse_simul_cov = sqrt(mean_simul_cov * (1 - mean_simul_cov) /
+                              sum(!is.na(simultaneous_coverage))),
+      mean_ci_len = mean(mean_ci_length, na.rm = T),
+      mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(sum(!is.na(mean_ci_length))),
+      runs = n(),
+      .groups = "drop"
+    )
+}
+
+metrics <- readRDS(file.path(res_path, "cts_corr_ci_metrics.RDS")) %>% tidy_ci()
+
+CELL <- c("rho", "rho_lab", "scenario", "n", "CI_sf", "model", "interval")
+metrics_summary <- summarise_ci(metrics, CELL)
+
+# everything outside the interval-kind sections is about the per-unit bootstrap
+metrics_hb <- filter(metrics, interval == interval_labels[["half_boot"]])
+summary_hb <- filter(metrics_summary, interval == interval_labels[["half_boot"]])
+```
+
+```{r plot-helpers, include=FALSE}
+ci_theme <- function() {
+  list(scale_colour_paletteer_d("rcartocolor::Safe"),
+       theme_bw(),
+       theme(axis.text.x = element_text(angle = 45, hjust = 1),
+             strip.background = element_rect(fill = "white"),
+             strip.text = element_text(colour = "black"),
+             legend.position = "bottom",
+             legend.box = "vertical"))
+}
+
+with_ci <- function(df, mean_col, mcse_col, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
+  mutate(df, est = .data[[mean_col]],
+         lo = .data[[mean_col]] - z * .data[[mcse_col]],
+         hi = .data[[mean_col]] + z * .data[[mcse_col]])
+}
+
+# the parent report's summary_plot, with rho added to the facet columns: each
+# scenario keeps its own y scale and its four (n, rho) panels share it
+summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+  p <- ggplot(with_ci(df, mean_col, mcse_col),
+              aes(x = CI_sf, y = est, colour = model, ymin = lo, ymax = hi))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    facet_grid(rows = vars(scenario), cols = vars(n, rho_lab), scales = "free_y",
+               labeller = labeller(n = function(x) paste("n =", x))) +
+    ci_theme() +
+    labs(title = title, y = ylab, x = "Subsampling ratio", colour = "Model")
+}
+
+# interval kind takes the colour and rho the shape, one plot per n
+interval_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+  p <- ggplot(with_ci(df, mean_col, mcse_col),
+              aes(x = CI_sf, y = est, colour = interval, shape = rho_lab,
+                  ymin = lo, ymax = hi))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_point(position = position_dodge(width = 0.6), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.6), linewidth = 0.3, width = 0.3) +
+    facet_grid(rows = vars(scenario), cols = vars(model), scales = "free_y") +
+    ci_theme() +
+    labs(title = title, y = ylab, x = "Subsampling ratio",
+         colour = "Interval kind", shape = "ρ")
+}
+
+#' Paired rho = 0.5 - rho = 0 difference in a per-run column, by cell
+#'
+#' Runs are matched on (by, run). The MCSE is sd(diff) / sqrt(pairs), which is
+#' what the shared seeds buy over the unpaired sqrt(mcse_0^2 + mcse_0.5^2). A
+#' run with the column NA at either rho drops out of its cell.
+paired_diff <- function(df, col, by = c("scenario", "n", "CI_sf", "model", "interval")) {
+  df %>%
+    select(all_of(c(by, "run", "rho")), value = all_of(col)) %>%
+    pivot_wider(names_from = rho, values_from = value, names_prefix = "rho_") %>%
+    mutate(diff = rho_0.5 - rho_0) %>%
+    group_by(across(all_of(by))) %>%
+    summarise(mean_diff = mean(diff, na.rm = TRUE),
+              mcse_diff = sd(diff, na.rm = TRUE) / sqrt(sum(!is.na(diff))),
+              pairs = sum(!is.na(diff)), .groups = "drop")
+}
+
+diff_plot <- function(df, title, ylab, x = "CI_sf", colour = "model",
+                      facet = facet_grid(rows = vars(scenario), cols = vars(n),
+                                         scales = "free_y",
+                                         labeller = labeller(n = function(x) paste("n =", x))),
+                      xlab = "Subsampling ratio", colour_lab = "Model") {
+  ggplot(with_ci(df, "mean_diff", "mcse_diff"),
+         aes(x = .data[[x]], y = est, colour = .data[[colour]], ymin = lo, ymax = hi)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.3) +
+    facet +
+    ci_theme() +
+    labs(title = title, y = ylab, x = xlab, colour = colour_lab)
+}
+```
+
+## Marginal coverage
+
+The proportion of units their own interval covers, against the nominal 95%
+(dashed line), across the sweep.
+
+```{r marg-cov-plot, fig.height=9}
+summary_plot(summary_hb, "mean_marg_cov", "mcse_marg_cov",
+             "Mean marginal coverage", "Marginal coverage", hline = 0.95)
+```
+
+## Simultaneous coverage
+
+The proportion of runs whose band covered every unit, the guarantee the
+method claims.
+
+```{r simul-cov-plot, fig.height=9}
+summary_plot(summary_hb, "mean_simul_cov", "mcse_simul_cov",
+             "Mean simultaneous coverage", "Simultaneous coverage", hline = 0.95)
+```
+
+## CI length
+
+```{r ci-len-plot, fig.height=9}
+summary_plot(summary_hb, "mean_ci_len", "mcse_ci_len",
+             "Mean CI length", "Mean CI length")
+```
+
+## Effect of the correlation: paired ρ = 0.5 − ρ = 0 differences
+
+Each point is the mean over runs of a run's metric at ρ = 0.5 minus the same
+run's at ρ = 0, with a 95% CI from the paired MCSE. A CI clear of the dashed
+line is a change the correlation made, not Monte Carlo noise. Per-unit
+bootstrap band.
+
+```{r diff-plots, fig.height=8}
+diff_plot(paired_diff(metrics_hb, "marginal_coverage"), "Marginal coverage",
+          "Δ marginal coverage (ρ = 0.5 − ρ = 0)")
+diff_plot(paired_diff(metrics_hb, "simultaneous_coverage"), "Simultaneous coverage",
+          "Δ simultaneous coverage (ρ = 0.5 − ρ = 0)")
+diff_plot(paired_diff(metrics_hb, "mean_ci_length"), "CI length",
+          "Δ mean CI length (ρ = 0.5 − ρ = 0)")
+```
+
+## The three interval kinds
+
+As in the parent report: the pointwise interval is not competing on
+simultaneous coverage, and does not depend on `CI_sf`. The query-grid band is
+a different target, and at ρ = 0.5 a partly extrapolated one (see above). One
+plot per sample size.
+
+```{r interval-plots, fig.height=9}
+for (nn in levels(metrics_summary$n)) {
+  d <- filter(metrics_summary, n == nn)
+  print(interval_plot(d, "mean_marg_cov", "mcse_marg_cov",
+                      paste0("Mean marginal coverage by interval kind, n = ", nn),
+                      "Marginal coverage", hline = 0.95))
+  print(interval_plot(d, "mean_simul_cov", "mcse_simul_cov",
+                      paste0("Mean simultaneous coverage by interval kind, n = ", nn),
+                      "Simultaneous coverage", hline = 0.95))
+  print(interval_plot(d, "mean_ci_len", "mcse_ci_len",
+                      paste0("Mean CI length by interval kind, n = ", nn),
+                      "Mean CI length"))
+}
+```
+
+The paired ρ effect by interval kind. If the grid band loses more coverage
+than the per-unit band, the extrapolation is the likelier cause.
+
+```{r interval-diff-plots, fig.height=9}
+interval_facet <- facet_grid(rows = vars(scenario), cols = vars(model, n), scales = "free_y",
+                             labeller = labeller(n = function(x) paste("n =", x)))
+diff_plot(paired_diff(metrics, "marginal_coverage"), "Marginal coverage, by interval kind",
+          "Δ marginal coverage (ρ = 0.5 − ρ = 0)", colour = "interval",
+          facet = interval_facet, colour_lab = "Interval kind")
+diff_plot(paired_diff(metrics, "simultaneous_coverage"),
+          "Simultaneous coverage, by interval kind",
+          "Δ simultaneous coverage (ρ = 0.5 − ρ = 0)", colour = "interval",
+          facet = interval_facet, colour_lab = "Interval kind")
+```
+
+Bias-eliminated coverage on the grid scores the band against the across-run
+mean estimate at each grid point instead of the true τ. Its gap to the
+ordinary grid coverage is the part of any undercoverage that comes from the
+point estimate's bias, which is where extrapolation shows up.
+
+```{r be-table}
+grid_be <- metrics %>%
+  filter(interval == interval_labels[["half_boot_grid"]]) %>%
+  group_by(scenario, n, rho, model) %>%
+  summarise(simul_cov = mean(simultaneous_coverage, na.rm = TRUE),
+            be_simul_cov = mean(be_simultaneous_coverage, na.rm = TRUE),
+            marg_cov = mean(marginal_coverage, na.rm = TRUE),
+            be_marg_cov = mean(be_marginal_coverage, na.rm = TRUE),
+            .groups = "drop") %>%
+  arrange(scenario, n, model, rho)
+
+kable(grid_be, digits = 3,
+      caption = "Query-grid band, pooled over CI_sf: coverage vs bias-eliminated coverage",
+      col.names = c("Scenario", "n", "ρ", "Model", "Simultaneous coverage",
+                    "BE simultaneous coverage", "Marginal coverage",
+                    "BE marginal coverage"))
+```
+
+## Choosing `CI_sf`
+
+The distance from nominal simultaneous coverage, `|mean simultaneous coverage -
+0.95|`, so **lower is better**. The table picks the arg-min per ρ, scenario,
+sample size and estimator. A best ratio that moves with ρ means the right
+`CI_sf` depends on the covariate structure, not just n.
+
+```{r sf-distance-plot, fig.height=9}
+sf_dist <- summary_hb %>%
+  mutate(dist = abs(mean_simul_cov - 0.95))
+
+sf_dist %>%
+  ggplot(aes(x = CI_sf, y = dist, colour = model, linetype = rho_lab,
+             group = interaction(model, rho_lab))) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(size = 1.5) +
+  geom_line(linewidth = 0.3) +
+  facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y",
+             labeller = labeller(n = function(x) paste("n =", x))) +
+  ci_theme() +
+  labs(title = "Distance from nominal simultaneous coverage",
+       subtitle = "Lower is better; zero is exactly nominal",
+       y = "|mean simultaneous coverage - 0.95|", x = "Subsampling ratio",
+       colour = "Model", linetype = "ρ")
+```
+
+```{r sf-best-table}
+best_sf <- sf_dist %>%
+  group_by(rho, scenario, n, model) %>%
+  slice_min(dist, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  select(scenario, n, model, rho, CI_sf, mean_simul_cov, mean_marg_cov, mean_ci_len) %>%
+  arrange(scenario, n, model, rho)
+
+kable(best_sf, digits = 4,
+      col.names = c("Scenario", "n", "Model", "ρ", "Best CI_sf",
+                    "Mean simultaneous coverage", "Mean marginal coverage",
+                    "Mean CI length"))
+```
+
+## Data-driven `CI_sf` (`optimal_sf`)
+
+```{r sf-data}
+sf_file <- file.path(res_path, "sf_calibration", "cts_corr_ci_sf_metrics.RDS")
+has_sf <- file.exists(sf_file)
+if (has_sf) {
+  sf <- readRDS(sf_file) %>% tidy_ci()
+  sf_runs <- filter(sf, interval == interval_labels[["half_boot"]])
+}
+```
+
+`r if (!has_sf) "**Skipped: the optimal_sf metrics (\x60sf_calibration/cts_corr_ci_sf_metrics.RDS\x60) are not on disk.**"`
+
+`../optimal_sf/` picks `CI_sf` per run for `dr_random_forest`. It resamples
+the pseudo-outcome residuals around the run's own estimate and takes the
+ratio whose band covers that estimate closest to 90%. It then builds the final
+band at that ratio. Two things to keep in mind:
+
+- **α = 0.10 here, against the sweep's 0.05**, so the final bands are 90%
+  bands and are judged against 0.90 (dashed lines). Compare the *picks* with
+  the sweep's best ratio, not the coverage levels.
+- **The calibration cannot see bias.** Its target is the estimate itself. At
+  ρ = 0.5 the prognostic function tracks τ, which is where bias would grow, so
+  the gap between the calibration's own coverage (`plugin coverage`) and the
+  true-τ coverage is the thing to watch.
+
+The distribution of the pick:
+
+```{r sf-pick-plot, eval=has_sf, fig.height=8}
+sf_runs %>%
+  mutate(pick = factor(optimal_sf, levels = seq(0.05, 0.5, 0.05))) %>%
+  ggplot(aes(x = pick, fill = rho_lab)) +
+  geom_bar(position = position_dodge(preserve = "single")) +
+  scale_x_discrete(drop = FALSE) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  facet_grid(rows = vars(scenario), cols = vars(n),
+             labeller = labeller(n = function(x) paste("n =", x))) +
+  ci_theme() +
+  labs(title = "Calibrated CI_sf per run", x = "Chosen subsampling ratio",
+       y = "Runs", fill = "ρ")
+```
+
+```{r sf-pick-diff, eval=has_sf, fig.height=4}
+diff_plot(paired_diff(sf_runs, "optimal_sf", by = c("scenario", "n")),
+          "Paired change in the calibrated CI_sf", "Δ CI_sf (ρ = 0.5 − ρ = 0)",
+          x = "n", colour = "scenario", facet = facet_null(), xlab = "Sample size",
+          colour_lab = "Scenario")
+```
+
+The final band's true-τ coverage, per unit and on the query grid:
+
+```{r sf-coverage-plot, eval=has_sf, fig.height=8}
+sf_summary <- summarise_ci(sf, c("rho", "rho_lab", "scenario", "n", "interval")) %>%
+  left_join(sf %>%
+              group_by(rho, scenario, n, interval) %>%
+              summarise(mean_pick = mean(optimal_sf),
+                        mean_plugin_cov = mean(plugin_coverage, na.rm = TRUE),
+                        mean_be_simul_cov = mean(be_simultaneous_coverage, na.rm = TRUE),
+                        .groups = "drop"),
+            by = c("rho", "scenario", "n", "interval"))
+
+sf_summary %>%
+  with_ci("mean_simul_cov", "mcse_simul_cov") %>%
+  ggplot(aes(x = n, y = est, colour = rho_lab, ymin = lo, ymax = hi)) +
+  geom_hline(yintercept = 0.90, linetype = "dashed") +
+  geom_point(position = position_dodge(width = 0.4), size = 2) +
+  geom_errorbar(position = position_dodge(width = 0.4), linewidth = 0.3, width = 0.2) +
+  facet_grid(rows = vars(scenario), cols = vars(interval)) +
+  ci_theme() +
+  labs(title = "Simultaneous coverage of the true CATE at the calibrated CI_sf",
+       y = "Simultaneous coverage", x = "Sample size", colour = "ρ")
+```
+
+```{r sf-coverage-diff, eval=has_sf, fig.height=6}
+sf_diff_facet <- facet_grid(rows = vars(scenario), cols = vars(interval), scales = "free_y")
+diff_plot(paired_diff(sf, "simultaneous_coverage", by = c("scenario", "n", "interval")),
+          "Paired change in simultaneous coverage at the calibrated CI_sf",
+          "Δ simultaneous coverage (ρ = 0.5 − ρ = 0)", x = "n", colour = "interval",
+          facet = sf_diff_facet, xlab = "Sample size", colour_lab = "Interval kind")
+diff_plot(paired_diff(sf, "marginal_coverage", by = c("scenario", "n", "interval")),
+          "Paired change in marginal coverage at the calibrated CI_sf",
+          "Δ marginal coverage (ρ = 0.5 − ρ = 0)", x = "n", colour = "interval",
+          facet = sf_diff_facet, xlab = "Sample size", colour_lab = "Interval kind")
+```
+
+```{r sf-coverage-table, eval=has_sf}
+kable(sf_summary %>%
+        select(scenario, n, rho, interval, mean_pick, mean_plugin_cov, mean_marg_cov,
+               mean_simul_cov, mcse_simul_cov, mean_be_simul_cov, mean_ci_len) %>%
+        arrange(scenario, n, interval, rho),
+      digits = 3,
+      col.names = c("Scenario", "n", "ρ", "Interval", "Mean CI_sf picked",
+                    "Plug-in coverage (calibration)", "Marginal coverage",
+                    "Simultaneous coverage", "MCSE (simul.)",
+                    "BE simultaneous coverage", "Mean CI length"))
+```
+
+The pick against the sweep's best ratio for `dr_random_forest`. The sweep's
+best is for a 95% band, the pick for a 90% one, so agreement is not expected
+to be exact. What matters is whether the two move the same way with ρ.
+
+```{r sf-vs-sweep, eval=has_sf}
+pick_summary <- sf_runs %>%
+  group_by(rho, scenario, n) %>%
+  summarise(mean_pick = mean(optimal_sf),
+            median_pick = median(optimal_sf),
+            modal_pick = as.numeric(names(which.max(table(optimal_sf)))),
+            .groups = "drop")
+
+sweep_best <- best_sf %>%
+  filter(model == model_labels[["dr_random_forest"]]) %>%
+  transmute(rho, scenario, n, best_sweep_sf = as.numeric(as.character(CI_sf)),
+            sweep_simul_cov = mean_simul_cov)
+
+kable(left_join(pick_summary, sweep_best, by = c("rho", "scenario", "n")) %>%
+        select(scenario, n, rho, everything()) %>%
+        arrange(scenario, n, rho),
+      digits = 3,
+      col.names = c("Scenario", "n", "ρ", "Mean pick", "Median pick", "Modal pick",
+                    "Sweep's best CI_sf", "Sweep simul. coverage there"))
+```
+
+## Sanity check: ρ = 0 against `confidence_intervals/continuous/`
+
+```{r parent-data}
+parent_file <- file.path(res_root, "confidence_intervals", "continuous", "ci_cts_metrics.RDS")
+has_parent <- file.exists(parent_file)
+```
+
+`r if (!has_parent) "**Skipped: \x60confidence_intervals/continuous/\x60's metrics are not on disk.**"`
+
+The ρ = 0 arm has the same distribution as the parent's scenarios 1–4, but
+different draws: the copula draws in another order, so the two are **not**
+paired and the z-scores use the unpaired MCSE. With this many cells a few
+`|z| > 3` are expected by chance; many more point to a DGM or pipeline
+difference.
+
+```{r sanity, eval=has_parent}
+keys <- c("scenario", "n", "CI_sf", "model", "interval")
+rho0 <- summarise_ci(filter(metrics, rho == 0), keys)
+par <- summarise_ci(readRDS(parent_file) %>% tidy_ci(), keys)
+cmp <- inner_join(rho0, par, by = keys, suffix = c("_rho0", "_parent"))
+stems <- c(marg_cov = "marg_cov", simul_cov = "simul_cov", ci_len = "ci_len")
+z <- sapply(stems, function(s) {
+  (cmp[[paste0("mean_", s, "_rho0")]] - cmp[[paste0("mean_", s, "_parent")]]) /
+    sqrt(cmp[[paste0("mcse_", s, "_rho0")]]^2 + cmp[[paste0("mcse_", s, "_parent")]]^2)
+})
+z_df <- bind_cols(select(cmp, all_of(keys)),
+                  as.data.frame(round(z, 2)) %>% rename_with(~ paste0("z_", .x)))
+# a simultaneous coverage of exactly 0 or 1 in both gives an MCSE of 0, so its
+# z is NaN - not a flag
+n_z <- sum(is.finite(z))
+n_big <- sum(abs(z) > 3, na.rm = TRUE)
+cat(sprintf("%d of %d finite z-scores have |z| > 3 (%.1f expected by chance).\n",
+            n_big, n_z, n_z * 2 * pnorm(-3)))
+kable(filter(z_df, if_any(starts_with("z_"), ~ abs(.x) > 3)) %>%
+        arrange(scenario, n, model, CI_sf),
+      caption = "Cells with |z| > 3, ρ = 0 vs confidence_intervals/continuous/")
+```
+
+## Headline table
+
+Every cell of the sweep for the per-unit bootstrap.
+
+```{r headline-table}
+headline <- summary_hb %>%
+  select(scenario, n, model, CI_sf, rho, mean_marg_cov, mcse_marg_cov,
+         mean_simul_cov, mcse_simul_cov, mean_ci_len, mcse_ci_len) %>%
+  arrange(scenario, n, model, CI_sf, rho)
+
+kable(headline, digits = 4,
+      col.names = c("Scenario", "n", "Model", "CI_sf", "ρ", "Mean marginal coverage",
+                    "MCSE (marg. cov.)", "Mean simultaneous coverage",
+                    "MCSE (simul. cov.)", "Mean CI length", "MCSE (CI length)"))
+```

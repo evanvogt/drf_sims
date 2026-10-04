@@ -31,9 +31,10 @@
 # goes into its parent's .tar. Left alone: competing_risk/, whose DGM is its own
 # (competing_risk/surv_dgm.R) and was unchanged by the 2026-09-26 change (its
 # own 2026-10-01 retune is archived separately, by hand - competing_risk/
-# README.md), sample_size/correlated/'s two studies, which were first run after
-# 2026-09-26 so have nothing old to archive (and archiving them would tar new
-# results), and anything no study config names -
+# README.md), sample_size/correlated/'s studies (its two sample-size studies
+# and the four under correlated/confidence_intervals/), which were first run
+# after 2026-09-26 so have nothing old to archive (and archiving them would tar
+# new results), and anything no study config names -
 # the figure directories, and ../collected_metrics/, which is outside results/.
 #
 # Safe to re-run: a tree whose .tar already exists is skipped, and every
@@ -44,7 +45,11 @@ source(here("R", "pipeline.R"))
 source(here("R", "study_registry.R"))
 
 ARCHIVE_DIR <- file.path("_archive", "pre_2026-09-26")
-UNAFFECTED <- c("competing_risk", "correlated/continuous", "correlated/binary")
+UNAFFECTED <- c("competing_risk", "correlated/continuous", "correlated/binary",
+                "correlated/confidence_intervals/continuous",
+                "correlated/confidence_intervals/binary",
+                "correlated/confidence_intervals/optimal_sf (cts)",
+                "correlated/confidence_intervals/optimal_sf (bin)")
 
 args <- commandArgs(trailingOnly = TRUE)
 apply <- "--apply" %in% args

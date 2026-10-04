@@ -1,0 +1,20 @@
+#!/bin/bash
+#PBS -l walltime=00:30:00
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=3gb
+#PBS -J 1-10000%100
+#PBS -N ci_corr_cts_1
+#PBS -o logs_1/
+#PBS -j oe
+
+module purge
+module add tools/prod
+module add R/4.3.2-gfbf-2023a
+
+eval "$(~/miniforge3/bin/conda shell.bash hook)"
+conda activate sim-env
+
+# Navigate to script directory
+cd "${PBS_O_WORKDIR}/.."
+
+# Run R script with parameters - rows 1-8000 are rho = 0, 8001-10000 rho = 0.5
+Rscript cts_corr_ci_analysis.R "$PBS_ARRAY_INDEX"

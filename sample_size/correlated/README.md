@@ -14,8 +14,12 @@ studies'.
 | ρ | 0, 0.5 (`CORR_RHOS`) | same |
 | n | 100, 250, 500, 1000 | same |
 | runs | 500 per (ρ, scenario, n) | same |
-| array | 16,000: rows 1–8000 are ρ = 0 (`*_corr_1.sh`), rows 8001–16000 are ρ = 0.5 (`*_corr_2.sh`) | same |
+| array | 16,000: rows 1–8000 are ρ = 0, rows 8001–16000 are ρ = 0.5; the jobscripts split at the PBS cap instead, `*_corr_1.sh` 1–10000 and `*_corr_2.sh` 10001–16000 | same |
 | results | `../results/correlated/continuous/rho_<ρ>/scenario_<k>/<n>/res_sim_<run>.RDS` | `.../correlated/binary/...` |
+
+`confidence_intervals/` holds the CI studies' counterparts on the same DGM:
+the continuous and binary `CI_sf` sweeps and both optimal_sf calibrations, at
+n ∈ {500, 1000}. See `confidence_intervals/README.md`.
 
 ## DGM
 
@@ -112,8 +116,8 @@ jobscripts folder, because the scripts `cd "${PBS_O_WORKDIR}/.."`:
 
 ```bash
 cd sample_size/correlated/continuous/jobscripts
-qsub cts_corr_1.sh            # 1-8000, rho = 0
-qsub cts_corr_2.sh            # 8001-16000, rho = 0.5
+qsub cts_corr_1.sh            # 1-10000 (rho = 0 is 1-8000)
+qsub cts_corr_2.sh            # 10001-16000, all rho = 0.5
 Rscript ../cts_corr_check.R   # writes failed_ids.txt, points cts_corr_rerun.sh at it
 qsub cts_corr_rerun.sh        # only if the check found failures
 qsub cts_corr_collect.sh

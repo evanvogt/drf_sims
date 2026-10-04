@@ -73,34 +73,15 @@ the per-run sampled units are not (a fresh sample is drawn every run) — so
 `be_marginal_coverage`/`be_simultaneous_coverage` are `NA` on every non-`_grid`
 row (`optimal_sf/` never builds a query grid, so it has none of this).
 
-## Possible extension: correlated covariates (not built)
+## Correlated covariates
 
-Costed 2026-10-01, nothing implemented. A CI arm for
-`sample_size/correlated/`: scenarios 1–4, 100 runs, and this study's design
-otherwise (n ∈ {500, 1000}, the 10-value `CI_sf` sweep).
-
-| | jobs per outcome | continuous + binary |
-|---|---|---|
-| ρ = 0.5 only (4 scen × 2 n × 10 sf × 100 runs) | 8,000 | 16,000 |
-| ρ = 0 and 0.5 | 16,000 | 32,000 |
-
-- The `CI_sf` sweep is the 10× factor: without it, it is 800 jobs per ρ per
-  outcome.
-- Adding n = 100 and 250 (the correlated studies' full n range) doubles every
-  number above.
-- PBS arrays cap at 10,000 subjobs. At 16,000 per outcome, split into two
-  jobscripts (1–10000 / 10001–16000), as `correlated/*_corr_{1,2}.sh` do.
-- For scale: this study is 20,000 per outcome over 10 scenarios. The ρ = 0 and
-  0.5 version is 80% of that for 4 scenarios.
-
-Ways to cut it:
-
-- **Fix `CI_sf`** (the `optimal_sf/` pick, or the best value from this sweep):
-  800 jobs per ρ per outcome, so 1,600 with both ρ.
-- **Coarser sweep**, e.g. 0.1 to 0.5 in steps of 0.1: halves every number.
-- **Drop ρ = 0.** It has the same distribution as this study, but the draws are
-  not paired with these runs, so it loses the paired ρ comparison
-  (`correlated/README.md`, "Pairing").
+Built 2026-10-04 as `sample_size/correlated/confidence_intervals/`. All three
+studies here (`continuous/`, `binary/`, `optimal_sf/`) are rerun on
+`correlated/`'s scenarios 1–4 at ρ = 0 and 0.5, with this folder's design
+otherwise: n ∈ {500, 1000}, 100 runs, and the full `CI_sf` sweep. That is
+16,000 jobs per CI outcome and 1,600 per optimal_sf outcome. Its ρ = 0 arm has
+this study's distribution but is not paired with these runs. See that
+folder's README.
 
 ## Status
 

@@ -43,7 +43,11 @@ study_registry <- data.frame(
     "model_evaluation",
     "validation/continuous",
     "correlated/continuous",
-    "correlated/binary"
+    "correlated/binary",
+    "correlated/confidence_intervals/continuous",
+    "correlated/confidence_intervals/binary",
+    "correlated/confidence_intervals/optimal_sf (cts)",
+    "correlated/confidence_intervals/optimal_sf (bin)"
   ),
   config_path = c(
     "sample_size/continuous/cts_config.R",
@@ -61,7 +65,11 @@ study_registry <- data.frame(
     "model_evaluation/me_config.R",
     "validation/continuous/cts_val_config.R",
     "sample_size/correlated/continuous/cts_corr_config.R",
-    "sample_size/correlated/binary/bin_corr_config.R"
+    "sample_size/correlated/binary/bin_corr_config.R",
+    "sample_size/correlated/confidence_intervals/continuous/cts_corr_ci_config.R",
+    "sample_size/correlated/confidence_intervals/binary/bin_corr_ci_config.R",
+    "sample_size/correlated/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R",
+    "sample_size/correlated/confidence_intervals/optimal_sf/bin_corr_ci_sf_config.R"
   ),
   config_var = "study",
   category = c(
@@ -79,6 +87,10 @@ study_registry <- data.frame(
     "crossfit_rerun",
     "dgm_rerun",
     "crossfit_rerun",
+    "first_run",
+    "first_run",
+    "first_run",
+    "first_run",
     "first_run",
     "first_run"
   ),
@@ -98,12 +110,16 @@ study_registry <- data.frame(
     "its 358/360 runs (the first under single crossfitting, me_models.R) predate bug O, which changed the continuous DGM, and the 2026-09-26 renumbering (1/4/6/9 -> 1/4/6/8); archived with the strategies and split trees, so the count restarts from zero",
     "crossfitting strategy change; plus T-learner (per-arm) DR outcome models",
     "new 2026-10-01: continuous/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/correlated/README.md)",
-    "new 2026-10-01: binary/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/correlated/README.md)"
+    "new 2026-10-01: binary/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/correlated/README.md)",
+    "new 2026-10-04: confidence_intervals/continuous/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
+    "new 2026-10-04: confidence_intervals/binary/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
+    "new 2026-10-04: confidence_intervals/optimal_sf (cts) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
+    "new 2026-10-04: confidence_intervals/optimal_sf (bin) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)"
   ),
   blocked = c(
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-    FALSE, FALSE
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE
   ),
   stringsAsFactors = FALSE
 )

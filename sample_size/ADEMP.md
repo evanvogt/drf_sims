@@ -1,6 +1,6 @@
 # ADEMP — sample size studies
 
-Seven studies, sharing one set of data-generating mechanisms
+Ten studies, sharing one set of data-generating mechanisms
 (`R/dgm_scenarios.R`) and one set of estimators (`R/cate_models.R`):
 
 | study | folder | question |
@@ -11,6 +11,8 @@ Seven studies, sharing one set of data-generating mechanisms
 | CI, continuous | `confidence_intervals/continuous/` | bootstrap confidence bands for the CATE |
 | CI, binary | `confidence_intervals/binary/` | the same, binary outcome |
 | optimal_sf | `confidence_intervals/optimal_sf/` | data-driven choice of the bootstrap `sample.fraction`, both outcomes |
+| correlated CI, continuous / binary | `correlated/confidence_intervals/continuous/`, `.../binary/` | the CI studies, scenarios 1–4, with correlated covariates (ρ = 0 vs 0.5, paired) |
+| correlated optimal_sf | `correlated/confidence_intervals/optimal_sf/` | optimal_sf, scenarios 1–4, with correlated covariates (ρ = 0 vs 0.5, paired), both outcomes |
 
 ## Aims
 
@@ -25,6 +27,10 @@ Seven studies, sharing one set of data-generating mechanisms
   the bootstrap forests' `sample.fraction` (`CI_sf`).
 - **optimal_sf:** choose `CI_sf` per dataset by a calibration that uses the
   point estimate as a plug-in truth.
+- **correlated CI / optimal_sf:** the CI and optimal_sf aims for scenarios 1–4,
+  and how they change when the covariates are correlated. For optimal_sf,
+  whether a calibration that cannot see bias still reaches nominal coverage of
+  the true CATE.
 
 ## Data-generating mechanisms
 
@@ -103,6 +109,10 @@ Full factorial over the rows below, per outcome type:
 | ρ | — (independent) | 0, 0.5 (design factor) | — | — |
 | `CI_sf` | — | — | 0.05 to 0.5 by 0.05 (design factor) | chosen per run from the same values |
 | repetitions | 100; 500 for scenarios 1–4 | 500 | 100 | 100 |
+
+The correlated CI and optimal_sf studies take their parents' columns with
+scenarios 1–4 and ρ ∈ {0, 0.5} as a design factor
+(`correlated/confidence_intervals/README.md`).
 
 Each run is seeded by its run index alone (`setup_rng_stream(run)`). So a
 given (scenario, n, run) is the same dataset in every independent-covariate
@@ -328,4 +338,7 @@ coverage 0.95.
 No metrics script yet. Each run saves the selected `CI_sf`, the calibration
 curve (mean coverage of `tau.hat` and mean width per candidate) and the final
 band over units and query grid alongside the truth, so coverage of the true
-CATE (nominal 0.90) can be scored as in the CI studies.
+CATE (nominal 0.90) can be scored as in the CI studies. The correlated
+optimal_sf studies do score it (`*_corr_ci_sf_metrics.R`): the CI studies'
+measures for the final band, plus the chosen `CI_sf` and the calibration's own
+plug-in coverage at it.

@@ -28,6 +28,8 @@ R/                    shared library - every study sources from here
 sample_size/
 ├── continuous/           continuous outcome, sample size sweep
 ├── binary/               binary outcome, sample size sweep
+├── correlated/           the above, scenarios 1-4, correlated covariates
+│                         (continuous, binary, confidence_intervals/)
 └── confidence_intervals/ interval estimation (continuous, binary, optimal_sf)
 competing_risk/       competing risks - the target setting
 missing/              missing covariates (continuous, binary, CI example)
