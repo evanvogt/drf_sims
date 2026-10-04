@@ -72,7 +72,9 @@ units_figure <- function(summary, metric, y_lab, file, hline = 0) {
   fig <- point_range_plot(keep, metric, y_lab, x = "method", colour = "units",
                           hline = hline) +
     labs(x = "Missing-data handling", colour = NULL) +
-    theme(legend.position = "bottom")
+    theme(legend.position = "bottom") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+  
   save_fig(file, fig_path, height = 18, plot = fig)
   fig
 }

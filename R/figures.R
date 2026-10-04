@@ -32,15 +32,15 @@ MODEL_LABELS <- c(
 )
 
 METHOD_LABELS <- c(
-  complete_cases = "Complete case",
-  mean_imputation = "Single mean imputation",
-  missforest = "Single forest-based imputation",
-  regression = "Single model-based imputation",
-  missing_indicator = "Missing indicators",
+  complete_data = "Complete data",
+  complete_cases = "CC",
   IPW = "IPW",
-  multiple_imputation = "Multiple imputation (rf)",
-  none = "Inbuilt missingness handling",
-  complete_data = "Complete data (reference)"
+  none = "MIA",
+  missing_indicator = "MPA",
+  mean_imputation = "Single: mean",
+  missforest = "Single: forest",
+  regression = "Single: parametric",
+  multiple_imputation = "MI"
 )
 
 # MAR / MNAR-Y0 / MNAR-tau since 2026-09-28 (R/dgm_scenarios.R, MISS_MECHS).
