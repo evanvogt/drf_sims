@@ -7,7 +7,7 @@
 #
 # Two figures per outcome, the four scenarios across in each:
 #   - CATE bias on the top row, RMSE on the bottom;
-#   - each HTE test's rejection rate at 0.05, one row per test, with the same
+#   - each HTE test's rejection rate at 0.1, one row per test, with the same
 #     tests run on the true values as a reference series.
 # Labels, palette, summaries and figure sizing come from R/figures.R. This
 # script carries only the paths and this study's filters.
@@ -69,7 +69,11 @@ bias_rmse_figure <- function(outcome, prefix, scale_lab = "") {
 cts_fig <- bias_rmse_figure("continuous", "cts")
 bin_fig <- bias_rmse_figure("binary", "bin")
 
-# the HTE tests, in facet-row order
+# the HTE tests' significance threshold, and the power each should reach where
+# there is HTE (a conventional target - nothing in the DGM aims for it)
+ALPHA <- 0.1
+POWER_TARGET <- 0.9
+
 # the HTE tests, in facet-row order
 HTE_TESTS <- c(
   BLP_p_os = "BLP (one-sided, HC3)",
@@ -80,10 +84,13 @@ HTE_TESTS <- c(
 
 TRUE_LAB <- "True values"
 
-#' Rejection rate at 0.05 by sample size, one row per test, one column per
+#' Rejection rate at ALPHA by sample size, one row per test, one column per
 #' scenario
 #'
-#' The "True values" series is the BLP and CATE permutation tests run on the
+#' Dashed reference line at ALPHA in the null scenario (nominal size) and at
+#' POWER_TARGET in the others.
+#'
+#' The "True values" series is the BLP and CATE independence tests run on the
 #' true CATE and true nuisances (<prefix>_corr_true_cate_tests.RDS, see
 #' true_cate_test_row() in R/cate_models.R). The true CATE is constant in the
 #' null scenario, so those tests have no true series there. There is no
@@ -123,7 +130,7 @@ rejection_figure <- function(outcome, prefix) {
   # left out, as summarise_metrics()'s na.rm would anyway
   rejections <- bind_rows(est, truth) %>%
     filter(!is.na(p)) %>%
-    mutate(rej = as.numeric(p < 0.1),
+    mutate(rej = as.numeric(p < ALPHA),
            test = factor(test, levels = names(HTE_TESTS), labels = HTE_TESTS)) %>%
     apply_labels(SS_SCENARIO_LABELS) %>%
     mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
@@ -142,10 +149,18 @@ rejection_figure <- function(outcome, prefix) {
     model_levels
   ))
 
-  fig <- point_range_plot(rej_summary, "rej", "Rejection rate at 0.1",
+  # nominal size where there is no HTE, the power target everywhere else
+  scenario_levels <- levels(rej_summary$scenario)
+  ref_lines <- tibble(
+    scenario = factor(scenario_levels, levels = scenario_levels),
+    yintercept = if_else(scenario_levels == SS_SCENARIO_LABELS[["1"]],
+                         ALPHA, POWER_TARGET)
+  )
+
+  fig <- point_range_plot(rej_summary, "rej", paste("Rejection rate at", ALPHA),
                           x = "n", colour = "model", facet_rows = "test",
                           facet_cols = "scenario", facet_scales = "fixed",
-                          line = TRUE, ci_alpha = 0.7, hline = 0.1,
+                          line = TRUE, ci_alpha = 0.7, hline = ref_lines,
                           palette = pal) +
     labs(x = "Sample size", colour = "Model") +
     theme(legend.position = "right") #+ # figures are too long with legend at the bottom

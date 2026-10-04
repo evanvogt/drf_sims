@@ -301,7 +301,10 @@ save_fig <- function(
 #' @param hline reference line, dashed - 0 for bias-type metrics (the
 #'   original hardcoded value), but e.g. 0.95 for a nominal-coverage panel.
 #'   NULL omits it - e.g. for correlation, where 0 is not a target and the
-#'   line would stretch the axis away from the data
+#'   line would stretch the axis away from the data. A data frame with a
+#'   `yintercept` column plus the facet columns it varies by draws a different
+#'   line per panel - e.g. nominal size in the null scenario, a power target
+#'   in the others
 point_range_plot <- function(
   summary,
   metric,
@@ -340,7 +343,10 @@ point_range_plot <- function(
     p <- p + aes(shape = .data[[shape]])
   }
 
-  if (!is.null(hline)) {
+  if (is.data.frame(hline)) {
+    p <- p + geom_hline(data = hline, aes(yintercept = yintercept),
+                        linetype = "dashed", inherit.aes = FALSE)
+  } else if (!is.null(hline)) {
     p <- p + geom_hline(yintercept = hline, linetype = "dashed")
   }
 
