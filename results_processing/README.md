@@ -19,7 +19,8 @@ Nothing here reads per-run simulation output directly — run the study's
 
 | script | reads |
 |---|---|
-| `cts_ss.R`, `bin_ss.R` | the sample-size studies |
+| `sample_size.R` | the correlated sample-size studies at ρ = 0.5 (main chapter): bias and RMSE, one figure per outcome |
+| `cts_ss.R`, `bin_ss.R` | the independent-covariate sample-size studies (appendix) |
 | `miss_cts.R`, `miss_bin.R` | the missing-data studies |
 | `cts_ci.R` | continuous confidence intervals |
 | `miss_cts_ci.R` | MI confidence intervals |
