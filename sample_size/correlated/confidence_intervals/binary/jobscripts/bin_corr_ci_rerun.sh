@@ -3,8 +3,8 @@
 # -J and the resource request are rewritten by check_failed(); the values here
 # are what it computes from bin_corr_ci_1.sh.
 #PBS -l walltime=01:00:00
-#PBS -l select=1:ncpus=3:ompthreads=2:mem=4gb
-#PBS -J 1-2%100
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=4gb
+#PBS -J 1-7
 #PBS -N ci_corr_bin_rerun
 #PBS -o logs_rerun/
 #PBS -j oe
