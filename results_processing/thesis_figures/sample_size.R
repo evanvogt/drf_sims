@@ -84,8 +84,8 @@ bin_fig <- bias_rmse_figure("binary", "bin")
 
 # the HTE tests' significance threshold, and the power each should reach where
 # there is HTE (a conventional target - nothing in the DGM aims for it)
-ALPHA <- 0.1
-POWER_TARGET <- 0.9
+ALPHA <- 0.05
+POWER_TARGET <- 0.8
 
 # the HTE tests, in facet-row order
 HTE_TESTS <- c(

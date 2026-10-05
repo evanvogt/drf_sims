@@ -1,7 +1,7 @@
 #!/bin/bash
-#PBS -l walltime=00:30:00
-#PBS -l select=1:ncpus=1:ompthreads=1:mem=2gb
-#PBS -J 1-2%100
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=2:ompthreads=1:mem=3gb
+#PBS -J 1-4800%100
 #PBS -N cts_corr_rerun
 #PBS -o logs_rerun/
 #PBS -j oe
