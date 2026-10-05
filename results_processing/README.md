@@ -19,8 +19,8 @@ Nothing here reads per-run simulation output directly — run the study's
 
 | script | reads |
 |---|---|
-| `sample_size.R` | the correlated sample-size studies at ρ = 0.5 (main chapter): bias and RMSE, one figure per outcome |
-| `cts_ss.R`, `bin_ss.R` | the independent-covariate sample-size studies (appendix) |
+| `sample_size.R` | the correlated sample-size studies (the chapter): per outcome, scenarios 1–4 and 5–10 (`*_supp_*`), each at ρ = 0.5 and as the paired ρ = 0.5 − ρ = 0 difference (`*_rhodiff_*`): bias/RMSE, and HTE test rejection rates at `HTE_ALPHA` (`R/figures.R`) |
+| `cts_ss.R`, `bin_ss.R` | the independent-covariate sample-size studies: defunct, not in the thesis |
 | `missing.R` | the continuous missing-data study (main chapter), scenarios 1–4, DR-RandomForest only: bias difference and relative efficiency against the complete-data arm, as separate figures, handling method on x, complete vs incomplete units by colour |
 | `miss_cts.R`, `miss_bin.R` | the missing-data studies (pre-2026-09-29 metrics: all-unit bias/MSE) |
 | `cts_ci.R` | continuous confidence intervals |
@@ -54,8 +54,8 @@ appendix's full grid, one table per metric per outcome:
 
 | script | writes | rows × columns |
 |---|---|---|
-| `ss_tables.R` | `{cts,bin}_ss_{main,supp}.tex` | scenario / n / model × estimation metrics |
-| `ss_test_tables.R` | `{cts,bin}_ss_tests_{main,supp}.tex` | scenario / test / model × n, HTE test rejection rates, with a True CATE reference row |
+| `ss_tables.R` | `{cts,bin}_corr_{rho05,rhodiff}_ss_{main,supp}.tex` | scenario / n / model × estimation metrics |
+| `ss_test_tables.R` | `{cts,bin}_corr_{rho05,rhodiff}_ss_tests_{main,supp}.tex` | scenario / test / model × n, HTE test rejection rates at `HTE_ALPHA` (or their paired ρ difference), with a True CATE reference row |
 | `miss_tables.R` | `{cts,bin}_miss_<metric>.tex`, `{cts,bin}_miss_tests_<test>.tex` | mechanism / scenario / method × model, one metric (or HTE test, with a True CATE column) per table |
 
 Each cell is `mean (MCSE)`, summarised with the figures' `summarise_metrics()`;

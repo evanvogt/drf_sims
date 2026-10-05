@@ -149,8 +149,8 @@ At ρ = 0.5, bW and the ATE move through two channels:
   (X4·X5), and 7 and 8 (X3·X4);
 - the planned SD or control event rate, through Cov(X1, X2).
 
-From `R/calibration_report.R`, plus a large-sample simulation for SD(τ) and
-cor(m0, τ):
+From `R/calibration_report.R` and, for SD(τ) and cor(m0, τ),
+`corr_truth_summary.R`:
 
 | | ρ = 0 | ρ = 0.5 |
 |---|---|---|
@@ -158,7 +158,7 @@ cor(m0, τ):
 | true ATE, n = 100 / 250 / 500 / 1000 | −0.65 / −0.41 / −0.29 / −0.20 | −0.60 / … / −0.19 |
 | realised power, scenarios 2 / 3 / 4 | 0.65–0.67 / 0.61–0.63 / 0.76–0.77 | 0.65–0.66 / 0.55–0.56 / 0.75–0.76 |
 | SD(τ), scenario 3 | 1.16 | 1.36 |
-| cor(m0, τ), scenarios 2 / 3 / 4 | 0 / 0 / 0 | −0.44 / 0.39 / 0.01 |
+| cor(m0, τ), scenarios 2 / 3 / 4 | 0 / 0 / 0 | −0.43 / 0.39 / 0.01 |
 | **binary** | | |
 | true RD, n = 100 / 250 / 500 / 1000 | −0.248 / −0.164 / −0.118 / −0.085 | −0.247 / … / −0.085 |
 | power | 0.80 | 0.80 |

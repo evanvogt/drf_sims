@@ -18,10 +18,11 @@
 #
 # The differences: run r at rho = 0 and at rho = 0.5 shares its random draws
 # (sample_size/correlated/README.md, "Seeding and pairing"), so each metric is
-# differenced per run and its MCSE is sd(diff) / sqrt(pairs), as in
-# correlated/*/*_corr_results.qmd's paired_diff(). Runs missing at either rho
-# drop out of the pairs. Pearson and sign accuracy get a third decimal there:
-# their differences are hundredths.
+# differenced per run (paired_rho_diff() in R/figures.R) and its MCSE is
+# sd(diff) / sqrt(pairs), as in correlated/*/*_corr_results.qmd's
+# paired_diff(). Runs missing at either rho drop out of the pairs. Pearson
+# and sign accuracy get a third decimal there: their differences are
+# hundredths.
 #
 # Metric choices:
 # - Bias is the CATE bias, `bias` (mean of est - true over units), as in the
@@ -118,20 +119,8 @@ caption_text <- function(o, scenarios, runs, note = "") {
   )
 }
 
-#' Per-run rho = 0.5 - rho = 0 differences of `stems`, one row per run pair
-paired_rho_diff <- function(metrics, stems) {
-  keys <- c("scenario", "n", "model", "run")
-  rho0 <- metrics %>%
-    filter(rho == 0) %>%
-    select(all_of(keys), all_of(stems))
-  out <- metrics %>%
-    filter(rho == 0.5) %>%
-    select(all_of(keys), all_of(stems)) %>%
-    inner_join(rho0, by = keys, suffix = c("", "_rho0"))
-  for (s in stems) out[[s]] <- out[[s]] - out[[paste0(s, "_rho0")]]
-  select(out, all_of(keys), all_of(stems))
-}
-
+# paired_rho_diff() is R/figures.R's, shared with ss_test_tables.R and the
+# figures
 for (o in outcomes) {
   metrics <- readRDS(file.path(dirname(path), "results", "correlated", o$dir,
                                paste0(o$prefix, "_corr_metrics.RDS")))

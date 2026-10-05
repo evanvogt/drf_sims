@@ -49,8 +49,8 @@ covariates' joint distribution changes, and with it:
   Cov(X1, X2).
 - SD(τ) in those scenarios, and how strongly the prognostic m0 tracks τ.
 
-From `Rscript R/calibration_report.R`, plus a large-sample simulation for
-SD(τ) and cor(m0, τ):
+From `Rscript R/calibration_report.R` and, for SD(τ) and cor(m0, τ), all ten
+scenarios, `Rscript corr_truth_summary.R`:
 
 | | ρ = 0 | ρ = 0.5 |
 |---|---|---|
@@ -58,7 +58,7 @@ SD(τ) and cor(m0, τ):
 | true ATE, n = 100 / 1000 | −0.65 / −0.20 | −0.60 / −0.19 |
 | realised power, scenarios 2 / 3 / 4 | 0.65–0.67 / 0.61–0.63 / 0.76–0.77 | 0.65–0.66 / 0.55–0.56 / 0.75–0.76 |
 | SD τ, scenario 3 | 1.16 | 1.36 |
-| cor(m0, τ), scenarios 2 / 3 / 4 | 0 / 0 / 0 | −0.44 / 0.39 / 0.01 |
+| cor(m0, τ), scenarios 2 / 3 / 4 | 0 / 0 / 0 | −0.43 / 0.39 / 0.01 |
 | **binary** | | |
 | true RD, n = 100 / 1000 | −0.248 / −0.085 | −0.247 / −0.085 |
 | power | 0.80 | 0.80 |
@@ -118,6 +118,7 @@ outcomes agree across ρ.
 
 | | |
 |---|---|
+| `corr_truth_summary.R` | SD(τ) (exact) and cor(m0, τ) (one seeded draw of 10^6) for every outcome × ρ × scenario; needs no simulation output |
 | `*_corr_config.R` | the grid (`rho` is a path column, prefix `rho_`) |
 | `*_corr_dgms.R` | the generator and oracle wrappers, with a `rho` argument |
 | `*_corr_analysis.R` | the parent's analysis script; reuses `../continuous/cts_models.R` / `../binary/bin_models.R`, and writes to `combo_dir()` |

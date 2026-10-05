@@ -51,7 +51,7 @@ functions, so only the covariates' joint distribution changes. Full design in
 
 - **ρ = 0** is the paired independent arm: the copula with no correlation.
 - **ρ = 0.5** is the correlated arm. The prognostic X1 and X2 move with the
-  modifiers X3–X5 (cor(m0, τ) is −0.44 / 0.39 / 0.01 in scenarios 2 / 3 / 4),
+  modifiers X3–X5 (cor(m0, τ) is −0.43 / 0.39 / 0.01 in scenarios 2 / 3 / 4),
   so the forests have to separate prognosis from effect modification.
   Scenario 3's SD(τ) rises from 1.16 to 1.36, so its CI length is on a
   different footing at the two values of ρ.

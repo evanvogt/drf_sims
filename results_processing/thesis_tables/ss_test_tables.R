@@ -3,20 +3,25 @@
 ##########
 # Rejection rates of the four heterogeneity tests, as "rate (MCSE)", with
 # sample size across the columns so each test's power reads left to right.
-# The correlated-covariate studies (sample_size/correlated/), per outcome and
-# rho: one table for the reported scenarios 1-4 and one for the supplementary
-# 5-10. The independent-covariate studies (sample_size/continuous/, binary/)
-# are no longer tabulated. The estimation metrics are in ss_tables.R.
+# The correlated-covariate studies (sample_size/correlated/), per outcome: the
+# rho = 0.5 rates, and the paired rho = 0.5 - rho = 0 differences in place of
+# the rho = 0 rates, as ss_tables.R does for the estimation metrics. Each as
+# one table for the reported scenarios 1-4 and one for the supplementary 5-10.
 #
 # Writes to ../results/thesis_tables/:
-#   {cts,bin}_corr_rho0_ss_tests_main.tex, {cts,bin}_corr_rho0_ss_tests_supp.tex,
-#   {cts,bin}_corr_rho05_ss_tests_main.tex, {cts,bin}_corr_rho05_ss_tests_supp.tex
+#   {cts,bin}_corr_rho05_ss_tests_main.tex, {cts,bin}_corr_rho05_ss_tests_supp.tex,
+#   {cts,bin}_corr_rhodiff_ss_tests_main.tex, {cts,bin}_corr_rhodiff_ss_tests_supp.tex
 # \input{} them into a document with
 #   \usepackage{booktabs, longtable, pdflscape, array}
 #
-# - Rejection is p < ALPHA, 0/1 per run, so the MCSE is the binomial one. Runs
-#   with an NA p-value (a constant CATE estimate, or a test not run) are left
-#   out of the denominator, as in the figures.
+# - Rejection is p < HTE_ALPHA (R/figures.R, shared with the figures), 0/1 per
+#   run, so the rates' MCSE is the binomial one. Runs with an NA p-value (a
+#   constant CATE estimate, or a test not run) are left out of the
+#   denominator, as in the figures.
+# - The differences are taken per run (paired_rho_diff() in R/figures.R): run r
+#   shares its random draws at the two rhos, so each cell is the mean of a
+#   -1/0/1 difference and its MCSE is sd(diff) / sqrt(pairs). A run with an NA
+#   p-value at either rho drops out of the pair.
 # - "True CATE" is each test run on the true CATE and nuisances
 #   ({cts,bin}_corr_true_cate_tests.RDS, from *_corr_metrics.R): the ceiling
 #   the models' own tests are chasing. It has no PO independence test (the
@@ -29,8 +34,6 @@
 library(here)
 source(here("R", "figures.R"))
 source(here("R", "tables.R"))
-
-ALPHA <- 0.05
 
 # paths
 path <- here()
@@ -50,15 +53,22 @@ outcomes <- list(
        ))
 )
 
-# one entry per outcome and rho (CORR_RHOS in R/dgm_scenarios.R): `out` names
-# the output files and LaTeX labels, `label` is the caption's outcome text
-outcomes <- unlist(lapply(outcomes, function(o) {
-  lapply(c(0, 0.5), function(r) modifyList(o, list(
-    out = paste0(o$prefix, "_corr_rho", sub(".", "", r, fixed = TRUE)),
-    label = paste0(o$label, ", correlated covariates ($\\rho = ", r, "$)"),
-    rho = r
-  )))
-}), recursive = FALSE)
+# one entry per outcome and table set, the rho = 0.5 rates and the paired
+# differences (CORR_RHOS in R/dgm_scenarios.R): `out` names the output files
+# and LaTeX labels, `label` is the caption's outcome text
+outcomes <- unlist(lapply(outcomes, function(o) list(
+  modifyList(o, list(
+    out = paste0(o$prefix, "_corr_rho05"),
+    label = paste0(o$label, ", correlated covariates ($\\rho = 0.5$)"),
+    diff = FALSE
+  )),
+  modifyList(o, list(
+    out = paste0(o$prefix, "_corr_rhodiff"),
+    label = paste0(o$label, ", correlated covariates, $\\rho = 0.5$ minus ",
+                   "$\\rho = 0$"),
+    diff = TRUE
+  ))
+)), recursive = FALSE)
 
 # p-value column -> row label, in row order
 tests <- c(
@@ -73,16 +83,19 @@ rej_tests <- setNames(tests, paste0("rej_", names(tests)))
 # (indep_po in the true-CATE file) is left absent.
 add_rejections <- function(df) {
   df %>%
-    mutate(across(any_of(names(tests)), ~ as.numeric(as.numeric(.x) < ALPHA),
+    mutate(across(any_of(names(tests)),
+                  ~ as.numeric(as.numeric(.x) < HTE_ALPHA),
                   .names = "rej_{.col}"))
 }
 
-summarise_rejections <- function(df, group_cols) {
+#' Rates get the binomial MCSE; differences (diff = TRUE) the general one,
+#' which on per-run differences is the paired SE
+summarise_rejections <- function(df, group_cols, diff) {
   summarise_metrics(
     df,
     group_cols,
     cols = setNames(names(rej_tests), names(rej_tests)),
-    binomial = names(rej_tests),
+    binomial = if (diff) character() else names(rej_tests),
     count_na = character()
   )
 }
@@ -92,28 +105,45 @@ short_caption_text <- function(o, scenarios) {
 }
 
 caption_text <- function(o, scenarios, runs, note = "") {
+  cells <- if (o$diff) {
+    paste0(
+      "per-run difference in rejection at $\\alpha = ", HTE_ALPHA, "$, mean ",
+      "(Monte Carlo SE) over ", runs, " run pairs per cell, by sample size. A ",
+      "run shares its random draws at the two values of $\\rho$, so the SE is ",
+      "that of the paired difference. "
+    )
+  } else {
+    paste0(
+      "rejection rate at $\\alpha = ", HTE_ALPHA, "$ (Monte Carlo SE) over ",
+      runs, " runs per cell, by sample size. Type I error in the null ",
+      "scenario, power otherwise. "
+    )
+  }
   paste0(
     "HTE tests, sample-size study, ", o$label, ", scenarios ", scenarios,
-    ": rejection rate at $\\alpha = ", ALPHA, "$ (Monte Carlo SE) over ", runs,
-    " runs per cell, by sample size. Type I error in the null scenario, power ",
-    "otherwise. Runs with an undefined p-value are left out. True CATE: the ",
+    ": ", cells, "Runs with an undefined p-value are left out. True CATE: the ",
     "test applied to the true CATE and nuisances.", note
   )
 }
 
 for (o in outcomes) {
   res_path <- file.path(dirname(path), "results", "correlated", o$dir)
-  read_corr <- function(stem) {
-    readRDS(file.path(res_path, paste0(o$prefix, "_corr_", stem, ".RDS"))) %>%
-      filter(rho == o$rho) %>%
+  # both rhos, then the rho = 0.5 rows or the per-run differences
+  read_corr <- function(stem, keys) {
+    df <- readRDS(file.path(res_path, paste0(o$prefix, "_corr_", stem, ".RDS"))) %>%
       add_rejections()
+    if (o$diff) {
+      paired_rho_diff(df, intersect(names(rej_tests), names(df)), keys)
+    } else {
+      filter(df, rho == 0.5)
+    }
   }
-  metrics <- read_corr("metrics")
-  true_cate_tests <- read_corr("true_cate_tests")
+  metrics <- read_corr("metrics", c("scenario", "n", "model", "run"))
+  true_cate_tests <- read_corr("true_cate_tests", c("scenario", "n", "run"))
 
   test_summary <- bind_rows(
-    summarise_rejections(metrics, c("scenario", "n", "model")),
-    summarise_rejections(true_cate_tests, c("scenario", "n")) %>%
+    summarise_rejections(metrics, c("scenario", "n", "model"), o$diff),
+    summarise_rejections(true_cate_tests, c("scenario", "n"), o$diff) %>%
       mutate(model = "True CATE")
   )
 

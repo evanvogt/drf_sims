@@ -76,6 +76,10 @@ SS_SUPP_SCENARIO_LABELS <- c(
 SS_SUPP_SCENARIO_PLOT_LABELS <- sub(" $\\times$ ", " × ", SS_SUPP_SCENARIO_LABELS,
                                     fixed = TRUE)
 
+# the sample-size chapter's HTE test significance level, shared by its figures
+# (thesis_figures/sample_size.R) and tables (thesis_tables/ss_test_tables.R)
+HTE_ALPHA <- 0.05
+
 # the missing-data studies' six-scenario set, numbered as the main study's
 # scenarios 1-6. Was copy-pasted verbatim into all three thesis_figures/miss_*.R
 # scripts, minus scenario 6. continuous/ and binary/ never run 6 (their grid is
@@ -225,6 +229,31 @@ summarise_metrics <- function(
     }
   }
   out
+}
+
+#' Per-run rho = 0.5 - rho = 0 differences of `stems`, one row per run pair
+#'
+#' For the correlated sample-size studies, where run r at rho = 0 and at
+#' rho = 0.5 shares its random draws (sample_size/correlated/README.md). The
+#' difference is taken per run, so summarise_metrics()'s general MCSE on the
+#' result is sd(diff) / sqrt(pairs), the paired SE. Runs missing at either rho
+#' drop out of the pairs.
+#'
+#' @param metrics one row per run, with a `rho` column
+#' @param stems the columns to difference
+#' @param keys the columns that identify a run pair; the true-CATE tests have
+#'   no `model`, so take c("scenario", "n", "run")
+paired_rho_diff <- function(metrics, stems,
+                            keys = c("scenario", "n", "model", "run")) {
+  rho0 <- metrics %>%
+    filter(rho == 0) %>%
+    select(all_of(keys), all_of(stems))
+  out <- metrics %>%
+    filter(rho == 0.5) %>%
+    select(all_of(keys), all_of(stems)) %>%
+    inner_join(rho0, by = keys, suffix = c("", "_rho0"))
+  for (s in stems) out[[s]] <- out[[s]] - out[[paste0(s, "_rho0")]]
+  select(out, all_of(keys), all_of(stems))
 }
 
 # ---- presentation -----------------------------------------------------------
