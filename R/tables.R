@@ -138,19 +138,62 @@ ss_latex_table <- function(summary, cols, ...) {
     as_tibble(cells)
   )
 
-  header_above <- NULL
-  if ("group" %in% names(cols)) {
-    groups <- rle(cols$group)
-    header_above <- c(2, groups$lengths)
-    names(header_above) <- c(" ", groups$values)
-  }
-
   grouped_longtable(
     tab,
     col_names = c("$n$", "Model", cols$header),
     group = body$scenario,
     block = body$n,
-    header_above = header_above,
+    header_above = col_group_headers(cols),
+    ...
+  )
+}
+
+#' Spanning headers from a `cols` table's optional `group` column, as
+#' add_header_above() takes them (two row-label columns first); NULL without one
+col_group_headers <- function(cols) {
+  if (!"group" %in% names(cols)) return(NULL)
+  groups <- rle(cols$group)
+  setNames(c(2, groups$lengths), c(" ", groups$values))
+}
+
+#' Missing-data metrics table for one estimator: rows mechanism x scenario x
+#' method, one column per metric
+#'
+#' ss_latex_table()'s layout with the missing-data studies' rows: grouped under
+#' a mechanism header, then by scenario. A row whose cells are all undefined is
+#' dropped (a handling method the estimator is not fitted for).
+#'
+#' @param summary output of summarise_metrics() for one model, with
+#'   `mechanism`, `scenario` and `method` as factors in display order
+#'   (apply_labels()), and mean_<stem>/mcse_<stem> for every stem in `cols`
+#' @param cols as ss_latex_table()
+#' @param ... passed to grouped_longtable()
+miss_metrics_table <- function(summary, cols, ...) {
+  body <- summary %>% arrange(mechanism, scenario, method)
+
+  cells <- lapply(seq_len(nrow(cols)), function(i) {
+    fmt_mcse(body[[paste0("mean_", cols$stem[i])]],
+             body[[paste0("mcse_", cols$stem[i])]],
+             cols$digits[i])
+  })
+  names(cells) <- cols$stem
+  cells <- as_tibble(cells)
+
+  keep <- rowSums(cells != "---") > 0
+  body <- body[keep, ]
+
+  tab <- bind_cols(
+    tibble(scenario = as.character(body$scenario),
+           method = as.character(body$method)),
+    cells[keep, ]
+  )
+
+  grouped_longtable(
+    tab,
+    col_names = c("Scenario", "Method", cols$header),
+    group = body$mechanism,
+    block = body$scenario,
+    header_above = col_group_headers(cols),
     ...
   )
 }
