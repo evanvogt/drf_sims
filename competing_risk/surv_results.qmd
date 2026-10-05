@@ -68,11 +68,16 @@ how their pseudo-values/nuisances are built (see `README.md`'s
 | `ipw` | causal forest on IPW-transformed RMST | cause-specific RMST |
 | `csf_cs` | causal survival forest, competing events censored | cause-specific RMST |
 | `csf_sh` | causal survival forest, competing events kept in the risk set (Fine-Gray) | subdistribution RMST |
-| Pseudo-value CF | `whole_oob`, `whole_scf`, `cvps_scf` | RMTL |
-| Pseudovalue DR RF | `whole_oob`, `whole_scf`, `cvps_scf` | RMTL |
-| SL T-learner | `whole`, `cvps`, `split` | RMTL |
-| Pseudovalue DR SL | `whole`, `cvps` | RMTL |
-| Pseudovalue DR RSF | `whole_oob`, `whole_scf` | RMTL |
+| CF on PV | `whole_oob`, `whole_scf`, `cvps_scf` | RMTL |
+| DR: RF on PV | `whole_oob`, `whole_scf`, `cvps_scf` | RMTL |
+| T: SL on PV | `whole`, `cvps`, `split` | RMTL |
+| DR: SL on PV | `whole`, `cvps` | RMTL |
+| DR: RSF on (Y, D) | `oob`, `scf` | RMTL |
+
+The DR families differ only in the per-arm outcome model: a regression of the
+pseudo-values (PV) on X, or a competing-risks random survival forest on the
+observed (Y, D). All three use whole-sample jackknife pseudo-values in the DR
+correction term.
 
 **The truth column depends on the family**: `ipw`/`csf_cs` remove competing
 events and target the cause-specific (net) RMST; `csf_sh` keeps them in the
@@ -116,29 +121,31 @@ framework_family <- c(
   ipw = "IPW",
   csf_cs = "CSF (cause-specific)",
   csf_sh = "Augmented CSF",
-  pseudo_cf_whole_oob = "Pseudo-value CF",
-  pseudo_cf_whole_scf = "Pseudo-value CF",
-  pseudo_cf_cvps_scf = "Pseudo-value CF",
-  pseudo_dr_whole_oob = "Pseudovalue DR RF",
-  pseudo_dr_whole_scf = "Pseudovalue DR RF",
-  pseudo_dr_cvps_scf = "Pseudovalue DR RF",
-  sl_t_whole = "SL T-learner",
-  sl_t_cvps = "SL T-learner",
-  sl_t_split = "SL T-learner",
-  sl_dr_whole = "Pseudovalue DR SL",
-  sl_dr_cvps = "Pseudovalue DR SL",
-  rsf_dr_oob = "Pseudovalue DR RSF",
-  rsf_dr_scf = "Pseudovalue DR RSF"
+  pseudo_cf_whole_oob = "CF on PV",
+  pseudo_cf_whole_scf = "CF on PV",
+  pseudo_cf_cvps_scf = "CF on PV",
+  pseudo_dr_whole_oob = "DR: RF on PV",
+  pseudo_dr_whole_scf = "DR: RF on PV",
+  pseudo_dr_cvps_scf = "DR: RF on PV",
+  sl_t_whole = "T: SL on PV",
+  sl_t_cvps = "T: SL on PV",
+  sl_t_split = "T: SL on PV",
+  sl_dr_whole = "DR: SL on PV",
+  sl_dr_cvps = "DR: SL on PV",
+  # the outcome model is the RSF on (Y, D), not a regression on pseudo-values;
+  # pseudo-values enter the DR correction term only
+  rsf_dr_oob = "DR: RSF on (Y, D)",
+  rsf_dr_scf = "DR: RSF on (Y, D)"
 )
 family_levels <- c(
   "IPW",
   "CSF (cause-specific)",
   "Augmented CSF",
-  "Pseudo-value CF",
-  "Pseudovalue DR RF",
-  "Pseudovalue DR RSF",
-  "SL T-learner",
-  "Pseudovalue DR SL"
+  "CF on PV",
+  "DR: RF on PV",
+  "DR: RSF on (Y, D)",
+  "T: SL on PV",
+  "DR: SL on PV"
 )
 
 framework_variant <- c(
@@ -156,16 +163,18 @@ framework_variant <- c(
   sl_t_split = "split",
   sl_dr_whole = "whole",
   sl_dr_cvps = "cvps",
-  # the RSF outcome model fits (Y, D), so only the correction term uses
-  # pseudo-values, and those are whole-sample - hence whole_oob / whole_scf
-  rsf_dr_oob = "whole_oob",
-  rsf_dr_scf = "whole_scf"
+  # the RSF outcome model fits (Y, D), so the whole/cvps pseudo-value factor
+  # has nothing to act on - these arms vary the fitting only
+  rsf_dr_oob = "oob",
+  rsf_dr_scf = "scf"
 )
 variant_levels <- c(
   "single",
   "whole_oob",
   "whole_scf",
   "cvps_scf",
+  "oob",
+  "scf",
   "whole",
   "cvps",
   "split"
@@ -175,6 +184,8 @@ variant_labels <- c(
   whole_oob = "Whole-sample, OOB",
   whole_scf = "Whole-sample, single CF",
   cvps_scf = "Crossfit PV, single CF",
+  oob = "OOB",
+  scf = "Single CF",
   whole = "Whole-sample PV",
   cvps = "Crossfit PV",
   split = "Split PV"
@@ -209,7 +220,7 @@ metrics_all <- metrics %>%
 # remove boring bits
 metrics_all <- metrics_all %>%
   # remove CSH stuff for conference presentations
-  #filter(!(family %in% c("CSF (cause-specific)", "IPW", "SL T-learner"))) %>%
+  #filter(!(family %in% c("CSF (cause-specific)", "IPW", "T: SL on PV"))) %>%
   # remove combined event
   filter(target != "Combined") %>%
   # remove superfluous crossfitting variants
