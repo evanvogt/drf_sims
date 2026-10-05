@@ -1,18 +1,27 @@
 ##########
 # title: LaTeX tables for the thesis chapter - sample size, both outcomes
 ##########
-# The correlated-covariate studies (sample_size/correlated/), per outcome and
-# rho: one table for the reported scenarios 1-4 and one for the supplementary
-# 5-10, each estimation metric as "mean (MCSE)". The independent-covariate
-# studies (sample_size/continuous/, binary/) are no longer tabulated. The HTE
-# tests have their own tables, ss_test_tables.R. Labels and the summary come
-# from R/figures.R, the table layout from R/tables.R.
+# The correlated-covariate studies (sample_size/correlated/), per outcome: the
+# rho = 0.5 levels, and the paired rho = 0.5 - rho = 0 differences in place of
+# the rho = 0 levels. Each as one table for the reported scenarios 1-4 and one
+# for the supplementary 5-10, each estimation metric as "mean (MCSE)". The
+# independent-covariate studies (sample_size/continuous/, binary/) are no
+# longer tabulated. The HTE tests have their own tables, ss_test_tables.R.
+# Labels and the summary come from R/figures.R, the table layout from
+# R/tables.R.
 #
 # Writes to ../results/thesis_tables/:
-#   {cts,bin}_corr_rho0_ss_main.tex, {cts,bin}_corr_rho0_ss_supp.tex,
-#   {cts,bin}_corr_rho05_ss_main.tex, {cts,bin}_corr_rho05_ss_supp.tex
+#   {cts,bin}_corr_rho05_ss_main.tex, {cts,bin}_corr_rho05_ss_supp.tex,
+#   {cts,bin}_corr_rhodiff_ss_main.tex, {cts,bin}_corr_rhodiff_ss_supp.tex
 # \input{} them into a document with
 #   \usepackage{booktabs, longtable, pdflscape, array}
+#
+# The differences: run r at rho = 0 and at rho = 0.5 shares its random draws
+# (sample_size/correlated/README.md, "Seeding and pairing"), so each metric is
+# differenced per run and its MCSE is sd(diff) / sqrt(pairs), as in
+# correlated/*/*_corr_results.qmd's paired_diff(). Runs missing at either rho
+# drop out of the pairs. Pearson and sign accuracy get a third decimal there:
+# their differences are hundredths.
 #
 # Metric choices:
 # - Bias is the CATE bias, `bias` (mean of est - true over units), as in the
@@ -52,26 +61,34 @@ outcomes <- list(
        ))
 )
 
-# one entry per outcome and rho (CORR_RHOS in R/dgm_scenarios.R): `out` names
-# the output files and LaTeX labels, `label` is the caption's outcome text
-outcomes <- unlist(lapply(outcomes, function(o) {
-  lapply(c(0, 0.5), function(r) modifyList(o, list(
-    out = paste0(o$prefix, "_corr_rho", sub(".", "", r, fixed = TRUE)),
-    label = paste0(o$label, ", correlated covariates ($\\rho = ", r, "$)"),
-    rho = r
-  )))
-}), recursive = FALSE)
+# one entry per outcome and table set, the rho = 0.5 levels and the paired
+# differences (CORR_RHOS in R/dgm_scenarios.R): `out` names the output files
+# and LaTeX labels, `label` is the caption's outcome text
+outcomes <- unlist(lapply(outcomes, function(o) list(
+  modifyList(o, list(
+    out = paste0(o$prefix, "_corr_rho05"),
+    label = paste0(o$label, ", correlated covariates ($\\rho = 0.5$)"),
+    diff = FALSE
+  )),
+  modifyList(o, list(
+    out = paste0(o$prefix, "_corr_rhodiff"),
+    label = paste0(o$label, ", correlated covariates, $\\rho = 0.5$ minus ",
+                   "$\\rho = 0$"),
+    diff = TRUE
+  ))
+)), recursive = FALSE)
 
 # the table's columns, left to right. Drop a row here to drop a column.
 table_cols <- function(o) {
+  digits_prop <- if (o$diff) 3 else 2
   # two-line headers (header2 "" for one line) keep the columns as narrow as
   # their cells
   tibble::tribble(
     ~stem,             ~header1,    ~header2,    ~digits,
     "bias",            "Bias",      "",          o$digits_bias,
     "mse",             "MSE",       "",          o$digits_mse,
-    "corr",            "Pearson",   "",          2,
-    "sign_acc",        "Sign",      "accuracy",  2
+    "corr",            "Pearson",   "",          digits_prop,
+    "sign_acc",        "Sign",      "accuracy",  digits_prop
   ) %>%
     mutate(header = ifelse(
       header2 == "", header1,
@@ -84,24 +101,51 @@ short_caption_text <- function(o, scenarios) {
 }
 
 caption_text <- function(o, scenarios, runs, note = "") {
+  cells <- if (o$diff) {
+    paste0(
+      "per-run difference, mean (Monte Carlo SE) over ", runs, " run pairs per cell. A run shares its random draws ",
+      "at the two values of $\\rho$, so the SE is that of the paired difference. "
+    )
+  } else {
+    paste0("mean (Monte Carlo SE) over ", runs, " runs per cell. ")
+  }
   paste0(
     "CATE estimation, sample-size study, ", o$label, ", scenarios ",
-    scenarios, ": mean (Monte Carlo SE) over ", runs, " runs per cell. ",
+    scenarios, ": ", cells,
     "Bias is the CATE bias, the mean of the estimated minus true CATE over ",
     "units. --- : not defined (correlation ",
     "under no heterogeneity).", note
   )
 }
 
+#' Per-run rho = 0.5 - rho = 0 differences of `stems`, one row per run pair
+paired_rho_diff <- function(metrics, stems) {
+  keys <- c("scenario", "n", "model", "run")
+  rho0 <- metrics %>%
+    filter(rho == 0) %>%
+    select(all_of(keys), all_of(stems))
+  out <- metrics %>%
+    filter(rho == 0.5) %>%
+    select(all_of(keys), all_of(stems)) %>%
+    inner_join(rho0, by = keys, suffix = c("", "_rho0"))
+  for (s in stems) out[[s]] <- out[[s]] - out[[paste0(s, "_rho0")]]
+  select(out, all_of(keys), all_of(stems))
+}
+
 for (o in outcomes) {
   metrics <- readRDS(file.path(dirname(path), "results", "correlated", o$dir,
-                               paste0(o$prefix, "_corr_metrics.RDS"))) %>%
-    filter(rho == o$rho)
+                               paste0(o$prefix, "_corr_metrics.RDS")))
 
   metrics <- metrics %>%
     mutate(corr = if_else(scenario == 1, NA_real_, corr))
 
   cols <- table_cols(o)
+
+  metrics <- if (o$diff) {
+    paired_rho_diff(metrics, cols$stem)
+  } else {
+    filter(metrics, rho == 0.5)
+  }
 
   metrics_summary <- summarise_metrics(
     metrics,
@@ -136,8 +180,9 @@ for (o in outcomes) {
           t$note
         ),
         label = paste0(o$out, "_ss_", nm),
-        # the 4 columns fit portrait within 16cm (A4, 2.5cm margins) at 10pt
-        # with LaTeX's own column padding, the 4-decimal binary table included
+        # the 4 columns fit portrait within the thesis's 17cm (A4, 2cm side
+        # margins) at 10pt with LaTeX's own column padding, the 4-decimal
+        # binary differences included
         landscape = FALSE,
         font_size = 10,
         tabcolsep = NULL
