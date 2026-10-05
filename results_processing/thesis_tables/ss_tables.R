@@ -15,8 +15,10 @@
 #   \usepackage{booktabs, longtable, pdflscape, array}
 #
 # Metric choices:
-# - Bias is `ate_bias`. `bias` (mean of est - true over units) is the same
-#   number unless a run has NA estimates, so it is not repeated.
+# - Bias is the CATE bias, `bias` (mean of est - true over units), as in the
+#   figures. `ate_bias` is the same number unless a run has NA estimates, but
+#   it is not an ATE estimate: that would need AIPW with the CATE models'
+#   propensity scores, which not every model estimates.
 # - No relative bias. The true ATE is recalibrated per n for 80% power and
 #   shrinks with n, so the bias rows are not on a common scale across n.
 # - MSE, not RMSE, and Pearson, not Spearman: the missing-data chapter's
@@ -66,7 +68,7 @@ table_cols <- function(o) {
   # their cells
   tibble::tribble(
     ~stem,             ~header1,    ~header2,    ~digits,
-    "ate_bias",        "Bias",      "",          o$digits_bias,
+    "bias",            "Bias",      "",          o$digits_bias,
     "mse",             "MSE",       "",          o$digits_mse,
     "corr",            "Pearson",   "",          2,
     "sign_acc",        "Sign",      "accuracy",  2
@@ -85,7 +87,8 @@ caption_text <- function(o, scenarios, runs, note = "") {
   paste0(
     "CATE estimation, sample-size study, ", o$label, ", scenarios ",
     scenarios, ": mean (Monte Carlo SE) over ", runs, " runs per cell. ",
-    "Bias is for the ATE. --- : not defined (correlation ",
+    "Bias is the CATE bias, the mean of the estimated minus true CATE over ",
+    "units. --- : not defined (correlation ",
     "under no heterogeneity).", note
   )
 }
