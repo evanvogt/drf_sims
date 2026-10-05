@@ -7,9 +7,9 @@
 # mechanism and run:
 #   - bias difference, bias - complete-data bias, per run and averaged over
 #     runs: the bias the missingness and its handling add. 0 is no change.
-#     The same measure as bias_diff_complete_cu in cts_miss_metrics.R and
+#     The same measure as bias_diff_complete/_cu in cts_miss_metrics.R and
 #     missing/continuous/cts_miss_results.qmd, extended to the incomplete units;
-#   - relative efficiency, MSE / complete-data MSE (rel_efficiency_cu/_iu from
+#   - relative efficiency, MSE / complete-data MSE (rel_efficiency/_cu/_iu from
 #     cts_miss_metrics.R, a per-run ratio averaged over runs, as in the
 #     appendix tables). 1 is no loss.
 # One figure each, the mechanism x scenario grid with handling method on x.
@@ -17,14 +17,16 @@
 # (All five estimators at once was too busy - the appendix tables,
 # thesis_tables/miss_tables.R, have the rest.)
 #
-# Every metric is scored separately on the complete units (no amputed
-# covariate) and the incomplete units (cate_metrics_split() in R/metrics.R),
-# shown in the same panel by colour. The complete-data arm is split by the
-# amputation its run would have had, so each set of units is compared with the
-# same units in the reference. Notes:
+# Every metric is scored on all units, and separately on the complete units (no
+# amputed covariate) and the incomplete units (cate_metrics_split() in
+# R/metrics.R), shown in the same panel by colour - the same three columns as
+# the appendix tables. The complete-data arm is split by the amputation its run
+# would have had, so each set of units is compared with the same units in the
+# reference. Notes:
 #   - the truth is the primary one, tau(X), under MNAR-tau too;
 #   - complete case and IPW drop the incomplete units, so they have only a
-#     complete-unit point;
+#     complete-unit point (cts_miss_metrics.R leaves their all-unit metrics NA:
+#     a ~350-unit MSE over a 500-unit one is not a like-for-like ratio);
 #   - scenario 1 has no MNAR-tau arm (cts_miss_config.R), so that panel is
 #     empty.
 #
@@ -44,32 +46,33 @@ dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
 MODEL <- "dr_random_forest"
 REF_METHOD <- "complete_data"
-UNIT_LABELS <- c(cu = "Complete units", iu = "Incomplete units")
+UNIT_LABELS <- c(all = "All units", cu = "Complete units",
+                 iu = "Incomplete units")
 
-metrics <- readRDS(file.path(res_path, "cts_miss_metrics.RDS"))
+metrics <- readRDS(file.path(res_path, "cts_miss_metrics.RDS")) %>%
+  filter(scenario %in% 1:4, model == MODEL)
+
+# the metrics file has the bias difference on all units and the complete
+# units only, so take the incomplete units' here, as thesis_tables/miss_tables.R
+# does. Complete case and IPW's incomplete-unit bias is all NA, so theirs
+# comes out NA too.
+ref_bias_iu <- metrics %>%
+  filter(method == REF_METHOD) %>%
+  select(scenario, mechanism, run, bias_iu_complete = bias_iu)
 
 # one row per run and set of units
 metrics_long <- metrics %>%
-  filter(scenario %in% 1:4, model == MODEL) %>%
-  select(scenario, mechanism, method, run,
-         bias_cu, bias_iu, rel_efficiency_cu, rel_efficiency_iu) %>%
-  pivot_longer(c(bias_cu, bias_iu, rel_efficiency_cu, rel_efficiency_iu),
-               names_to = c(".value", "units"),
-               names_pattern = "^(bias|rel_efficiency)_(cu|iu)$")
-
-# the complete-data arm's bias on the same run and units. cts_miss_metrics.R
-# keeps the difference for the complete units only (bias_diff_complete_cu), so
-# take it for both sets of units here; on the complete units it is the same
-# number. Complete case and IPW's incomplete-unit bias is all NA, so theirs
-# comes out NA too.
-ref_bias <- metrics_long %>%
-  filter(method == REF_METHOD) %>%
-  select(scenario, mechanism, run, units, bias_ref = bias)
-
-metrics_long <- metrics_long %>%
   filter(method != REF_METHOD) %>%
-  left_join(ref_bias, by = c("scenario", "mechanism", "run", "units")) %>%
-  mutate(bias_diff = bias - bias_ref) %>%
+  left_join(ref_bias_iu, by = c("scenario", "mechanism", "run")) %>%
+  mutate(bias_diff_iu = bias_iu - bias_iu_complete) %>%
+  select(scenario, mechanism, method, run,
+         bias_diff_all = bias_diff_complete,
+         bias_diff_cu = bias_diff_complete_cu, bias_diff_iu,
+         rel_efficiency_all = rel_efficiency,
+         rel_efficiency_cu, rel_efficiency_iu) %>%
+  pivot_longer(-c(scenario, mechanism, method, run),
+               names_to = c(".value", "units"),
+               names_pattern = "^(bias_diff|rel_efficiency)_(all|cu|iu)$") %>%
   mutate(units = factor(UNIT_LABELS[units], levels = UNIT_LABELS)) %>%
   apply_labels(SS_SCENARIO_LABELS)
 
@@ -80,7 +83,7 @@ metrics_summary <- summarise_metrics(
   count_na = character()
 )
 
-#' One metric by handling method, complete and incomplete units by colour
+#' One metric by handling method, all, complete and incomplete units by colour
 #'
 #' @param summary metrics_summary
 #' @param metric "bias_diff" or "rel_efficiency"
@@ -88,8 +91,8 @@ metrics_summary <- summarise_metrics(
 #' @param file output file name
 #' @param hline reference line, as point_range_plot()
 units_figure <- function(summary, metric, y_lab, file, hline = 0) {
-  # complete case and IPW's incomplete-unit rows are all NA (mean NaN), so
-  # leave them out rather than give them a dodge slot
+  # complete case and IPW's all- and incomplete-unit rows are all NA (mean
+  # NaN), so leave them out rather than give them a dodge slot
   keep <- filter(summary, is.finite(.data[[paste0("mean_", metric)]]))
 
   fig <- point_range_plot(keep, metric, y_lab, x = "method", colour = "units",
