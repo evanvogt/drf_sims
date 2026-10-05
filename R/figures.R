@@ -338,6 +338,9 @@ save_fig <- function(
 #'   `yintercept` column plus the facet columns it varies by draws a different
 #'   line per panel - e.g. nominal size in the null scenario, a power target
 #'   in the others
+#' @param dodge_width how far apart the colour (x shape) groups sit within
+#'   each x position - widen it when there are many groups per x
+#' @param point_size point size; bump it when `shape` has to be legible
 point_range_plot <- function(
   summary,
   metric,
@@ -354,11 +357,14 @@ point_range_plot <- function(
   palette = drf_scale(),
   shape = NULL,
   shape_palette = NULL,
-  hline = 0
+  hline = 0,
+  dodge_width = 0.5,
+  point_size = 1
 ) {
   mean_col <- paste0("mean_", metric)
   mcse_col <- paste0("mcse_", metric)
   z <- qnorm(1 - alpha / 2)
+  dodge <- position_dodge(width = dodge_width)
   x_lab <- if (x == "model") "Model" else x
 
   p <- ggplot(
@@ -393,7 +399,7 @@ point_range_plot <- function(
             interaction(.data[[colour]], .data[[shape]])
           }
         ),
-        position = position_dodge(width = 0.5),
+        position = dodge,
         linewidth = 0.5,
         alpha = 0.5
       )
@@ -401,12 +407,12 @@ point_range_plot <- function(
 
   p <- p +
     geom_errorbar(
-      position = position_dodge(width = 0.5),
+      position = dodge,
       linewidth = 0.3,
       width = 0.3,
       alpha = ci_alpha
     ) +
-    geom_point(position = position_dodge(width = 0.5), size = 1) +
+    geom_point(position = dodge, size = point_size) +
     facet_grid(
       rows = vars(!!!rlang::syms(facet_rows)),
       cols = vars(!!!rlang::syms(facet_cols)),

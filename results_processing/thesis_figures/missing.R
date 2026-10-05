@@ -1,10 +1,9 @@
 ##########
 # title: figures for the thesis chapter - missing covariates, continuous outcome
 ##########
-# The main chapter's missing-data figures, continuous outcome only, for one
-# estimator: the DR-learner with random forests. Both metrics compare each
-# handling method with the complete-data arm (no amputation), same scenario,
-# mechanism and run:
+# The main chapter's missing-data figures, continuous outcome only. Both metrics
+# compare each handling method with the complete-data arm (no amputation), same
+# scenario, mechanism, estimator and run:
 #   - bias difference, bias - complete-data bias, per run and averaged over
 #     runs: the bias the missingness and its handling add. 0 is no change.
 #     The same measure as bias_diff_complete/_cu in cts_miss_metrics.R and
@@ -12,21 +11,24 @@
 #   - relative efficiency, MSE / complete-data MSE (rel_efficiency/_cu/_iu from
 #     cts_miss_metrics.R, a per-run ratio averaged over runs, as in the
 #     appendix tables). 1 is no loss.
-# One figure each, the mechanism x scenario grid with handling method on x.
+# Each is drawn on the mechanism x scenario grid with handling method on x:
+#   - one figure per estimator, units by colour (cts_miss_<metric>_<model>.png);
+#   - one figure with every estimator, estimator by colour and units by shape
+#     (cts_miss_<metric>_all_models.png).
 # The complete-data arm is 0 and 1 by construction, so it is not plotted.
-# (All five estimators at once was too busy - the appendix tables,
-# thesis_tables/miss_tables.R, have the rest.)
 #
 # Every metric is scored on all units, and separately on the complete units (no
 # amputed covariate) and the incomplete units (cate_metrics_split() in
-# R/metrics.R), shown in the same panel by colour - the same three columns as
-# the appendix tables. The complete-data arm is split by the amputation its run
-# would have had, so each set of units is compared with the same units in the
-# reference. Notes:
+# R/metrics.R) - the same three columns as the appendix tables. The
+# complete-data arm is split by the amputation its run would have had, so each
+# set of units is compared with the same units in the reference. Notes:
 #   - the truth is the primary one, tau(X), under MNAR-tau too;
 #   - complete case and IPW drop the incomplete units, so they have only a
 #     complete-unit point (cts_miss_metrics.R leaves their all-unit metrics NA:
 #     a ~350-unit MSE over a 500-unit one is not a like-for-like ratio);
+#   - not every estimator has every handling method in the metrics file (MIA
+#     is causal forest and DR-RandomForest only; MI is not DR-oracle or
+#     DR-SuperLearner), so those slots are empty;
 #   - scenario 1 has no MNAR-tau arm (cts_miss_config.R), so that panel is
 #     empty.
 #
@@ -44,13 +46,13 @@ res_path <- file.path(dirname(path), "results", "missing", "continuous")
 fig_path <- file.path(dirname(path), "results", "thesis_figures", "missing")
 dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
-MODEL <- "dr_random_forest"
 REF_METHOD <- "complete_data"
-UNIT_LABELS <- c(all = "All units", cu = "Complete units",
-                 iu = "Incomplete units")
+UNIT_LABELS <- c(all = "All participants", cu = "Complete participants",
+                 iu = "Incomplete participants")
+UNIT_SHAPES <- setNames(c(16, 17, 15), UNIT_LABELS)
 
 metrics <- readRDS(file.path(res_path, "cts_miss_metrics.RDS")) %>%
-  filter(scenario %in% 1:4, model == MODEL)
+  filter(scenario %in% 1:4)
 
 # the metrics file has the bias difference on all units and the complete
 # units only, so take the incomplete units' here, as thesis_tables/miss_tables.R
@@ -58,41 +60,48 @@ metrics <- readRDS(file.path(res_path, "cts_miss_metrics.RDS")) %>%
 # comes out NA too.
 ref_bias_iu <- metrics %>%
   filter(method == REF_METHOD) %>%
-  select(scenario, mechanism, run, bias_iu_complete = bias_iu)
+  select(scenario, mechanism, model, run, bias_iu_complete = bias_iu)
 
 # one row per run and set of units
 metrics_long <- metrics %>%
   filter(method != REF_METHOD) %>%
-  left_join(ref_bias_iu, by = c("scenario", "mechanism", "run")) %>%
+  left_join(ref_bias_iu, by = c("scenario", "mechanism", "model", "run")) %>%
   mutate(bias_diff_iu = bias_iu - bias_iu_complete) %>%
-  select(scenario, mechanism, method, run,
+  select(scenario, mechanism, model, method, run,
          bias_diff_all = bias_diff_complete,
          bias_diff_cu = bias_diff_complete_cu, bias_diff_iu,
          rel_efficiency_all = rel_efficiency,
          rel_efficiency_cu, rel_efficiency_iu) %>%
-  pivot_longer(-c(scenario, mechanism, method, run),
+  pivot_longer(-c(scenario, mechanism, model, method, run),
                names_to = c(".value", "units"),
                names_pattern = "^(bias_diff|rel_efficiency)_(all|cu|iu)$") %>%
   mutate(units = factor(UNIT_LABELS[units], levels = UNIT_LABELS)) %>%
   apply_labels(SS_SCENARIO_LABELS)
 
+# complete case and IPW's all- and incomplete-unit rows are all NA (mean NaN),
+# as is every estimator x method pair that wasn't run, so the figures leave
+# out non-finite means rather than give them a dodge slot
 metrics_summary <- summarise_metrics(
   metrics_long,
-  c("scenario", "mechanism", "method", "units"),
+  c("scenario", "mechanism", "model", "method", "units"),
   cols = c(bias_diff = "bias_diff", rel_efficiency = "rel_efficiency"),
   count_na = character()
 )
 
-#' One metric by handling method, all, complete and incomplete units by colour
+FIGURES <- list(
+  bias_diff = list(y_lab = "Bias minus complete-data bias", hline = 0),
+  rel_efficiency = list(y_lab = "Relative efficiency vs complete data",
+                        hline = 1)
+)
+
+#' One metric for one estimator, all, complete and incomplete units by colour
 #'
-#' @param summary metrics_summary
+#' @param summary metrics_summary, filtered to one model
 #' @param metric "bias_diff" or "rel_efficiency"
 #' @param y_lab axis label
 #' @param file output file name
 #' @param hline reference line, as point_range_plot()
 units_figure <- function(summary, metric, y_lab, file, hline = 0) {
-  # complete case and IPW's all- and incomplete-unit rows are all NA (mean
-  # NaN), so leave them out rather than give them a dodge slot
   keep <- filter(summary, is.finite(.data[[paste0("mean_", metric)]]))
 
   fig <- point_range_plot(keep, metric, y_lab, x = "method", colour = "units",
@@ -100,14 +109,48 @@ units_figure <- function(summary, metric, y_lab, file, hline = 0) {
     labs(x = "Missing-data handling", colour = NULL) +
     theme(legend.position = "bottom") +
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-  
+
   save_fig(file, fig_path, height = 18, plot = fig)
   fig
 }
 
-bias_fig <- units_figure(metrics_summary, "bias_diff",
-                         "Bias minus complete-data bias",
-                         "cts_miss_bias_diff.png")
-eff_fig <- units_figure(metrics_summary, "rel_efficiency",
-                        "Relative efficiency vs complete data",
-                        "cts_miss_rel_efficiency.png", hline = 1)
+#' One metric for every estimator: estimator by colour, units by shape
+#'
+#' Up to 15 points per handling method (5 estimators x 3 sets of units), so the
+#' dodge is wider, the points bigger and the error bars fainter than
+#' units_figure(), and the figure is bigger.
+#'
+#' @inheritParams units_figure
+#' @param summary metrics_summary, all models
+models_figure <- function(summary, metric, y_lab, file, hline = 0) {
+  keep <- filter(summary, is.finite(.data[[paste0("mean_", metric)]]))
+
+  fig <- point_range_plot(keep, metric, y_lab, x = "method", colour = "model",
+                          shape = "units",
+                          shape_palette = scale_shape_manual(values = UNIT_SHAPES),
+                          hline = hline, dodge_width = 0.85, point_size = 1.5,
+                          ci_alpha = 0.5) +
+    labs(x = "Missing-data handling", colour = NULL, shape = NULL) +
+    theme(legend.position = "bottom", legend.box = "vertical") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+
+  save_fig(file, fig_path, width = 30, height = 24, plot = fig)
+  fig
+}
+
+# one figure per estimator and metric, named by the estimator's raw name
+models <- intersect(names(MODEL_LABELS), unique(metrics$model))
+model_figs <- lapply(setNames(models, models), function(m) {
+  summary <- filter(metrics_summary, model == MODEL_LABELS[[m]])
+  Map(function(metric, spec) {
+    units_figure(summary, metric, spec$y_lab,
+                 paste0("cts_miss_", metric, "_", m, ".png"),
+                 hline = spec$hline)
+  }, names(FIGURES), FIGURES)
+})
+
+all_model_figs <- Map(function(metric, spec) {
+  models_figure(metrics_summary, metric, spec$y_lab,
+                paste0("cts_miss_", metric, "_all_models.png"),
+                hline = spec$hline)
+}, names(FIGURES), FIGURES)
