@@ -20,6 +20,7 @@ Nothing here reads per-run simulation output directly — run the study's
 | script | reads |
 |---|---|
 | `sample_size.R` | the correlated sample-size studies (the chapter): per outcome, scenarios 1–4 and 5–10 (`*_supp_*`), each at ρ = 0.5 and as the paired ρ = 0.5 − ρ = 0 difference (`*_rhodiff_*`): bias/RMSE, and HTE test rejection rates at `HTE_ALPHA` (`R/figures.R`) |
+| `ss_ci.R` | the correlated CI studies, `CI_sf` sweep: per outcome, at ρ = 0, ρ = 0.5 and the paired difference, one figure per interval metric (`{cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.png`), scenarios across, n down, `CI_sf` on x; the inbuilt causal-forest interval is a flat line with its MCSE band. Coverage on a fixed y scale, length free per panel. A study with incomplete metrics is skipped. optimal_sf figures to follow |
 | `cts_ss.R`, `bin_ss.R` | the independent-covariate sample-size studies: defunct, not in the thesis |
 | `missing.R` | the continuous missing-data study (main chapter), scenarios 1–4, DR-RandomForest only: bias difference and relative efficiency against the complete-data arm, as separate figures, handling method on x, complete vs incomplete units by colour |
 | `miss_cts.R`, `miss_bin.R` | the missing-data studies (pre-2026-09-29 metrics: all-unit bias/MSE) |
@@ -56,6 +57,7 @@ appendix's full grid, one table per metric per outcome:
 |---|---|---|
 | `ss_tables.R` | `{cts,bin}_corr_{rho05,rhodiff}_ss_{main,supp}.tex` | scenario / n / model × estimation metrics |
 | `ss_test_tables.R` | `{cts,bin}_corr_{rho05,rhodiff}_ss_tests_{main,supp}.tex` | scenario / test / model × n, HTE test rejection rates at `HTE_ALPHA` (or their paired ρ difference), with a True CATE reference row |
+| `ss_ci_tables.R` | `{cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.tex`, `{cts,bin}_corr_ci_sf.tex` | correlated CI studies: scenario / n / model × the 10 `CI_sf` values, one interval metric per table (the inbuilt causal-forest interval, which does not depend on `CI_sf`, spans the columns). optimal_sf: scenario / n / ρ (0, 0.5, paired Δ) × ratio picked, plug-in and true-τ coverage, length. A study with incomplete metrics is skipped |
 | `miss_tables.R` | `{cts,bin}_miss_<metric>.tex`, `{cts,bin}_miss_tests_<test>.tex` | mechanism / scenario / method × model, one metric (or HTE test, with a True CATE column) per table |
 | `surv_tables.R` | `surv_main_{rho05,rho0}.tex`, `surv_<family>_{rho05,rho0}.tex` | competing risks: scenario / censoring / arm × (event × CATE bias, RMSE, Pearson). Main: one production arm per family. Secondary, one per multi-arm family: the raw arms, then paired per-run differences between arms that differ by one factor (fitting or pseudo-values) |
 
@@ -66,6 +68,7 @@ the layout helpers are in `R/tables.R`. Run from
 ```
 Rscript ss_tables.R
 Rscript ss_test_tables.R
+Rscript ss_ci_tables.R
 Rscript miss_tables.R
 ```
 

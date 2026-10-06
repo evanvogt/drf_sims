@@ -246,6 +246,66 @@ ss_test_table <- function(summary, tests, digits = 3, ...) {
   )
 }
 
+#' CI sweep table: rows scenario x n x model, one column per subsampling ratio
+#'
+#' One interval metric per table, so the CI studies' ten `CI_sf` values read
+#' across a row. A model in `span_models` (an interval that does not depend on
+#' the ratio) is printed once, in a cell spanning the ratio columns, instead
+#' of ten times over. That is only done if its ten cells really are identical,
+#' with a warning otherwise.
+#'
+#' @param summary output of summarise_metrics() grouped by scenario, n, model
+#'   and CI_sf, with `scenario`, `n` and `model` as factors in display order
+#'   (apply_labels()), and mean_<stem>/mcse_<stem>
+#' @param stem the metric
+#' @param digits decimals for every cell
+#' @param span_models display labels of the ratio-independent models
+#' @param ... passed to grouped_longtable()
+ci_sweep_table <- function(summary, stem, digits, span_models = character(), ...) {
+  body <- summary %>%
+    transmute(
+      scenario, n, model,
+      CI_sf = formatC(CI_sf, format = "f", digits = 2),
+      cell = fmt_mcse(.data[[paste0("mean_", stem)]],
+                      .data[[paste0("mcse_", stem)]], digits)
+    ) %>%
+    pivot_wider(names_from = CI_sf, values_from = cell, names_sort = TRUE) %>%
+    arrange(scenario, n, model)
+
+  sf_cols <- setdiff(names(body), c("scenario", "n", "model"))
+  cells <- as.matrix(body[sf_cols])
+  cells[is.na(cells)] <- "---"
+
+  # kbl() needs every row to have all its cells, so a spanned row's other
+  # cells are placeholders, removed (with their "&") from the LaTeX afterwards
+  placeholder <- "SPANNEDCELL"
+  span <- as.character(body$model) %in% span_models
+  same <- apply(cells, 1, function(r) all(r == r[1]))
+  if (any(span & !same)) {
+    warning(stem, ": ", paste(unique(body$model[span & !same]), collapse = ", "),
+            " varies with CI_sf, so it is printed per ratio", call. = FALSE)
+  }
+  span <- span & same & length(sf_cols) > 1
+  cells[span, 1] <- paste0("\\multicolumn{", length(sf_cols), "}{c}{",
+                           cells[span, 1], "}")
+  cells[span, -1] <- placeholder
+
+  tab <- bind_cols(
+    tibble(n = as.character(body$n), model = as.character(body$model)),
+    as_tibble(cells)
+  )
+
+  out <- grouped_longtable(
+    tab,
+    col_names = c("$n$", "Model", sf_cols),
+    group = body$scenario,
+    block = body$n,
+    header_above = c(" " = 2, "Subsampling ratio" = length(sf_cols)),
+    ...
+  )
+  gsub(paste0(" *& *", placeholder), "", out)
+}
+
 #' Missing-data table: rows mechanism x scenario x method, one column per model
 #'
 #' One metric per table, with the estimators across the columns, so the
