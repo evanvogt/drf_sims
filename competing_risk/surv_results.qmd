@@ -54,10 +54,11 @@ Fixed at **n = 500**, censoring **on/off**, **500 runs**, horizon = 28. Full
 design in `competing_risk/README.md`.
 
 Covariates are drawn from a Gaussian copula at two latent correlations,
-**ρ = 0** (independent: the primary analysis, and every section below except
-"Correlated covariates") and **ρ = 0.5** (X1, X2, X3 and the noise X01–X03
-correlated). τ(x) is the same function at both; the runs share their seeds, so
-that section compares the two ρ with paired per-run differences.
+**ρ = 0.5** (X1, X2, X3 and the noise X01–X03 correlated: the primary
+analysis, and every section below except "Sensitivity analysis") and
+**ρ = 0** (independent: the sensitivity analysis). τ(x) is the same function
+at both; the runs share their seeds, so that section compares the two ρ with
+paired per-run differences.
 
 **Five estimator frameworks**, several shipping in multiple arms that vary
 how their pseudo-values/nuisances are built (see `README.md`'s
@@ -235,8 +236,8 @@ metrics_all <- metrics_all %>%
   # ) %>%
   droplevels()
 
-# every section but "Correlated covariates" is the primary analysis, rho = 0
-metrics <- filter(metrics_all, rho == 0)
+# every section but "Sensitivity analysis" is the primary analysis, rho = 0.5
+metrics <- filter(metrics_all, rho == 0.5)
 
 # per (scenario, censoring, target, family, variant) summaries
 #
@@ -585,69 +586,6 @@ if (nrow(na_table) > 0) {
 }
 ```
 
-## Correlated covariates: ρ = 0.5 against ρ = 0
-
-At ρ = 0.5 the modifier X3 is correlated with the prognostic X1 and X2 (about
-0.3–0.4) and with the noise X01–X03, which become partial proxies for it. The
-true CATE function, the event mix and the scenarios' X3 separation barely move
-(`surv_dgm_check.R`; ADEMP "What the DGM implies"), so a change here is the
-estimators' doing, not the truth's.
-
-Each run is seeded by its run index alone, so run *r* at the two ρ shares W,
-the copula's raw normals, the categorical noise and the event-time uniforms.
-The differences below are therefore paired: per run, ρ = 0.5 minus ρ = 0, then
-averaged, with MCSE = sd(diff) / √pairs (as `sample_size/correlated/`). A
-positive MSE difference means correlation made that arm worse. Scenario 1 is
-dropped from the correlation and C-statistic panels, as above.
-
-```{r corr-paired}
-paired_rho <- metrics_all %>%
-  select(rho, scenario, censoring, target, family, variant, run,
-         mse, corr, c_stat) %>%
-  pivot_longer(c(mse, corr, c_stat), names_to = "metric") %>%
-  pivot_wider(names_from = rho, values_from = value, names_prefix = "rho_") %>%
-  mutate(diff = rho_0.5 - rho_0) %>%
-  group_by(metric, scenario, censoring, target, family, variant) %>%
-  summarise(
-    mean_diff = mean(diff, na.rm = TRUE),
-    mcse_diff = sd(diff, na.rm = TRUE) / sqrt(sum(!is.na(diff))),
-    pairs = sum(!is.na(diff)),
-    .groups = "drop"
-  )
-```
-
-```{r corr-mse-plot, fig.height=10}
-summary_plot(
-  filter(paired_rho, metric == "mse"),
-  "mean_diff",
-  "mcse_diff",
-  "Paired difference in MSE, ρ = 0.5 − ρ = 0",
-  "MSE difference"
-)
-ggsave("surv_rho_mse_diff.png", path = figdir, height = 20, width = 30,
-       units = "cm")
-```
-
-```{r corr-corr-plot, fig.height=10}
-summary_plot(
-  filter(paired_rho, metric == "corr", scenario != scenario_labels[["1"]]),
-  "mean_diff",
-  "mcse_diff",
-  "Paired difference in correlation with the true CATE, ρ = 0.5 − ρ = 0",
-  "Correlation difference"
-)
-```
-
-```{r corr-cstat-plot, fig.height=10}
-summary_plot(
-  filter(paired_rho, metric == "c_stat", scenario != scenario_labels[["1"]]),
-  "mean_diff",
-  "mcse_diff",
-  "Paired difference in C-statistic, ρ = 0.5 − ρ = 0",
-  "C-statistic difference"
-)
-```
-
 ## Headline table
 
 Arranged by scenario, censoring, target, and mean MSE (best arm first
@@ -692,5 +630,72 @@ kable(
     "Mean correlation",
     "Mean C-statistic"
   )
+)
+```
+
+## Sensitivity analysis: independent covariates (ρ = 0)
+
+Every section above is ρ = 0.5, where the modifier X3 is correlated with the
+prognostic X1 and X2 (about 0.3–0.4) and with the noise X01–X03, which become
+partial proxies for it. At ρ = 0 all covariates are independent. The true
+CATE function, the event mix and the scenarios' X3 separation barely move
+between the two (`surv_dgm_check.R`; ADEMP "What the DGM implies"), so a
+change here is the estimators' doing, not the truth's.
+
+Each run is seeded by its run index alone, so run *r* at the two ρ shares W,
+the copula's raw normals, the categorical noise and the event-time uniforms.
+The differences below are therefore paired: per run, ρ = 0 minus ρ = 0.5 (the
+sensitivity analysis minus the primary), then averaged, with MCSE =
+sd(diff) / √pairs (as `sample_size/correlated/`). A positive MSE difference
+means that arm does worse with independent covariates than in the primary
+analysis; a positive correlation or C-statistic difference means it does
+better. Scenario 1 is dropped from the correlation and C-statistic panels, as
+above.
+
+```{r sens-paired}
+paired_rho <- metrics_all %>%
+  select(rho, scenario, censoring, target, family, variant, run,
+         mse, corr, c_stat) %>%
+  pivot_longer(c(mse, corr, c_stat), names_to = "metric") %>%
+  pivot_wider(names_from = rho, values_from = value, names_prefix = "rho_") %>%
+  mutate(diff = rho_0 - rho_0.5) %>%
+  group_by(metric, scenario, censoring, target, family, variant) %>%
+  summarise(
+    mean_diff = mean(diff, na.rm = TRUE),
+    mcse_diff = sd(diff, na.rm = TRUE) / sqrt(sum(!is.na(diff))),
+    pairs = sum(!is.na(diff)),
+    .groups = "drop"
+  )
+```
+
+```{r sens-mse-plot, fig.height=10}
+summary_plot(
+  filter(paired_rho, metric == "mse"),
+  "mean_diff",
+  "mcse_diff",
+  "Paired difference in MSE, ρ = 0 − ρ = 0.5",
+  "MSE difference"
+)
+ggsave("surv_rho_mse_diff.png", path = figdir, height = 20, width = 30,
+       units = "cm")
+```
+
+```{r sens-corr-plot, fig.height=10}
+summary_plot(
+  filter(paired_rho, metric == "corr", scenario != scenario_labels[["1"]]),
+  "mean_diff",
+  "mcse_diff",
+  "Paired difference in correlation with the true CATE, ρ = 0 − ρ = 0.5",
+  "Correlation difference"
+)
+```
+
+```{r sens-cstat-plot, fig.height=10}
+summary_plot(
+  filter(paired_rho, metric == "c_stat", scenario != scenario_labels[["1"]]),
+  "mean_diff",
+  "mcse_diff",
+  "Paired difference in C-statistic, ρ = 0 − ρ = 0.5",
+  "C-statistic difference"
 )
 ```

@@ -4,11 +4,12 @@
 # Rejection rates of the four heterogeneity tests, as "rate (MCSE)", with
 # sample size across the columns so each test's power reads left to right.
 # The correlated-covariate studies (sample_size/correlated/), per outcome: the
-# rho = 0.5 rates, and the paired rho = 0.5 - rho = 0 differences in place of
-# the rho = 0 rates, as ss_tables.R does for the estimation metrics. Each as
-# one table for the reported scenarios 1-4 and one for the supplementary 5-10.
+# rho = 0 and rho = 0.5 rates, and the paired rho = 0.5 - rho = 0
+# differences, as ss_tables.R does for the estimation metrics. Each as one
+# table for the reported scenarios 1-4 and one for the supplementary 5-10.
 #
 # Writes to ../results/thesis_tables/:
+#   {cts,bin}_corr_rho0_ss_tests_main.tex, {cts,bin}_corr_rho0_ss_tests_supp.tex,
 #   {cts,bin}_corr_rho05_ss_tests_main.tex, {cts,bin}_corr_rho05_ss_tests_supp.tex,
 #   {cts,bin}_corr_rhodiff_ss_tests_main.tex, {cts,bin}_corr_rhodiff_ss_tests_supp.tex
 # \input{} them into a document with
@@ -53,13 +54,20 @@ outcomes <- list(
        ))
 )
 
-# one entry per outcome and table set, the rho = 0.5 rates and the paired
-# differences (CORR_RHOS in R/dgm_scenarios.R): `out` names the output files
-# and LaTeX labels, `label` is the caption's outcome text
+# one entry per outcome and table set, the rho = 0 and rho = 0.5 rates and the
+# paired differences (CORR_RHOS in R/dgm_scenarios.R): `out` names the output
+# files and LaTeX labels, `label` is the caption's outcome text
 outcomes <- unlist(lapply(outcomes, function(o) list(
+  modifyList(o, list(
+    out = paste0(o$prefix, "_corr_rho0"),
+    label = paste0(o$label, ", correlated covariates ($\\rho = 0$)"),
+    rho = 0,
+    diff = FALSE
+  )),
   modifyList(o, list(
     out = paste0(o$prefix, "_corr_rho05"),
     label = paste0(o$label, ", correlated covariates ($\\rho = 0.5$)"),
+    rho = 0.5,
     diff = FALSE
   )),
   modifyList(o, list(
@@ -128,14 +136,14 @@ caption_text <- function(o, scenarios, runs, note = "") {
 
 for (o in outcomes) {
   res_path <- file.path(dirname(path), "results", "correlated", o$dir)
-  # both rhos, then the rho = 0.5 rows or the per-run differences
+  # both rhos, then the rows at o$rho or the per-run differences
   read_corr <- function(stem, keys) {
     df <- readRDS(file.path(res_path, paste0(o$prefix, "_corr_", stem, ".RDS"))) %>%
       add_rejections()
     if (o$diff) {
       paired_rho_diff(df, intersect(names(rej_tests), names(df)), keys)
     } else {
-      filter(df, rho == 0.5)
+      filter(df, rho == o$rho)
     }
   }
   metrics <- read_corr("metrics", c("scenario", "n", "model", "run"))

@@ -20,9 +20,9 @@ machinery from `R/cate_models.R` and `R/sl_library.R`.
 - Secondary: how the pseudo-values should be built for a meta-learner -
   whole-sample against leave-one-fold-out pseudo-values, and whole-sample OOB
   against single crossfit fitting.
-- Secondary: whether that recovery changes when the effect modifier is
-  correlated with the prognostic covariates and with the noise (ρ = 0.5
-  against ρ = 0, same τ(x)).
+- Sensitivity: whether that recovery changes when the covariates are
+  independent (ρ = 0) rather than correlated as in the primary analysis
+  (ρ = 0.5), with the same τ(x).
 
 ## Data-generating mechanisms
 
@@ -48,8 +48,9 @@ Gaussian copula the missing-data and `sample_size/correlated/` sets use
 and X3 are Z thresholded at their prevalences, while X2 and X01–X03 are Z
 itself, so every marginal is as above. This study drops the copula's X4 and
 X5 columns. X04 / X05 are independent of everything. ρ ∈ `CORR_RHOS` = {0,
-0.5} is a design factor. ρ = 0 (independent) is the primary analysis. At ρ =
-0.5 the observed correlations are about 0.5 between continuous covariates and
+0.5} is a design factor. ρ = 0.5 (correlated) is the primary analysis and
+ρ = 0 (independent) the sensitivity analysis (since 2026-10-06; before that
+the roles were the other way round). At ρ = 0.5 the observed correlations are about 0.5 between continuous covariates and
 0.3–0.4 for pairs involving X1 or X3. The noise X01–X03 are then partial
 proxies for X3 (and X1, X2), although they never enter a hazard. The hazards,
 the coefficients and so τ(x) are the same at both ρ. Only the covariates'
@@ -153,10 +154,10 @@ both ρ.
 | scenarios | 1–7 |
 | n | 500 |
 | censoring | TRUE (uniform + administrative), FALSE (administrative only) |
-| covariate correlation ρ | 0 (primary), 0.5 |
+| covariate correlation ρ | 0.5 (primary), 0 (sensitivity) |
 | horizon | 28 |
 | repetitions | 500 per (ρ, scenario, censoring) |
-| array | 14,000 jobs (`surv_config.R`): rows 1–7000 are ρ = 0 (`surv_1.sh`), 7001–14000 are ρ = 0.5 (`surv_2.sh`) |
+| array | 14,000 jobs (`surv_config.R`): rows 1–7000 are ρ = 0, the sensitivity analysis (`surv_1.sh`), 7001–14000 are ρ = 0.5, the primary (`surv_2.sh`) |
 | folds | V = 10 (`n_folds = 10` at n ≥ 300), contiguous blocks of 50 rows |
 
 **All results produced before 2026-10-01 come from the old parameters** (see
@@ -188,7 +189,9 @@ event mix comes from `generate_surv_data()` at n = 20,000 per (ρ, scenario,
 censoring) cell, seeded once rather than with the study's streams, so it is
 illustrative. The truths are population values: `truth_individual()` on an
 X1 × X3 × 41-point X2 grid, interpolated in X2 over 200,000 copula draws per
-ρ. The tables are for ρ = 0. The ρ = 0.5 values follow them.
+ρ. The tables are for ρ = 0, where the parameters were tuned. The primary
+ρ = 0.5 differs from them only within simulation noise (see "At ρ = 0.5
+almost nothing above moves" below).
 
 **Event mix by the horizon.** The control arm is the same in every scenario:
 E1 0.52–0.54, E2 0.32–0.34, still event-free at 28 about 0.14. With censoring

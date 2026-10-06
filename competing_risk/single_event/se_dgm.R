@@ -12,7 +12,8 @@
 #     W, Z-block (n x 8), cats, U, [C]
 # which is generate_surv_data()'s order without its `cause` draw. Under the
 # same setup_rng_stream(run), W, the covariates and U are therefore those of
-# the competing-risk run with the same run index at rho = 0, and T here solves
+# the competing-risk run with the same run index at rho = 0 (the parent's
+# sensitivity analysis; its primary is rho = 0.5), and T here solves
 # Lambda1(T) = -log U where there it solves Lambda1(T) + Lambda2(T) = -log U, so
 # T_single >= T_CR unit by unit. C is not shared: the parent draws `cause`
 # before C. se_dgm_check.R asserts the pairing.

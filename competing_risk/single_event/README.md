@@ -91,6 +91,12 @@ So per-run differences between the studies (this study's `csf` against the
 parent's `csf_cs` Event 1, for example) are paired. C is not shared: the
 parent draws `cause` before C.
 
+Since 2026-10-06 the parent's primary analysis is ρ = 0.5 and ρ = 0 is its
+sensitivity analysis, so this study pairs with the parent's sensitivity runs.
+That was a deliberate choice, to avoid rerunning this study at ρ = 0.5.
+Against the parent's primary (ρ = 0.5) results a comparison is side by side,
+not paired.
+
 ## Files
 
 | file | |

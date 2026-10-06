@@ -14,7 +14,7 @@
 # censoring), so each plot below picks one slice of that (one censoring value,
 # sometimes one estimand) rather than crossing everything into one panel. The
 # covariate correlation is one more such slice: everything is drawn for a
-# single rho (`rho_value`, default 0 - the primary analysis), into
+# single rho (`rho_value`, default 0.5 - the primary analysis), into
 # nuisance_figs/rho_<rho>/.
 
 library(here)
@@ -41,7 +41,7 @@ NUISANCE_ARM_LABELS <- c(
 )
 
 # which covariate correlation to draw - one of CORR_RHOS
-rho_value <- 0
+rho_value <- 0.5
 
 fig_dir <- file.path(study$res_path, "nuisance_figs", paste0("rho_", rho_value))
 dir.create(fig_dir, showWarnings = FALSE, recursive = TRUE)

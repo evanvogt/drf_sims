@@ -34,7 +34,10 @@ The same as `competing_risk/` at ρ = 0, and drawn by the same code
   (0.45 / 0.30 / 0.25)
 
 Every estimator sees the 8 covariates X1, X2, X3, X01–X05. There is no ρ
-factor.
+factor. ρ = 0 is the parent's sensitivity analysis (its primary is ρ = 0.5,
+since 2026-10-06), so this study pairs with the parent's sensitivity runs,
+not its primary ones. That was kept deliberately rather than rerunning here at
+ρ = 0.5.
 
 ### Event time
 
@@ -79,7 +82,8 @@ Draw order: `W, Z (n × 8 copula normals), cats, U, [C]`. So:
 
 - the three scenarios and the two censoring settings of a run share W, the
   covariates and U, and comparisons across them are paired;
-- **the run is paired with `competing_risk/`'s ρ = 0 run of the same index.**
+- **the run is paired with `competing_risk/`'s ρ = 0 (sensitivity) run of the
+  same index.**
   The draw order is that study's without its `cause` draw, so W, X and U are
   identical, and T here solves Λ₁(T) = −log U where there it solves
   Λ₁(T) + Λ₂(T) = −log U. So T_single ≥ T_CR for every unit. C is not shared,

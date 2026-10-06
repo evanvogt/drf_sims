@@ -6,10 +6,11 @@
 #
 # Covariates are drawn from the copula at every rho in CORR_RHOS
 # (R/dgm_scenarios.R; see surv_dgm.R). rho varies slowest, so rows 1-7000 are
-# rho = 0, the primary analysis (jobscripts/surv_1.sh), and rows 7001-14000 are
-# rho = 0.5 (surv_2.sh). A run is seeded by its run index alone, so the same
-# run at the two rhos is a paired dataset. The array index is a row number of
-# `grid`, so `grid` must never be filtered or reordered after construction.
+# rho = 0, the sensitivity analysis (jobscripts/surv_1.sh), and rows 7001-14000
+# are rho = 0.5, the primary analysis (surv_2.sh). A run is seeded by its run
+# index alone, so the same run at the two rhos is a paired dataset. The array
+# index is a row number of `grid`, so `grid` must never be filtered or
+# reordered after construction.
 
 library(here)
 source(here("R", "pipeline.R"))

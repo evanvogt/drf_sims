@@ -9,9 +9,9 @@ shared ones.
 | scenarios | 1–7 |
 | n | 500 |
 | censoring | TRUE, FALSE |
-| covariate correlation ρ | 0 (primary), 0.5 |
+| covariate correlation ρ | 0.5 (primary), 0 (sensitivity) |
 | runs | 500 |
-| array | **14,000 jobs**: 1–7000 ρ = 0 (`surv_1.sh`), 7001–14000 ρ = 0.5 (`surv_2.sh`) |
+| array | **14,000 jobs**: 1–7000 ρ = 0, sensitivity (`surv_1.sh`), 7001–14000 ρ = 0.5, primary (`surv_2.sh`) |
 | horizon | 28 |
 | results | `../results/competing_risk/rho_<ρ>/scenario_<k>/<n>/censor_<TRUE\|FALSE>/` |
 
@@ -19,17 +19,17 @@ On the cluster, from `competing_risk/jobscripts/` (run `Rscript make_log_dirs.R`
 from the repo root first, for `logs_1/` and `logs_2/`):
 
 ```bash
-qsub surv_1.sh               # 1-7000, rho = 0
-qsub surv_2.sh               # 7001-14000, rho = 0.5
+qsub surv_1.sh               # 1-7000, rho = 0 (sensitivity)
+qsub surv_2.sh               # 7001-14000, rho = 0.5 (primary)
 Rscript ../surv_check.R      # writes failed_ids.txt, points surv_rerun.sh at it
 qsub surv_rerun.sh           # only if the check found failures
 qsub surv_collect.sh
 qsub surv_metrics.sh
 ```
 
-Local smoke test, from `competing_risk/`: `Rscript surv_analysis.R 3`
-(scenario 3, censoring on, run 1, ρ = 0), then `Rscript surv_analysis.R 7003`
-(the same run at ρ = 0.5).
+Local smoke test, from `competing_risk/`: `Rscript surv_analysis.R 7003`
+(scenario 3, censoring on, run 1, ρ = 0.5, the primary), then
+`Rscript surv_analysis.R 3` (the same run at ρ = 0).
 
 ## Without the queue
 
@@ -85,14 +85,16 @@ now come from the copula `sample_size/correlated/` uses
 (`correlated_covariates()` in `R/dgm_scenarios.R`), at ρ ∈ {0, 0.5}. That
 makes ρ a grid factor and a `rho_<ρ>/` level in the results path. Key points:
 
-- ρ = 0 is the independent, primary analysis. It has the same distribution as
-  before but a new draw order, so it is not paired with any older run.
+- ρ = 0.5 is the primary analysis and ρ = 0 (independent) the sensitivity
+  analysis, since 2026-10-06 (ρ = 0 was primary until then). ρ = 0 has the
+  same distribution as before 2026-10-01 but a new draw order, so it is not
+  paired with any older run.
 - τ(x) is identical at both ρ, and the scenario labels still separate on the
   RMTL scale at ρ = 0.5. `Rscript surv_dgm_check.R` gives the numbers (ADEMP
   "What the DGM implies").
 - The two ρ share each run's seed, so compare them with paired per-run
-  differences. `surv_results.qmd`, "Correlated covariates", does this.
-- Every other section of the report is ρ = 0.
+  differences. `surv_results.qmd`, "Sensitivity analysis", does this.
+- Every other section of the report is ρ = 0.5.
 
 ### Scenario 5 flips the sign of the RMTL1 CATE — expect it
 
