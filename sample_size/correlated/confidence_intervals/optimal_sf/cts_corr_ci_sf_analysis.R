@@ -21,11 +21,12 @@ source(here("sample_size", "correlated", "confidence_intervals", "optimal_sf",
             "cts_corr_ci_sf_config.R"))
 
 # simulation parameters
-i <- as.numeric(commandArgs(trailingOnly = T))
+args <- as.numeric(commandArgs(trailingOnly = T))
+i <- args[1]
 
 CI_boot <- 200
 alpha   <- 0.1
-workers <- 2
+workers <- if (length(args) >= 2 && !is.na(args[2])) args[2] else 2
 
 # no CI_sf axis - that is what we are finding
 param    <- study$grid[i, ]

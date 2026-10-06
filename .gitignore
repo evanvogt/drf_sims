@@ -6,7 +6,7 @@ ssh*
 *.ER
 *.OU
 *logs*/
-*failed_ids.txt
+*failed*_ids.txt
 # ignore compiled rmd files
 *.html
 *README_files/
