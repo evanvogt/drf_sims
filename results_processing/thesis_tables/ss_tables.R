@@ -2,15 +2,16 @@
 # title: LaTeX tables for the thesis chapter - sample size, both outcomes
 ##########
 # The correlated-covariate studies (sample_size/correlated/), per outcome: the
-# rho = 0.5 levels, and the paired rho = 0.5 - rho = 0 differences in place of
-# the rho = 0 levels. Each as one table for the reported scenarios 1-4 and one
-# for the supplementary 5-10, each estimation metric as "mean (MCSE)". The
+# rho = 0 and rho = 0.5 levels, and the paired rho = 0.5 - rho = 0
+# differences. Each as one table for the reported scenarios 1-4 and one for
+# the supplementary 5-10, each estimation metric as "mean (MCSE)". The
 # independent-covariate studies (sample_size/continuous/, binary/) are no
 # longer tabulated. The HTE tests have their own tables, ss_test_tables.R.
 # Labels and the summary come from R/figures.R, the table layout from
 # R/tables.R.
 #
 # Writes to ../results/thesis_tables/:
+#   {cts,bin}_corr_rho0_ss_main.tex, {cts,bin}_corr_rho0_ss_supp.tex,
 #   {cts,bin}_corr_rho05_ss_main.tex, {cts,bin}_corr_rho05_ss_supp.tex,
 #   {cts,bin}_corr_rhodiff_ss_main.tex, {cts,bin}_corr_rhodiff_ss_supp.tex
 # \input{} them into a document with
@@ -62,13 +63,20 @@ outcomes <- list(
        ))
 )
 
-# one entry per outcome and table set, the rho = 0.5 levels and the paired
-# differences (CORR_RHOS in R/dgm_scenarios.R): `out` names the output files
-# and LaTeX labels, `label` is the caption's outcome text
+# one entry per outcome and table set, the rho = 0 and rho = 0.5 levels and the
+# paired differences (CORR_RHOS in R/dgm_scenarios.R): `out` names the output
+# files and LaTeX labels, `label` is the caption's outcome text
 outcomes <- unlist(lapply(outcomes, function(o) list(
+  modifyList(o, list(
+    out = paste0(o$prefix, "_corr_rho0"),
+    label = paste0(o$label, ", correlated covariates ($\\rho = 0$)"),
+    rho = 0,
+    diff = FALSE
+  )),
   modifyList(o, list(
     out = paste0(o$prefix, "_corr_rho05"),
     label = paste0(o$label, ", correlated covariates ($\\rho = 0.5$)"),
+    rho = 0.5,
     diff = FALSE
   )),
   modifyList(o, list(
@@ -133,7 +141,7 @@ for (o in outcomes) {
   metrics <- if (o$diff) {
     paired_rho_diff(metrics, cols$stem)
   } else {
-    filter(metrics, rho == 0.5)
+    filter(metrics, rho == o$rho)
   }
 
   metrics_summary <- summarise_metrics(
