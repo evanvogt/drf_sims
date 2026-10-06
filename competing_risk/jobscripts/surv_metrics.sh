@@ -1,10 +1,11 @@
 #!/bin/bash
 # Same mem rationale as surv_collect.sh - surv_metrics.R reads the same
-# data-laden surv_all.RDS (~729MB serialized locally) and unnests it further.
-# Single core: unlike surv_collect.R's get_results(workers = 2), this script
-# does no parallel work.
+# data-laden surv_all.RDS (~729MB serialized locally). ncpus = 2 for
+# surv_metrics.R's `workers <- 2`; it strips each run to the truth and the
+# framework estimates before shipping combos to the workers, so they hold far
+# less than the parent.
 #PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=1:ompthreads=1:mem=32gb
+#PBS -l select=1:ncpus=2:ompthreads=1:mem=32gb
 #PBS -N surv_metrics
 #PBS -j oe
 

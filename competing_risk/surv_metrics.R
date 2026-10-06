@@ -10,6 +10,12 @@ library(here)
 source(here("competing_risk/surv_config.R"))
 source(here("R", "metrics.R"))
 
+# One future::multisession worker per task below; keep the jobscript's PBS
+# ncpus/ompthreads in step with this (jobscripts/surv_metrics.sh). There are 28
+# (rho, scenario, n, censoring) combos to share out; workers <= 1 runs
+# sequentially instead.
+workers <- 2
+
 # The pseudo-value frameworks come in arms crossing two factors - see
 # surv_models.R and the README:
 #   whole_oob  whole-sample pseudo-values, whole-sample OOB fit (production parity)
@@ -63,8 +69,6 @@ framework_truth_map <- c(
   setNames(rep(list(pseudo_truth), length(pseudo_frameworks)), pseudo_frameworks)
 )
 
-all_results_df <- readRDS(file.path(study$res_path, "surv_all.RDS"))
-
 # C-statistic = (Kendall tau_b + 1) / 2, equivalent to Harrell's C for a
 # continuous outcome.
 c_statistic <- function(est, true) {
@@ -85,42 +89,83 @@ association <- function(est, true) {
   )
 }
 
-metrics <- all_results_df %>%
-  unnest_longer(results) %>%
-  mutate(run     = map_int(results, ~ .x$run),
-         sim_res = map(results,     ~ .x$result)) %>%
-  select(-results) %>%
-  mutate(metrics = pmap(
-    list(rho, scenario, n, censoring, run, sim_res),
-    function(rho, scenario, n, censoring, run, sim_res) {
+#' One run's metrics: a row per (framework, target) the run carries
+score_run <- function(sim_res, scenario) {
 
-      truth          <- sim_res$truth
-      frameworks_run <- intersect(names(sim_res), frameworks)
+  truth          <- sim_res$truth
+  frameworks_run <- intersect(names(sim_res), frameworks)
 
-      map_dfr(frameworks_run, function(framework) {
+  map_dfr(frameworks_run, function(framework) {
 
-        fw_data     <- sim_res[[framework]]
-        targets_run <- intersect(names(fw_data), framework_targets[[framework]])
+    fw_data     <- sim_res[[framework]]
+    targets_run <- intersect(names(fw_data), framework_targets[[framework]])
 
-        map_dfr(targets_run, function(target) {
+    map_dfr(targets_run, function(target) {
 
-          model_tau <- fw_data[[target]]
-          true_tau  <- truth[[framework_truth_map[[framework]][[target]]]]
+      model_tau <- fw_data[[target]]
+      true_tau  <- truth[[framework_truth_map[[framework]][[target]]]]
 
-          bind_cols(
-            tibble(rho = rho, scenario = scenario, n = n, censoring = censoring,
-                   run = run,
-                   framework = framework, target = target),
-            select(cate_metrics(model_tau, true_tau, scenario),
-                   -c(corr, spearman)),
-            association(model_tau, true_tau)
-          )
-        })
-      })
-    }
-  )) %>%
-  select(metrics) %>%
-  unnest(metrics) %>%
+      bind_cols(
+        tibble(framework = framework, target = target),
+        select(cate_metrics(model_tau, true_tau, scenario),
+               -c(corr, spearman)),
+        association(model_tau, true_tau)
+      )
+    })
+  })
+}
+
+#' One (rho, scenario, n, censoring) combo's runs -> its metric rows
+score_combo <- function(args) {
+  map_dfr(args$results, function(entry) {
+    mutate(score_run(entry$result, args$scenario),
+           rho = args$rho, scenario = args$scenario, n = args$n,
+           censoring = args$censoring, run = entry$run, .before = 1)
+  })
+}
+
+message("Reading surv_all.RDS...")
+all_results_df <- readRDS(file.path(study$res_path, "surv_all.RDS"))
+
+# Bundle each combo's own slice into its own list element BEFORE handing it to
+# future_map(), which ships .x[[i]] to the worker scoring it - mapping over row
+# indices instead would make every worker export the whole of all_results_df as
+# a captured global (see surv_nuisance_extract.R). Each run is also cut down to
+# the truth and the framework estimates: its data and nuisances are what make
+# surv_all.RDS large, and nothing here reads them.
+combo_args <- pmap(
+  list(all_results_df$results, all_results_df$rho, all_results_df$scenario,
+       all_results_df$n, all_results_df$censoring),
+  function(results, rho, scenario, n, censoring) {
+    results <- map(results, function(entry) {
+      keep <- intersect(names(entry$result), c("truth", frameworks))
+      list(run = entry$run, result = entry$result[keep])
+    })
+    list(results = results, rho = rho, scenario = scenario, n = n,
+         censoring = censoring)
+  }
+)
+rm(all_results_df)
+invisible(gc())
+
+message("Scoring ", length(combo_args), " combos, ",
+        sum(map_int(combo_args, ~ length(.x$results))), " runs total, ",
+        workers, " worker(s)...")
+
+if (workers > 1) {
+  require(future)
+  require(furrr)
+  future::plan(future::multisession, workers = workers)
+  on.exit(future::plan(future::sequential), add = TRUE)
+  scored <- furrr::future_map(
+    combo_args, score_combo,
+    .options = furrr::furrr_options(packages = c("dplyr", "purrr", "tibble"))
+  )
+} else {
+  scored <- map(combo_args, score_combo)
+}
+
+metrics <- bind_rows(scored) %>%
   # RMST and RMTL are inverses of each other, so label by event rather than scale
   mutate(target = case_when(target %in% c("RMST1", "RMTL1") ~ "Event 1",
                             target %in% c("RMST2", "RMTL2") ~ "Event 2",
