@@ -504,13 +504,15 @@ deviation is zero"), relative biases are NA, and sign accuracy is about 0,
 since `sign(true) = 0` matches no non-zero estimate. Drop them; they are not
 failures. The README notes this for scenario 5's Event 1 only.
 
-**Scenario 1 is treated as null, but is not.** `cate_metrics()` and
-`c_statistic()` hard-code scenario 1 as the no-heterogeneity scenario (the
-`sample_size/` convention): Pearson and Spearman are set to 0 and the
-C-statistic to 0.5. Here scenario 1's CATE varies with X1 and X2 (SD 0.09 for
-τ_RMTL1, 0.10 for τ_RMST1_cs), so those three columns are placeholders in
-scenario 1, not measurements. Bias and the error measures are unaffected.
-Fixing it needs only a metrics rerun, not a simulation rerun.
+**Scenario 1 is not null.** `cate_metrics()` hard-codes scenario 1 as the
+no-heterogeneity scenario (the `sample_size/` convention) and stores Pearson
+and Spearman as 0 there. Here scenario 1's CATE varies with X1 and X2 (SD 0.09
+for τ_RMTL1, 0.10 for τ_RMST1_cs), so since 2026-10-06 `surv_metrics.R`
+recomputes Pearson, Spearman and the C-statistic in every scenario. A
+`surv_metrics.RDS` written before then has placeholders (0, 0, 0.5) in those
+columns for scenario 1: rerun `surv_metrics.R` (no simulation rerun needed).
+Expect scenario 1's correlations to be small and noisy, as its truth spans
+only about 0.1 days.
 
 **Failed runs.** Runs that error produce no results and drop out of every
 summary. Under the pre-2026-10-01 parameters, `jobscripts/failed_ids.txt`

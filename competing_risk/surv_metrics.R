@@ -66,10 +66,23 @@ framework_truth_map <- c(
 all_results_df <- readRDS(file.path(study$res_path, "surv_all.RDS"))
 
 # C-statistic = (Kendall tau_b + 1) / 2, equivalent to Harrell's C for a
-# continuous outcome. Undefined in the null scenario, where it is 0.5.
-c_statistic <- function(est, true, scenario) {
-  if (scenario == 1) return(0.5)
+# continuous outcome.
+c_statistic <- function(est, true) {
   (cor(true, est, method = "kendall", use = "pairwise.complete.obs") + 1) / 2
+}
+
+# No scenario here is null. cate_metrics() hard-codes scenario 1 as the
+# no-heterogeneity scenario (the sample_size/ convention) and stores Pearson and
+# Spearman there as 0, but this study's scenario 1 CATE varies with X1 and X2
+# (ADEMP.md, "Performance measures"). So both are recomputed for every scenario.
+# A constant truth (tau_RMST1_cs in scenarios 2 and 5, tau_RMST2_cs in 1 and 3)
+# still gives NA, with cor()'s "standard deviation is zero" warning.
+association <- function(est, true) {
+  tibble(
+    corr     = cor(true, est, use = "pairwise.complete.obs"),
+    spearman = cor(true, est, method = "spearman", use = "pairwise.complete.obs"),
+    c_stat   = c_statistic(est, true)
+  )
 }
 
 metrics <- all_results_df %>%
@@ -98,8 +111,9 @@ metrics <- all_results_df %>%
             tibble(rho = rho, scenario = scenario, n = n, censoring = censoring,
                    run = run,
                    framework = framework, target = target),
-            cate_metrics(model_tau, true_tau, scenario),
-            tibble(c_stat = c_statistic(model_tau, true_tau, scenario))
+            select(cate_metrics(model_tau, true_tau, scenario),
+                   -c(corr, spearman)),
+            association(model_tau, true_tau)
           )
         })
       })

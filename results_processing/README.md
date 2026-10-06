@@ -57,6 +57,7 @@ appendix's full grid, one table per metric per outcome:
 | `ss_tables.R` | `{cts,bin}_corr_{rho05,rhodiff}_ss_{main,supp}.tex` | scenario / n / model × estimation metrics |
 | `ss_test_tables.R` | `{cts,bin}_corr_{rho05,rhodiff}_ss_tests_{main,supp}.tex` | scenario / test / model × n, HTE test rejection rates at `HTE_ALPHA` (or their paired ρ difference), with a True CATE reference row |
 | `miss_tables.R` | `{cts,bin}_miss_<metric>.tex`, `{cts,bin}_miss_tests_<test>.tex` | mechanism / scenario / method × model, one metric (or HTE test, with a True CATE column) per table |
+| `surv_tables.R` | `surv_main_{rho05,rho0}.tex`, `surv_<family>_{rho05,rho0}.tex` | competing risks: scenario / censoring / arm × (event × CATE bias, RMSE, Pearson). Main: one production arm per family. Secondary, one per multi-arm family: the raw arms, then paired per-run differences between arms that differ by one factor (fitting or pseudo-values) |
 
 Each cell is `mean (MCSE)`, summarised with the figures' `summarise_metrics()`;
 the layout helpers are in `R/tables.R`. Run from

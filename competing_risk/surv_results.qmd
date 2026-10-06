@@ -479,15 +479,16 @@ ggsave("surv_mae.png", path = figdir, height = 20, width = 30, units = "cm")
 
 ## Correlation with the true CATE
 
-Pearson correlation between estimated and true CATEs. Undefined (forced to
-0 by `cate_metrics()`) in scenario 1, since there's no heterogeneity to
-correlate with — excluded here. Also see the scenario-5 note above: the
+Pearson correlation between estimated and true CATEs. Scenario 1 is
+included: its CATE varies with X1 and X2 (SD about 0.1 days), so the
+correlation is defined there, if small and noisy. `surv_metrics.R` computes
+it rather than taking `cate_metrics()`'s null-scenario 0. Also see the scenario-5 note above: the
 `ipw`/`csf_cs` Event 1 cells there are genuine `NA` (zero-variance truth),
 dropped by `na.rm = TRUE` rather than shown as 0.
 
 ```{r corr-plot, fig.height=10}
 summary_plot(
-  filter(metrics_summary, scenario != scenario_labels[["1"]]),
+  metrics_summary,
   "mean_corr",
   "mcse_corr",
   "Mean correlation with the true CATE",
@@ -498,12 +499,12 @@ summary_plot(
 ## Spearman rank correlation with the true CATE
 
 Rank correlation alongside the Pearson correlation above — less sensitive to
-outlying CATE estimates and non-linear-but-monotone miscalibration. Same
-scenario-1-undefined convention, so scenario 1 is excluded here too.
+outlying CATE estimates and non-linear-but-monotone miscalibration. Scenario
+1 is included, as above.
 
 ```{r spearman-plot, fig.height=10}
 summary_plot(
-  filter(metrics_summary, scenario != scenario_labels[["1"]]),
+  metrics_summary,
   "mean_spearman",
   "mcse_spearman",
   "Mean Spearman correlation with the true CATE",
@@ -530,13 +531,12 @@ summary_plot(
 ## C-statistic
 
 `(Kendall's tau_b + 1) / 2`, a rank-concordance measure equivalent to
-Harrell's C for a continuous outcome. Forced to 0.5 in scenario 1 (no
-heterogeneity to rank), so it's excluded here for the same reason as the
-correlation metrics above; 0.5 (dashed line) is chance level elsewhere.
+Harrell's C for a continuous outcome. Scenario 1 is included, as above; 0.5
+(dashed line) is chance level.
 
 ```{r c-stat-plot, fig.height=10}
 summary_plot(
-  filter(metrics_summary, scenario != scenario_labels[["1"]]),
+  metrics_summary,
   "mean_c_stat",
   "mcse_c_stat",
   "Mean C-statistic",
@@ -649,8 +649,7 @@ sensitivity analysis minus the primary), then averaged, with MCSE =
 sd(diff) / √pairs (as `sample_size/correlated/`). A positive MSE difference
 means that arm does worse with independent covariates than in the primary
 analysis; a positive correlation or C-statistic difference means it does
-better. Scenario 1 is dropped from the correlation and C-statistic panels, as
-above.
+better.
 
 ```{r sens-paired}
 paired_rho <- metrics_all %>%
@@ -682,7 +681,7 @@ ggsave("surv_rho_mse_diff.png", path = figdir, height = 20, width = 30,
 
 ```{r sens-corr-plot, fig.height=10}
 summary_plot(
-  filter(paired_rho, metric == "corr", scenario != scenario_labels[["1"]]),
+  filter(paired_rho, metric == "corr"),
   "mean_diff",
   "mcse_diff",
   "Paired difference in correlation with the true CATE, ρ = 0 − ρ = 0.5",
@@ -692,7 +691,7 @@ summary_plot(
 
 ```{r sens-cstat-plot, fig.height=10}
 summary_plot(
-  filter(paired_rho, metric == "c_stat", scenario != scenario_labels[["1"]]),
+  filter(paired_rho, metric == "c_stat"),
   "mean_diff",
   "mcse_diff",
   "Paired difference in C-statistic, ρ = 0 − ρ = 0.5",

@@ -297,3 +297,58 @@ miss_latex_table <- function(summary, stem, digits, ...) {
     ...
   )
 }
+
+#' Competing-risks metrics table: rows scenario x censoring x arm, columns
+#' event x metric
+#'
+#' ss_latex_table()'s layout with the competing-risks study's rows: grouped
+#' under a scenario header, then by censoring. Each event (`target`) gets a
+#' spanning header over its metric columns, so both events of one arm read
+#' across a row. A cell with no row in `summary` prints as an em dash.
+#'
+#' @param summary output of summarise_metrics(), with `scenario`, `censoring`,
+#'   `arm` and `target` as factors in display order, and mean_<stem>/mcse_<stem>
+#'   for every stem in `cols`
+#' @param cols as ss_latex_table(), without `group`: the spanning headers are
+#'   the targets
+#' @param ... passed to grouped_longtable()
+surv_metrics_table <- function(summary, cols, ...) {
+  summary <- droplevels(summary)
+  targets <- levels(summary$target)
+
+  long <- bind_rows(lapply(seq_len(nrow(cols)), function(i) {
+    summary %>%
+      transmute(
+        scenario, censoring, arm, target,
+        stem = cols$stem[i],
+        cell = fmt_mcse(.data[[paste0("mean_", cols$stem[i])]],
+                        .data[[paste0("mcse_", cols$stem[i])]],
+                        cols$digits[i])
+      )
+  }))
+
+  # event-major column order: every metric of the first event, then the next
+  cell_cols <- paste(rep(targets, each = nrow(cols)), cols$stem, sep = "__")
+  body <- long %>%
+    mutate(key = paste(target, stem, sep = "__")) %>%
+    select(-target, -stem) %>%
+    pivot_wider(names_from = key, values_from = cell)
+  for (cc in setdiff(cell_cols, names(body))) body[[cc]] <- NA_character_
+  body <- body %>%
+    mutate(across(all_of(cell_cols), ~ coalesce(.x, "---"))) %>%
+    arrange(scenario, censoring, arm)
+
+  tab <- body %>%
+    transmute(censoring = as.character(censoring), arm = as.character(arm),
+              across(all_of(cell_cols)))
+
+  grouped_longtable(
+    tab,
+    col_names = c("Censoring", "Estimator", rep(cols$header, length(targets))),
+    group = body$scenario,
+    block = body$censoring,
+    header_above = c(" " = 2,
+                     setNames(rep(nrow(cols), length(targets)), targets)),
+    ...
+  )
+}
