@@ -39,6 +39,14 @@ arguments:
 | `ipw` | grf `sample.weights` / SuperLearner `obsWeights`. `NULL` is the unweighted path exactly | the missing-data IPW arm |
 | `ci` | `list(boot=, sf=, alpha=)` turns on the half-sample bootstrap | the CI studies |
 
+Two more were added for applied analyses (2026-10-06). Both default to the old
+behaviour exactly:
+
+| argument | what it changes |
+|---|---|
+| `models` | `NULL` runs every arm; a subset of `CATE_MODELS` runs only those (e.g. no oracle-type arms) |
+| `X_ps` | propensity-only covariates (e.g. calendar time under a drifting allocation): added to every *estimated* propensity model - `nuisance_rf`'s, the causal forest's (which then takes `nuisance_rf`'s `W.hat` instead of its own), the SuperLearner arm's - and to nothing else. `all_cate_surv_models()` takes the same argument, along with `models` and `estimands` |
+
 The fourth was where the oracle arm's inverse link lives, and it is gone. Every
 oracle formula in `dgm_scenarios.R` returns the outcome mean `E[Y | X, W]` —
 the linear predictor for a continuous outcome, the risk for a binary one — so
@@ -54,15 +62,20 @@ The variants also disagreed about which post-estimation tests run. Those
 disagreements look like drift rather than design, so they are reproduced exactly
 rather than harmonised — changing them would move published numbers.
 
-| | `base` | `ci` | `missing` | `ci_mi` |
-|---|---|---|---|---|
-| causal forest variance | no | yes | yes | yes |
-| causal forest BLP/independence | yes | no | yes | no |
-| `dr_random_forest` BLP/independence | yes | no | yes | no |
-| oracle / semi-oracle tests | yes | no | yes | no |
-| SuperLearner arm | yes | no | yes (if `X` complete) | no |
-| half-sample bootstrap | no | yes | no | yes |
-| nuisance row means | yes | no | yes | yes |
+| | `base` | `ci` | `missing` | `ci_mi` | `full` |
+|---|---|---|---|---|---|
+| causal forest variance | no | yes | yes | yes | yes |
+| causal forest BLP/independence | yes | no | yes | no | yes |
+| `dr_random_forest` BLP/independence | yes | no | yes | no | yes |
+| oracle / semi-oracle tests | yes | no | yes | no | yes |
+| SuperLearner arm | yes | no | yes (if `X` complete) | no | yes (if `X` complete) |
+| half-sample bootstrap | no | yes | no | yes | with `ci` |
+| nuisance row means | yes | no | yes | yes | |
+
+`full` (2026-10-06) is `missing` under a name for applied use: tests, causal
+forest variance and, given `ci`, the bootstrap intervals all from one run. The
+"SuperLearner arm" and "bootstrap" rows are really set by `sl_lib` and `ci`,
+which work under any profile; the CI profiles only switch the tests off.
 
 The `dr_random_forest` row used to be the odd one: `missing` alone set
 `dr_rf_tests = FALSE`, so `BLP_p` was `NA` for exactly one model in those two

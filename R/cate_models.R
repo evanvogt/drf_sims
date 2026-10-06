@@ -64,13 +64,23 @@ source(here::here("R", "sl_library.R"))   # as_sl_libs, sl_fit_predict, pretest_
 
 # ---- orchestration profiles -------------------------------------------------
 #
-#                        base      ci        missing
-#  causal forest variance  no       yes       yes
-#  causal forest tests     yes      no        yes
-#  dr_random_forest tests  yes      no        yes     <- was "no", see NOTE
-#  oracle / semi tests     yes      no        yes
+#                        base      ci        missing                  full
+#  causal forest variance  no       yes       yes                      yes
+#  causal forest tests     yes      no        yes                      yes
+#  dr_random_forest tests  yes      no        yes (was "no", see NOTE) yes
+#  oracle / semi tests     yes      no        yes                      yes
 #  SuperLearner arm        yes      no        yes (skipped if X still has NAs)
 #  half-sample bootstrap   no       yes       no
+#
+# (The "SuperLearner arm" and "bootstrap" rows are really set by sl_lib and
+# ci, which work under any profile. "ci" and "ci_mi" drop the tests only to
+# save runtime in the CI simulation studies.)
+#
+# "full" is "missing" under a name that says what it is: everything on, for an
+# applied analysis that wants the tests, the causal forest's variance and -
+# with `ci` - the bootstrap intervals from one run. Like "missing" it skips the
+# arms that need a complete covariate matrix (SuperLearner, oracle,
+# semi-oracle) when X still has NAs; `skip_incomplete` below is that switch.
 #
 # NOTE: the missing profile used to set dr_rf_tests = FALSE, so that arm alone
 # was built inline as list(tau = stage2_whole_rf(...)$tau) and carried no BLP or
@@ -90,11 +100,17 @@ source(here::here("R", "sl_library.R"))   # as_sl_libs, sl_fit_predict, pretest_
 # whole-sample OOB / single-crossfit vectors, which have no matrix to aggregate.
 
 PROFILES <- list(
-  base    = list(cf_variance = FALSE, tests = TRUE,  dr_rf_tests = TRUE),
-  ci      = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE),
-  missing = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = TRUE),
-  ci_mi   = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE)
+  base    = list(cf_variance = FALSE, tests = TRUE,  dr_rf_tests = TRUE,  skip_incomplete = FALSE),
+  ci      = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE, skip_incomplete = FALSE),
+  missing = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = TRUE,  skip_incomplete = TRUE),
+  ci_mi   = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE, skip_incomplete = FALSE),
+  full    = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = TRUE,  skip_incomplete = TRUE)
 )
+
+# The arms cate_methods() can run, in the order it runs them. `models` picks a
+# subset; the oracle and SuperLearner arms also need fmla_info / sl_lib.
+CATE_MODELS <- c("causal_forest", "dr_random_forest", "dr_oracle",
+                 "dr_semi_oracle", "dr_superlearner")
 
 # ---- helpers ----------------------------------------------------------------
 
@@ -108,6 +124,32 @@ dr_pseudo <- function(Y, W, Y1.hat, Y0.hat, W.hat) {
 }
 
 is_binomial <- function(family) identical(family$family, "binomial")
+
+#' Covariates for a propensity model: X plus any propensity-only covariates
+#'
+#' Propensity-only covariates (e.g. calendar time under an allocation that
+#' drifts) predict treatment but are not candidate effect modifiers, so they
+#' enter the propensity models and nothing else. NULL returns X itself, so a
+#' caller with none is unchanged. Keeps X's class (matrix or data.frame).
+#' @param X_ps NULL, or a matrix/data.frame with nrow(X) rows
+cbind_ps <- function(X, X_ps) {
+  if (is.null(X_ps)) return(X)
+  if (is.data.frame(X)) cbind(X, as.data.frame(X_ps)) else cbind(X, as.matrix(X_ps))
+}
+
+#' Rows of an optional propensity-only covariate matrix (NULL stays NULL)
+rows_ps <- function(X_ps, idx) if (is.null(X_ps)) NULL else X_ps[idx, , drop = FALSE]
+
+#' OOB propensity from X plus the propensity-only covariates, for a grf
+#' forest that would otherwise fit its own on X alone
+#'
+#' NULL when there are none: passed on as W.hat = NULL, that leaves grf to fit
+#' its own propensity exactly as before. Untrimmed, as grf's own is.
+ps_oob <- function(X, X_ps, W, num.threads = NULL) {
+  if (is.null(X_ps)) return(NULL)
+  predict(regression_forest(cbind_ps(X, X_ps), W,
+                            num.threads = num.threads))$predictions
+}
 
 # ---- main entry point -------------------------------------------------------
 
@@ -125,7 +167,7 @@ is_binomial <- function(family) identical(family$family, "binomial")
 #' @param family gaussian() or binomial(); controls the SuperLearner outcome model
 #' @param ipw optional length-n weights for the missing-data IPW arm
 #' @param ci NULL, or list(boot = , sf = , alpha = ) to add half-sample bootstrap CIs
-#' @param profile "base", "ci" or "missing" - see PROFILES
+#' @param profile "base", "ci", "missing", "ci_mi" or "full" - see PROFILES
 #' @param num.threads grf thread count, forwarded to every regression_forest()/
 #'   causal_forest() call this function reaches (nuisance_rf, stage2_whole_rf,
 #'   run_causal_forest, run_dr_semi_oracle). NULL (default) is grf's own default
@@ -145,15 +187,32 @@ is_binomial <- function(family) identical(family$family, "binomial")
 #'   build_query_grid(). NULL (default) skips all of it, so every existing
 #'   caller is unaffected. Adds `tau_grid` (and, with `ci`, `grid_lb`/
 #'   `grid_ub`/`grid_draws`) to each arm's result list.
+#' @param models NULL (default: every arm, as before this parameter existed), or
+#'   a subset of CATE_MODELS to run - e.g. to leave out the oracle-type arms in
+#'   an applied analysis. The oracle and SuperLearner arms still need fmla_info
+#'   and sl_lib as well. nuisance_rf() always runs: the causal forest's tests
+#'   and the DR random forest both use it.
+#' @param X_ps NULL (default), or a matrix/data.frame of propensity-only
+#'   covariates, nrow(data) rows: they enter every estimated propensity model
+#'   (nuisance_rf's, the causal forest's, the SuperLearner arm's) and nothing
+#'   else - see cbind_ps(). The oracle-type arms fix the propensity at 0.5.
 cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
                          family = gaussian(), ipw = NULL, ci = NULL,
-                         profile = c("base", "ci", "missing", "ci_mi"),
+                         profile = c("base", "ci", "missing", "ci_mi", "full"),
                          num.threads = NULL, verbose_timing = FALSE,
-                         Z_query = NULL) {
+                         Z_query = NULL, models = NULL, X_ps = NULL) {
 
   profile <- match.arg(profile)
   p <- PROFILES[[profile]]
   sl_lib <- as_sl_libs(sl_lib)
+  if (!is.null(models) && !all(models %in% CATE_MODELS)) {
+    stop("unknown model(s): ", paste(setdiff(models, CATE_MODELS), collapse = ", "))
+  }
+  want <- function(m) is.null(models) || m %in% models
+  if (!is.null(X_ps)) {
+    X_ps <- as.matrix(X_ps)
+    stopifnot(nrow(X_ps) == nrow(data))
+  }
 
   X <- as.matrix(data[, -c(1:2)])
   Y <- data$Y
@@ -182,40 +241,51 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
   }
 
   cat("Computing nuisance functions...\n")
-  nuisances_rf <- time_step("nuisance_rf", nuisance_rf(X, Y, W, ipw, num.threads = num.threads))
+  nuisances_rf <- time_step("nuisance_rf",
+    nuisance_rf(X, Y, W, ipw, num.threads = num.threads, X_ps = X_ps))
 
-  cat("Running Causal Forest...\n")
-  results$causal_forest <- time_step("causal_forest",
-    run_causal_forest(X, Y, W, nuisances_rf, ipw,
-                      variance = p$cf_variance,
-                      tests = p$tests, num.threads = num.threads, Z_query = Z_query_mat))
-  if (!is.null(ci)) {
-    cat("Running Causal Forest bootstrap... \n")
-    results$causal_forest <- c(results$causal_forest,
-      cf_oob_half_boot(X, Y, W, results$causal_forest, results$causal_forest$tau,
-                       ci$boot, ci$sf, ci$alpha,
-                       Z_query = Z_query_mat, tau_grid = results$causal_forest$tau_grid))
+  if (want("causal_forest")) {
+    cat("Running Causal Forest...\n")
+    # with propensity-only covariates the forest takes nuisance_rf's propensity
+    # (fit on X and X_ps) instead of fitting its own on X alone
+    results$causal_forest <- time_step("causal_forest",
+      run_causal_forest(X, Y, W, nuisances_rf, ipw,
+                        variance = p$cf_variance,
+                        tests = p$tests, num.threads = num.threads, Z_query = Z_query_mat,
+                        W.hat = if (!is.null(X_ps)) nuisances_rf$W.hat))
+    if (!is.null(ci)) {
+      cat("Running Causal Forest bootstrap... \n")
+      results$causal_forest <- c(results$causal_forest,
+        time_step("causal_forest_ci",
+          cf_oob_half_boot(X, Y, W, results$causal_forest, results$causal_forest$tau,
+                           ci$boot, ci$sf, ci$alpha,
+                           Z_query = Z_query_mat, tau_grid = results$causal_forest$tau_grid)))
+    }
   }
 
-  cat("Running DR Random Forest...\n")
-  results$dr_random_forest <- time_step("dr_random_forest", if (p$dr_rf_tests) {
-    run_dr_random_forest(X, Y, W, nuisances_rf, ipw, num.threads = num.threads, Z_query = Z_query_mat)
-  } else {
-    s <- stage2_whole_rf(X, nuisances_rf$po, ipw, num.threads = num.threads, Z_query = Z_query_mat)
-    list(tau = s$tau, tau_grid = s$tau_grid)
-  })
-  if (!is.null(ci)) {
-    cat("Running DR RF bootstrap... \n")
-    results$dr_random_forest <- c(results$dr_random_forest,
-      rf_oob_half_boot(X, Y, W, nuisances_rf$po, results$dr_random_forest$tau,
-                       ci$boot, ci$sf, ci$alpha,
-                       Z_query = Z_query_mat, tau_grid = results$dr_random_forest$tau_grid))
+  if (want("dr_random_forest")) {
+    cat("Running DR Random Forest...\n")
+    results$dr_random_forest <- time_step("dr_random_forest", if (p$dr_rf_tests) {
+      run_dr_random_forest(X, Y, W, nuisances_rf, ipw, num.threads = num.threads, Z_query = Z_query_mat)
+    } else {
+      s <- stage2_whole_rf(X, nuisances_rf$po, ipw, num.threads = num.threads, Z_query = Z_query_mat)
+      list(tau = s$tau, tau_grid = s$tau_grid)
+    })
+    if (!is.null(ci)) {
+      cat("Running DR RF bootstrap... \n")
+      results$dr_random_forest <- c(results$dr_random_forest,
+        time_step("dr_random_forest_ci",
+          rf_oob_half_boot(X, Y, W, nuisances_rf$po, results$dr_random_forest$tau,
+                           ci$boot, ci$sf, ci$alpha,
+                           Z_query = Z_query_mat, tau_grid = results$dr_random_forest$tau_grid)))
+    }
   }
 
   # the missing-data variant skips the arms that need a complete covariate matrix
   complete_X <- !anyNA(X)
+  full_X_ok <- !p$skip_incomplete || complete_X
 
-  if (!is.null(fmla_info) && (profile != "missing" || complete_X)) {
+  if (want("dr_oracle") && !is.null(fmla_info) && full_X_ok) {
     cat("Running DR Oracle...\n")
     results$dr_oracle <- time_step("dr_oracle",
       run_dr_oracle(X, Y, W, fmla_info, ipw,
@@ -230,7 +300,7 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
     }
   }
 
-  if (profile != "missing" || complete_X) {
+  if (want("dr_semi_oracle") && full_X_ok) {
     cat("Running DR Semi-Oracle...\n")
     results$dr_semi_oracle <- time_step("dr_semi_oracle",
       run_dr_semi_oracle(X, Y, W, ipw, tests = p$tests, num.threads = num.threads,
@@ -244,11 +314,12 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
     }
   }
 
-  if (!is.null(sl_lib) && (profile != "missing" || complete_X)) {
+  if (want("dr_superlearner") && !is.null(sl_lib) && full_X_ok) {
     cat("Running DR SuperLearner...\n")
     X <- as.data.frame(X)
     results$dr_superlearner <- time_step("dr_superlearner", {
-      nuisances_sl <- nuisance_sl(X, Y, W, fold_indices, sl_lib, ipw, family = family)
+      nuisances_sl <- nuisance_sl(X, Y, W, fold_indices, sl_lib, ipw, family = family,
+                                  X_ps = X_ps)
       out <- run_dr_superlearner(X, Y, W, nuisances_sl,
                                  fold_indices, fold_list,
                                  sl_lib, ipw, tests = p$tests)
@@ -342,13 +413,16 @@ t_learner_rf_split <- function(X, Y, W, in_train, in_test, ipw = NULL,
 #' "oob_oob_s" arm (one forest on cbind(W, X), read at counterfactual rows via
 #' grf's X.orig) when the DR-learners moved to per-arm outcome models; that
 #' arm had itself replaced the double-crossfit this function used to do.
-nuisance_rf <- function(X, Y, W, ipw = NULL, num.threads = NULL) {
+#'
+#' @param X_ps optional propensity-only covariates, added to X for W.hat alone
+#'   (see cbind_ps)
+nuisance_rf <- function(X, Y, W, ipw = NULL, num.threads = NULL, X_ps = NULL) {
 
   mu <- t_learner_rf(X, Y, W, ipw, num.threads = num.threads)
   Y0.hat <- mu$Y0.hat
   Y1.hat <- mu$Y1.hat
 
-  W.hat <- trim_ps(predict(regression_forest(X, W, sample.weights = ipw,
+  W.hat <- trim_ps(predict(regression_forest(cbind_ps(X, X_ps), W, sample.weights = ipw,
                                              num.threads = num.threads))$predictions)
   Y.hat.cf <- predict(regression_forest(X, Y, sample.weights = ipw,
                                         num.threads = num.threads))$predictions
@@ -370,10 +444,12 @@ nuisance_rf <- function(X, Y, W, ipw = NULL, num.threads = NULL) {
 #' @param X covariates, as a data frame
 #' @param in_train,in_test logical row masks
 #' @param sl_lib list(W = , Y = , tau = ), already through as_sl_libs()
+#' @param X_ps optional propensity-only covariates, added to X for the
+#'   propensity SuperLearner alone (see cbind_ps)
 #' @return list(po, Y.hat, Y0.hat, W.hat) at the test rows, and libs - the
 #'   pretested libraries list(Y0 = , Y1 = , W = ) for dropped_table()
 sl_split_fit <- function(X, Y, W, in_train, in_test, sl_lib, ipw = NULL,
-                         family = gaussian()) {
+                         family = gaussian(), X_ps = NULL) {
 
   binom <- is_binomial(family)
 
@@ -401,8 +477,9 @@ sl_split_fit <- function(X, Y, W, in_train, in_test, sl_lib, ipw = NULL,
   fit0 <- arm_fit(0)
   fit1 <- arm_fit(1)
 
-  W_lib <- pretest_superlearner(W[in_train], X_train, sl_lib$W, binomial())
-  W_fit <- sl_fit_predict(W[in_train], X_train, list(w = X_test), W_lib,
+  X_W <- cbind_ps(X, X_ps)
+  W_lib <- pretest_superlearner(W[in_train], X_W[in_train, ], sl_lib$W, binomial())
+  W_fit <- sl_fit_predict(W[in_train], X_W[in_train, ], list(w = X_W[in_test, ]), W_lib,
                           family = binomial(), obsWeights = wts(ipw, in_train))
   W_lib <- mark_failed_fit(W_lib, W_fit)
   W.hat <- W_fit$pred$w
@@ -435,13 +512,13 @@ sl_split_fit <- function(X, Y, W, in_train, in_test, sl_lib, ipw = NULL,
 #' @param sl_lib list(W = , Y = , tau = ) - see as_sl_libs(). The pretest's
 #'   dropped learners are returned as attr(, "sl_dropped").
 nuisance_sl <- function(X, Y, W, fold_indices, sl_lib, ipw = NULL,
-                        family = gaussian()) {
+                        family = gaussian(), X_ps = NULL) {
 
   sl_lib <- as_sl_libs(sl_lib)
 
   cross_fits <- future_map(unique(fold_indices), function(fold) {
     in_train <- fold_indices != fold
-    fit <- sl_split_fit(X, Y, W, in_train, !in_train, sl_lib, ipw, family)
+    fit <- sl_split_fit(X, Y, W, in_train, !in_train, sl_lib, ipw, family, X_ps)
     c(list(fold = fold), fit[c("po", "Y.hat", "Y0.hat", "W.hat")],
       list(dropped = dropped_table(fit$libs, fold)))
   }, .options = furrr_options(seed = TRUE))
@@ -516,9 +593,15 @@ stage_2_sl <- function(X, po, fold_indices, fold_list, sl_lib, ipw = NULL) {
 #' nuisance_rf() object shared with dr_random_forest, not what fits the forest.
 #' The forest's own Y.hat/W.hat are returned (as Y.hat.cf/W.hat, matching the
 #' field-naming convention) so the half-sample bootstrap can hold them fixed.
+#'
+#' @param W.hat NULL (default) lets grf fit its own propensity on X; a vector
+#'   replaces it - cate_methods passes nuisance_rf's when there are
+#'   propensity-only covariates, which grf's own cannot see.
 run_causal_forest <- function(X, Y, W, nuisances, ipw = NULL, variance = FALSE,
-                              tests = TRUE, num.threads = NULL, Z_query = NULL) {
-  forest <- causal_forest(X, Y, W, sample.weights = ipw, num.threads = num.threads)
+                              tests = TRUE, num.threads = NULL, Z_query = NULL,
+                              W.hat = NULL) {
+  forest <- causal_forest(X, Y, W, W.hat = W.hat, sample.weights = ipw,
+                          num.threads = num.threads)
   pred <- predict(forest, estimate.variance = variance)
 
   out <- list(tau = pred$predictions, Y.hat.cf = forest$Y.hat, W.hat = forest$W.hat)

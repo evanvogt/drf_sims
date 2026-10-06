@@ -49,6 +49,10 @@ amputation_mask <- function(amputed) {
 #' order, since cate_methods() reads covariates by position. An arm with
 #' nothing missing is returned as it is.
 #'
+#' Every arm present in W is imputed on its own, in increasing order of W, so
+#' a multi-arm W (e.g. 0, 1, 2) works as well; for a binary W that is the 0, 1
+#' order this always had.
+#'
 #' @param data dataset with Y, W and covariates, containing NAs
 #' @param impute function(df) returning a completed data.frame, or a list of
 #'   them (multiple imputation)
@@ -56,7 +60,7 @@ amputation_mask <- function(amputed) {
 #' @return a data.frame, or a list of n_out data.frames
 impute_by_arm <- function(data, impute, n_out = 1) {
   out <- rep(list(data), n_out)
-  for (arm in c(0, 1)) {
+  for (arm in sort(unique(data$W))) {
     rows <- which(data$W == arm)
     df <- data[rows, setdiff(names(data), "W"), drop = FALSE]
     if (!anyNA(df)) next
