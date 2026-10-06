@@ -73,6 +73,9 @@ so the paired differences are where to judge whether ρ matters.
 * **Simultaneous coverage**: 0/1 per run, whether the band covered every unit
   at once. This is what the half-sample bootstrap is constructed to control.
 * **CI length**: mean interval length within a run.
+* **Bias-eliminated (BE) coverage** (query grid only): marginal and
+  simultaneous coverage of the across-run mean estimate instead of the true
+  τ. It separates the band's width from the point estimate's bias.
 
 Nominal is 0.95 for both coverages.
 
@@ -340,27 +343,133 @@ diff_plot(paired_diff(metrics, "simultaneous_coverage"),
           facet = interval_facet, colour_lab = "Interval kind")
 ```
 
-Bias-eliminated coverage on the grid scores the band against the across-run
+### Bias-eliminated coverage on the query grid
+
+Bias-eliminated (BE) coverage scores the grid band against the across-run
 mean estimate at each grid point instead of the true τ. Its gap to the
 ordinary grid coverage is the part of any undercoverage that comes from the
-point estimate's bias, which is where extrapolation shows up.
+point estimate's bias, which is where extrapolation shows up. It is defined on
+the grid only: the per-unit bands have no fixed point to average over runs.
+The MCSEs treat the across-run mean as fixed, so they leave out that
+reference's own Monte Carlo error.
+
+```{r be-data}
+grid_runs <- filter(metrics, interval == interval_labels[["half_boot_grid"]])
+
+#' Mean and MCSE of true-tau and BE grid coverage per cell, long by reference
+#'
+#' The same MCSEs as summarise_ci(): sd / sqrt(non-NA) for the marginal
+#' coverages, binomial for the 0/1 simultaneous ones.
+summarise_be <- function(df, by) {
+  binom_mcse <- function(x) {
+    p <- mean(x, na.rm = TRUE)
+    sqrt(p * (1 - p) / sum(!is.na(x)))
+  }
+  df %>%
+    group_by(across(all_of(by))) %>%
+    summarise(
+      across(c(marginal_coverage, be_marginal_coverage),
+             list(mean = ~ mean(.x, na.rm = TRUE),
+                  mcse = ~ sd(.x, na.rm = TRUE) / sqrt(sum(!is.na(.x))))),
+      across(c(simultaneous_coverage, be_simultaneous_coverage),
+             list(mean = ~ mean(.x, na.rm = TRUE), mcse = binom_mcse)),
+      .groups = "drop") %>%
+    pivot_longer(matches("_coverage_(mean|mcse)$"),
+                 names_to = c("reference", "measure", ".value"),
+                 names_pattern = "^(be_)?(marginal|simultaneous)_coverage_(mean|mcse)$") %>%
+    mutate(reference = factor(if_else(coalesce(reference, "") == "", "True τ",
+                                      "Across-run mean (BE)"),
+                              levels = c("True τ", "Across-run mean (BE)")))
+}
+
+be_summary <- summarise_be(grid_runs, CELL)
+
+# reference takes the colour and rho the shape, as interval_plot()
+be_plot <- function(df, title, ylab) {
+  ggplot(with_ci(df, "mean", "mcse"),
+         aes(x = CI_sf, y = est, colour = reference, shape = rho_lab,
+             ymin = lo, ymax = hi)) +
+    geom_hline(yintercept = 0.95, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.6), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.6), linewidth = 0.3, width = 0.3) +
+    facet_grid(rows = vars(scenario), cols = vars(model), scales = "free_y") +
+    ci_theme() +
+    labs(title = title, y = ylab, x = "Subsampling ratio",
+         colour = "Coverage of", shape = "ρ")
+}
+```
+
+Coverage of the true τ and of the across-run mean, side by side with 95%
+MCSE intervals. One plot per sample size and measure.
+
+```{r be-plots, fig.height=9}
+for (nn in levels(be_summary$n)) {
+  for (m in c("simultaneous", "marginal")) {
+    print(be_plot(filter(be_summary, n == nn, measure == m),
+                  paste0("Query-grid band: ", m, " coverage, true τ vs BE, n = ", nn),
+                  paste(tools::toTitleCase(m), "coverage")))
+  }
+}
+```
+
+The per-run gap, BE minus true-τ coverage. Both come from the same band in
+the same run, so the MCSE is sd(gap)/√runs. A gap clear of zero is coverage
+lost to the point estimate's bias rather than to the band's width.
+
+```{r be-gap-plots, fig.height=9}
+#' Per-run BE - true-tau coverage, mean and paired MCSE per cell
+be_gap <- function(df, be_col, true_col) {
+  df %>%
+    mutate(diff = .data[[be_col]] - .data[[true_col]]) %>%
+    group_by(rho_lab, scenario, n, CI_sf, model) %>%
+    summarise(mean_diff = mean(diff, na.rm = TRUE),
+              mcse_diff = sd(diff, na.rm = TRUE) / sqrt(sum(!is.na(diff))),
+              .groups = "drop")
+}
+
+gap_facet <- facet_grid(rows = vars(scenario), cols = vars(n, rho_lab), scales = "free_y",
+                        labeller = labeller(n = function(x) paste("n =", x)))
+diff_plot(be_gap(grid_runs, "be_simultaneous_coverage", "simultaneous_coverage"),
+          "Query-grid band: BE minus true-τ simultaneous coverage",
+          "Δ simultaneous coverage (BE − true τ)", facet = gap_facet)
+diff_plot(be_gap(grid_runs, "be_marginal_coverage", "marginal_coverage"),
+          "Query-grid band: BE minus true-τ marginal coverage",
+          "Δ marginal coverage (BE − true τ)", facet = gap_facet)
+```
+
+The paired ρ effect on BE coverage. With the bias taken out, a change here is
+the band's width responding to the correlation, not the extrapolation.
+
+```{r be-diff-plots, fig.height=8}
+diff_plot(paired_diff(grid_runs, "be_simultaneous_coverage"),
+          "Query-grid band: BE simultaneous coverage",
+          "Δ BE simultaneous coverage (ρ = 0.5 − ρ = 0)")
+diff_plot(paired_diff(grid_runs, "be_marginal_coverage"),
+          "Query-grid band: BE marginal coverage",
+          "Δ BE marginal coverage (ρ = 0.5 − ρ = 0)")
+```
 
 ```{r be-table}
-grid_be <- metrics %>%
-  filter(interval == interval_labels[["half_boot_grid"]]) %>%
-  group_by(scenario, n, rho, model) %>%
-  summarise(simul_cov = mean(simultaneous_coverage, na.rm = TRUE),
-            be_simul_cov = mean(be_simultaneous_coverage, na.rm = TRUE),
-            marg_cov = mean(marginal_coverage, na.rm = TRUE),
-            be_marg_cov = mean(be_marginal_coverage, na.rm = TRUE),
+# pooled over CI_sf. Run r is the same dataset at every CI_sf, so the rows are
+# averaged within run first and the MCSE is over the run means.
+be_cols <- c("simultaneous_coverage", "be_simultaneous_coverage",
+             "marginal_coverage", "be_marginal_coverage")
+grid_be <- grid_runs %>%
+  group_by(scenario, n, rho, model, run) %>%
+  summarise(across(all_of(be_cols), ~ mean(.x, na.rm = TRUE)), .groups = "drop_last") %>%
+  summarise(across(all_of(be_cols),
+                   list(mean = ~ mean(.x, na.rm = TRUE),
+                        mcse = ~ sd(.x, na.rm = TRUE) / sqrt(sum(!is.na(.x))))),
             .groups = "drop") %>%
   arrange(scenario, n, model, rho)
 
 kable(grid_be, digits = 3,
       caption = "Query-grid band, pooled over CI_sf: coverage vs bias-eliminated coverage",
-      col.names = c("Scenario", "n", "ρ", "Model", "Simultaneous coverage",
-                    "BE simultaneous coverage", "Marginal coverage",
-                    "BE marginal coverage"))
+      col.names = c("Scenario", "n", "ρ", "Model",
+                    "Simultaneous coverage", "MCSE",
+                    "BE simultaneous coverage", "MCSE",
+                    "Marginal coverage", "MCSE",
+                    "BE marginal coverage", "MCSE"))
 ```
 
 ## Choosing `CI_sf`
@@ -461,6 +570,8 @@ sf_summary <- summarise_ci(sf, c("rho", "rho_lab", "scenario", "n", "interval"))
               summarise(mean_pick = mean(optimal_sf),
                         mean_plugin_cov = mean(plugin_coverage, na.rm = TRUE),
                         mean_be_simul_cov = mean(be_simultaneous_coverage, na.rm = TRUE),
+                        mcse_be_simul_cov = sqrt(mean_be_simul_cov * (1 - mean_be_simul_cov) /
+                                                   sum(!is.na(be_simultaneous_coverage))),
                         .groups = "drop"),
             by = c("rho", "scenario", "n", "interval"))
 
@@ -491,13 +602,14 @@ diff_plot(paired_diff(sf, "marginal_coverage", by = c("scenario", "n", "interval
 ```{r sf-coverage-table, eval=has_sf}
 kable(sf_summary %>%
         select(scenario, n, rho, interval, mean_pick, mean_plugin_cov, mean_marg_cov,
-               mean_simul_cov, mcse_simul_cov, mean_be_simul_cov, mean_ci_len) %>%
+               mean_simul_cov, mcse_simul_cov, mean_be_simul_cov, mcse_be_simul_cov,
+               mean_ci_len) %>%
         arrange(scenario, n, interval, rho),
       digits = 3,
       col.names = c("Scenario", "n", "ρ", "Interval", "Mean CI_sf picked",
                     "Plug-in coverage (calibration)", "Marginal coverage",
                     "Simultaneous coverage", "MCSE (simul.)",
-                    "BE simultaneous coverage", "Mean CI length"))
+                    "BE simultaneous coverage", "MCSE (BE simul.)", "Mean CI length"))
 ```
 
 The pick against the sweep's best ratio for `dr_random_forest`. The sweep's
