@@ -1,8 +1,9 @@
 ##########
 # script for running all the CATE models in one run - correlated cts outcome
 ##########
-# continuous/cts_analysis.R on the correlated sets: the same estimators
-# (continuous/cts_models.R), with rho read from the grid row.
+# The retired continuous/cts_analysis.R (tag independent-ss-final) on the
+# correlated sets: the same estimators (cts_corr_models.R, formerly
+# continuous/cts_models.R), with rho read from the grid row.
 
 library(dplyr)
 library(furrr)
@@ -14,7 +15,7 @@ library(here)
 # functions
 source(here("R", "utils.R"))
 source(here("sample_size", "correlated", "continuous", "cts_corr_dgms.R"))
-source(here("sample_size", "continuous", "cts_models.R"))
+source(here("sample_size", "correlated", "continuous", "cts_corr_models.R"))
 source(here("sample_size", "correlated", "continuous", "cts_corr_config.R"))
 
 

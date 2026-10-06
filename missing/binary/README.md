@@ -59,7 +59,7 @@ calibration" has the design. Here it means:
 - **Correlated covariates** (since 2026-09-28, `missing/ADEMP.md`). They move
   scenario 3's `bW` to −0.052 (E[tanh(X4)·tanh(X5)] ≠ 0) and leave the others
   and the 40% control event rate (0.398) as they were.
-  `sample_size/binary/bin_verify_hte.R` re-derives the MNAR caps on the
+  `R/bin_verify_hte.R` re-derives the MNAR caps on the
   correlated set.
 
 ### Stronger U, and this study's own HTE scale (2026-09-29)
@@ -81,7 +81,7 @@ scale, `RD_SCALE_MISS`, and spends the extra floor room on U:
 - `sU = 2` pushes `tanh(U)` towards ±1. The amputation standardises U, so
   this strengthens the selection without touching the bounds.
 
-`sample_size/binary/bin_verify_hte.R` re-derives both (its check 6). The main
+`R/bin_verify_hte.R` re-derives both (its check 6). The main
 `RD_SCALE` is unchanged, so the sample-size studies are not affected.
 
 The result, from `missing/miss_dgm_checks.R` (scenario 2, n = 20,000):

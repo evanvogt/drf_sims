@@ -25,16 +25,14 @@
 # doesn't can still be added without changing check_all.R.
 #
 # To add a new study: add one row. To retire a study: delete its row.
+# Retired 2026-10-06: the independent-covariate sample-size studies
+# (sample_size/continuous, binary, and confidence_intervals/{continuous,
+# binary, optimal_sf}); code at tag independent-ss-final, results archived
+# under results/_archive/retired_2026-10/.
 
 study_registry <- data.frame(
   study_name  = c(
-    "continuous",
-    "binary",
     "competing_risk",
-    "confidence_intervals/continuous",
-    "confidence_intervals/binary",
-    "confidence_intervals/optimal_sf (cts)",
-    "confidence_intervals/optimal_sf (bin)",
     "crossfitting",
     "crossfitting/confidence_intervals",
     "missing/continuous",
@@ -51,13 +49,7 @@ study_registry <- data.frame(
     "competing_risk/single_event"
   ),
   config_path = c(
-    "sample_size/continuous/cts_config.R",
-    "sample_size/binary/bin_config.R",
     "competing_risk/surv_config.R",
-    "sample_size/confidence_intervals/continuous/cts_ci_config.R",
-    "sample_size/confidence_intervals/binary/bin_ci_config.R",
-    "sample_size/confidence_intervals/optimal_sf/cts_ci_sf_config.R",
-    "sample_size/confidence_intervals/optimal_sf/bin_ci_sf_config.R",
     "crossfitting/cf_config.R",
     "crossfitting/confidence_intervals/cf_ci_config.R",
     "missing/continuous/cts_miss_config.R",
@@ -76,12 +68,6 @@ study_registry <- data.frame(
   config_var = "study",
   category = c(
     "crossfit_rerun",
-    "crossfit_rerun",
-    "crossfit_rerun",
-    "crossfit_rerun",
-    "crossfit_rerun",
-    "crossfit_rerun",
-    "crossfit_rerun",
     "dgm_rerun",
     "dgm_rerun",
     "crossfit_rerun",
@@ -98,13 +84,7 @@ study_registry <- data.frame(
     "first_run"
   ),
   reason = c(
-    "crossfitting strategy change; also bug F (dr_superlearner); plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
-    "crossfitting strategy change; also bug F (dr_superlearner); also bug P and the risk-difference DGM (sample_size/binary/README.md); plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
     "crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
-    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models",
-    "crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale); also bug P and the risk-difference DGM (sample_size/binary/README.md); plus T-learner (per-arm) DR outcome models",
-    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models",
-    "crossfitting strategy change; also the DGM was wrong (see sample_size/confidence_intervals/optimal_sf README); also bug P and the risk-difference DGM (sample_size/binary/README.md); plus T-learner (per-arm) DR outcome models",
     "own comparison arms unchanged by the crossfitting change, but bug O changed the continuous DGM it runs on, and the 2026-09-26 renumbering its scenario ids (1/4/6/9 -> 1/4/6/8); old results archived; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only",
     "pilot study, not part of the production rerun; re-run because bug O changed the continuous DGM and the 2026-09-26 renumbering its scenario ids (1/6/9 -> 1/4/8); old results archived",
     "crossfitting strategy change; also bug F (dr_superlearner); plus bug O (continuous DGM) - all 12,600 rows re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 missing-data redesign - correlated covariates (X01-X03 auxiliary) and mechanisms MAR / MNAR-Y0 / MNAR-tau (missing/ADEMP.md)",
@@ -121,8 +101,7 @@ study_registry <- data.frame(
     "new 2026-10-04: competing_risk/'s event 1 without event 2 - pseudo-value CF / DR / T, SuperLearner DR / T, RSF DR / T and the causal survival forest on the RMST, scenarios 1-3 (null, constant, heterogeneous), censoring on/off, 500 runs (competing_risk/single_event/README.md)"
   ),
   blocked = c(
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
+    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
     FALSE
   ),

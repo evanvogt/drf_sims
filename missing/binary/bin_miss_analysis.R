@@ -56,7 +56,7 @@ if (method == "complete_data") {
 
   # multisession workers are new R processes and inherit this, so setting it
   # here does control their OpenMP thread pools even though this process's
-  # own libraries have already initialised - matches sample_size/binary/bin_analysis.R
+  # own libraries have already initialised - matches sample_size/correlated/binary/bin_corr_analysis.R
   Sys.setenv(OMP_NUM_THREADS = grf_threads)
 
   metaplan <- plan(multisession, workers = workers)
@@ -88,7 +88,7 @@ if (method == "complete_data") {
   # set up parallelisation
   # multisession workers are new R processes and inherit this, so setting it
   # here does control their OpenMP thread pools even though this process's
-  # own libraries have already initialised - matches sample_size/binary/bin_analysis.R
+  # own libraries have already initialised - matches sample_size/correlated/binary/bin_corr_analysis.R
   Sys.setenv(OMP_NUM_THREADS = grf_threads)
 
   metaplan <- plan(multisession, workers = workers)

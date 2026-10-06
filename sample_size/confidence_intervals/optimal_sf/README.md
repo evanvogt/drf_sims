@@ -1,5 +1,12 @@
 # Calibrating the bootstrap sample fraction
 
+> **Retired 2026-10-06 — not used in the thesis.** The code was removed and is at
+> git tag `independent-ss-final` (`git show independent-ss-final:<path>`), and the
+> results are archived under `results/_archive/retired_2026-10/`. The correlated
+> studies (`sample_size/correlated/`) replace this one, with their ρ = 0 arm as
+> the independent-covariate comparator. This file is kept for the method notes
+> that other READMEs and scripts cite; the run instructions below no longer apply.
+
 The half-sample bootstrap takes a `sample.fraction` for the forests it refits on
 each half sample. Too small and those forests are noisy; too large and the halves
 stop being independent enough for the roots to behave. This folder picks a value

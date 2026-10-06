@@ -18,12 +18,22 @@
 # exactly the tree's files; if not, the .tar is removed and the tree kept.
 #
 #   Rscript R/archive_old_results.R                  # dry run - what would happen
-#   qsub R/jobscripts/archive_old_results.sh         # the real run, on the cluster
+#   cd R/jobscripts; qsub archive_old_results.sh     # the real run, on the cluster
 #   Rscript R/archive_old_results.R --apply          # the same, interactively
 #   Rscript R/archive_old_results.R --root <dir>     # a results/ other than
 #                                                    # ../results (for testing)
 #
-# Restore one tree:  tar -xf _archive/pre_2026-09-26/<name>.tar  (from results/)
+# Restore one tree:  tar -xf _archive/<label>/<name>.tar  (from results/)
+#
+# Any other set of trees, archived the same way (added 2026-10-06, for the
+# retired independent sample-size studies and competing_risk's pre-2026-10-01
+# DGM). --trees takes every argument up to the next --flag, as directories
+# relative to the results root, and skips the study registry entirely; --label
+# names the _archive/ subfolder (default pre_2026-09-26). Space-separated
+# because qsub -v splits on commas:
+#   Rscript R/archive_old_results.R --label retired_2026-10 --trees continuous binary confidence_intervals
+#   cd R/jobscripts
+#   qsub -v ARCHIVE_ARGS="--label retired_2026-10 --trees continuous binary confidence_intervals" archive_old_results.sh
 #
 # Which trees: the res_path of every study in R/study_registry.R, plus
 # model_evaluation's strategies and split trees, which share me_config.R. A
@@ -44,7 +54,6 @@ suppressPackageStartupMessages(library(here))
 source(here("R", "pipeline.R"))
 source(here("R", "study_registry.R"))
 
-ARCHIVE_DIR <- file.path("_archive", "pre_2026-09-26")
 UNAFFECTED <- c("competing_risk", "correlated/continuous", "correlated/binary",
                 "correlated/confidence_intervals/continuous",
                 "correlated/confidence_intervals/binary",
@@ -53,14 +62,47 @@ UNAFFECTED <- c("competing_risk", "correlated/continuous", "correlated/binary",
 
 args <- commandArgs(trailingOnly = TRUE)
 apply <- "--apply" %in% args
-default_root <- file.path(dirname(here()), "results")
-results_root <- if ("--root" %in% args) {
-  args[match("--root", args) + 1]
-} else {
-  default_root
+
+#' The value after `flag`, or `default` if the flag is absent
+flag_value <- function(flag, default = NULL) {
+  if (!flag %in% args) return(default)
+  value <- args[match(flag, args) + 1]
+  if (is.na(value) || startsWith(value, "--")) {
+    stop(flag, " needs a value", call. = FALSE)
+  }
+  value
 }
-if (is.na(results_root) || !dir.exists(results_root)) {
+
+#' Every argument after `flag` up to the next --flag, or NULL if it is absent
+flag_values <- function(flag) {
+  if (!flag %in% args) return(NULL)
+  rest <- args[-seq_len(match(flag, args))]
+  next_flag <- which(startsWith(rest, "--"))
+  if (length(next_flag)) rest <- rest[seq_len(next_flag[1] - 1)]
+  if (!length(rest)) stop(flag, " needs at least one value", call. = FALSE)
+  rest
+}
+
+default_root <- file.path(dirname(here()), "results")
+results_root <- flag_value("--root", default_root)
+if (!dir.exists(results_root)) {
   stop("no results directory at ", results_root, call. = FALSE)
+}
+
+label <- flag_value("--label", "pre_2026-09-26")
+if (grepl("[/\\\\]", label)) stop("--label must be a single folder name", call. = FALSE)
+ARCHIVE_DIR <- file.path("_archive", label)
+
+explicit_trees <- flag_values("--trees")
+if (!is.null(explicit_trees)) {
+  explicit_trees <- sub("/+$", "", gsub("\\\\", "/", explicit_trees))
+  bad <- explicit_trees[grepl("^(/|[A-Za-z]:)", explicit_trees) |
+                          grepl("(^|/)\\.\\.?(/|$)", explicit_trees) |
+                          startsWith(explicit_trees, "_archive")]
+  if (length(bad)) {
+    stop("--trees must be directories inside the results root, not ",
+         paste(bad, collapse = ", "), call. = FALSE)
+  }
 }
 
 tar_bin <- "tar"
@@ -68,28 +110,32 @@ if (!nzchar(Sys.which(tar_bin))) stop("tar not found on the PATH", call. = FALSE
 
 # ---- which trees ------------------------------------------------------------
 
-studies <- study_registry[!study_registry$study_name %in% UNAFFECTED, ]
-configs <- rbind(
-  studies[, c("study_name", "config_path", "config_var")],
-  data.frame(study_name = c("model_evaluation (strategies)",
-                            "model_evaluation (split)"),
-             config_path = "model_evaluation/me_config.R",
-             config_var = c("study_strat", "study_split"))
-)
+if (!is.null(explicit_trees)) {
+  trees <- data.frame(study = explicit_trees, rel = explicit_trees)
+} else {
+  studies <- study_registry[!study_registry$study_name %in% UNAFFECTED, ]
+  configs <- rbind(
+    studies[, c("study_name", "config_path", "config_var")],
+    data.frame(study_name = c("model_evaluation (strategies)",
+                              "model_evaluation (split)"),
+               config_path = "model_evaluation/me_config.R",
+               config_var = c("study_strat", "study_split"))
+  )
 
-# every config builds its res_path as file.path(dirname(here()), "results", ...);
-# the part after that is the tree's path inside results_root
-rel_paths <- vapply(seq_len(nrow(configs)), function(i) {
-  res_path <- load_study(configs$config_path[i], configs$config_var[i])$res_path
-  prefix <- paste0(default_root, "/")
-  if (!startsWith(res_path, prefix)) {
-    stop(configs$study_name[i], "'s res_path is not under ", default_root, ": ",
-         res_path, call. = FALSE)
-  }
-  substring(res_path, nchar(prefix) + 1)
-}, character(1))
+  # every config builds its res_path as file.path(dirname(here()), "results", ...);
+  # the part after that is the tree's path inside results_root
+  rel_paths <- vapply(seq_len(nrow(configs)), function(i) {
+    res_path <- load_study(configs$config_path[i], configs$config_var[i])$res_path
+    prefix <- paste0(default_root, "/")
+    if (!startsWith(res_path, prefix)) {
+      stop(configs$study_name[i], "'s res_path is not under ", default_root, ": ",
+           res_path, call. = FALSE)
+    }
+    substring(res_path, nchar(prefix) + 1)
+  }, character(1))
 
-trees <- data.frame(study = configs$study_name, rel = rel_paths)
+  trees <- data.frame(study = configs$study_name, rel = rel_paths)
+}
 trees <- trees[!duplicated(trees$rel), ]
 nested <- vapply(trees$rel, function(r) {
   any(startsWith(r, paste0(setdiff(trees$rel, r), "/")))
@@ -175,7 +221,7 @@ for (i in seq_len(nrow(trees))) {
 
 untouched <- setdiff(list.dirs(".", full.names = FALSE, recursive = FALSE),
                      c(sub("/.*", "", trees$rel), sub("/.*", "", ARCHIVE_DIR)))
-if (length(untouched)) {
+if (is.null(explicit_trees) && length(untouched)) {
   cat("\nnot archived (no study config names them):",
       paste(sort(untouched), collapse = ", "), "\n")
 }

@@ -1,11 +1,13 @@
 ##########
-# title: CATE model fitting with confidence intervals - cts outcome
+# title: CATE model fitting with confidence intervals - correlated cts outcome
 ##########
 # The estimators live in R/cate_models.R and the bootstrap in R/bootstrap_ci.R.
-# This file is the continuous CI study's configuration of them: the "ci"
-# orchestration profile, which adds half-sample bootstrap intervals and
-# causal-forest variance estimates, and drops the SuperLearner arm and the
-# post-estimation BLP / independence tests.
+# This file is the correlated continuous CI and optimal_sf studies'
+# configuration of them: the "ci" orchestration profile, which adds half-sample
+# bootstrap intervals and causal-forest variance estimates, and drops the
+# SuperLearner arm and the post-estimation BLP / independence tests. It was
+# sample_size/confidence_intervals/continuous/cts_ci_models.R until that study
+# was retired (2026-10-06); the function is unchanged.
 
 source(here::here("R", "cate_models.R"))
 

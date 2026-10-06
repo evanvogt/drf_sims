@@ -1,8 +1,13 @@
 #!/bin/bash
-# Archives every study's pre-2026-09-26 results tree, one .tar per study - see
-# the header of R/archive_old_results.R. Submit from the repo root, after a dry
-# run there (Rscript R/archive_old_results.R) has shown what it will do:
-#   qsub R/jobscripts/archive_old_results.sh
+# Archives results trees, one .tar per tree - see the header of
+# R/archive_old_results.R. Like every jobscript here it cds to
+# ${PBS_O_WORKDIR}/.., so submit from R/jobscripts/, after a dry run from the
+# repo root (Rscript R/archive_old_results.R [args]) has shown what it will do:
+#   cd R/jobscripts
+#   qsub archive_old_results.sh                     # every study's pre-2026-09-26 tree
+#   qsub -v ARCHIVE_ARGS="--label retired_2026-10 --trees continuous binary confidence_intervals" archive_old_results.sh
+# ARCHIVE_ARGS is passed through to the R script; keep it comma-free (qsub -v
+# splits on commas), which is why --trees is space-separated.
 # Packing and listing ~100k files is too much for a login node. The walltime
 # is generous: tar is disk-bound, and a tree that doesn't finish is left intact.
 #PBS -l walltime=08:00:00
@@ -19,4 +24,5 @@ conda activate sim-env
 
 cd "${PBS_O_WORKDIR}/.."
 
-Rscript archive_old_results.R --apply
+# unquoted on purpose: ARCHIVE_ARGS is several words
+Rscript archive_old_results.R --apply ${ARCHIVE_ARGS}

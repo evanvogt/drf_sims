@@ -39,7 +39,7 @@
 # Binary floor / ceiling: the lowest and highest treated risk over the whole
 # covariate support (treated_risk_bounds()). RD_SCALE keeps them inside
 # [RD_EPS, 1 - RD_EPS], give or take bW's 3-dp rounding (5e-4);
-# sample_size/binary/bin_verify_hte.R checks that, and re-derives RD_SCALE.
+# R/bin_verify_hte.R checks that, and re-derives RD_SCALE.
 
 suppressPackageStartupMessages(library(here))
 suppressMessages(source(here("R", "dgm_scenarios.R")))

@@ -1,9 +1,10 @@
 ##########
 # title: optimal sample.fraction calibration simulation - correlated continuous outcome
 ##########
-# confidence_intervals/optimal_sf/cts_ci_sf_analysis.R on the correlated sets,
-# with the grid read from the study config and rho from the grid row. The
-# calibration settings are the parent's.
+# The retired confidence_intervals/optimal_sf/cts_ci_sf_analysis.R (tag
+# independent-ss-final) on the correlated sets, with the grid read from the
+# study config and rho from the grid row. The calibration settings are the
+# parent's. find_optimal_sf() is in R/bootstrap_ci.R.
 
 # libraries
 library(here)
@@ -15,8 +16,9 @@ path <- here()
 # functions
 source(here("R", "utils.R"))
 source(here("sample_size", "correlated", "continuous", "cts_corr_dgms.R"))
-source(here("sample_size", "confidence_intervals", "continuous", "cts_ci_models.R"))
-source(here("sample_size", "confidence_intervals", "optimal_sf", "cts_ci_sf_calibration.R"))
+source(here("sample_size", "correlated", "confidence_intervals", "continuous",
+            "cts_corr_ci_models.R"))
+source(here("R", "bootstrap_ci.R"))
 source(here("sample_size", "correlated", "confidence_intervals", "optimal_sf",
             "cts_corr_ci_sf_config.R"))
 

@@ -179,7 +179,7 @@ metrics_summary <- metrics %>%
 
 ```{r summary-plot-helper, include=FALSE}
 # helper: the house summary plot, points with a 95% CI (mean +/- qnorm(1 -
-# alpha/2) x MCSE) error bar - see sample_size/continuous/cts_results.R's summary_plot for
+# alpha/2) x MCSE) error bar - see R/figures.R's point_range_plot() (its alpha doc) for
 # why this isn't a raw +/- 1x MCSE (~68% coverage, not 95%). Unlike
 # cf_results.qmd's version there's no `set` (train/test) dimension to dodge
 # on - one sample per arm/run - so colour by variant instead (redundant with

@@ -58,7 +58,7 @@ args <- as.numeric(commandArgs(trailingOnly = T))
 i <- args[1]
 # workers/grf_threads default to 2/1, so `Rscript surv_analysis.R <i>` - what
 # surv_1.sh, surv_2.sh and surv_run.R run - keeps 2 workers and now pins grf to
-# 1 thread, the same arg order and defaults as sample_size/continuous/cts_analysis.R.
+# 1 thread, the same arg order and defaults as sample_size/correlated/continuous/cts_corr_analysis.R.
 workers <- if (length(args) >= 2 && !is.na(args[2])) args[2] else 2
 grf_threads <- if (length(args) >= 3 && !is.na(args[3])) args[3] else 1
 
@@ -82,7 +82,7 @@ setup_rng_stream(run)
 
 # multisession workers are new R processes and inherit this, so it keeps rfsrc's
 # main-process OOB fits and the BLAS in step with grf's num.threads rather than
-# each process claiming every core - matches sample_size/continuous/cts_analysis.R.
+# each process claiming every core - matches sample_size/correlated/continuous/cts_corr_analysis.R.
 # Set before plan() so the workers start with it.
 Sys.setenv(OMP_NUM_THREADS = grf_threads)
 

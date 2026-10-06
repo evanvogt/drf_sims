@@ -310,9 +310,12 @@ save_fig <- function(
 #'   originally hardcoded, so existing callers are unaffected.
 #' @param facet_scales passed to facet_grid
 #' @param alpha error bar is a (1 - alpha) CI, i.e. mean +/- qnorm(1 -
-#'   alpha/2) x MCSE - not a raw +/- 1x MCSE, which is only a ~68% interval
-#'   (see sample_size/continuous/cts_results.R's summary_plot() for the verification of
-#'   why the raw form is wrong). Not to be confused with `ci_alpha` below -
+#'   alpha/2) x MCSE - not a raw +/- 1x MCSE, which is only a ~68% interval and
+#'   makes a genuinely unbiased estimator look biased on ~32% of points by
+#'   chance alone. Checked on dr_oracle's 100-run continuous results: 42% of
+#'   cells missed zero at +/- 1x MCSE against 5% (the expected false-positive
+#'   rate) at the 95% CI. Every study's summary plot uses this convention, and
+#'   their comments point here. Not to be confused with `ci_alpha` below -
 #'   this `alpha` is a significance level, not a plotting transparency.
 #' @param line add a geom_line connecting each colour group's points across x
 #'   (drawn under the points) - only meaningful when x has a natural order

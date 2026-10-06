@@ -70,7 +70,7 @@ metrics_summary <- metrics %>%
 
 # create a cleaner metrics table to save and look at to write results.
 # intervals are a 95% CI (mean +/- qnorm(0.975) x MCSE), not a raw +/- 1x
-# MCSE (~68% coverage) - see sample_size/continuous/cts_results.R's summary_plot
+# MCSE (~68% coverage) - see R/figures.R's point_range_plot() (its alpha doc)
 z <- qnorm(0.975)
 
 metrics_sum_tidy <- metrics_summary %>%

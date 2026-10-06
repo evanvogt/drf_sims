@@ -1,5 +1,12 @@
 # Confidence intervals for CATE estimates
 
+> **Retired 2026-10-06 — not used in the thesis.** The code was removed and is at
+> git tag `independent-ss-final` (`git show independent-ss-final:<path>`), and the
+> results are archived under `results/_archive/retired_2026-10/`. The correlated
+> studies (`sample_size/correlated/`) replace this one, with their ρ = 0 arm as
+> the independent-covariate comparator. This file is kept for the method notes
+> that other READMEs and scripts cite; the run instructions below no longer apply.
+
 A point estimate of a heterogeneous treatment effect is not much use without an
 interval. These studies build **simultaneous** intervals — bands that cover every
 unit at once, not each unit separately — using a half-sample bootstrap, and ask

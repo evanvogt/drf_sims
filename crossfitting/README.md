@@ -249,7 +249,7 @@ Change the trailing `workers` and the `ncpus` in `#PBS -l select` together, so
 the two can't drift apart.
 
 Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
-`collate_predictions`, `sample_size/continuous/cts_dgms.R` supplies the DGP, and
+`collate_predictions`, `R/dgm_scenarios.R` supplies the DGP (its `"continuous"` set), and
 `R/cate_models.R` supplies the per-arm outcome models (`t_learner_rf_split`,
 `nuisance_rf`, `sl_split_fit`, `nuisance_sl`) and, via `R/sl_library.R`,
 `pretest_superlearner`, the per-nuisance SuperLearner libraries and
@@ -263,7 +263,8 @@ This folder was the model for the repo-wide `R/` refactor: it was already
 sourcing shared code rather than copying it, at a time when the same CATE
 estimators existed in seven files. The reference implementations it compares
 against moved from `sample_size/continuous/cts_models.R` into `R/cate_models.R`, which is
-now the only copy - `cts_models.R` is a thirteen-line profile shim.
+now the only copy - `cts_models.R` became a thirteen-line profile shim (now
+`sample_size/correlated/continuous/cts_corr_models.R`).
 
 ## Status
 

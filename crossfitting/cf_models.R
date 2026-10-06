@@ -24,31 +24,33 @@ require(dplyr)
 require(here)
 
 # reused rather than forked: collate_predictions (R/utils.R), the continuous DGP
-# (cts_dgms.R), and from R/cate_models.R the per-arm outcome models
-# (t_learner_rf_split, nuisance_rf, sl_split_fit, nuisance_sl) plus, via
-# R/sl_library.R, pretest_superlearner and sl_fit_predict
+# (the "continuous" set of R/dgm_scenarios.R), and from R/cate_models.R the
+# per-arm outcome models (t_learner_rf_split, nuisance_rf, sl_split_fit,
+# nuisance_sl) plus, via R/sl_library.R, pretest_superlearner and sl_fit_predict
 source(here("R", "utils.R"))
-source(here("sample_size", "continuous", "cts_dgms.R"))
+source(here("R", "dgm_scenarios.R"))
 source(here("R", "cate_models.R"))
 
 # ---- data -------------------------------------------------------------------
 
 #' Draw a training sample and an independent test sample from the same DGP
 #'
-#' bW is derived from n inside generate_continuous_scenario_data (calibrate_bW()
-#' in R/dgm_scenarios.R), so the test sample is built by stacking n_test/n draws
+#' bW is derived from n inside generate_scenario_data (calibrate_bW() in
+#' R/dgm_scenarios.R), so the test sample is built by stacking n_test/n draws
 #' at the same n rather
 #' than by asking for a bigger sample - that keeps the true CATE surface identical.
 #'
-#' @param scenario scenario index passed to generate_continuous_scenario_data
+#' @param scenario scenario index of the "continuous" set, passed to
+#'   generate_scenario_data
 #' @param n training sample size
 #' @param n_test test sample size; must be a multiple of n
 generate_cf_replicate <- function(scenario, n, n_test = 2000) {
   stopifnot(n_test %% n == 0)
 
-  gen <- generate_continuous_scenario_data(scenario, n)
+  gen <- generate_scenario_data(scenario, n, set = "continuous")
 
-  reps <- lapply(seq_len(n_test / n), function(i) generate_continuous_scenario_data(scenario, n))
+  reps <- lapply(seq_len(n_test / n),
+                 function(i) generate_scenario_data(scenario, n, set = "continuous"))
   test_data <- do.call(rbind, lapply(reps, `[[`, "dataset"))
   test_truth <- do.call(rbind, lapply(reps, `[[`, "truth"))
 

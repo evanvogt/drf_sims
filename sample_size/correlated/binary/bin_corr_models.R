@@ -1,12 +1,13 @@
 ##########
-# title: CATE estimation functions - binary outcome
+# title: CATE estimation functions - correlated binary outcome
 ##########
-# The estimators live in R/cate_models.R. This file is the binary study's
-# configuration of them, and the outcome type is the entire difference from the
-# continuous study across what used to be 438 near-identical lines:
+# The estimators live in R/cate_models.R. This file is the correlated binary
+# study's configuration of them, and the outcome type is the entire difference
+# from the continuous one (cts_corr_models.R):
 #   family = binomial()      SuperLearner outcome model + method.NNloglik
-# The oracle formula from bin_dgms.R returns the risk itself, so the oracle arm
-# needs no link (it took oracle_link = "logit" while the DGM was logit-scale).
+# The oracle formula from the binary DGM returns the risk itself, so the oracle
+# arm needs no link. It was sample_size/binary/bin_models.R until that study was
+# retired (2026-10-06); the function is unchanged.
 
 source(here::here("R", "cate_models.R"))
 

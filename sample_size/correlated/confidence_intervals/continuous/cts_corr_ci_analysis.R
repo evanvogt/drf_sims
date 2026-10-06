@@ -1,9 +1,10 @@
 ##########
 # title: half-sample bootstrap estimation - correlated continuous outcome
 ##########
-# confidence_intervals/continuous/cts_ci_analysis.R on the correlated sets: the
-# same estimators and bootstrap (confidence_intervals/continuous/cts_ci_models.R),
-# with rho read from the grid row.
+# The retired confidence_intervals/continuous/cts_ci_analysis.R (tag
+# independent-ss-final) on the correlated sets: the same estimators and
+# bootstrap (cts_corr_ci_models.R, formerly
+# confidence_intervals/continuous/cts_ci_models.R), with rho read from the grid row.
 
 # libraries
 library(here)
@@ -15,7 +16,8 @@ path <- here()
 # functions
 source(here("R", "utils.R"))
 source(here("sample_size", "correlated", "continuous", "cts_corr_dgms.R"))
-source(here("sample_size", "confidence_intervals", "continuous", "cts_ci_models.R"))
+source(here("sample_size", "correlated", "confidence_intervals", "continuous",
+            "cts_corr_ci_models.R"))
 source(here("sample_size", "correlated", "confidence_intervals", "continuous",
             "cts_corr_ci_config.R"))
 

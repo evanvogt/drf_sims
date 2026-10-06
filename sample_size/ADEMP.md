@@ -1,16 +1,22 @@
 # ADEMP — sample size studies
 
 Ten studies, sharing one set of data-generating mechanisms
-(`R/dgm_scenarios.R`) and one set of estimators (`R/cate_models.R`):
+(`R/dgm_scenarios.R`) and one set of estimators (`R/cate_models.R`).
+
+The five independent-covariate studies (continuous, binary, CI continuous / binary,
+optimal_sf) were **retired on 2026-10-06** and are not used in the thesis. Their
+code is at git tag `independent-ss-final`. They stay in this document because
+the correlated studies are defined against them, and each correlated study's
+ρ = 0 arm is the independent-covariate comparator.
 
 | study | folder | question |
 |---|---|---|
-| continuous | `continuous/` | CATE estimation and HTE tests, continuous outcome |
-| binary | `binary/` | the same, binary outcome (risk-difference scale) |
+| continuous *(retired)* | `continuous/` | CATE estimation and HTE tests, continuous outcome |
+| binary *(retired)* | `binary/` | the same, binary outcome (risk-difference scale) |
 | correlated, continuous / binary | `correlated/continuous/`, `correlated/binary/` | the same, scenarios 1–4 (5–10 for the appendix), with correlated covariates (ρ = 0 vs 0.5, paired) |
-| CI, continuous | `confidence_intervals/continuous/` | bootstrap confidence bands for the CATE |
-| CI, binary | `confidence_intervals/binary/` | the same, binary outcome |
-| optimal_sf | `confidence_intervals/optimal_sf/` | data-driven choice of the bootstrap `sample.fraction`, both outcomes |
+| CI, continuous *(retired)* | `confidence_intervals/continuous/` | bootstrap confidence bands for the CATE |
+| CI, binary *(retired)* | `confidence_intervals/binary/` | the same, binary outcome |
+| optimal_sf *(retired)* | `confidence_intervals/optimal_sf/` | data-driven choice of the bootstrap `sample.fraction`, both outcomes |
 | correlated CI, continuous / binary | `correlated/confidence_intervals/continuous/`, `.../binary/` | the CI studies, scenarios 1–4, with correlated covariates (ρ = 0 vs 0.5, paired) |
 | correlated optimal_sf | `correlated/confidence_intervals/optimal_sf/` | optimal_sf, scenarios 1–4, with correlated covariates (ρ = 0 vs 0.5, paired), both outcomes |
 

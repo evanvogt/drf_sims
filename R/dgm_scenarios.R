@@ -176,7 +176,7 @@ ORACLE_RD <- paste0(RD_CONTROL, c(
 # LESS benefit, where the bounds leave room - with the continuous signs,
 # scenarios 3, 4, 5, 8 and 10 would have to be much smaller. The price is that
 # the opposite subgroup benefits more than in continuous/, undoing bug P's sign
-# harmonisation. sample_size/binary/bin_verify_hte.R re-derives RD_SCALE from the tables
+# harmonisation. R/bin_verify_hte.R re-derives RD_SCALE from the tables
 # and fails if it drifts: change p0_lo, p0_hi, b0-b2, RD_EPS or the binary
 # studies' n, and it must be recomputed.
 # The binary_corr_* sets keep RD_SCALE except in scenario 9 (RD_SCALE_CORR

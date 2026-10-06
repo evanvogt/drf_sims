@@ -24,6 +24,9 @@ which is where most of the bugs in the ledger below came from.
 | `pipeline.R` | `study_config`, `get_results`, `check_failed`, `grid_indices` |
 | `figures.R` | display labels, palette/theme, `summarise_metrics`, plot helpers |
 | `regression_check.R` | the old-vs-new equivalence harness |
+| `bin_verify_hte.R` | checks the binary risk-difference scenarios and re-derives `RD_SCALE`, `RD_SCALE_MISS`/`BU_MISS` and `RD_SCALE_CORR` (`Rscript R/bin_verify_hte.R`; it was in `sample_size/binary/` until 2026-10-06) |
+| `calibration_report.R` | planned vs realised power and `bW` per scenario |
+| `archive_old_results.R` | packs results trees into `results/_archive/<label>/*.tar` (`--trees`, `--label`) |
 
 The repo-root `utils.R` is a two-line shim onto `R/utils.R`, so existing
 `source(here("utils.R"))` calls keep working.

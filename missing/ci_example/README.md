@@ -51,7 +51,7 @@ machinery already exists in `R/dgm_scenarios.R`; this study just does not thread
 it through.
 
 Three call sites are needed, copying
-`sample_size/confidence_intervals/continuous/cts_ci_analysis.R`:
+`sample_size/confidence_intervals/continuous/cts_ci_analysis.R` (retired; now `sample_size/correlated/confidence_intervals/continuous/cts_corr_ci_analysis.R`):
 
 1. `cts_miss_ci_analysis.R` — build the query points and their truth:
    ```r

@@ -185,7 +185,7 @@ The table covers scenarios 1–4. `R/calibration_report.R` prints all ten.
   cannot produce. So scenario 9 takes `RD_SCALE_CORR[9]` = 0.139, the largest
   scale (floored to 3 dp) that keeps its floor at `RD_EPS` at ρ = 0.5. The
   same scale is used at both ρ, so the arms stay paired.
-- `sample_size/binary/bin_verify_hte.R` check 7 re-derives 0.139, holds
+- `R/bin_verify_hte.R` check 7 re-derives 0.139, holds
   scenarios 3 and 8 at ρ = 0.5 to > 0, and holds every other cell to
   `RD_EPS`.
 
@@ -264,9 +264,11 @@ The jobscripts split at the PBS array cap (1–10000, 10001–16000), not at the
 ## Methods
 
 The estimators are fit exactly as in the parent studies. The cts / bin analysis
-scripts source `sample_size/continuous/cts_models.R` and
-`sample_size/binary/bin_models.R`. The CI scripts source the parent CI studies'
-`*_ci_models.R`. Model code is in `R/cate_models.R` (`cate_methods()`), and
+scripts source `continuous/cts_corr_models.R` and `binary/bin_corr_models.R`,
+and the CI and optimal_sf scripts source
+`confidence_intervals/{continuous,binary}/*_corr_ci_models.R`. These are the
+parent studies' models wrappers, moved here unchanged when the parents were
+retired (2026-10-06). Model code is in `R/cate_models.R` (`cate_methods()`), and
 SuperLearner set-up is in `R/sl_library.R`.
 
 ### Estimators

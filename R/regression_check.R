@@ -43,12 +43,18 @@ BASELINE_DIR <- here(".regression_baseline")
 
 STUDIES <- list(
 
+  # continuous / binary / ci_continuous / ci_binary: the retired independent
+  # sample-size studies' DGMs (now called straight from R/dgm_scenarios.R) and
+  # the models wrappers the correlated studies inherited from them
+  # (sample_size/correlated/). Kept because those wrappers - the "base" and
+  # "ci" profiles on each outcome family - are what the correlated studies run.
   continuous = list(
-    sources = c("utils.R", "sample_size/continuous/cts_dgms.R", "sample_size/continuous/cts_models.R"),
+    sources = c("utils.R", "R/dgm_scenarios.R",
+                "sample_size/correlated/continuous/cts_corr_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_continuous_scenario_data(scenario = 8, n = 120)
-      fmla <- get_continuous_oracle_info(8, gen$bW)
+      gen <- generate_scenario_data(8, 120, set = "continuous")
+      fmla <- get_oracle_info(8, gen$bW, set = "continuous")
       setup_rng_stream(3)
       res <- run_all_cate_methods(gen$dataset, n_folds = 3,
                                   sl_lib = SL_LIB, fmla_info = fmla)
@@ -58,11 +64,12 @@ STUDIES <- list(
   ),
 
   binary = list(
-    sources = c("utils.R", "sample_size/binary/bin_dgms.R", "sample_size/binary/bin_models.R"),
+    sources = c("utils.R", "R/dgm_scenarios.R",
+                "sample_size/correlated/binary/bin_corr_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_binary_scenario_data(scenario = 3, n = 120)
-      fmla <- get_binary_oracle_info(3, gen$bW)
+      gen <- generate_scenario_data(3, 120, set = "binary")
+      fmla <- get_oracle_info(3, gen$bW, set = "binary")
       setup_rng_stream(3)
       res <- run_all_cate_methods(gen$dataset, n_folds = 3,
                                   sl_lib = SL_LIB, fmla_info = fmla)
@@ -72,13 +79,12 @@ STUDIES <- list(
   ),
 
   ci_continuous = list(
-    sources = c("utils.R",
-                "sample_size/confidence_intervals/continuous/cts_ci_dgms.R",
-                "sample_size/confidence_intervals/continuous/cts_ci_models.R"),
+    sources = c("utils.R", "R/dgm_scenarios.R",
+                "sample_size/correlated/confidence_intervals/continuous/cts_corr_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_continuous_scenario_data(scenario = 8, n = 120)
-      fmla <- get_continuous_oracle_info(8, gen$bW)
+      gen <- generate_scenario_data(8, 120, set = "continuous")
+      fmla <- get_oracle_info(8, gen$bW, set = "continuous")
       setup_rng_stream(3)
       res <- run_all_cate_methods(gen$dataset, n_folds = 3, fmla_info = fmla,
                                   CI_boot = 10, CI_sf = 0.5, alpha = 0.05)
@@ -87,17 +93,13 @@ STUDIES <- list(
     }
   ),
 
-  # bug A lives here: this DGM currently carries the CONTINUOUS coefficient table.
-  # The baseline pins that behaviour so the refactor can be proved inert before
-  # Step 8 deliberately changes it.
   ci_binary = list(
-    sources = c("utils.R",
-                "sample_size/confidence_intervals/binary/bin_ci_dgms.R",
-                "sample_size/confidence_intervals/binary/bin_ci_models.R"),
+    sources = c("utils.R", "R/dgm_scenarios.R",
+                "sample_size/correlated/confidence_intervals/binary/bin_corr_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_binary_scenario_data(scenario = 3, n = 120)
-      fmla <- get_binary_oracle_info(3, gen$bW)
+      gen <- generate_scenario_data(3, 120, set = "binary_ci")
+      fmla <- get_oracle_info(3, gen$bW, set = "binary_ci")
       setup_rng_stream(3)
       res <- run_all_cate_methods(gen$dataset, n_folds = 3, fmla_info = fmla,
                                   CI_boot = 10, CI_sf = 0.5, alpha = 0.05)

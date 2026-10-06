@@ -3,7 +3,7 @@
 ###############
 # The scenario tables and the generator live in R/dgm_scenarios.R. This file
 # names this study's slice of them - the same continuous-outcome slice that
-# sample_size/continuous/cts_dgms.R names, since this study fits on chunks of the same
+# the retired sample_size/continuous/cts_dgms.R named, since this study fits on chunks of the same
 # scenario. It replaces the standalone fork that used to live in
 # cts_dgm_validation.R.
 

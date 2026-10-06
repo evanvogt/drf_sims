@@ -361,7 +361,7 @@ the *ranking* of the 9 candidates within a single (scenario, n, run), so the
 report first has to reduce each run's 9x9 score matrix to per-run rank
 agreement, top-1 selection accuracy and regret before anything can be
 averaged. That derivation lives inline in the `.qmd`, as
-`sample_size/continuous/cts_results.qmd` and `sample_size/binary/bin_results.qmd` keep theirs; it is
+the retired `sample_size/continuous/cts_results.qmd` and `sample_size/binary/bin_results.qmd` kept theirs; it is
 not in `R/figures.R`, whose `summarise_metrics()` is built for the
 bias/MSE/correlation columns this study doesn't have.
 

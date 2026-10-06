@@ -65,7 +65,7 @@ so the paired differences are where to judge whether ρ matters.
 
 **Estimators**: `causal_forest`, `dr_random_forest`, `dr_oracle`,
 `dr_semi_oracle` (`CI_MODELS` in `R/metrics.R`), on the parent's
-`profile = "ci"` (`confidence_intervals/continuous/cts_ci_models.R`).
+`profile = "ci"` (`cts_corr_ci_models.R`).
 
 ### Performance measures
 

@@ -85,7 +85,7 @@ and the lowest treated risk over the covariate support at n = 100 falls:
 
 So binary scenario 9's HTE is about 15% smaller than `binary/`'s, and its
 ρ = 0 arm is not `binary/` scenario 9's distribution (bW still is: E[g] = 0
-there). `bin_verify_hte.R` check 7 re-derives 0.139, holds scenarios 3 and 8
+there). `R/bin_verify_hte.R` check 7 re-derives 0.139, holds scenarios 3 and 8
 at ρ = 0.5 to > 0, and holds every other cell to `RD_EPS`.
 
 ## Pairing, and how to compare ρ
@@ -121,7 +121,8 @@ outcomes agree across ρ.
 | `corr_truth_summary.R` | SD(τ) (exact) and cor(m0, τ) (one seeded draw of 10^6) for every outcome × ρ × scenario; needs no simulation output |
 | `*_corr_config.R` | the grid (`rho` is a path column, prefix `rho_`) |
 | `*_corr_dgms.R` | the generator and oracle wrappers, with a `rho` argument |
-| `*_corr_analysis.R` | the parent's analysis script; reuses `../continuous/cts_models.R` / `../binary/bin_models.R`, and writes to `combo_dir()` |
+| `*_corr_models.R` | the parent's models wrapper, moved here unchanged when the parent was retired (2026-10-06) |
+| `*_corr_analysis.R` | the parent's analysis script; sources `*_corr_models.R` and writes to `combo_dir()` |
 | `*_corr_check.R`, `*_corr_collect.R`, `*_corr_metrics.R` | as the parent's; outputs `*_corr_all.RDS`, `*_corr_metrics.RDS` and `*_corr_true_cate_tests.RDS`, all with a `rho` column |
 | `corr_results.qmd` | both outcomes: levels by ρ, paired differences, tests, DR-oracle-relative ATE bias, and the ρ = 0 sanity check |
 | `continuous/cts_corr_results.qmd`, `binary/bin_corr_results.qmd` | one outcome each, in the shape of the parent's `*_results.qmd`: every metric by ρ, the paired ρ = 0.5 − ρ = 0 differences, true-CATE tests, NA tables, the ρ = 0 sanity check and a headline table |

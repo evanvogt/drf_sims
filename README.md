@@ -23,14 +23,16 @@ R/                    shared library - every study sources from here
 ├── metrics.R         metric definitions + the metrics pipeline
 ├── pipeline.R        study configs, collect, check
 ├── figures.R         display labels, palette, plot helpers
+├── bin_verify_hte.R  checks the binary risk-difference scenarios, re-derives RD_SCALE
 └── regression_check.R  old-vs-new equivalence harness
 
 sample_size/
-├── continuous/           continuous outcome, sample size sweep
-├── binary/               binary outcome, sample size sweep
-├── correlated/           the above, scenarios 1-4, correlated covariates
+├── correlated/           continuous and binary outcomes, sample size sweep,
+│                         correlated covariates at rho 0 / 0.5
 │                         (continuous, binary, confidence_intervals/)
-└── confidence_intervals/ interval estimation (continuous, binary, optimal_sf)
+├── continuous/           RETIRED 2026-10-06 - README only (method notes)
+├── binary/               RETIRED 2026-10-06 - README only (method notes)
+└── confidence_intervals/ RETIRED 2026-10-06 - READMEs only (method notes)
 competing_risk/       competing risks - the target setting
 missing/              missing covariates (continuous, binary, CI example)
 crossfitting/         compared double crossfitting against cheaper alternatives
@@ -94,7 +96,7 @@ scenarios (`R/dgm_scenarios.R`). The four the chapters report come first:
 The last column is the old number. The renumbering changed no data: each
 scenario generates exactly what it did under its old number. Everything saved
 before it uses the old numbers: `../collected_metrics/`, results directories,
-figures, the `results_processing/` notebooks and `sample_size/continuous/diagnostics/`.
+figures and the `results_processing/` notebooks.
 The missing-data studies use scenarios 1–6 under the same numbers. The subset
 studies run: `crossfitting/` and `model_evaluation/` 1, 4, 6, 8;
 `crossfitting/confidence_intervals/` 1, 4, 8; `validation/continuous/` 2.
@@ -157,10 +159,11 @@ correlation, sign accuracy. `bias` is `estimate - truth` throughout.
 there. `Rscript` lines run anywhere, including as a local smoke test.
 
 ```bash
-qsub sample_size/continuous/jobscripts/cts_1.sh         # the array job — cluster only
-Rscript sample_size/continuous/cts_check.R              # any missing runs? — runs locally too
-qsub sample_size/continuous/jobscripts/cts_collect.sh   # cluster only
-qsub sample_size/continuous/jobscripts/cts_metrics.sh   # cluster only
+cd sample_size/correlated/continuous/jobscripts   # jobscripts cd to ${PBS_O_WORKDIR}/..
+qsub cts_corr_1.sh            # the array job — cluster only
+Rscript ../cts_corr_check.R   # any missing runs? — runs locally too
+qsub cts_corr_collect.sh      # cluster only
+qsub cts_corr_metrics.sh      # cluster only
 ```
 
 The array index is a **row number** of `study$grid`. Never filter or reorder the
@@ -202,11 +205,20 @@ Three more surfaced along the way:
 - `binary`'s grid was declared three ways and they disagreed. Submitting
   indices 1–1600 against the analysis script's ten-scenario grid ran runs 1–40
   of all ten scenarios, so the results on disk have 40 replicates per cell,
-  not 100 (see `sample_size/binary/bin_config.R`). The study re-runs in full anyway
+  not 100 (see `sample_size/binary/bin_config.R` at tag `independent-ss-final`). The study re-runs in full anyway
 - `combine_mi()` in `missing/ci_example` read `alpha` as a **free variable** from
   the global environment
 
 ## Status
+
+**Retired 2026-10-06:** the independent-covariate sample-size studies
+(`continuous`, `binary`, and `confidence_intervals/{continuous, binary,
+optimal_sf}`) are not used in the thesis. The correlated studies replace them,
+with their ρ = 0 arm as the independent-covariate comparator. Their code is at
+git tag `independent-ss-final`, and their READMEs stay for the method notes.
+Their results are archived with
+`R/archive_old_results.R --label retired_2026-10 --trees continuous binary confidence_intervals`.
+The rows below that name them are historical.
 
 **Step 0 — archive the old results.** Nothing under `../results` is what the
 current code produces (bug O and the risk-difference DGM, below), and every
@@ -217,7 +229,7 @@ root:
 
 ```bash
 Rscript R/archive_old_results.R              # dry run: what goes where
-qsub R/jobscripts/archive_old_results.sh     # one .tar per study, then deletes the tree
+cd R/jobscripts; qsub archive_old_results.sh # one .tar per study, then deletes the tree
 ```
 
 Each study's tree becomes `results/_archive/pre_2026-09-26/<path>.tar`

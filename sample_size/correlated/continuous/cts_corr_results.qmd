@@ -159,7 +159,7 @@ box_plot <- function(df, col, title, ylab, hline = 0, free_y = TRUE) {
 }
 
 # the parent report's summary_plot: mean with a 95% CI (mean +/- qnorm(1 -
-# alpha/2) x MCSE, not a raw +/- 1x MCSE - see continuous/cts_results.qmd)
+# alpha/2) x MCSE, not a raw +/- 1x MCSE - see R/figures.R's point_range_plot())
 summary_plot <- function(df, mean_col, mcse_col, title, ylab, hline = 0, alpha = 0.05,
                          free_y = TRUE) {
   z <- qnorm(1 - alpha / 2)

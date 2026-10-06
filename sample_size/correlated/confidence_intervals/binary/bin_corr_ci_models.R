@@ -1,11 +1,12 @@
 ##########
-# title: CATE model fitting with confidence intervals - binary outcome
+# title: CATE model fitting with confidence intervals - correlated binary outcome
 ##########
 # The estimators live in R/cate_models.R and the bootstrap in R/bootstrap_ci.R.
-# As the continuous CI study, but with a binomial outcome family. The oracle
-# formula from bin_ci_dgms.R returns the risk itself, so the oracle arm needs no
-# link. (Bug A - the DGM carrying the continuous coefficient table - is fixed in
-# the DGM; the models were never affected.)
+# As cts_corr_ci_models.R, but with a binomial outcome family; used by the
+# correlated binary CI and optimal_sf studies. The oracle formula from the
+# binary DGM returns the risk itself, so the oracle arm needs no link. It was
+# sample_size/confidence_intervals/binary/bin_ci_models.R until that study was
+# retired (2026-10-06); the function is unchanged.
 
 source(here::here("R", "cate_models.R"))
 

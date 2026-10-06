@@ -81,7 +81,7 @@ floor room the main studies need at n = 100, and `U` spends it: `bU = 0.12`
 `sample_size/binary` HTE, and only scenario 4, where the ceiling binds, is
 smaller (scale 0.179 against 0.204). `sU = 2` pushes `tanh(U)` towards ±1,
 which strengthens the selection at no cost to the bounds (the amputation
-standardises `U`). Both are re-derived by `sample_size/binary/bin_verify_hte.R`.
+standardises `U`). Both are re-derived by `R/bin_verify_hte.R`.
 The binary mechanisms remain much weaker than the continuous ones, because a
 Bernoulli outcome's own variance dominates - see the strength table below.
 

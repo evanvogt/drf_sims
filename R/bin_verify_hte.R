@@ -1,9 +1,10 @@
 ##########
-# title: binary study - check the risk-difference scenarios are what they claim
+# title: binary DGMs - check the risk-difference scenarios are what they claim
 ##########
 # Every binary set generates P(Y = 1 | x, W) = m0(x) + W * tau(x): the treatment
 # effect on the RISK-DIFFERENCE scale, with the control risk m0 bounded in
-# [p0_lo, p0_hi] (R/dgm_scenarios.R; the design is in README.md). This script
+# [p0_lo, p0_hi] (R/dgm_scenarios.R; the design is in
+# sample_size/binary/README.md). This script
 # checks the properties that design exists for, and re-derives RD_SCALE:
 #   1. the oracle formula and the generator's truth agree (they are separate
 #      columns of the scenario table and could drift)
@@ -32,10 +33,15 @@
 #
 # Until 2026-09-26 the effect was on the logit scale, and this script measured
 # how much of var(tau) the link handed to X1 and X2 - up to 80% at n = 100.
-# README.md keeps that table as the reason for the change.
+# sample_size/binary/README.md keeps that table as the reason for the change.
 #
-# Writes nothing, and stops at the first failed check. Run from sample_size/binary/:
-#   Rscript bin_verify_hte.R
+# The independent binary study itself is retired (2026-10-06), but its "binary"
+# set is still the coefficient table the correlated and missing-data sets build
+# on, so checks 1-5 still pin what those studies inherit. This script lived in
+# sample_size/binary/ until then.
+#
+# Writes nothing, and stops at the first failed check. Run from the repo root:
+#   Rscript R/bin_verify_hte.R
 
 source(here::here("R", "dgm_scenarios.R"))
 

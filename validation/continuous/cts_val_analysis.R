@@ -22,7 +22,7 @@ source(here("validation/continuous/cts_val_config.R"))
 #
 # workers and grf_threads come off the jobscript's Rscript line rather than
 # being hardcoded here, so the PBS resource request and the R-level parallelism
-# cannot drift apart - same arrangement as sample_size/continuous/cts_analysis.R. The
+# cannot drift apart - same arrangement as sample_size/correlated/continuous/cts_corr_analysis.R. The
 # defaults reproduce what this script did before they were arguments, so a bare
 # `Rscript cts_val_analysis.R <i>` (cts_val_testing.R check 7) still works.
 args <- commandArgs(trailingOnly = TRUE)
@@ -56,7 +56,7 @@ n_folds2 <- ifelse(n * (1 - interim_prop) < 250, 5, 10)
 
 # multisession workers are new R processes and inherit this, so setting it here
 # does control their OpenMP thread pools even though this process's own libraries
-# have already initialised - matches sample_size/continuous/cts_analysis.R
+# have already initialised - matches sample_size/correlated/continuous/cts_corr_analysis.R
 if (!is.null(grf_threads)) Sys.setenv(OMP_NUM_THREADS = grf_threads)
 
 metaplan <- plan(multisession, workers = workers)
