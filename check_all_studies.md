@@ -1,48 +1,31 @@
 # Rerun campaign status
 
-Last updated: 2026-09-03 11:50 BST
+Last updated: 2026-10-06 18:13 BST
 
-| study_name | category | expected_jobs | found_jobs | missing_jobs | pct_complete | status | patchable_jobs | patched_jobs | patch_status | reason |
-|---|---|---|---|---|---|---|---|---|---|---|
-| crossfitting | no_rerun |  2000 |     0 | 2000 |   0.0 | not_started | NA | NA | not_applicable | own comparison arms unchanged; only the production consumers of R/cate_models.R moved |
-| crossfitting/confidence_intervals | no_rerun |   150 |     0 |  150 |   0.0 | not_started | NA | NA | not_applicable | own comparison arms unchanged; pilot study, not part of the production rerun |
-| competing_risk | crossfit_rerun |  7000 |  6831 |  169 |  97.6 | in_progress | NA | NA | not_applicable | crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy |
-| confidence_intervals/optimal_sf (bin) | crossfit_rerun |  2000 |  1994 |    6 |  99.7 | in_progress | NA | NA | not_applicable | crossfitting strategy change; also the DGM was wrong (see confidence_intervals/optimal_sf README) |
-| confidence_intervals/optimal_sf (cts) | crossfit_rerun |  2000 |  1114 |  886 |  55.7 | in_progress | NA | NA | not_applicable | crossfitting strategy change |
-| missing/ci_example | crossfit_rerun |   500 |   453 |   47 |  90.6 | in_progress | NA | NA | not_applicable | crossfitting strategy change |
-| model_evaluation | first_run |   360 |   358 |    2 |  99.4 | in_progress | NA | NA | not_applicable | first run, not a re-run - its own 9 candidates moved off double crossfitting (me_models.R); the 16 pre-change res_sim_*.RDS have been deleted, so the count restarts from zero |
-| binary | crossfit_rerun |  4000 |  4000 |    0 | 100.0 | complete | NA | NA | not_applicable | crossfitting strategy change; also bug F (dr_superlearner) |
-| confidence_intervals/binary | crossfit_rerun | 20000 | 20000 |    0 | 100.0 | complete | NA | NA | not_applicable | crossfitting strategy change; also DGM bug A (continuous coefficients on logit scale) |
-| confidence_intervals/continuous | crossfit_rerun | 20000 | 20000 |    0 | 100.0 | complete | NA | NA | not_applicable | crossfitting strategy change |
-| continuous | crossfit_rerun |  4000 |  4000 |    0 | 100.0 | complete | NA | NA | not_applicable | crossfitting strategy change; also bug F (dr_superlearner) |
-| missing/binary | crossfit_rerun |  9900 |  9900 |    0 | 100.0 | complete | 8800 | 8800 | complete | crossfitting strategy change; also the DGM was wrong three ways; plus the dr_random_forest HTE back-fill, patched in place - no re-run |
-| missing/continuous | crossfit_rerun |  9900 |  9900 |    0 | 100.0 | complete | 8800 | 8800 | complete | crossfitting strategy change; also bug F (dr_superlearner); plus the dr_random_forest HTE back-fill, patched in place - no re-run |
-| validation/continuous | crossfit_rerun |  1100 |  1100 |    0 | 100.0 | complete | NA | NA | not_applicable | crossfitting strategy change |
+| study_name | category | expected_jobs | found_jobs | missing_jobs | pct_complete | status | reason |
+|---|---|---|---|---|---|---|---|
+| validation/continuous | crossfit_rerun |  1100 |     0 | 1100 |   0.0 | not_started | crossfitting strategy change; plus T-learner (per-arm) DR outcome models |
+| model_evaluation | dgm_rerun |   360 |     0 |  360 |   0.0 | not_started | its 358/360 runs (the first under single crossfitting, me_models.R) predate bug O, which changed the continuous DGM, and the 2026-09-26 renumbering (1/4/6/9 -> 1/4/6/8); archived with the strategies and split trees, so the count restarts from zero |
+| missing/ci_example | crossfit_rerun |   400 |   143 |  257 |  35.8 | in_progress | crossfitting strategy change; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 correlated covariates of continuous_missing (missing/ADEMP.md) |
+| correlated/confidence_intervals/optimal_sf (bin) | first_run |  1600 |   274 | 1326 |  17.1 | in_progress | new 2026-10-04: confidence_intervals/optimal_sf (bin) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md) |
+| correlated/confidence_intervals/optimal_sf (cts) | first_run |  1600 |   259 | 1341 |  16.2 | in_progress | new 2026-10-04: confidence_intervals/optimal_sf (cts) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md) |
+| competing_risk | crossfit_rerun | 14000 | 14000 |    0 | 100.0 | complete | crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models |
+| missing/binary | crossfit_rerun | 12600 | 12600 |    0 | 100.0 | complete | crossfitting strategy change; also the DGM was wrong three ways; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run; plus bug P and the risk-difference DGM - all 12,600 rows re-run, which also makes bug N moot; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 missing-data redesign - correlated covariates (X01-X03 auxiliary) and mechanisms MAR / MNAR-Y0 / MNAR-tau (missing/ADEMP.md) |
+| missing/continuous | crossfit_rerun | 12600 | 12600 |    0 | 100.0 | complete | crossfitting strategy change; also bug F (dr_superlearner); plus bug O (continuous DGM) - all 12,600 rows re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 missing-data redesign - correlated covariates (X01-X03 auxiliary) and mechanisms MAR / MNAR-Y0 / MNAR-tau (missing/ADEMP.md) |
+| crossfitting | dgm_rerun |   400 |   400 |    0 | 100.0 | complete | own comparison arms unchanged by the crossfitting change, but bug O changed the continuous DGM it runs on, and the 2026-09-26 renumbering its scenario ids (1/4/6/9 -> 1/4/6/8); old results archived; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only |
+| crossfitting/confidence_intervals | dgm_rerun |   150 |   150 |    0 | 100.0 | complete | pilot study, not part of the production rerun; re-run because bug O changed the continuous DGM and the 2026-09-26 renumbering its scenario ids (1/6/9 -> 1/4/8); old results archived |
+| competing_risk/single_event | first_run |  3000 |  3000 |    0 | 100.0 | complete | new 2026-10-04: competing_risk/'s event 1 without event 2 - pseudo-value CF / DR / T, SuperLearner DR / T, RSF DR / T and the causal survival forest on the RMST, scenarios 1-3 (null, constant, heterogeneous), censoring on/off, 500 runs (competing_risk/single_event/README.md) |
+| correlated/binary | first_run | 20800 | 20800 |    0 | 100.0 | complete | new 2026-10-01: binary/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/correlated/README.md) |
+| correlated/confidence_intervals/binary | first_run | 16000 | 16000 |    0 | 100.0 | complete | new 2026-10-04: confidence_intervals/binary/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md) |
+| correlated/confidence_intervals/continuous | first_run | 16000 | 16000 |    0 | 100.0 | complete | new 2026-10-04: confidence_intervals/continuous/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md) |
+| correlated/continuous | first_run | 20800 | 20800 |    0 | 100.0 | complete | new 2026-10-01: continuous/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/correlated/README.md) |
 
 ## Legend
 
 - **expected_jobs**: n_sims x number of parameter combinations in the study's grid
 - **found_jobs**: res_sim_*.RDS files actually present under the study's results directory
 - **status**: not_started (0 found), in_progress (0 < found < expected), complete (all found), blocked (currently fails to run, not scanned)
-- **patchable_jobs / patched_jobs / patch_status**: progress of a one-off
-  repair the study owes on top of being run, counted from the manifest the
-  repair writes. `not_applicable` means the study owes none. Right now the
-  only repair is the dr_random_forest HTE back-fill (`R/patch_hte_tests.R`),
-  owed by the two missing-covariate studies. **A study can be `complete` and
-  its patch `not_started`** - that is exactly the state these columns exist
-  to make visible.
-- **patchable_jobs excludes the `multiple_imputation` runs** (1,100 per
-  study). Those keep no nuisances, so there is nothing to recompute a BLP
-  from and the patch refuses them by design; counting them would peg a fully
-  repaired study at 88.9%. See the multiple-imputation note in
-  `missing/README.md`.
 
 Generated by `Rscript check_all.R`. For resubmitting a specific study's
 missing runs, use its own `<prefix>_check.R` -> `jobscripts/failed_ids.txt`
 -> `qsub jobscripts/<prefix>_rerun.sh` loop; this script only reports.
-
-A `patch_status` short of complete says only that manifest rows are missing,
-which a killed array element and one that was never submitted both produce.
-`<prefix>_patch_check.R` -> `jobscripts/failed_patch_ids.txt` ->
-`qsub jobscripts/<prefix>_patch_rerun.sh` is the same loop for the repair,
-and tells the two apart by reading the result files themselves.

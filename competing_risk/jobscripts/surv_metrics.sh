@@ -5,7 +5,7 @@
 # framework estimates before shipping combos to the workers, so they hold far
 # less than the parent.
 #PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=2:ompthreads=1:mem=32gb
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=32gb
 #PBS -N surv_metrics
 #PBS -j oe
 
