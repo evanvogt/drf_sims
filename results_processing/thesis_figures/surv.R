@@ -1,154 +1,184 @@
 ##########
-# title: figures for the thesis chapter - competing risk
+# title: figures for the thesis chapter - competing risks
 ##########
+# The competing-risks study (competing_risk/), one figure per metric - CATE
+# bias, RMSE and Pearson correlation with the true CATE - each at the primary
+# rho = 0.5 (*_rho05_*), the sensitivity rho = 0 (*_rho0_*) and as the paired
+# rho = 0.5 - rho = 0 difference (*_rhodiff_*). In each, censoring on x, the
+# model in colour, the event in rows and the scenario in columns. The tables
+# are thesis_tables/surv_tables.R.
+#
+# - One arm per estimator family, its production fitting approach
+#   (SURV_ARM_LABELS in R/figures.R), the same rows as the main table.
+# - The arms are not all scored against the same truth (ADEMP.md,
+#   "Estimands"): ipw and csf_cs censor the competing event and are scored
+#   against the net (cause-specific) RMST CATE, the rest on the subdistribution
+#   scale (csf_sh's subdistribution RMST, the pseudo-value arms' RMTL). Shape
+#   marks which. It is a property of the arm, so it carries into the Combined
+#   row, where every arm targets the same all-cause RMST.
+# - Combined (RMSTc) is in for now. csf_sh has no Combined estimate.
+# - Pearson is NA where the arm's truth is constant - the net RMST CATE of
+#   event 1 in scenarios 2 and 5 and of event 2 in 1 and 3 - so those points
+#   are left out.
+# - The differences: run r at rho = 0 and at rho = 0.5 shares its seed
+#   (competing_risk/surv_config.R), so each metric is differenced per run
+#   (paired_rho_diff()) and its MCSE is sd(diff) / sqrt(pairs).
+#
+# Labels, palette, summaries and figure sizing come from R/figures.R. This
+# script carries only the paths and this study's filters.
+#
+# Writes to ../results/thesis_figures/surv/:
+#   surv_{rho05,rho0,rhodiff}_{bias,rmse,corr}.png
 
-# libraries
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(paletteer)
 library(here)
-library(patchwork)
-library(purrr)
-library(ggridges)
-library(scales)
-
+source(here("R", "figures.R"))
 
 # paths
 path <- here()
 res_path <- file.path(dirname(path), "results", "competing_risk")
 fig_path <- file.path(dirname(path), "results", "thesis_figures", "surv")
-dir.create(fig_path, showWarnings = F, recursive = T)
+dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
-# data
+# the levels views, by their file-name tag; "rhodiff" is the third view
+RHOS <- c(rho05 = 0.5, rho0 = 0)
+
+TARGETS <- c("Event 1", "Event 2", "Combined")
+
+ESTIMAND_LABELS <- c(net = "Cause-specific", sub = "Subdistribution")
+ESTIMAND_SHAPES <- setNames(c(17, 16), ESTIMAND_LABELS)
+
+# second line of a difference figure's y labels
+DIFF_LAB <- "ρ = 0.5 − ρ = 0"
+
+# seven scenario columns, so wider than save_fig()'s standard 21cm
+FIG_WIDTH <- 33
+FIG_HEIGHT <- 20
+
+# per metric: the levels' and the differences' y labels, and the levels'
+# reference line (the differences' is 0 throughout)
+FIGURES <- list(
+  bias = list(y_lab = "Bias of the CATE (days)",
+              diff_lab = "Δ bias of the CATE (days)", hline = 0),
+  rmse = list(y_lab = "RMSE of the CATE (days)",
+              diff_lab = "Δ RMSE of the CATE (days)", hline = NULL),
+  corr = list(y_lab = "Pearson correlation with the true CATE",
+              diff_lab = "Δ Pearson correlation", hline = NULL)
+)
+
+# ---- data --------------------------------------------------------------------
+
 metrics <- readRDS(file.path(res_path, "surv_metrics.RDS"))
 
-# clean up
+if (!"rho" %in% names(metrics)) {
+  stop("surv_metrics.RDS has no rho column: it predates the 2026-10-01 grid. ",
+       "Rerun surv_collect.R and surv_metrics.R on the current results.",
+       call. = FALSE)
+}
+s1_corr <- metrics$corr[metrics$scenario == 1]
+if (length(s1_corr) > 0 && all(s1_corr %in% 0)) {
+  stop("scenario 1's Pearson correlations are all 0, cate_metrics()'s ",
+       "null-scenario placeholder: surv_metrics.RDS predates the 2026-10-06 ",
+       "fix. Rerun surv_metrics.R.", call. = FALSE)
+}
+
 metrics <- metrics %>%
-  mutate(
-    description = factor(
-      case_match(scenario,
-                 1 ~ "ATE on EOI only",
-                 2 ~ "ATE on CE only",
-                 3 ~ "HTE on EOI only",
-                 4 ~ "HTE on EOI, ATE on CE",
-                 5 ~ "HTE on CE only",
-                 6 ~ "HTE on CE, ATE on EOI",
-                 7 ~ "HTE on both"),
-      levels = c("ATE on EOI only", "ATE on CE only", "HTE on EOI only",
-                 "HTE on EOI, ATE on CE", "HTE on CE only",
-                 "HTE on CE, ATE on EOI", "HTE on both")),
-    scenario = factor(scenario, levels = c(1:7)),
-    framework = factor(
-      case_match(framework,
-                 "csf_cs" ~ "CSF - censoring CEs",
-                 "csf_sh" ~ "CSF - subdistribution",
-                 "ipw"      ~ "IPW",
-                 "pseudo_cf" ~ "pseudovalue CF",
-                 "pseudo_dr" ~ "pseudovalue DR RF"),
-      levels = c("CSF - censoring CEs", "CSF - subdistribution", "IPW", "pseudovalue CF", "pseudovalue DR RF")),
-    target = factor(target, levels = c("Event 1", "Event 2", "Combined"))
+  filter(framework %in% names(SURV_ARM_LABELS), target %in% TARGETS)
+
+#' One view's per-run rows: one rho's, or the paired rho differences
+#'
+#' @param view "rho05", "rho0" or "rhodiff"
+view_runs <- function(view) {
+  if (view == "rhodiff") {
+    paired_rho_diff(
+      metrics,
+      names(FIGURES),
+      keys = c("scenario", "n", "censoring", "framework", "target", "run")
+    )
+  } else {
+    filter(metrics, rho == RHOS[[view]])
+  }
+}
+
+#' Mean and MCSE of every metric by scenario, censoring, model and event
+summarise_view <- function(runs) {
+  runs %>%
+    mutate(
+      model = factor(SURV_ARM_LABELS[framework],
+                     levels = unname(SURV_ARM_LABELS)),
+      estimand = factor(
+        if_else(framework %in% SURV_NET_ARMS,
+                ESTIMAND_LABELS[["net"]], ESTIMAND_LABELS[["sub"]]),
+        levels = ESTIMAND_LABELS
+      ),
+      scenario = label_factor(scenario, SURV_SCENARIO_PLOT_LABELS),
+      censoring = label_factor(censoring, SURV_CENSORING_LABELS),
+      target = factor(target, levels = TARGETS)
+    ) %>%
+    summarise_metrics(
+      c("scenario", "censoring", "model", "estimand", "target"),
+      cols = setNames(names(FIGURES), names(FIGURES)),
+      count_na = character()
+    )
+}
+
+# ---- figures -----------------------------------------------------------------
+
+#' One metric for one view
+#'
+#' @param summary summarise_view() output
+#' @param metric a name of FIGURES
+#' @param view "rho05", "rho0" or "rhodiff"
+surv_figure <- function(summary, metric, view) {
+  spec <- FIGURES[[metric]]
+  diff <- view == "rhodiff"
+
+  # NA Pearson (a constant truth) has a NaN mean; leave it out rather than give
+  # it a dodge slot
+  keep <- filter(summary, is.finite(.data[[paste0("mean_", metric)]]))
+
+  fig <- point_range_plot(
+    keep,
+    metric,
+    if (diff) paste0(spec$diff_lab, "\n", DIFF_LAB) else spec$y_lab,
+    x = "censoring",
+    colour = "model",
+    shape = "estimand",
+    shape_palette = scale_shape_manual(values = ESTIMAND_SHAPES),
+    facet_rows = "target",
+    facet_cols = "scenario",
+    facet_scales = "free_y",
+    hline = if (diff) 0 else spec$hline,
+    dodge_width = 0.8,
+    point_size = 1.5,
+    ci_alpha = 0.7
+  ) +
+    labs(x = "Censoring", colour = "Model", shape = "Estimand") +
+    theme(
+      axis.text.x = element_text(angle = 0),
+      legend.position = "bottom",
+      legend.box = "vertical"
+    ) +
+    guides(colour = guide_legend(nrow = 2))
+
+  save_fig(
+    paste0("surv_", view, "_", metric, ".png"),
+    fig_path,
+    width = FIG_WIDTH,
+    height = FIG_HEIGHT,
+    plot = fig
   )
+  fig
+}
 
-# per scenario summaries
-#
-# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
-# column - not sqrt(n()), the whole group's row count regardless of NAs.
-# corr is genuinely NA for some Event 1 cells (zero-variance truth in
-# scenario 5's ipw/csf_cs arms), so it's the most exposed here.
-metrics_summary <- metrics %>%
-  group_by(scenario, description, n, censoring, framework, target) %>%
-  summarise(
-    mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T)/sqrt(sum(!is.na(bias))),
-    mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T)/sqrt(sum(!is.na(mse))),
-    mean_corr = mean(corr, na.rm = T),
-    mcse_corr = sd(corr, na.rm = T)/sqrt(sum(!is.na(corr))),
-    .groups = "drop"
-  )
-
-# create a cleaner metrics table to save and look at to write results.
-# intervals are a 95% CI (mean +/- qnorm(0.975) x MCSE), not a raw +/- 1x
-# MCSE (~68% coverage) - see R/figures.R's point_range_plot() (its alpha doc)
-z <- qnorm(0.975)
-
-metrics_sum_tidy <- metrics_summary %>%
-  mutate(
-    bias_lb = signif(mean_bias - z * mcse_bias, 4),
-    bias_ub = signif(mean_bias + z * mcse_bias, 4),
-    mse_lb = signif(mean_mse - z * mcse_mse, 4),
-    mse_ub = signif(mean_mse + z * mcse_mse, 4),
-    corr_lb = signif(mean_corr - z * mcse_corr, 4),
-    corr_ub = signif(mean_corr + z * mcse_corr, 4),
-    bias = signif(mean_bias, 4),
-    mse = signif(mean_mse, 4),
-    corr = signif(mean_corr, 4)
-  ) %>%
-  mutate(
-    bias_tidy = paste0(bias, " (", bias_lb, ", ", bias_ub, ")"),
-    mse_tidy = paste0(mse, " (", mse_lb, ", ", mse_ub, ")"),
-    corr_tidy = paste0(corr, " (", corr_lb, ", ", corr_ub, ")")
-  ) %>%
-  select(scenario, description, censoring, target, framework, bias, bias_lb, bias_ub, bias_tidy, mse, mse_lb, mse_ub, mse_tidy, corr, corr_lb, corr_ub, corr_tidy)
-write.csv(metrics_sum_tidy, file.path(res_path, "surv_metric_sum_tidy.csv"))
-
-bias_plot <- metrics_summary %>%
-  filter(!(framework == "IPW" & target == "Event 2")) %>%
-  #filter(!(framework %in% c("CSF - censoring CEs", "IPW"))) %>%
-  ggplot(aes(x = censoring, colour = framework, y = mean_bias, ymin = mean_bias - z * mcse_bias, ymax = mean_bias + z * mcse_bias)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
-  facet_grid(cols = vars(scenario), rows = vars(target), scales = "free_y") +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "Bias",
-       x = "Censoring") +
-  theme(axis.text.x = element_text(angle = 90))
-ggsave("surv_bias.png", path = fig_path, width = 21, height = 15, units = "cm")
-
-mse_plot <- metrics_summary %>%
-  filter(!(framework == "IPW" & target == "Event 2")) %>%
-  #filter(!(framework %in% c("CSF - censoring CEs", "IPW"))) %>%
-  ggplot(aes(x = censoring, colour = framework, y = mean_mse, ymin = mean_mse - z * mcse_mse, ymax = mean_mse + z * mcse_mse)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
-  facet_grid(cols = vars(scenario), rows = vars(target), scales = "free_y") +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "MSE",
-       x = "Censoring") +
-  theme(axis.text.x = element_text(angle = 90))
-ggsave("surv_mse.png", path = fig_path, width = 21, height = 15, units = "cm")
-
-
-# scratch
-metrics_summary %>%
-  filter(framework == "IPW") %>%
-  #filter(framework %in% c("CSF - censoring CEs", "CSF - subdistribution")) %>%
-  ggplot(aes(x = censoring, colour = framework, y = mean_bias, ymin = mean_bias - z * mcse_bias, ymax = mean_bias + z * mcse_bias)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
-  facet_grid(cols = vars(scenario), rows = vars(target), scales = "free_y") +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "Bias",
-       x = "Censoring") +
-  theme(axis.text.x = element_text(angle = 90))
-
-metrics_summary %>%
-  filter(framework == "IPW") %>%
-  #filter(framework %in% c("CSF - censoring CEs", "CSF - subdistribution")) %>%
-  ggplot(aes(x = censoring, colour = framework, y = mean_mse, ymin = mean_mse - z * mcse_mse, ymax = mean_mse + z * mcse_mse)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
-  facet_grid(cols = vars(scenario), rows = vars(target), scales = "free_y") +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "MSE",
-       x = "Censoring") +
-  theme(axis.text.x = element_text(angle = 90))
+# kept in `figs` for viewing interactively, figs[[view]][[metric]]
+figs <- list()
+for (view in c(names(RHOS), "rhodiff")) {
+  runs <- view_runs(view)
+  if (nrow(runs) == 0) {
+    message("no ", view, " metrics - figures skipped")
+    next
+  }
+  summary <- summarise_view(runs)
+  figs[[view]] <- lapply(setNames(names(FIGURES), names(FIGURES)),
+                         surv_figure, summary = summary, view = view)
+}

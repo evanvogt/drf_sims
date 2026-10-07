@@ -11,9 +11,10 @@
 #              each arm's raw values, then the paired differences between arms
 #              that differ by one factor
 # Rows are scenario / censoring / arm, the columns CATE bias, RMSE and Pearson
-# for Event 1 then Event 2, each cell "mean (MCSE)". Labels are inline here
-# (competing_risk/ shares none with the other studies), the summary comes from
-# R/figures.R and the layout from R/tables.R (surv_metrics_table()).
+# for Event 1 then Event 2, each cell "mean (MCSE)". The scenario, censoring
+# and main-table arm labels (SURV_*) and the summary come from R/figures.R,
+# shared with thesis_figures/surv.R; the secondary tables' arm labels are
+# inline below. The layout is R/tables.R's surv_metrics_table().
 #
 # Writes to ../results/thesis_tables/, for <rho> in rho05, rho0:
 #   surv_main_<rho>.tex
@@ -55,18 +56,8 @@ tab_path <- file.path(dirname(path), "results", "thesis_tables")
 dir.create(tab_path, showWarnings = FALSE, recursive = TRUE)
 
 # ---- labels ------------------------------------------------------------------
-
-SCENARIO_LABELS <- c(
-  `1` = "Scenario 1: ATE on E1 only",
-  `2` = "Scenario 2: ATE on E2 only",
-  `3` = "Scenario 3: HTE on E1, no ATE on E2",
-  `4` = "Scenario 4: HTE on E1, ATE on E2",
-  `5` = "Scenario 5: HTE on E2, no ATE on E1",
-  `6` = "Scenario 6: HTE on E2, ATE on E1",
-  `7` = "Scenario 7: HTE on both"
-)
-
-CENSORING_LABELS <- c(`TRUE` = "Yes", `FALSE` = "No")
+# scenario, censoring and production-arm labels are SURV_* in R/figures.R,
+# shared with thesis_figures/surv.R
 
 TARGETS <- c("Event 1", "Event 2")
 
@@ -75,17 +66,10 @@ RHOS <- list(
   list(out = "rho0", rho = 0, text = "$\\rho = 0$ (sensitivity analysis)")
 )
 
-# the main table's rows: the production arm of each family, in row order
-MAIN_ARMS <- c(
-  ipw = "IPW causal forest$^\\dagger$",
-  csf_cs = "CSF, cause-specific$^\\dagger$",
-  csf_sh = "CSF, subdistribution",
-  pseudo_cf_whole_oob = "Causal forest on PV",
-  pseudo_dr_whole_oob = "DR-RF on PV",
-  rsf_dr_oob = "DR-RSF",
-  sl_t_whole = "T-SuperLearner on PV",
-  sl_dr_whole = "DR-SuperLearner on PV"
-)
+# the main table's rows: the production arm of each family, in row order, the
+# net-RMST arms daggered
+MAIN_ARMS <- SURV_ARM_LABELS
+MAIN_ARMS[SURV_NET_ARMS] <- paste0(MAIN_ARMS[SURV_NET_ARMS], "$^\\dagger$")
 
 # the secondary tables: each family's arms (raw rows, in order), then the
 # contrasts (arm - ref), each between two arms that differ by one factor:
@@ -218,8 +202,8 @@ label_rows <- function(df, arms) {
   df %>%
     filter(framework %in% names(arms)) %>%
     mutate(
-      scenario = label_factor(scenario, SCENARIO_LABELS),
-      censoring = label_factor(censoring, CENSORING_LABELS),
+      scenario = label_factor(scenario, SURV_SCENARIO_LABELS),
+      censoring = label_factor(censoring, SURV_CENSORING_LABELS),
       target = factor(target, levels = TARGETS),
       arm = factor(arms[framework], levels = unname(arms))
     )

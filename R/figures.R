@@ -105,6 +105,53 @@ STRATEGY_LABELS <- c(
   hybrid = "Hybrid"
 )
 
+# the competing-risks study (competing_risk/), shared by thesis_figures/surv.R
+# and thesis_tables/surv_tables.R. Scenario names are the long ones from
+# competing_risk/ADEMP.md for the tables, and surv_results.qmd's short ones
+# for figure strips, where seven sit side by side.
+SURV_SCENARIO_LABELS <- c(
+  `1` = "Scenario 1: ATE on E1 only",
+  `2` = "Scenario 2: ATE on E2 only",
+  `3` = "Scenario 3: HTE on E1, no ATE on E2",
+  `4` = "Scenario 4: HTE on E1, ATE on E2",
+  `5` = "Scenario 5: HTE on E2, no ATE on E1",
+  `6` = "Scenario 6: HTE on E2, ATE on E1",
+  `7` = "Scenario 7: HTE on both"
+)
+
+SURV_SCENARIO_PLOT_LABELS <- c(
+  `1` = "ATE E1",
+  `2` = "ATE E2",
+  `3` = "HTE E1",
+  `4` = "HTE E1, ATE E2",
+  `5` = "HTE E2",
+  `6` = "HTE E2, ATE E1",
+  `7` = "HTE E1&2"
+)
+
+SURV_CENSORING_LABELS <- c(`TRUE` = "Yes", `FALSE` = "No")
+
+# one arm per estimator family - its production fitting approach - in display
+# order. The other arms vary the pseudo-values or the fitting
+# (competing_risk/README.md, "Crossfitting") and only the secondary tables
+# show them.
+SURV_ARM_LABELS <- c(
+  ipw = "IPW causal forest",
+  csf_cs = "CSF, cause-specific",
+  csf_sh = "CSF, subdistribution",
+  pseudo_cf_whole_oob = "Causal forest on PV",
+  pseudo_dr_whole_oob = "DR-RF on PV",
+  rsf_dr_oob = "DR-RSF",
+  sl_t_whole = "T-SuperLearner on PV",
+  sl_dr_whole = "DR-SuperLearner on PV"
+)
+
+# the arms that censor the competing event, so are scored against the net
+# (cause-specific) RMST CATE; every other arm targets the subdistribution
+# scale (csf_sh's subdistribution RMST, or RMTL). See competing_risk/ADEMP.md,
+# "Estimands".
+SURV_NET_ARMS <- c("ipw", "csf_cs")
+
 #' Recode a column to its display labels and make it an ordered factor
 #'
 #' Levels follow the order of `labels`, so the legend order is controlled in one

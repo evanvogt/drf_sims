@@ -26,7 +26,7 @@ Nothing here reads per-run simulation output directly — run the study's
 | `miss_cts.R`, `miss_bin.R` | the missing-data studies (pre-2026-09-29 metrics: all-unit bias/MSE) |
 | `cts_ci.R` | continuous confidence intervals |
 | `miss_cts_ci.R` | MI confidence intervals |
-| `surv.R` | competing risks |
+| `surv.R` | the competing-risks study, the production arm of each estimator family (`SURV_ARM_LABELS`, `R/figures.R`): one figure per metric (CATE bias, RMSE, Pearson) at ρ = 0.5, ρ = 0 and the paired difference (`surv_{rho05,rho0,rhodiff}_{bias,rmse,corr}.png`), censoring on x, model by colour, cause-specific vs subdistribution estimand by shape, event (incl. Combined) down, scenario across |
 
 Shared presentation lives in `R/figures.R`: the display labels
 (`MODEL_LABELS`, `METHOD_LABELS`, `MECHANISM_LABELS`), the palette and theme,
