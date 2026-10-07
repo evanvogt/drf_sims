@@ -295,13 +295,29 @@ incomplete] instead, which rewards a method that learns the shift from the
 missingness itself (missing indicators, inbuilt handling). See
 `missing/ADEMP.md`, "Estimands".
 
-```{r rmse-r-plot, fig.height=5}
+Rows are all analysed units, then the complete and incomplete units
+separately. Complete cases and IPW have no incomplete units, so they are
+absent from the bottom row.
+
+```{r rmse-r-plot, fig.height=11}
 mnar_tau_summary <- filter(metrics_summary,
                            mechanism == MECHANISM_LABELS[["MNAR-tau"]])
-if (nrow(mnar_tau_summary) > 0 && "mean_rmse_r" %in% names(mnar_tau_summary)) {
-  point_range_plot(mnar_tau_summary, "rmse_r",
+r_stems <- c(`All analysed units` = "rmse_r", `Complete units` = "rmse_r_cu",
+             `Incomplete units` = "rmse_r_iu")
+if (nrow(mnar_tau_summary) > 0 &&
+    all(paste0("mean_", r_stems) %in% names(mnar_tau_summary))) {
+  # stack the three subsets under one mean/mcse pair, so point_range_plot()
+  # can put one row of facets per subset
+  mnar_tau_long <- imap(r_stems, function(stem, units) {
+    transmute(mnar_tau_summary, scenario, method, model, units = units,
+              mean_rmse_r = .data[[paste0("mean_", stem)]],
+              mcse_rmse_r = .data[[paste0("mcse_", stem)]])
+  }) %>%
+    bind_rows() %>%
+    mutate(units = factor(units, levels = names(r_stems)))
+  point_range_plot(mnar_tau_long, "rmse_r",
                    "RMSE against the truth given completeness",
-                   facet_scales = "free_y") +
+                   facet_rows = "units", facet_scales = "free_y") +
     legend_bottom
 } else {
   cat("No MNAR-tau rows with the secondary truth in this metrics file.")
