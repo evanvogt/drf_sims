@@ -15,16 +15,16 @@ source(here("R", "utils.R"))
 source(here("missing/ci_example/cts_miss_ci_config.R"))
 
 # simulation parameters. Trailing args after the array index are
-# workers[1]/workers[2]/grf_threads, as cts_miss_ci_1.sh passes them. Without
-# them the defaults (workers 3/3, grf's own thread default) reproduce this
-# script's original behaviour, so a bare index-only invocation (as
-# cts_miss_ci_rerun.sh still uses) is unaffected.
+# workers/grf_threads, as the jobscripts pass them. workers is the number of
+# imputations fitted in parallel; everything inside an imputation (crossfit
+# folds, bootstrap draws) runs sequentially. Without them the defaults are
+# 3 workers and grf's own thread default.
 args <- commandArgs(trailingOnly = TRUE)
 i <- as.numeric(args[1])
 
 n_folds <- 10
-workers <- if (length(args) >= 3) as.numeric(args[2:3]) else c(3, 3)
-grf_threads <- if (length(args) >= 4) as.numeric(args[4]) else NULL
+workers <- if (length(args) >= 2) as.numeric(args[2]) else 3
+grf_threads <- if (length(args) >= 3) as.numeric(args[3]) else NULL
 CI_boot <- 200
 CI_sf <- 0.5
 alpha <- 0.05
@@ -62,8 +62,12 @@ fmla_info <- get_continuous_oracle_info(scenario, gen$bW)
 # set up parallelisation. multisession workers are new R processes and
 # inherit this, so setting it here controls their OpenMP thread pools even
 # though this process's own libraries have already initialised.
+# Only the imputation level is parallel: a nested multisession level made each
+# worker open its own sockets, which failed on the cluster when array jobs
+# sharing a node picked the same port. With one worker nothing opens a socket.
 if (!is.null(grf_threads)) Sys.setenv(OMP_NUM_THREADS = grf_threads)
-metaplan <- plan(list(tweak(multisession, workers = workers[1]), tweak(multisession, workers = I(workers[2]))))
+outer_plan <- if (workers > 1) tweak(multisession, workers = workers) else sequential
+metaplan <- plan(list(outer_plan, sequential))
 on.exit(plan(metaplan), add = T)
 
 # Run the models

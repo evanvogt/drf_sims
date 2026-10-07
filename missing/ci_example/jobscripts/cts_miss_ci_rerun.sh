@@ -22,5 +22,7 @@ echo "rerunning index: $jobid"
 # Navigate to script directory
 cd "${PBS_O_WORKDIR}/.."
 
-# Run Rscript with parameters
-Rscript cts_miss_ci_analysis.R "$jobid" 3 3 1
+# Run Rscript with parameters. Trailing args are workers (imputations fitted
+# in parallel)/grf_threads: one worker per cpu, one grf thread each, so
+# workers should match ncpus above - change them together.
+Rscript cts_miss_ci_analysis.R "$jobid" 10 1

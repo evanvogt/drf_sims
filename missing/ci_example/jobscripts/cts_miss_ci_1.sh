@@ -16,6 +16,7 @@ conda activate sim-env
 # Navigate to script directory
 cd "${PBS_O_WORKDIR}/.."
 
-# Run R script with parameters. Trailing args are workers[1]/workers[2]/
-# grf_threads, set by hand to match ncpus above - change them together.
-Rscript cts_miss_ci_analysis.R "$PBS_ARRAY_INDEX" 1 1 1
+# Run R script with parameters. Trailing args are workers (imputations fitted
+# in parallel)/grf_threads, set by hand to match ncpus above - change them
+# together. One worker runs fully sequentially.
+Rscript cts_miss_ci_analysis.R "$PBS_ARRAY_INDEX" 1 1
