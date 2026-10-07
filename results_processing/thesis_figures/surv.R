@@ -68,7 +68,7 @@ FIGURES <- list(
 # ---- data --------------------------------------------------------------------
 
 metrics <- readRDS(file.path(res_path, "surv_metrics.RDS"))
-
+metrics <- filter(metrics, framework != "sl_t_whole")
 if (!"rho" %in% names(metrics)) {
   stop("surv_metrics.RDS has no rho column: it predates the 2026-10-01 grid. ",
        "Rerun surv_collect.R and surv_metrics.R on the current results.",
