@@ -62,13 +62,14 @@ fmla_info <- get_continuous_oracle_info(scenario, gen$bW)
 # set up parallelisation. multisession workers are new R processes and
 # inherit this, so setting it here controls their OpenMP thread pools even
 # though this process's own libraries have already initialised.
-# Only the imputation level is parallel: a nested multisession level made each
-# worker open its own sockets, which failed on the cluster when array jobs
-# sharing a node picked the same port. With one worker nothing opens a socket.
+# Only the imputation level is parallel; future runs the nested future_map
+# calls inside each worker (crossfit folds, bootstrap draws) sequentially. A
+# forced second multisession level made every worker open its own sockets,
+# which failed on the cluster when array jobs sharing a node picked the same
+# port.
 if (!is.null(grf_threads)) Sys.setenv(OMP_NUM_THREADS = grf_threads)
-outer_plan <- if (workers > 1) tweak(multisession, workers = workers) else sequential
-metaplan <- plan(list(outer_plan, sequential))
-on.exit(plan(metaplan), add = T)
+metaplan <- plan(multisession, workers = workers)
+on.exit(plan(metaplan), add = TRUE)
 
 # Run the models
 results <- mi_boot(
