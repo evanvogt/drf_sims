@@ -12,7 +12,8 @@
 #
 # Checks, in order:
 #   1. xgboost and SHAPforxgboost load. They are used nowhere else in this repo,
-#      so a missing install here is the one thing that stops the array dead
+#      so a missing install here is the one thing that stops the array dead.
+#      Also sandwich, for the HC3 interaction tests
 #   2. the grid is 1100 rows over 11 interim proportions, and - the reason
 #      cts_val_config.R rounds - none of those proportions stringifies to a
 #      float artefact, since as.character(interim_prop) becomes a directory name
@@ -72,7 +73,7 @@ cat("\n=== 1. the new dependencies ===\n")
 # plus the DR SuperLearner's learners (R/sl_library.R). Those are in sim-env
 # for the sample-size studies already, but a missing one would only show up as
 # a learner the pretest silently drops
-for (pkg in c("xgboost", "SHAPforxgboost",
+for (pkg in c("xgboost", "SHAPforxgboost", "sandwich",
               "SuperLearner", "glmnet", "gam", "earth", "ranger")) {
   ok <- requireNamespace(pkg, quietly = TRUE)
   report(ok, sprintf("%s is installed%s", pkg,

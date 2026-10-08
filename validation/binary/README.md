@@ -50,8 +50,8 @@ scale the effect is on, so `W:v` is a risk-difference interaction. But its
 errors are heteroskedastic by construction (`Var = p(1 - p)`), so the classical
 standard errors are wrong. `bin_val_analysis.R` passes `robust = TRUE`, and
 `coef_pval()` (`../val_common.R`) uses `sandwich::vcovHC(type = "HC3")`
-standard errors in the t-test. The continuous arm keeps classical standard
-errors. `sandwich` is already in `sim-env` (GenericML depends on it), and
+standard errors in the t-test. The continuous arm uses HC3 too, for a
+different reason (see `../continuous/README.md`). `sandwich` is already in `sim-env` (GenericML depends on it), and
 `bin_val_testing.R` check 1 confirms it.
 
 ## Files

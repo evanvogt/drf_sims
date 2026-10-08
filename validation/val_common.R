@@ -438,11 +438,13 @@ get_shap_vims <- function(X, tau) {
 
 #' p-value of one coefficient of a fitted lm, classical or HC3
 #'
-#' @param robust FALSE: summary.lm's t-test, as the continuous arm has always
-#'   used. TRUE: the same t-test on sandwich::vcovHC(type = "HC3") standard
-#'   errors. A binary outcome makes `Y ~ W * v` a linear probability model,
-#'   whose errors are heteroskedastic by construction (Var = p(1 - p)), so the
-#'   classical standard errors are wrong there.
+#' @param robust FALSE: summary.lm's t-test. TRUE: the same t-test on
+#'   sandwich::vcovHC(type = "HC3") standard errors, which both arms pass. A
+#'   binary outcome makes `Y ~ W * v` a linear probability model, whose errors
+#'   are heteroskedastic by construction (Var = p(1 - p)). A continuous one has
+#'   homoskedastic noise, but the working model omits the prognostic covariates
+#'   and the within-group spread of tau, so its residual variance still differs
+#'   across the W x v cells - most where v is a small (10%) subgroup.
 #' @return the p-value, or NA_real_ if lm dropped the term (aliased) or its
 #'   robust standard error is not finite (a leverage-1 row under HC3)
 coef_pval <- function(fit, term, robust = FALSE) {

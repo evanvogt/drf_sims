@@ -98,8 +98,22 @@ coefficient of `Y ~ W * (all covariates)` and should not flag it.
 The comparisons are `chunk_validations()`, and the estimation logic behind them
 (both importance measures and `interaction_pval()`), in `../val_common.R`,
 shared with the binary arm. It is specific to these studies, so it stays in
-`validation/` rather than moving into `R/`. This arm calls `chunk_validations()`
-with classical standard errors (`robust = FALSE`), as it always has.
+`validation/` rather than moving into `R/`.
+
+**HC3 interaction tests.** This arm calls `chunk_validations(robust = TRUE)`,
+so every interaction test (the subgroup tests, `p_cts`, `p_cts_adj`,
+`p_split`) is a t-test on `sandwich::vcovHC(type = "HC3")` standard errors, as
+in the binary arm. The noise is homoskedastic, but `Y ~ W * v` leaves out the
+prognostic X1 and X2 and, in the treated arm, the spread of tau within each
+level of `v`. At rho = 0.5 both of those vary with the subgroup, so the
+residual variance differs across the four `W x v` cells. The W:v estimate is a
+contrast of the four cell means, its variance is dominated by the small cells
+(a 10% responder subgroup is ~12–40 per cell in chunk 2), and the classical
+pooled variance comes almost entirely from the large ones. HC3 is the cell-wise
+(Welch-type) variance there, slightly conservative. For `p_split`, `p_cts` and
+`p_cts_adj` the two give nearly the same answer, so the switch costs little
+there and keeps the two arms' tests the same. Classical standard errors until
+2026-10-08.
 
 ## Files
 
@@ -108,7 +122,7 @@ with classical standard errors (`robust = FALSE`), as it always has.
 | `cts_val_config.R` | the parameter grid and results path — **the** definition |
 | `cts_val_dgms.R` | names this study's slice of `R/dgm_scenarios.R` |
 | `cts_val_models.R` | `run_all_cate_methods()`: `../val_common.R`'s `fit_val_methods()` with `family = gaussian()` |
-| `cts_val_analysis.R` | array entry point; splits the trial, fits both chunks, runs `chunk_validations()` |
+| `cts_val_analysis.R` | array entry point; splits the trial, fits both chunks, runs `chunk_validations(robust = TRUE)` |
 | `../val_common.R` | shared with `binary/`: the split, the estimators and importance measures, the interaction tests, the four comparisons |
 | `cts_val_run.R` | runs the whole grid in one RStudio session, 8 rows at a time — the no-queue alternative to `cts_val_1.sh` |
 | `cts_val_testing.R` | pre-submission verification — dependencies, grid, and the helpers above |
@@ -211,6 +225,9 @@ Changed 2026-10-08, ahead of the rerun:
   the split, `fit_val_methods()`, the helpers and `chunk_validations()` (the
   four comparisons, formerly inline in `cts_val_analysis.R`). The comparisons
   were checked identical to the inline code at four interim points.
+- **HC3 interaction tests** (`robust = TRUE`), after the move above — see What
+  is compared across chunks. Every p-value in `subgroups` and `top_var_tests`
+  changes; the other two comparisons do not.
 - **`cts_val_rerun.sh` reset** to what `check_failed()` computes from
   `cts_val_1.sh`. It still asked for `ncpus=6:ompthreads=5:mem=12gb` from the
   old 5-worker setup, and `check_failed()` only ever raises a rerun's resources.

@@ -82,9 +82,13 @@ results2$data <- data2
 results2$truth <- chunks$truth2
 
 # The four chunk comparisons: subgroups, variances, var_imps, top_var_tests.
-# Classical standard errors in the interaction tests, as this arm has always
-# used (robust = FALSE).
-validations <- chunk_validations(results1, results2, data1, data2)
+# robust = TRUE: HC3 standard errors in the interaction tests (coef_pval(),
+# validation/val_common.R), as in the binary arm. The noise is homoskedastic,
+# but `Y ~ W * v` leaves out the prognostic X1/X2 and the within-group spread of
+# tau, so its residual variance differs across the W x v cells - and the 10%
+# responder subgroups are exactly the small cells a pooled variance misweights.
+# Classical standard errors until 2026-10-08.
+validations <- chunk_validations(results1, results2, data1, data2, robust = TRUE)
 
 results <- list(results1 = results1, results2 = results2, validations = validations)
 

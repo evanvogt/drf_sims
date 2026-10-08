@@ -84,8 +84,7 @@ results2$truth <- chunks$truth2
 # robust = TRUE: with a binary Y every interaction test is a linear probability
 # model - linear in the risk, the scale the treatment effect is on - whose
 # errors are heteroskedastic by construction, so its standard errors are HC3
-# (coef_pval(), validation/val_common.R) rather than the classical ones the
-# continuous arm uses.
+# (coef_pval(), validation/val_common.R). The continuous arm uses HC3 too.
 validations <- chunk_validations(results1, results2, data1, data2, robust = TRUE)
 
 results <- list(results1 = results1, results2 = results2, validations = validations)

@@ -37,10 +37,12 @@ same three estimators and the same four chunk comparisons. A
 - `chunk_validations()` — the four chunk comparisons
 
 Each arm's `<prefix>_val_models.R` sources it and fixes the outcome family
-(`gaussian()` / `binomial()`). Each arm's `<prefix>_val_analysis.R` then
-chooses the interaction tests' standard errors: classical for continuous, HC3
-for binary (`robust = TRUE` — see `binary/README.md`). This code moved out of
-`continuous/` unchanged when the binary arm was added (2026-10-08); the
-continuous arm's comparisons were checked identical before and after.
+(`gaussian()` / `binomial()`). Both arms' `<prefix>_val_analysis.R` call
+`chunk_validations(robust = TRUE)`, so every interaction test uses HC3 standard
+errors — see `continuous/README.md` and `binary/README.md` for why each needs
+them. This code moved out of `continuous/` unchanged when the binary arm was
+added (2026-10-08); the continuous arm's comparisons were checked identical
+before and after, while it still used classical standard errors. It switched
+to HC3 later the same day.
 
 See each arm's README for its design, file roles and status.

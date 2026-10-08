@@ -48,6 +48,7 @@ estimator comparison.
 | `interim_prop` | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
 | runs | 100 — **1100 array jobs** |
 | folds | DR SuperLearner only: 5 for a stage below 500 rows, else 10 |
+| interaction tests | linear models with HC3 standard errors |
 
 **Estimators**: `causal_forest`, `dr_random_forest` and `dr_superlearner`
 (`R/cate_models.R`). The question is whether one estimator's own findings
