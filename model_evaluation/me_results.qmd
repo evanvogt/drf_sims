@@ -62,8 +62,10 @@ covariates, so the two reports share scenarios, not data.
 
 ### The 9 candidates
 
-Each is fit as its own single-crossfit DR-learner (`me_models.R`). `p` is the
-number of covariates, 7–9 across these scenarios.
+Each is fit as its own single-crossfit DR-learner (`me_models.R`), with
+per-arm (T-learner) outcome models. `p` is the number of covariates, 10 in
+every scenario. `rf*` and `net*` fit the propensity with their own learner;
+the `SL*` candidates use the production mean + glm propensity.
 
 | id | family | hyperparameters |
 |---|---|---|
@@ -71,11 +73,11 @@ number of covariates, 7–9 across these scenarios.
 | `rf2` | random forest | `mtry = p, max.depth = 5` |
 | `rf3` | random forest | `mtry = ceiling(p/2), max.depth = 3` |
 | `net1` | elastic net | `alpha = 1` (lasso) |
-| `net2` | elastic net | `alpha = 0` (ridge) |
+| `net2` | elastic net | `alpha = 1` on main effects and pairwise interactions (interaction lasso) |
 | `net3` | elastic net | `alpha = 0.5` |
-| `SL1` | SuperLearner | `glmnet, ranger, earth, gam, mean` |
+| `SL1` | SuperLearner | the production `dr_superlearner` (`sl_libraries(n)`, per nuisance) |
 | `SL2` | SuperLearner | `glmnet, xgboost, cforest, earth, gam, mean` |
-| `SL3` | SuperLearner | `svm, nnet, mean` |
+| `SL3` | SuperLearner | `svm, nnet, mean` (deliberately weak) |
 
 ### The proxy scores
 

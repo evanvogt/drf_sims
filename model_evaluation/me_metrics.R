@@ -120,8 +120,8 @@ calc_dr_risk <- function(tau_hat, tau_dr) {
 #' A candidate predicting the constant ATE for every unit has arbitrary quantile
 #' groups, so each group's GATE^DR is about the overall mean phi and every
 #' discrepancy is near zero - a near-perfect score at whatever PEHE the true
-#' heterogeneity implies. Expect the shrunk-to-a-constant candidates (net2, and
-#' everything in scenario 1) to look good here. That is a property of the
+#' heterogeneity implies. Expect any candidate whose stage 2 shrinks to a
+#' constant (and everything in scenario 1) to look good here. That is a property of the
 #' metric, not a bug to patch, and it is part of what this study is measuring.
 #'
 #' @param tau_hat the candidate's CATE predictions on the evaluation rows

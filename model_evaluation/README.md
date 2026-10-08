@@ -10,7 +10,8 @@ object of interest is the 12-column-wide proxy-vs-truth comparison
 Ported from a single-commit, never-successfully-run prototype that used the
 external `benchtm` package for data generation. This version uses the same
 shared DGM every other study in this repo does
-(`R/dgm_scenarios.R`, `set = "continuous"`) and the same 7-role file shape
+(`R/dgm_scenarios.R`, `set = "continuous_corr_0.5"` since 2026-10-08 - see
+"Data" below) and the same 7-role file shape
 (`config`/`dgms`/`models`/`analysis`/`check`/`collect`/`metrics`) `continuous/`
 uses, plus study-specific extras the same way `crossfitting/` has extras
 beyond that floor.
@@ -22,11 +23,23 @@ sizes, 30 runs each — **360 array jobs**.
 
 | | |
 |---|---|
-| scenarios | 1, 4, 6, 9 (see `R/dgm_scenarios.R`, `DESC_10`) |
+| scenarios | 1, 4, 6, 8 (see `R/dgm_scenarios.R`, `DESC_10`) |
+| covariates | correlated, latent ρ = 0.5 (`me_dgms.R`'s `ME_RHO`) |
 | n | 250, 500, 1000 |
 | runs | 30 |
 | folds | 10 (all n — see "Crossfitting strategy" below) |
-| results | `../results/model_evaluation/scenario_<k>/<n>/res_sim_<run>.RDS` |
+| results | `../results/correlated/model_evaluation/scenario_<k>/<n>/res_sim_<run>.RDS` |
+
+### Data
+
+Since 2026-10-08 the study runs on `continuous_corr_0.5`: `continuous/`'s
+scenario table, with the covariates drawn from the copula at latent
+correlation 0.5 — the primary arm of `sample_size/correlated/`. τ(x) and m0(x)
+are unchanged; only the covariates' joint distribution moves, and with it bW,
+the ATE and SD(τ) wherever g multiplies two modifiers (scenario 8 here,
+X3·X4), and the correlation between the prognostic m0 and τ. See
+`sample_size/correlated/README.md` for the numbers. Only ρ = 0.5 is run, so ρ
+is a constant rather than a grid column and the grid is unchanged.
 
 **Why only 4 of the 10 scenarios, not all of them like `continuous/`.** This
 study's research question — does a cheap proxy loss rank 9 candidate models
@@ -38,7 +51,7 @@ answer. `crossfitting/cf_analysis.R` made the same call for the same reason
 expensive than a `continuous/` replicate: 9 single-crossfit candidate-model
 fits, *plus* two independent nuisance-evaluation pipelines (XGBoost with a
 36-combination CV grid search, and H2O AutoML with up to 20 auto-tuned
-models), each across 2 fold regimes and 4 nuisance targets. See "Sizing the
+models), each across the nuisance arms and 4 nuisance targets. See "Sizing the
 array job" below — the real per-replicate cost has never been measured, so
 even 30 is provisional.
 
@@ -82,30 +95,67 @@ for the scoring pipelines (the `cv_indep` arm) was removed before the
 9 configurations, each fit as its own single-crossfit DR-learner
 (`me_models.R`, `run_all_candidate_models()`):
 
-| id | family | hyperparameters |
-|---|---|---|
-| `rf1` | random forest | ranger defaults (`mtry = floor(sqrt(p))`) |
-| `rf2` | random forest | `mtry = p, max.depth = 5` (every covariate each split) |
-| `rf3` | random forest | `mtry = ceiling(p/2), max.depth = 3` |
-| `net1` | elastic net | `alpha=1` (lasso) |
-| `net2` | elastic net | `alpha=0` (ridge) |
-| `net3` | elastic net | `alpha=0.5` |
-| `SL1` | SuperLearner | `glmnet, ranger, earth, gam, mean` |
-| `SL2` | SuperLearner | `glmnet, xgboost, cforest, earth, gam, mean` |
-| `SL3` | SuperLearner | `svm, nnet, mean` |
+| id | family | outcome model and stage 2 | propensity |
+|---|---|---|---|
+| `rf1` | random forest | ranger defaults (`mtry = floor(sqrt(p))`) | the candidate's own forest |
+| `rf2` | random forest | `mtry = p, max.depth = 5` (every covariate each split) | the candidate's own forest |
+| `rf3` | random forest | `mtry = ceiling(p/2), max.depth = 3` | the candidate's own forest |
+| `net1` | elastic net | `alpha = 1` (lasso) | the candidate's own glmnet |
+| `net2` | elastic net | `alpha = 1` over main effects **and all pairwise interactions** (interaction lasso) | the candidate's own glmnet |
+| `net3` | elastic net | `alpha = 0.5` | the candidate's own glmnet |
+| `SL1` | SuperLearner | **the production `dr_superlearner`**: `sl_libraries(n)$Y` per arm, `$tau` at stage 2, pretested (`R/sl_library.R`) | `sl_libraries(n)$W` = mean + glm |
+| `SL2` | SuperLearner | `glmnet, xgboost, cforest, earth, gam, mean` | mean + glm, as SL1 |
+| `SL3` | SuperLearner | `svm, nnet, mean` — deliberately weak | mean + glm, as SL1 |
 
-`p = ncol(X)` (7-9 across this study's scenarios). `rf2`/`rf3`'s `mtry` is
+`p = ncol(X)` = 10 in every scenario (X1–X5, X01–X05). `rf2`/`rf3`'s `mtry` is
 scaled to `p` rather than fixed, unlike the ported prototype's original
 `mtry = 30`/`mtry = 10` — those were calibrated to `benchtm`'s much wider
 covariate set and error out of `ranger` ("mtry can not be larger than number
 of variables in data") against this DGM's smaller one. Found by
 `me_testing.R full`, not by inspection.
 
-This is a *different* estimator family from `R/cate_models.R`'s DR-learner
-(e.g. the elastic-net arms wrap a single learner via
-`create.Learner("SL.glmnet", ...)` inside `SuperLearner()`, a code path
-`R/cate_models.R` doesn't have) — not unified into `R/`, since only this
-study needs it.
+**Outcome models are per arm (T-learner) in all 9** (since 2026-10-08, before
+the correlated rerun), as in `R/cate_models.R`'s DR-learners: one model per
+arm, fit on `X` with that arm's training rows, predicting every held-out row.
+Until then each candidate fit one model on `cbind(W, X)` and read it at
+`W = 0` and `1`. For the `net*` candidates that made `Y1.hat − Y0.hat` a single
+constant (W entered as a main effect only), so all the heterogeneity in the
+pseudo-outcome came from its noisy residual term; for `rf1`, `W` was offered at
+only ~30% of splits.
+
+**Propensity.** `rf*` and `net*` fit it with the candidate's own learner, as
+they always have. The SuperLearner candidates all use the production
+propensity library, mean + glm: every study here is an RCT at P(W = 1) = 0.5,
+and a flexible learner only fits noise that the DR weight `1/(e(1 − e))`
+amplifies (`R/sl_library.R`'s header). Every candidate trims to
+[0.05, 0.95].
+
+**`SL1` is the production estimator, not a copy of it.** Each fold calls
+`R/cate_models.R::sl_split_fit()` and stage 2 is `stage_2_sl()`, with
+`sl_libraries(n)` on this study's `fold_indices` — the same `scf_scf` scheme
+`nuisance_sl()` uses — so the study answers directly whether a proxy would
+pick the estimator the other studies report. Its dropped learners are saved
+as `SL1$sl_dropped`, as `cate_methods()` saves them. The libraries are sized
+to the rows the candidate is fit on (`n`, or the 80% in the split arm), so
+`SL.earth` is in the outcome library only from 500 rows.
+
+**`net2` is the interaction lasso** (replaced ridge on 2026-10-08): `X`
+expanded to its 10 main effects and 45 pairwise products (`net_design()`, the
+same expansion as `R/sl_library.R`'s `SL.glmnet.int`), at `lambda.min`, in all
+three nuisances and stage 2. It is the only linear-family candidate that can
+represent scenario 8's X3·X4 effect, and it keeps the three `net*` candidates
+apart: lasso, ridge and elastic net at `lambda.min` on 10 covariates are
+expected to give near-identical τ, and near-ties make top-1 selection a coin
+toss.
+
+**`SL3` is deliberately weak.** `SL.nnet`'s defaults (2 hidden units, no
+weight decay) are unstable on a noisy pseudo-outcome. It is kept so the set
+has a candidate a good proxy should avoid, which is what regret measures.
+
+`rf*`, `net*`, `SL2` and `SL3` are this study's own code path (e.g. the
+elastic-net arms wrap a single learner via `create.Learner("SL.glmnet", ...)`
+inside `SuperLearner()`, a code path `R/cate_models.R` doesn't have) — not
+unified into `R/`, since only this study needs it.
 
 ## Nuisance-evaluation pipelines
 
@@ -237,10 +287,11 @@ argument; and the calibration score needs only each candidate's saved per-row
 `tau` and the arm's saved `phi`. Scores are a pure post-hoc function of
 `<prefix>_all.RDS`, so adding a score family means re-running `me_metrics.R`
 and nothing else — the same argument `me_strategies.R`'s header makes for its
-own pass. What *would* force a rerun is fixing `pi = 0.5` inside the
-**candidates**: `me_models.R` builds each learner's own pseudo-outcome from a
-trimmed estimated `W.hat`, and changing that invalidates every stored `tau`.
-Every arm here scores the identical candidate fits, which is the controlled
+own pass. This is separate from the propensity *inside the candidates*:
+`me_models.R` builds each candidate's own pseudo-outcome from a trimmed
+estimated `W.hat` (its own learner for `rf*`/`net*`, mean + glm for `SL*` —
+see "Candidate models"), and changing that changes every stored `tau`. Every
+arm here scores the identical candidate fits, which is the controlled
 comparison the study rests on.
 
 #### The calibration score
@@ -332,7 +383,7 @@ account for it.
 | file | role |
 |---|---|
 | `me_config.R` | the parameter grid, results path, and candidate-model list — **the** definition |
-| `me_dgms.R` | names this study's slice of `R/dgm_scenarios.R` (`set = "continuous"`) |
+| `me_dgms.R` | names this study's slice of `R/dgm_scenarios.R` (`set = "continuous_corr_0.5"`) |
 | `me_utils.R` | design-matrix prep and fold-splitting (DGM-agnostic, unchanged by the port) |
 | `me_models.R` | the 9 candidate CATE-learner configurations and their fitting logic |
 | `me_nuisance.R` | the two independent nuisance-evaluation pipelines — see below for why this exists outside the usual 7-file shape |
@@ -389,7 +440,7 @@ nothing else does: whether `sim-env` really carries `h2o`/`xgboost`/`caret`
 with a working Java runtime, and whether `SL2`'s local failure reproduces
 there (it should not).
 
-The main study (already complete — 358/360):
+The main study:
 
 ```bash
 qsub model_evaluation/jobscripts/me_1.sh            # the study itself - 1-360
@@ -446,8 +497,8 @@ diffs the two trees and separates "missing because there is no source run"
 from "missing because this pass failed" — only the latter needs resubmitting,
 which is also why `failed_ids_strat.txt` is not written automatically.
 
-Results land in `../results/model_evaluation{,_strategies,_split}/` (siblings
-of the repo, as elsewhere). `me_results.qmd` reads `me_metrics.RDS` from
+Results land in `../results/correlated/model_evaluation{,_strategies,_split}/`
+(outside the repo, as elsewhere). `me_results.qmd` reads `me_metrics.RDS` from
 there, so it renders wherever the results are — not on a machine that only has
 the repo. The rendered `.html` is gitignored, as every other study's report is.
 
@@ -504,6 +555,12 @@ Error in UseMethod("predict") :
 Calls: predict -> predict.SuperLearner -> do.call -> predict
 ```
 
+Only the outcome and stage-2 fits use `SL2`'s library (its propensity is
+mean + glm since 2026-10-08), but those still predict through
+`predict.SuperLearner()`, so the failure stands. On 2026-10-08 a cluster
+`me_testing.sh` run (on the candidates as they were before that day's changes)
+was passing, so `SL.xgboost` is kept.
+
 `SL2`'s library is unchanged from the ported prototype - this is a local
 package-version mismatch, not something the DGM swap introduced, and exactly
 the situation `.claude/CLAUDE.md` already documents ("local R is 4.5.3 ...
@@ -521,6 +578,20 @@ strategies and split trees are archived by `R/archive_old_results.R` (root
 `README.md`, Status, step 0), and all three re-run from empty. After the
 strategies pass, regenerate `me_strategies_verify.R`'s `known_holdout_na` - it
 lists which blocks degenerated under the old DGM.
+
+**Changed for the rerun (2026-10-08)**, none of it comparable with the
+archived runs:
+
+- the data: correlated covariates, ρ = 0.5 (see "Data"), written under
+  `results/correlated/`;
+- the candidates: per-arm outcome models in all 9, mean + glm propensity for
+  `SL*`, `SL1` = the production `dr_superlearner`, `net2` = interaction lasso
+  (see "Candidate models");
+- the arms: `cv_indep` and its second fold draw removed, so `me_analysis.R`
+  fits only `whole` and the strategies tree carries three arms.
+
+Re-run `jobscripts/me_testing.sh` on the cluster before `me_1.sh`: the
+2026-10-08 cluster run that was passing predates these candidate changes.
 
 What follows is the state of the archived runs.
 

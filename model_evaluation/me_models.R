@@ -25,10 +25,28 @@
 # one shared honesty regime, or the ranking confounds learner choice with
 # crossfitting scheme.
 #
-# This is a *different* estimator family from R/cate_models.R's DR-learner
-# (e.g. fit_glmnet wraps a single learner via create.Learner("SL.glmnet", ...)
-# inside SuperLearner(), a code path R/cate_models.R doesn't have) - not
-# unified into R/ here, since that would be a redesign, not a plumbing port.
+# NUISANCES (since 2026-10-08, before the correlated rerun), in line with
+# R/cate_models.R's DR-learners:
+#
+#   outcome     a T-learner in every candidate: one model per arm, fit on X
+#               with that arm's training rows only and predicting every
+#               held-out row (control arm first). Until then each candidate
+#               fit one S-learner on cbind(W, X) and read it at W = 0 and 1,
+#               which made glmnet's Y1.hat - Y0.hat a constant.
+#   propensity  rf* and net* keep their own learner (ranger / glmnet at the
+#               candidate's alpha). SL1-3 all use the production propensity
+#               library, sl_libraries(n)$W = mean + glm (R/sl_library.R): every
+#               study is an RCT at P(W = 1) = 0.5, and a flexible learner only
+#               fits noise that the DR weight 1/(e(1 - e)) amplifies.
+#
+# SL1 IS the production dr_superlearner: each fold is R/cate_models.R's
+# sl_split_fit() and stage 2 is its stage_2_sl(), with sl_libraries(n) - the
+# per-nuisance libraries, pretest and mean fallbacks every other study uses -
+# on this study's fold_indices (the same scf_scf scheme nuisance_sl uses).
+# SL2 and SL3 keep their own single library for the outcome and stage 2.
+# net*/rf*/SL2/SL3 are this study's own code path (e.g. fit_glmnet wraps a
+# single learner via create.Learner("SL.glmnet", ...) inside SuperLearner(),
+# which R/cate_models.R doesn't have).
 #
 # scatter_folds() is sourced from R/utils.R rather than duplicated locally -
 # it is the single-crossfit reassembly helper R/cate_models.R::nuisance_sl
@@ -38,6 +56,10 @@
 require(future.apply)
 require(ranger)
 require(SuperLearner)
+
+# sl_split_fit, stage_2_sl, dr_pseudo; and through it R/sl_library.R's
+# sl_libraries, pretest_superlearner, sl_fit_predict
+source(here::here("R", "cate_models.R"))
 
 # hyper parameter specifications for CATE learners
 create_rf_hyperparams <- function(
@@ -54,8 +76,11 @@ create_rf_hyperparams <- function(
   )
 }
 
-create_net_hyperparams <- function(alpha) {
-  list(alpha = alpha)
+#' @param interactions TRUE fits the lasso/elastic net over every main effect
+#'   and pairwise interaction (see net_design()), in all three nuisances and
+#'   stage 2
+create_net_hyperparams <- function(alpha, interactions = FALSE) {
+  list(alpha = alpha, interactions = interactions)
 }
 
 create_SL_hyperparams <- function(method, SL.library) {
@@ -69,6 +94,18 @@ collect_tau <- function(tau_list, fold_list, fold_indices) {
     tau[fold_indices == fold] <- tau_list[[fold]]
   }
   return(tau)
+}
+
+#' One fold's DR-learner nuisances, in the shape scatter_folds() reassembles
+#'
+#' @param Y_test,W_test the held-out rows' outcome and treatment
+#' @param W.hat the held-out rows' propensity, already trimmed
+dr_fold_result <- function(fold, Y_test, W_test, Y0.hat, Y1.hat, W.hat) {
+  list(
+    fold = fold,
+    po = dr_pseudo(Y_test, W_test, Y1.hat, Y0.hat, W.hat),
+    Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat
+  )
 }
 
 # fitting functions for the random forest
@@ -113,29 +150,24 @@ crossfit_single_RF <- function(fold, Y, W, X, hyper_list, fold_indices) {
     do.call(ranger, hyper)
   }
 
-  Y_model <- fit_model(
-    Y ~ .,
-    data.frame(Y = Y[train_filter], W = W[train_filter], X[train_filter, ])
-  )
+  X_test <- X[test_filter, , drop = FALSE]
+
+  # T-learner: one forest per arm, control arm first
+  arm_pred <- function(arm) {
+    in_arm <- train_filter & W == arm
+    Y_model <- fit_model(Y ~ ., data.frame(Y = Y[in_arm], X[in_arm, , drop = FALSE]))
+    predict(Y_model, X_test)$predictions
+  }
+  Y0.hat <- arm_pred(0)
+  Y1.hat <- arm_pred(1)
+
   W_model <- fit_model(
     W ~ .,
-    data.frame(W = W[train_filter], X[train_filter, ])
+    data.frame(W = W[train_filter], X[train_filter, , drop = FALSE])
   )
+  W.hat <- trim_ps(predict(W_model, X_test)$predictions)
 
-  test_data <- data.frame(W, X)[test_filter, ]
-  Y0.hat <- predict(Y_model, mutate(test_data, W = 0L))$predictions
-  Y1.hat <- predict(Y_model, mutate(test_data, W = 1L))$predictions
-  W.hat <- trim_ps(predict(W_model, X[test_filter, ])$predictions)
-
-  W_test <- W[test_filter]
-  Y_test <- Y[test_filter]
-  Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
-
-  po <- Y1.hat -
-    Y0.hat +
-    ((Y_test - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
-
-  list(fold = fold, po = po, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat)
+  dr_fold_result(fold, Y[test_filter], W[test_filter], Y0.hat, Y1.hat, W.hat)
 }
 
 fit_tau_rf <- function(X, fold_list, fold_indices, po, hyper_list) {
@@ -162,6 +194,28 @@ fit_tau_rf <- function(X, fold_list, fold_indices, po, hyper_list) {
 }
 
 # fitting functions for GLMnet
+
+#' The covariates a net* candidate sees
+#'
+#' X itself, or - for an `interactions` candidate - every main effect and
+#' pairwise interaction (10 + 45 = 55 columns at this DGM's p = 10), the same
+#' expansion as R/sl_library.R's SL.glmnet.int. Expanded per call rather than
+#' once, so the split arm can expand its train and test rows separately; the
+#' covariates are all numeric, so the columns always line up.
+net_design <- function(X, hyper_list) {
+  if (!isTRUE(hyper_list$interactions)) return(X)
+  data.frame(stats::model.matrix(~ .^2, X)[, -1, drop = FALSE])
+}
+
+#' The SL.glmnet learner for a net* candidate, created in the caller's frame
+#'
+#' create.Learner() assigns the wrapper into env, and SuperLearner() looks it up
+#' from the frame it is called from - so it has to be created in the function
+#' that calls SuperLearner(), or one that encloses it.
+net_learner <- function(hyper_list, env = parent.frame()) {
+  create.Learner("SL.glmnet", params = list(alpha = hyper_list$alpha), env = env)
+}
+
 fit_glmnet <- function(
   Y,
   W,
@@ -198,7 +252,8 @@ crossfit_single_glmnet <- function(
   hyper_list,
   fold_indices
 ) {
-  custom_net <- create.Learner("SL.glmnet", params = hyper_list)
+  custom_net <- net_learner(hyper_list)
+  X <- net_design(X, hyper_list)
 
   train_filter <- fold_indices != fold
   test_filter <- !train_filter
@@ -213,27 +268,26 @@ crossfit_single_glmnet <- function(
     )
   }
 
-  Y_model <- fit_model(Y[train_filter], cbind(W, X)[train_filter, ], gaussian())
-  W_model <- fit_model(W[train_filter], X[train_filter, ], binomial())
+  X_test <- X[test_filter, , drop = FALSE]
 
-  test_data <- data.frame(W, X)[test_filter, ]
-  Y0.hat <- as.numeric(predict(Y_model, mutate(test_data, W = 0L))$pred)
-  Y1.hat <- as.numeric(predict(Y_model, mutate(test_data, W = 1L))$pred)
-  W.hat <- trim_ps(as.numeric(predict(W_model, X[test_filter, ])$pred))
+  # T-learner: one model per arm, control arm first
+  arm_pred <- function(arm) {
+    in_arm <- train_filter & W == arm
+    Y_model <- fit_model(Y[in_arm], X[in_arm, , drop = FALSE], gaussian())
+    as.numeric(predict(Y_model, X_test)$pred)
+  }
+  Y0.hat <- arm_pred(0)
+  Y1.hat <- arm_pred(1)
 
-  W_test <- W[test_filter]
-  Y_test <- Y[test_filter]
-  Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
+  W_model <- fit_model(W[train_filter], X[train_filter, , drop = FALSE], binomial())
+  W.hat <- trim_ps(as.numeric(predict(W_model, X_test)$pred))
 
-  po <- Y1.hat -
-    Y0.hat +
-    ((Y_test - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
-
-  list(fold = fold, po = po, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat)
+  dr_fold_result(fold, Y[test_filter], W[test_filter], Y0.hat, Y1.hat, W.hat)
 }
 
 fit_tau_glmnet <- function(X, fold_list, fold_indices, po, hyper_list) {
-  custom_net <- create.Learner("SL.glmnet", params = hyper_list)
+  custom_net <- net_learner(hyper_list)
+  X <- net_design(X, hyper_list)
 
   tau_list <- future_lapply(
     fold_list,
@@ -283,12 +337,54 @@ fit_SL <- function(
 
   tau <- fit_tau_SL(X, fold_list, fold_indices, matrices$po, hyper_list)
 
-  c(list(tau = tau), matrices)
+  out <- c(list(tau = as.numeric(tau)), matrices)
+  if (isTRUE(hyper_list$production)) {
+    # the pretest's dropped learners and failed fits, as cate_methods() returns
+    # them for dr_superlearner
+    out$sl_dropped <- rbind(
+      do.call(rbind, lapply(nuisances, `[[`, "dropped")),
+      attr(tau, "sl_dropped")
+    )
+  }
+  out
+}
+
+#' The production propensity: sl_libraries(n)$W (mean + glm), pretested and
+#' fit as R/cate_models.R::sl_split_fit fits it. Used by SL2 and SL3; SL1 gets
+#' the identical fit from sl_split_fit itself.
+#'
+#' @param X_test covariates of the rows to predict
+sl_propensity <- function(W, X, train_filter, X_test) {
+  W_lib <- pretest_superlearner(
+    W[train_filter], X[train_filter, , drop = FALSE],
+    sl_libraries(nrow(X))$W, binomial()
+  )
+  W_fit <- sl_fit_predict(
+    W[train_filter], X[train_filter, , drop = FALSE], list(w = X_test), W_lib,
+    family = binomial()
+  )
+  W.hat <- W_fit$pred$w
+  if (all(W.hat == 0)) {
+    warning("SuperLearner failed for W.hat. Using mean(W).")
+    W.hat <- rep(mean(W[train_filter]), nrow(X_test))
+  }
+  trim_ps(W.hat)
 }
 
 crossfit_single_SL <- function(fold, Y, W, X, hyper_list, fold_indices) {
   train_filter <- fold_indices != fold
   test_filter <- !train_filter
+
+  # SL1: the production estimator's own fold fit, libraries sized to the data
+  # it is handed (n here, the 80% in the split arm)
+  if (isTRUE(hyper_list$production)) {
+    fit <- sl_split_fit(X, Y, W, train_filter, test_filter, sl_libraries(nrow(X)))
+    return(c(
+      list(fold = fold),
+      fit[c("po", "Y0.hat", "Y1.hat", "W.hat")],
+      list(dropped = dropped_table(fit$libs, fold))
+    ))
+  }
 
   fit_model <- function(y, x, family) {
     hyper <- hyper_list
@@ -298,26 +394,27 @@ crossfit_single_SL <- function(fold, Y, W, X, hyper_list, fold_indices) {
     do.call(SuperLearner, hyper)
   }
 
-  Y_model <- fit_model(Y[train_filter], cbind(W, X)[train_filter, ], gaussian())
-  W_model <- fit_model(W[train_filter], X[train_filter, ], binomial())
+  X_test <- X[test_filter, , drop = FALSE]
 
-  test_data <- data.frame(W, X)[test_filter, ]
-  Y0.hat <- as.numeric(predict(Y_model, mutate(test_data, W = 0L))$pred)
-  Y1.hat <- as.numeric(predict(Y_model, mutate(test_data, W = 1L))$pred)
-  W.hat <- trim_ps(as.numeric(predict(W_model, X[test_filter, ])$pred))
+  # T-learner on the candidate's own library, control arm first
+  arm_pred <- function(arm) {
+    in_arm <- train_filter & W == arm
+    Y_model <- fit_model(Y[in_arm], X[in_arm, , drop = FALSE], gaussian())
+    as.numeric(predict(Y_model, X_test)$pred)
+  }
+  Y0.hat <- arm_pred(0)
+  Y1.hat <- arm_pred(1)
 
-  W_test <- W[test_filter]
-  Y_test <- Y[test_filter]
-  Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
+  W.hat <- sl_propensity(W, X, train_filter, X_test)
 
-  po <- Y1.hat -
-    Y0.hat +
-    ((Y_test - Y.hat) * (W_test - W.hat)) / (W.hat * (1 - W.hat))
-
-  list(fold = fold, po = po, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat)
+  dr_fold_result(fold, Y[test_filter], W[test_filter], Y0.hat, Y1.hat, W.hat)
 }
 
 fit_tau_SL <- function(X, fold_list, fold_indices, po, hyper_list) {
+  if (isTRUE(hyper_list$production)) {
+    return(stage_2_sl(X, po, fold_indices, fold_list, sl_libraries(nrow(X))))
+  }
+
   tau_list <- future_lapply(
     fold_list,
     function(fold) {
@@ -364,19 +461,22 @@ candidate_hyperparams <- function(p) {
     rf3 = create_rf_hyperparams(mtry = max(2, ceiling(p / 2)), max.depth = 3),
 
     net1 = create_net_hyperparams(alpha = 1), # lasso
-    net2 = create_net_hyperparams(alpha = 0), # ridge
+    # interaction lasso (replaced ridge, alpha = 0, on 2026-10-08): the only
+    # linear-family candidate that can represent an X3*X4 effect (scenario 8)
+    net2 = create_net_hyperparams(alpha = 1, interactions = TRUE),
     net3 = create_net_hyperparams(alpha = 0.5), # elastic net
 
-    SL1 = create_SL_hyperparams(
-      method = "method.CC_LS",
-      SL.library = list("SL.glmnet", "SL.ranger", "SL.earth", "SL.gam", "SL.mean")
-    ),
+    # the production dr_superlearner - sl_libraries(n), per nuisance
+    SL1 = list(production = TRUE),
     SL2 = create_SL_hyperparams(
       method = "method.CC_LS",
       SL.library = list(
         "SL.glmnet", "SL.xgboost", "SL.cforest", "SL.earth", "SL.gam", "SL.mean"
       )
     ),
+    # deliberately weak: SL.nnet's defaults (2 hidden units, no weight decay)
+    # are unstable on a noisy pseudo-outcome. Kept so the set has a candidate a
+    # good proxy should avoid - which is what regret measures.
     SL3 = create_SL_hyperparams(
       method = "method.CC_LS",
       SL.library = list("SL.svm", "SL.nnet", "SL.mean")
@@ -485,18 +585,26 @@ stage2_split_rf <- function(X_train, po, X_test, hyper_list) {
 }
 
 stage2_split_glmnet <- function(X_train, po, X_test, hyper_list) {
-  custom_net <- create.Learner("SL.glmnet", params = hyper_list)
+  custom_net <- net_learner(hyper_list)
   po_model <- SuperLearner(
     po,
-    X_train,
+    net_design(X_train, hyper_list),
     family = gaussian(),
     SL.library = custom_net$names,
     method = "method.CC_LS"
   )
-  predict(po_model, X_test)$pred
+  predict(po_model, net_design(X_test, hyper_list))$pred
 }
 
 stage2_split_SL <- function(X_train, po, X_test, hyper_list) {
+  # SL1: stage_2_sl()'s per-fold body, fit once on the whole training set
+  if (isTRUE(hyper_list$production)) {
+    tau_lib <- pretest_superlearner(
+      po, X_train, sl_libraries(nrow(X_train))$tau, gaussian()
+    )
+    return(sl_fit_predict(po, X_train, list(tau = X_test), tau_lib)$pred$tau)
+  }
+
   hyper <- hyper_list
   hyper$family <- gaussian()
   hyper$X <- X_train

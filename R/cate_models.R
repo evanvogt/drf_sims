@@ -446,8 +446,10 @@ nuisance_rf <- function(X, Y, W, ipw = NULL, num.threads = NULL, X_ps = NULL) {
 #' @param sl_lib list(W = , Y = , tau = ), already through as_sl_libs()
 #' @param X_ps optional propensity-only covariates, added to X for the
 #'   propensity SuperLearner alone (see cbind_ps)
-#' @return list(po, Y.hat, Y0.hat, W.hat) at the test rows, and libs - the
-#'   pretested libraries list(Y0 = , Y1 = , W = ) for dropped_table()
+#' @return list(po, Y.hat, Y0.hat, Y1.hat, W.hat) at the test rows, and libs -
+#'   the pretested libraries list(Y0 = , Y1 = , W = ) for dropped_table().
+#'   Callers take the fields they need by name; Y1.hat is for
+#'   model_evaluation/me_models.R's SL1, which stores both arms' predictions.
 sl_split_fit <- function(X, Y, W, in_train, in_test, sl_lib, ipw = NULL,
                          family = gaussian(), X_ps = NULL) {
 
@@ -497,7 +499,7 @@ sl_split_fit <- function(X, Y, W, in_train, in_test, sl_lib, ipw = NULL,
   Y.hat <- W_test * Y1.hat + (1 - W_test) * Y0.hat
   po <- dr_pseudo(Y[in_test], W_test, Y1.hat, Y0.hat, W.hat)
 
-  list(po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, W.hat = W.hat,
+  list(po = po, Y.hat = Y.hat, Y0.hat = Y0.hat, Y1.hat = Y1.hat, W.hat = W.hat,
        libs = list(Y0 = fit0$lib, Y1 = fit1$lib, W = W_lib))
 }
 
