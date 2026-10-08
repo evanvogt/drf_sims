@@ -40,19 +40,39 @@ scenario <- param$scenario
 n <- param$n
 interim_prop <- param$interim_prop
 run <- param$run
+rho <- param$rho
 
-# set up simulation seed
+# set up simulation seed - the run alone, so every interim_prop of a run splits
+# the same trial
 setup_rng_stream(run)
 
-# Generate data from trial chunks before and after the interim analysis
-gen1 <- generate_continuous_scenario_data(scenario, n * interim_prop)
-gen2 <- generate_continuous_scenario_data(scenario, n * (1 - interim_prop))
+# One trial of n, split at the interim analysis: the first n * interim_prop
+# participants are chunk 1, the rest chunk 2. Rows are iid, so the first n1 are
+# a valid "enrolled by the interim" cohort. This used to draw the two chunks as
+# two separate datasets, and generate_scenario_data() calibrates bW to 80% power
+# at the n it is given - so each chunk was its own trial with its own ATE, not
+# two halves of one. Splitting one draw also nests the chunks across
+# interim_prop: run r's chunk 1 at 0.25 is a subset of its chunk 1 at 0.30, so
+# curves over interim_prop are paired within run.
+#
+# round() because n * interim_prop is not always an exact integer in floating
+# point (1000 * 0.35 need not be 350), and an index sequence would truncate it.
+gen <- generate_continuous_scenario_data(scenario, n, rho)
 
-data1 <- gen1$dataset
-data2 <- gen2$dataset
+n1 <- round(n * interim_prop)
+chunk1 <- seq_len(n1)
+chunk2 <- (n1 + 1):n
 
-n_folds1 <- ifelse(n * interim_prop < 250, 5, 10)
-n_folds2 <- ifelse(n * (1 - interim_prop) < 250, 5, 10)
+data1 <- gen$dataset[chunk1, ]
+data2 <- gen$dataset[chunk2, ]
+rownames(data2) <- NULL
+
+truth1 <- gen$truth[chunk1, , drop = FALSE]
+truth2 <- gen$truth[chunk2, , drop = FALSE]
+rownames(truth2) <- NULL
+
+n_folds1 <- ifelse(nrow(data1) < 250, 5, 10)
+n_folds2 <- ifelse(nrow(data2) < 250, 5, 10)
 
 # multisession workers are new R processes and inherit this, so setting it here
 # does control their OpenMP thread pools even though this process's own libraries
@@ -66,12 +86,12 @@ on.exit(plan(metaplan), add = TRUE)
 results1 <- run_all_cate_methods(data = data1, n_folds = n_folds1,
                                  num.threads = grf_threads)
 results1$data <- data1
-results1$truth <- gen1$truth
+results1$truth <- truth1
 
 results2 <- run_all_cate_methods(data = data2, n_folds = n_folds2,
                                  num.threads = grf_threads)
 results2$data <- data2
-results2$truth <- gen2$truth
+results2$truth <- truth2
 
 ##########
 # subgroups based on top and bottom responders
@@ -167,6 +187,12 @@ for (model in models) {
 # and a median split, which is directly parallel to the top10/bottom10 tests
 # above. x_top2 is chunk 2's own winner, kept so the report can ask how often
 # the two chunks even agree on which covariate matters most.
+#
+# p_cts_adj is the continuous test again, adjusted for every other covariate
+# (interaction_pval_adj, cts_val_models.R). The covariates are correlated
+# (rho = 0.5), so a non-modifier correlated with X4 shows a real *marginal*
+# W x X interaction in p_cts; p_cts_adj asks whether x_top modifies the effect
+# given the rest.
 top_var_tests <- list()
 for (model in models) {
   vi <- var_imps[[model]]
@@ -179,6 +205,7 @@ for (model in models) {
                x_top = x_top,
                x_top2 = v$variables[which.max(v$vi2)],
                p_cts = interaction_pval(data2$Y, data2$W, xt),
+               p_cts_adj = interaction_pval_adj(data2$Y, data2$W, X2, x_top),
                p_split = interaction_pval(data2$Y, data2$W,
                                           as.numeric(xt > median(xt))),
                stringsAsFactors = FALSE)
@@ -201,9 +228,11 @@ validations <- list(subgroups = subgroups, variances = variances,
 
 results <- list(results1 = results1, results2 = results2, validations = validations)
 
-output_dir <- file.path(study$res_path, paste0("scenario_", scenario), n, interim_prop)
+# under the path check/collect expect (combo_dir()) - built by hand here it would
+# not follow path_cols, which now lead with rho
+output_dir <- combo_dir(study, param)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
 
-print(paste0("All methods for scenario ", scenario, "_", n, " interim ", interim_prop,
-            " run ", run, " completed successfully!"))
+print(paste0("All methods for rho ", rho, " scenario ", scenario, "_", n,
+             " interim ", interim_prop, " run ", run, " completed successfully!"))

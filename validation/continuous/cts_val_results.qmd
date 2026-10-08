@@ -43,8 +43,8 @@ estimator comparison.
 
 | | |
 |---|---|
-| scenario | 3, continuous set (see below) |
-| n | 1000, split into chunks of `n * interim_prop` and `n * (1 - interim_prop)` |
+| scenario | 2, correlated continuous set at rho = 0.5 (see below) |
+| n | 1000, one trial split into its first `n * interim_prop` participants and the rest |
 | `interim_prop` | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
 | runs | 100 — **1100 array jobs** |
 | folds | 5 below n=250 per stage, else 10 |
@@ -75,18 +75,36 @@ Scenario 2 of the continuous set is `TE_10[2]`: `tau = bW + b4 * X4`, with
 draws X1–X5) but do not modify the effect. (Before the 2026-09-26 renumbering this was scenario 3,
 and results produced then sit under `scenario_3/`.)
 
-Three consequences used as reference lines below:
+The covariates are correlated: X1–X5 and X01–X03 come from a Gaussian copula
+with exchangeable latent correlation 0.5 (`R/dgm_scenarios.R`, CORRELATED
+COVARIATES), X1 and X3 thresholded to binary. X04 and X05 (a three-level
+categorical) are the only covariates independent of X4.
+
+Each run is one trial of 1000, and stage 1 is its first `n * interim_prop`
+participants, so a run's stage 1 at 0.25 is nested in its stage 1 at 0.30 and
+curves across `interim_prop` are paired within run. (Before this rerun the two
+stages were drawn as two separate trials, each with its own `bW`.)
+
+Consequences used as reference lines below:
 
 - **`Var(tau) = b4^2 * Var(X4) = 1`**, in both stages and at every
-  `interim_prop`. `bW` is recalibrated per stage size, but it is an additive
-  constant and does not enter the variance.
-- **X4 is the only true HTE driver.** The other seven covariates in the
-  fitted model (X1, X2, X01, X02, X03, X04, X05) are noise as far as the CATE
+  `interim_prop`. The copula scales X4's latent column, so its variance is
+  unchanged by the correlation.
+- **X4 is the only true HTE driver.** The other nine covariates in the
+  fitted model (X1, X2, X3, X5, X01–X05) are noise as far as the CATE
   is concerned, and X4 should rank as the single most important one in both
   stages, under either importance measure.
+- **The noise covariates are not exchangeable.** Those correlated with X4 carry
+  some of its signal, so they should rank consistently above X04/X05 in both
+  stages. That structure inflates the stage-to-stage rank correlation without
+  any real discovery behind it. Dropping one covariate at a time also lowers X4's TE-VIM,
+  because its correlated proxies stand in for part of it.
 - **X4 is therefore the right answer to the top-variable test.** A run that
   nominates X4 and then finds a significant `W x X4` interaction in stage 2 has
-  done the whole job correctly.
+  done the whole job correctly. A run that nominates a proxy of X4 will still
+  often find a significant *marginal* interaction (`p_cts`), because E[tau | X]
+  moves with any covariate correlated with X4. The adjusted test (`p_cts_adj`)
+  conditions on the other covariates and should not.
 
 ```{r data}
 res_path <- study$res_path
@@ -388,13 +406,17 @@ kable(x4_top %>% filter(interim_prop %in% landmarks), digits = 3,
 The point of ranking covariates is whether the winner means anything. For each
 estimator and each importance measure, `cts_val_analysis.R` takes stage 1's
 most important covariate and tests its treatment interaction on the remaining
-trial participants — two ways: `p_cts`, the continuous `W x X_top` interaction,
-and `p_split`, the same test after dichotomising `X_top` at its stage-2 median.
+trial participants — three ways: `p_cts`, the continuous `W x X_top` interaction;
+`p_cts_adj`, the `W:X_top` coefficient of `Y ~ W * (all covariates)`, i.e. the
+same interaction holding the other covariates fixed; and `p_split`, the
+marginal test after dichotomising `X_top` at its stage-2 median.
 
 ```{r top-var-long}
 top_var_long <- top_var %>%
-  pivot_longer(c(p_cts, p_split), names_to = "form", values_to = "pval") %>%
-  mutate(form = recode(form, p_cts = "Continuous W x X", p_split = "Median split"))
+  pivot_longer(c(p_cts, p_cts_adj, p_split), names_to = "form", values_to = "pval") %>%
+  mutate(form = recode(form, p_cts = "Continuous W x X",
+                       p_cts_adj = "Continuous W x X, adjusted",
+                       p_split = "Median split"))
 
 top_var_prop <- top_var_long %>%
   mutate(is_sig = pval < 0.05) %>%
@@ -425,9 +447,14 @@ ggplot(top_var_prop, aes(x = interim_prop, y = prop_sig, colour = model,
        colour = "Model", fill = "Model")
 ```
 
-The median split throws away information and, for the already-binary X01-X05,
-is not a split at all — so the gap between the two panels is the cost of
-dichotomising a discovered driver rather than testing it as it stands.
+The median split throws away information and, for the already-binary X1, X3,
+X04 and X05, is not a split at all — so the gap between the continuous and
+median-split panels is the cost of dichotomising a discovered driver rather
+than testing it as it stands. The gap between the continuous and adjusted
+panels is mostly how much of the "replication" comes from nominating a proxy
+of X4 that interacts with treatment only through its correlation with X4 —
+partly, too, the power that adjusting for correlated covariates costs when X4
+itself is nominated.
 
 ```{r top-var-agreement}
 top_var_agree <- top_var %>%

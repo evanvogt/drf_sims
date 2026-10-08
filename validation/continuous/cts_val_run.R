@@ -3,7 +3,7 @@
 ##########
 # The no-queue alternative to `qsub jobscripts/cts_val_1.sh`. Same 1100 rows and
 # the same results, but 8 at a time inside an interactive session rather than
-# 1100 five-minute array jobs waiting to be scheduled.
+# 1100 short array jobs waiting to be scheduled.
 #
 # ---- how to run it ----------------------------------------------------------
 #   request an RStudio session with 8 cores and 64gb, then

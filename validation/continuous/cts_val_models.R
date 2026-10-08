@@ -294,3 +294,24 @@ interaction_pval <- function(Y, W, v) {
   if (!"W:v" %in% rownames(co)) return(NA_real_)
   unname(co["W:v", 4])
 }
+
+#' Interaction p-value for one covariate, adjusted for every other covariate
+#'
+#' The W:x_top coefficient of `Y ~ W * (all covariates)` - does x_top modify the
+#' effect once the other covariates' main effects and interactions are held
+#' fixed? interaction_pval() above is the marginal test, and under correlated
+#' covariates the two answer different questions: with rho = 0.5, E[tau | X5]
+#' moves with X5 because X5 is correlated with X4, so a marginal W x X5 test
+#' finds an interaction even though X5 modifies nothing. A wrong top covariate
+#' then "replicates" marginally; this adjusted test is the one that should not.
+#'
+#' @param X data frame of every covariate, x_top among its columns
+#' @param x_top name of the covariate whose interaction is tested
+#' @return the W:x_top p-value, or NA_real_ if lm dropped that term (aliased)
+interaction_pval_adj <- function(Y, W, X, x_top) {
+  d <- data.frame(Y = Y, W = W, X)
+  co <- summary(lm(Y ~ W * ., data = d))$coefficients
+  term <- paste0("W:", x_top)
+  if (!term %in% rownames(co)) return(NA_real_)
+  unname(co[term, 4])
+}

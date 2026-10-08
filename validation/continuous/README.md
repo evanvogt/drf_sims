@@ -7,12 +7,20 @@ validation study checks and why.
 
 | | |
 |---|---|
+| covariates | correlated, rho = 0.5 — the `continuous_corr_0.5` set (`R/dgm_scenarios.R`, CORRELATED COVARIATES), the same set `sample_size/correlated/` runs as its primary arm |
 | scenario | 2 (simple HTE, continuous X4 — see `R/dgm_scenarios.R`, `DESC_10`; scenario 3 before the 2026-09-26 renumbering) |
-| n | 1000, split into two chunks of `n * interim_prop` and `n * (1 - interim_prop)` |
+| n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 — **1100 array jobs**, 1h walltime |
+| runs | 100 — **1100 array jobs**, 15 min walltime |
 | folds | 5 below n=250 per chunk, else 10 |
-| results | `../results/cts_val/scenario_2/1000/<interim_prop>/res_sim_<run>.RDS` |
+| results | `../results/validation/continuous/rho_0.5/scenario_2/1000/<interim_prop>/res_sim_<run>.RDS` |
+
+Each run draws one trial of `n` and splits it. Because the seed is the run alone,
+a run's chunk 1 at 0.25 is nested in its chunk 1 at 0.30, so every curve across
+`interim_prop` is paired within run. Before the 2026-10-08 changes the two chunks
+were two separate draws, and since `generate_scenario_data()` calibrates `bW`
+to 80% power at the `n` it is given, each chunk was its own trial with its own
+ATE.
 
 `cts_val_config.R` rounds the `interim_prop` sequence to 2 dp, which is
 load-bearing rather than cosmetic: `interim_prop` is a `path_cols` entry, so its
@@ -20,9 +28,9 @@ load-bearing rather than cosmetic: `interim_prop` is a `path_cols` entry, so its
 `seq(by = 0.05)` yields values like `0.30000000000000004` that `get_results()`
 can no longer match back to their grid row.
 
-Only scenario 2 and n = 1000 are run today; both are still columns of the grid
-(`cts_val_config.R`) so extending to more scenarios or sizes is a one-line
-change, not a rewrite.
+Only rho = 0.5, scenario 2 and n = 1000 are run today; all three are still
+columns of the grid (`cts_val_config.R`) so extending to rho = 0, more scenarios
+or sizes is a one-line change, not a rewrite.
 
 ## Estimators
 
@@ -66,7 +74,13 @@ check 1 is there to catch their absence before 1100 jobs go out.
 | `subgroups` | fit a tree on chunk 1's top/bottom-10%-CATE responder groups, predict them into chunk 2, test the `W x subgroup` interaction there |
 | `variances` | `var(tau)` in each chunk, against the true `Var(tau) = 1` |
 | `var_imps` | each measure's covariate ranking in each chunk, and the rank change |
-| `top_var_tests` | chunk 1's most important covariate, interaction-tested on the remaining participants — both as a continuous `W x X_top` interaction and after a median split |
+| `top_var_tests` | chunk 1's most important covariate, interaction-tested on the remaining participants — as a continuous `W x X_top` interaction (`p_cts`), the same adjusted for every other covariate (`p_cts_adj`), and after a median split (`p_split`) |
+
+`p_cts_adj` exists because of the correlation. With rho = 0.5, E[tau | X5]
+moves with X5 because X5 is correlated with X4, so a marginal `W x X5` test
+finds a real interaction even though X5 modifies nothing. A run that nominates
+a proxy of X4 then "replicates" on `p_cts`. `p_cts_adj` is the `W:X_top`
+coefficient of `Y ~ W * (all covariates)` and should not flag it.
 
 The estimation logic behind these (both importance measures and
 `interaction_pval()`) is specific to this study — it isn't duplicated anywhere
@@ -136,7 +150,9 @@ metrics run exactly as they would after an array run.
 never measured, and until recently no `num.threads` reached grf at all, so each
 of those five workers spawned forests on every visible core whatever PBS had
 allocated. `cts_val_1.sh` now runs one worker with one grf thread
-(`cts_val_analysis.R <i> 1 1`) on `ncpus=1`. That is set by hand. The `syrup`
+(`cts_val_analysis.R <i> 1 1`) on `ncpus=1`. That is set by hand, as is the
+15 min walltime (against roughly 3 min a row). `cts_val_testing.R full` passes
+the same `1 1`, so the replicate time it reports is the array job's. The `syrup`
 resource sweep meant to measure the alternatives didn't work for this study
 (see the root README's "Resource profiling (removed)"). Read the replicate time
 that `cts_val_testing.R full` reports against the jobscript's walltime instead.
@@ -150,8 +166,22 @@ cannot drift apart. Called without them it falls back to what it did before
 
 **Needs a fresh run** — for several independent reasons. Archive the old tree
 first with `R/archive_old_results.R` (root `README.md`, Status, step 0): bug O
-changed the continuous DGM, and the scenario is now numbered 2, not 3. The
-most recent set:
+changed the continuous DGM, and the scenario is now numbered 2, not 3.
+
+Changed 2026-10-08, ahead of the rerun:
+
+- **Correlated covariates, rho = 0.5 only.** The study now draws from
+  `continuous_corr_0.5` rather than the independent `continuous` set. `rho` is
+  a grid and path column (`rho_0.5/`), and `cts_val_analysis.R` writes through
+  `combo_dir()` rather than a hand-built path.
+- **One trial, split.** See Design. The chunks used to be two separate draws,
+  each with `bW` calibrated to its own size.
+- **`p_cts_adj`** in `top_var_tests` — see What is compared across chunks.
+- **`cts_val_rerun.sh` reset** to what `check_failed()` computes from
+  `cts_val_1.sh`. It still asked for `ncpus=6:ompthreads=5:mem=12gb` from the
+  old 5-worker setup, and `check_failed()` only ever raises a rerun's resources.
+
+Before that:
 
 - **`bottom_pval` was never a subgroup test.** The analysis script pulled the
   interaction p-value correctly for the top-10% group (`pvals_top[4]`) but read

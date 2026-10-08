@@ -18,7 +18,9 @@
 #      float artefact, since as.character(interim_prop) becomes a directory name
 #   3. interaction_pval returns the W:v interaction, not the intercept. This is
 #      the bottom_pval bug: the old code read coefficient row 1 instead of the
-#      interaction, so the check is against both rows, not just the right one
+#      interaction, so the check is against both rows, not just the right one.
+#      Also that interaction_pval_adj does not flag a proxy of the real
+#      modifier, which the marginal test does under correlated covariates
 #   4. interaction_pval returns NA on a covariate with no contrast, the case
 #      where rpart predicted no bottom10 leaf into chunk 2 and the old
 #      positional index would have read whatever row happened to be there
@@ -29,8 +31,10 @@
 #   6. run_all_cate_methods attaches both te_vims and shap_vims to both
 #      estimators, over the same covariates, so the rank comparison in
 #      cts_val_analysis.R has matching rows to line up
-#   7. (full only) one replicate end to end: results land in a directory named
-#      by the un-mangled interim_prop, validations carries all four comparisons,
+#   7. (full only) one replicate end to end, with cts_val_1.sh's "1 1"
+#      arguments: results land in a directory named by the un-mangled
+#      interim_prop, the one trial is split n1 / n - n1, validations carries
+#      all four comparisons,
 #      and bottom is a plausible p-value rather than the near-zero intercept
 #      p-value the old code produced
 
@@ -129,6 +133,21 @@ Y_cts <- 50 + 0.5 * W_t + 2 * W_t * x_cts + rnorm(n_t)
 report(interaction_pval(Y_cts, W_t, x_cts) < 0.01,
        "a planted continuous W x X interaction is detected")
 
+# the adjusted test: a proxy correlated with the real modifier interacts
+# marginally but not once the modifier is in the model - the case p_cts_adj
+# exists for under rho = 0.5
+set.seed(104)
+x_mod <- rnorm(n_t)
+x_proxy <- 0.7 * x_mod + sqrt(1 - 0.7^2) * rnorm(n_t)
+X_adj <- data.frame(Xmod = x_mod, Xproxy = x_proxy)
+Y_adj <- 50 + 0.5 * W_t - 1 * W_t * x_mod + rnorm(n_t)
+report(interaction_pval(Y_adj, W_t, x_proxy) < 0.01,
+       "a proxy of the modifier interacts marginally (the trap)")
+report(interaction_pval_adj(Y_adj, W_t, X_adj, "Xproxy") > 0.01,
+       "interaction_pval_adj does not flag the proxy once the modifier is adjusted for")
+report(interaction_pval_adj(Y_adj, W_t, X_adj, "Xmod") < 0.01,
+       "interaction_pval_adj still detects the real modifier")
+
 # =============================================================================
 cat("\n=== 4. interaction_pval's degenerate guard ===\n")
 
@@ -171,7 +190,7 @@ report(!identical(raw_order, colnames(X_s)),
 cat("\n=== 6. run_all_cate_methods attaches both measures ===\n")
 
 setup_rng_stream(1)
-gen_t <- generate_continuous_scenario_data(2, 250)
+gen_t <- generate_continuous_scenario_data(2, 250, study$grid$rho[1])
 fit_t <- run_all_cate_methods(data = gen_t$dataset, n_folds = 10)
 
 covars <- colnames(as.matrix(gen_t$dataset[, -c(1:2)]))
@@ -194,17 +213,23 @@ if (!run_full) {
   cat("  SKIP  (pass 'full' to run - fits both chunks and writes a results file)\n")
 } else {
   analysis <- here("validation", "continuous", "cts_val_analysis.R")
+  # "1 1" - one worker, one grf thread - is what cts_val_1.sh passes, so the
+  # time reported below is the time an array job will take. Bare, the script
+  # falls back to 5 workers and unthrottled grf and reports an optimistic time.
   elapsed <- system.time(
-    status <- system2("Rscript", c(shQuote(analysis), "1"), stdout = NULL, stderr = NULL)
+    status <- system2("Rscript", c(shQuote(analysis), "1", "1", "1"),
+                      stdout = NULL, stderr = NULL)
   )[["elapsed"]]
 
-  report(status == 0, sprintf("cts_val_analysis.R 1 exits cleanly (%.1f min)",
+  report(status == 0, sprintf("cts_val_analysis.R 1 1 1 exits cleanly (%.1f min)",
                               elapsed / 60))
-  cat(sprintf("  NOTE  a single replicate took %.1f min; jobscript walltime is 1h\n",
+  cat(sprintf(paste0("  NOTE  a single replicate took %.1f min on one core; ",
+                     "check against cts_val_1.sh's walltime\n"),
               elapsed / 60))
 
   # row 1 of the grid is interim_prop = 0.25
-  out_file <- file.path(study$res_path, "scenario_2", "1000", "0.25", "res_sim_1.RDS")
+  param1 <- study$grid[1, ]
+  out_file <- file.path(combo_dir(study, param1), "res_sim_1.RDS")
   report(file.exists(out_file),
          sprintf("results land in a directory named by the un-mangled interim_prop (%s)",
                  out_file))
@@ -212,6 +237,15 @@ if (!run_full) {
   if (file.exists(out_file)) {
     res <- readRDS(out_file)
     val <- res$validations
+
+    n1 <- round(param1$n * param1$interim_prop)
+    report(nrow(res$results1$data) == n1 &&
+             nrow(res$results2$data) == param1$n - n1,
+           sprintf("the trial splits %d / %d (got %d / %d)", n1, param1$n - n1,
+                   nrow(res$results1$data), nrow(res$results2$data)))
+    report(nrow(res$results1$truth) == nrow(res$results1$data) &&
+             nrow(res$results2$truth) == nrow(res$results2$data),
+           "each chunk's truth has one row per participant")
 
     report(setequal(names(val),
                     c("subgroups", "variances", "var_imps", "top_var_tests")),
@@ -239,9 +273,12 @@ if (!run_full) {
       report(all(tv$x_top %in% covars) && all(tv$x_top2 %in% covars),
              sprintf("%s: x_top/x_top2 name real covariates (%s)",
                      model, paste(tv$x_top, collapse = ", ")))
-      report(all(is.na(tv$p_cts) | is.finite(tv$p_cts)) &&
+      report(all(c("p_cts", "p_cts_adj", "p_split") %in% names(tv)) &&
+               all(is.na(tv$p_cts) | is.finite(tv$p_cts)) &&
+               all(is.na(tv$p_cts_adj) | is.finite(tv$p_cts_adj)) &&
                all(is.na(tv$p_split) | is.finite(tv$p_split)),
-             sprintf("%s: p_cts and p_split are finite or NA, never NaN", model))
+             sprintf("%s: p_cts, p_cts_adj and p_split are present and finite or NA",
+                     model))
     }
   }
 }

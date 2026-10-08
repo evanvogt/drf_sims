@@ -128,8 +128,10 @@ tidy_var_imps %>%
 metrics$top_var %>%
   apply_labels() %>%
   mutate(measure = label_factor(measure, MEASURE_LABELS)) %>%
-  pivot_longer(c(p_cts, p_split), names_to = "form", values_to = "pval") %>%
-  mutate(form = recode(form, p_cts = "Continuous W x X", p_split = "Median split")) %>%
+  pivot_longer(c(p_cts, p_cts_adj, p_split), names_to = "form", values_to = "pval") %>%
+  mutate(form = recode(form, p_cts = "Continuous W x X",
+                       p_cts_adj = "Continuous W x X, adjusted",
+                       p_split = "Median split")) %>%
   group_by(model, measure, form, interim_prop) %>%
   summarise(prop_sig = mean(pval < 0.05, na.rm = TRUE), .groups = "drop") %>%
   ggplot(aes(x = interim_prop, y = prop_sig, colour = model)) +
