@@ -12,11 +12,10 @@
 # Per-run objects here are heavier than continuous's (9 model results + 2
 # nuisance pipelines x N arms of prediction data - all confirmed to be plain
 # numeric vectors/data.frames, not raw fitted-model objects, so nothing here
-# is unsafe to have saveRDS()'d). The strategies tree carries FOUR arms per
-# pipeline rather than two, so its per-run objects are roughly twice the size
-# of the main study's - if this job runs low on memory at mem=20gb, that is
-# the first place to look, and the strategies collect is the one to raise
-# first.
+# is unsafe to have saveRDS()'d). The strategies tree carries THREE arms per
+# pipeline rather than the main study's one, so its per-run objects are the
+# larger - if this job runs low on memory at mem=20gb, that is the first place
+# to look, and the strategies collect is the one to raise first.
 
 library(here)
 source(here("model_evaluation/me_config.R"))

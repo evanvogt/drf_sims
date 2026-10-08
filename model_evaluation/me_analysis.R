@@ -21,9 +21,6 @@ library(h2o)
 library(caret)
 library(here)
 
-# path
-path <- here()
-
 # functions
 source(here("R", "utils.R"))
 source(here("model_evaluation", "me_dgms.R"))
@@ -67,20 +64,12 @@ Y <- design$Y
 W <- design$W
 X <- design$X
 
-# k-folds for cross-fitting/validation. Two independent draws, both from
-# split_folds() and both consuming the RNG stream (see model_seed's comment
-# below for why draw order matters here): one for the 9 candidate models,
-# one for me_nuisance.R's scoring pipelines. Under the old double-crossfit
-# candidates the two could safely share one fold_indices - the scoring
-# pipeline's leave-one-fold-out nuisance for row i and a double-crossfit
-# candidate's tau_hat at row i were never fit on the identical training set.
-# Single crossfitting removes that separation: sharing folds would fit
-# tau_hat_i and the scoring nuisance at row i on the identical row set,
-# correlating their errors and biasing the proxy score toward whatever
-# tau_hat the shared split happens to favour. An independent draw keeps the
-# scoring honest.
+# k-folds for the candidates' single crossfit. The only fold draw: the scoring
+# arms that need folds (cv_shared, holdout) derive them from this one in
+# me_strategies.R. A second, independent draw for the scoring nuisance (the
+# cv_indep arm) was removed before the 2026-10-08 rerun - see me_config.R's
+# NUISANCE_ARMS.
 kfolds <- split_folds(Y, k = n_folds)
-nuis_folds <- split_folds(Y, k = n_folds)
 
 fold_indices <- kfolds$fold_indices
 fold_list <- kfolds$fold_list
@@ -92,15 +81,17 @@ on.exit(plan(metaplan), add = TRUE)
 model_list <- run_all_candidate_models(Y, W, X, fold_indices, fold_list)
 
 # nuisance-evaluation pipelines, used only to score the candidates above.
-# model_seed is drawn AFTER data generation, both fold draws, and
+# Only the `whole` arm here; me_strategies.R adds cv_shared and holdout.
+# model_seed is drawn AFTER data generation, the fold draw, and
 # candidate-model fitting - keep it in this exact position, since draw order
 # from setup_rng_stream() is part of the reproducibility contract (see
 # R/dgm_scenarios.R's header for the same principle applied to the DGM
 # itself).
 model_seed <- sample.int(2^31 - 1, 1)
 
-nuisances <- run_all_nuisance_pipelines(
-  X, Y, W, nuis_folds$fold_indices, nuis_folds$fold_list,
+nuisances <- run_nuisance_arms(
+  X, Y, W,
+  arms = list(whole = nuisance_arm_spec("whole")),
   n_cores = n_cores, mem = h2o_mem, model_seed = model_seed
 )
 
@@ -112,13 +103,12 @@ results <- c(model_list, list(
   data = list(Y = Y, W = W, X = X),
   truth = gen$truth,
   fold_info = kfolds,
-  nuisance_fold_info = nuis_folds,
   nuisances = nuisances
 ))
 
-# Save results
-output_dir <- file.path(dirname(path), "results", "model_evaluation",
-                        paste0("scenario_", scenario), n)
+# Save results - to combo_dir(), the path me_strategies.R and me_split.R read
+# their source runs from, so the three trees follow study$res_path together
+output_dir <- combo_dir(study, param)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
 

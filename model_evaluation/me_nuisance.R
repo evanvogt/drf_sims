@@ -30,10 +30,10 @@
 #
 # crossfitting/README.md makes the general version of this point ("Re-
 # randomising the stage-2 split cannot remove that dependence"), which is why
-# scf_scf_new is an arm to be TESTED there rather than the default. So the
-# independent draw is retired as a default here, kept as the `cv_indep` arm
-# because it is already computed, and set beside `cv_shared` - which uses the
-# candidates' own folds - so the comparison is empirical rather than asserted.
+# scf_scf_new is an arm to be TESTED there rather than the default. The
+# independent draw was kept for a while as a `cv_indep` arm, beside
+# `cv_shared` (the candidates' own folds), and removed before the 2026-10-08
+# rerun - see me_config.R's NUISANCE_ARMS.
 #
 # The `holdout` arm restores the `infold` (resubstitution) branch that was
 # removed from this file: fit AND predict on the fold the candidate held out.
@@ -151,8 +151,8 @@ run_xgb_cv <- function(grid, train_data) {
     # and would take a whole array task down.
     #
     # Local R has xgboost 3.2.1.1; the cluster's R/4.3.2 module has an older
-    # one (the 358 completed runs prove it, since they went through this exact
-    # line). So this is the same class of local/cluster version mismatch as
+    # one (the 358 runs of the pre-2026-09-26 study prove it, since they went
+    # through this exact line). So this is the same class of local/cluster version mismatch as
     # SL2's - see README.md - and the fix has to work under both.
     #
     # The which.min() fallback is a genuine equivalent, not a degradation:
@@ -277,9 +277,8 @@ run_xgb_holdout <- function(
 
 #' Leave-one-fold-out XGBoost nuisance estimation
 #'
-#' Serves both `cv_indep` and `cv_shared` - the two differ only in which fold
-#' vector the caller hands over (an independent draw vs. the candidate's own
-#' fold_info), not in anything this function does.
+#' Serves the `cv_shared` arm, with the candidates' own fold_info handed over
+#' by the caller.
 run_xgb_cross_validation <- function(
   X,
   Y,
@@ -347,7 +346,7 @@ run_xgb_whole_dataset <- function(X, Y, W, param_grids) {
 #'
 #' Fixes a bug found while porting: the old sim_eval.R called this without
 #' n_cores, so XGBoost's own nthread grid parameter silently defaulted to 1
-#' regardless of the n_cores the script set elsewhere. run_all_nuisance_pipelines()
+#' regardless of the n_cores the script set elsewhere. run_nuisance_arms()
 #' below now always passes it through explicitly.
 #'
 #' @param arms named list of arm specs - see nuisance_arm_spec(). Names become
@@ -543,8 +542,7 @@ run_automl_holdout <- function(
 
 #' Leave-one-fold-out H2O AutoML nuisance estimation
 #'
-#' Serves both `cv_indep` and `cv_shared`, as the XGBoost version does - only
-#' the fold vector handed in differs.
+#' Serves the `cv_shared` arm, as the XGBoost version does.
 run_automl_cross_validation <- function(
   X,
   Y,
@@ -674,8 +672,7 @@ nuisance_arm_spec <- function(type, folds = NULL) {
 
 #' Both nuisance-evaluation pipelines, over an arbitrary set of arms
 #'
-#' The general entry point, used by me_strategies.R and me_split.R.
-#' run_all_nuisance_pipelines() below is the legacy two-arm wrapper.
+#' The one entry point, used by me_analysis.R, me_strategies.R and me_split.R.
 #'
 #' @param arms named list of nuisance_arm_spec()s. Names become the arm half
 #'   of me_metrics.R's score column names, so they should come from
@@ -705,36 +702,4 @@ run_nuisance_arms <- function(
   }
 
   out
-}
-
-#' The original two-arm pipeline, unchanged in behaviour
-#'
-#' Kept at its old signature ON PURPOSE. me_analysis.R has already produced
-#' 358 of 360 runs against it, and rerunning one of the two failures must
-#' still write the same `cv`/`whole` shape those files have - me_strategies.R
-#' is what renames `cv` to `cv_indep` and adds the rest, and it has to find
-#' the same thing in every input file regardless of when that file was
-#' written.
-run_all_nuisance_pipelines <- function(
-  X,
-  Y,
-  W,
-  fold_indices,
-  fold_list,
-  n_cores,
-  mem,
-  model_seed
-) {
-  folds <- list(fold_indices = fold_indices, fold_list = fold_list)
-
-  run_nuisance_arms(
-    X, Y, W,
-    arms = list(
-      cv = nuisance_arm_spec("cv", folds),
-      whole = nuisance_arm_spec("whole")
-    ),
-    n_cores = n_cores,
-    mem = mem,
-    model_seed = model_seed
-  )
 }

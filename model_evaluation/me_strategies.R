@@ -1,27 +1,26 @@
 ##########
 # title: nuisance-arm pass over existing results - model evaluation study
 ##########
-# A SECOND PASS, not a rerun. me_analysis.R has already produced 358 of 360
-# replicates; this reads each one, adds the two new nuisance arms
-# (`cv_shared`, `holdout`), carries `whole` and the retired-but-kept
-# `cv_indep` through untouched, and writes the result to a parallel tree.
+# A SECOND PASS over me_analysis.R's replicates: this reads each one, adds the
+# two fold-based nuisance arms (`cv_shared`, `holdout`), carries `whole`
+# through untouched, and writes the result to a parallel tree.
 #
-# WHY THIS DOES NOT NEED A RERUN. Everything the new arms consume is already
-# saved in each res_sim_<run>.RDS (me_analysis.R's results list): data$Y/W/X,
-# truth, fold_info, and each candidate's tau. So:
+# WHY A SECOND PASS. Everything these arms consume is already saved in each
+# res_sim_<run>.RDS (me_analysis.R's results list): data$Y/W/X, truth,
+# fold_info, and each candidate's tau. So:
 #
 #   - the DGM is never re-run. Y/W/X are read, not regenerated. That also
 #     sidesteps replaying the RNG stream, which matters because split_folds()
 #     consumes it and R/dgm_scenarios.R's header makes draw order a contract.
 #   - the 9 candidates are never refit. tau passes through unchanged, so all
-#     four arms score the IDENTICAL candidate fits. That is the whole point:
+#     three arms score the IDENTICAL candidate fits. That is the whole point:
 #     the comparison is controlled, differing in the nuisance and nothing
 #     else. (me_split.R is the one arm that does refit, by design.)
 #   - fold_info is read from disk, never re-derived. Re-deriving it would mean
 #     reproducing caret::createFolds() at exactly the right point in the RNG
 #     stream, which is a contract this script has no reason to depend on.
 #
-# WHY A PARALLEL TREE rather than rewriting res_sim_*.RDS in place: those 358
+# WHY A PARALLEL TREE rather than rewriting res_sim_*.RDS in place: those
 # files are the only copy of a finished run. The per-run objects are plain
 # vectors and data.frames (me_collect.R's header), so duplicating them is
 # cheap, and it means me_strategies_verify.R can diff old against new rather
@@ -114,13 +113,10 @@ new_nuis <- run_nuisance_arms(
 
 # ---- merge old and new arms ------------------------------------------------
 # Ordered by NUISANCE_ARMS so the score columns me_metrics.R emits come out in
-# a stable order regardless of which arms were computed where. `cv` is renamed
-# to `cv_indep` here and nowhere else - me_analysis.R still writes `cv`, so
-# that rerunning one of the two failures produces a file this script can read.
+# a stable order regardless of which arms were computed where.
 merge_arms <- function(old_pipeline, new_pipeline) {
   merged <- list(
     whole     = old_pipeline$whole,
-    cv_indep  = old_pipeline$cv,
     cv_shared = new_pipeline$cv_shared,
     holdout   = new_pipeline$holdout
   )
@@ -139,7 +135,7 @@ names(nuisances) <- names(old$nuisances)
 # ---- propensity diagnostics ------------------------------------------------
 # calculate_pseudos() divides by pi * (1 - pi) with no trimming, and the
 # holdout arm fits pi on 25-100 rows, so its predictions sit much closer to
-# 0/1 than the whole or cv arms' do - which can make phi's AIPW correction
+# 0/1 than the whole or cv_shared arms' do - which can make phi's AIPW correction
 # blow up and dominate the DR risk. The formula is deliberately NOT changed
 # (trimming one arm and not the others would make them non-comparable); this
 # records the exposure per arm so the decision can be made from measured
@@ -165,7 +161,7 @@ pi_diag <- pi_diagnostics(nuisances)
 print(as.data.frame(pi_diag))
 
 # ---- write -----------------------------------------------------------------
-# The 9 candidates, data, truth and both fold_infos come straight from `old`,
+# The 9 candidates, data, truth and fold_info come straight from `old`,
 # so the output is a complete replicate that me_collect.R/me_metrics.R can
 # read with no knowledge that it was assembled in two passes.
 results <- old

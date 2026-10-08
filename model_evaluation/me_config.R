@@ -12,6 +12,10 @@
 # (do cheap proxy losses rank 9 candidate models the way true PEHE would?)
 # doesn't need every CATE-structure re-litigated, the same reasoning
 # crossfitting/cf_analysis.R uses for its own scenario = c(1, 4, 6, 8).
+#
+# The data are correlated-covariate (rho = 0.5, me_dgms.R's ME_RHO) since
+# 2026-10-08, so all three trees live under results/correlated/. rho is not a
+# grid column - only one value is run - so the grid is unchanged.
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -19,7 +23,7 @@ source(here("R", "pipeline.R"))
 study <- study_config(
   name     = "model_evaluation",
   prefix   = "me",
-  res_path = file.path(dirname(here()), "results", "model_evaluation"),
+  res_path = file.path(dirname(here()), "results", "correlated", "model_evaluation"),
   grid = expand.grid(
     scenario = c(1, 4, 6, 8),
     n = c(250, 500, 1000),
@@ -50,26 +54,21 @@ CANDIDATE_MODELS <- c("rf1", "rf2", "rf3", "net1", "net2", "net3", "SL1", "SL2",
 # by me_analysis.R, single-crossfit over fold_info at V=10; every arm below
 # scores those same fits.
 #
-#   whole      all n rows, fit and predicted           (no split at all)
-#   cv_indep   90%, from a SECOND INDEPENDENT fold draw (retired - see below)
+#   whole      all n rows, fit and predicted (no split at all) - me_analysis.R
 #   cv_shared  the candidate's own V-1 training folds, predicted on its held-out fold
 #   holdout    the candidate's held-out fold only, fit AND predicted there
 #
-# cv_indep is retired but kept, because it is already computed and costs
-# nothing to carry: me_analysis.R drew a second, independent fold assignment
-# (nuisance_fold_info) on the theory that sharing one draw would correlate a
-# candidate's tau_hat with the nuisance at the same row. That reasoning does
-# not survive contact with the arithmetic. Row-level honesty - whether row i's
-# own (Y_i, W_i) entered the model predicting at row i - holds under BOTH a
-# shared and an independent draw. What the second draw changes is the OVERLAP
-# of the two training sets, from 100% to (V-1)/V = 90%. It removes a tenth of
-# the dependence, for a design that cannot be described from theory.
-# crossfitting/README.md states the general form of this ("re-randomising the
-# stage-2 split cannot remove that dependence"), which is why its scf_scf_new
-# is an arm to be tested rather than the default. Keeping cv_indep alongside
-# cv_shared makes that an empirical claim in this study too, rather than a
-# deletion nobody can check.
-NUISANCE_ARMS <- c("whole", "cv_indep", "cv_shared", "holdout")
+# A fourth arm, cv_indep, was removed before the 2026-10-08 rerun. It fit the
+# nuisance leave-one-fold-out over a SECOND, independent fold draw, on the
+# theory that sharing the candidates' draw would correlate a candidate's
+# tau_hat with the nuisance at the same row. Row-level honesty - whether row
+# i's own (Y_i, W_i) entered the model predicting at row i - holds under both
+# draws; the second draw only cut the two training sets' overlap from 100% to
+# (V-1)/V = 90% (crossfitting/README.md: "re-randomising the stage-2 split
+# cannot remove that dependence"). It was kept while it was free to carry;
+# on a rerun it cost a full 10-fold nuisance pipeline per replicate, and the
+# report already discarded it.
+NUISANCE_ARMS <- c("whole", "cv_shared", "holdout")
 
 # ---- the calibration score's group counts -----------------------------------
 # How many tau_hat quantile groups the DR calibration score (calc_cal_score(),
@@ -100,15 +99,14 @@ HOLDOUT_MIN_BLOCK <- 40L
 # get_results(), check_failed() and compute_metrics() all work against them
 # unchanged - the whole point of R/pipeline.R taking the study as an argument.
 
-# me_strategies.R: a second pass over `study`'s existing results, adding the
-# cv_shared and holdout arms. Same 360-row grid, because the array index must
-# keep meaning the same row of the same grid. Written to a PARALLEL tree, not
-# back into study$res_path - those 358 files are the only copy of a finished
-# run.
+# me_strategies.R: a second pass over `study`'s results, adding the cv_shared
+# and holdout arms. Same 360-row grid, because the array index must keep
+# meaning the same row of the same grid. Written to a PARALLEL tree, not back
+# into study$res_path, so me_strategies_verify.R can diff the two.
 study_strat <- study_config(
   name     = "model_evaluation_strategies",
   prefix   = "me_strat",
-  res_path = file.path(dirname(here()), "results", "model_evaluation_strategies"),
+  res_path = file.path(dirname(here()), "results", "correlated", "model_evaluation_strategies"),
   grid     = study$grid,
   path_cols   = study$path_cols,
   n_sims      = study$n_sims,
@@ -126,7 +124,7 @@ study_strat <- study_config(
 study_split <- study_config(
   name     = "model_evaluation_split",
   prefix   = "me_split",
-  res_path = file.path(dirname(here()), "results", "model_evaluation_split"),
+  res_path = file.path(dirname(here()), "results", "correlated", "model_evaluation_split"),
   grid = expand.grid(
     scenario = c(1, 4, 6, 8),
     n = c(500, 1000),

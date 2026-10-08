@@ -2,15 +2,15 @@
 # title: prove me_strategies.R's pass-through is inert
 ##########
 # me_strategies.R adds two nuisance arms and carries four things through
-# untouched: the 9 candidates' fits, the data, the truth, and the `whole` and
-# `cv_indep` (formerly `cv`) arms. Everything downstream depends on that
-# carry-through being exact - if it is not, the four-arm comparison is not
-# comparing four ways of scoring THE SAME candidate fits, and the whole point
-# of doing this as a second pass rather than a rerun is lost.
+# untouched: the 9 candidates' fits, the data, the truth, and the `whole`
+# arm. Everything downstream depends on that carry-through being exact - if it
+# is not, the three-arm comparison is not comparing three ways of scoring THE
+# SAME candidate fits, and the whole point of doing this as a second pass is
+# lost.
 #
 # WHY THIS IS NOT A me_testing.R CHECK. Proving the carry-through needs no
 # model fits, no fixtures and no recomputation - it is identical() on two
-# saved objects. Running it over every one of the 358 file pairs is minutes of
+# saved objects. Running it over every one of the ~360 file pairs is minutes of
 # pure I/O, and it is a strictly stronger statement than any assertion against
 # an aggregated me_metrics.RDS, which could hide a compensating difference.
 # me_testing.R checks that the SCORING is right; this checks that the INPUT to
@@ -140,10 +140,6 @@ for (r in seq_len(nrow(cmb))) {
         report_fail("%s: %s `whole` was not carried through unchanged",
                     tag, pipeline)
       }
-      if (!identical(old_p$cv, new_p$cv_indep)) {
-        report_fail("%s: %s `cv` -> `cv_indep` was not a pure rename",
-                    tag, pipeline)
-      }
       # the new arms must actually be new, and complete
       for (arm in c("cv_shared", "holdout")) {
         d <- new_p[[arm]]
@@ -161,13 +157,6 @@ for (r in seq_len(nrow(cmb))) {
             report_fail("%s: %s `%s` has NA in phi/pi", tag, pipeline, arm)
           }
         }
-      }
-      # cv_shared must use the CANDIDATES' folds, which is the entire
-      # difference between it and cv_indep. If the two are identical, the
-      # pass was handed the wrong fold vector.
-      if (identical(new_p$cv_shared, new_p$cv_indep)) {
-        report_fail("%s: %s `cv_shared` is identical to `cv_indep`",
-                    tag, pipeline)
       }
     }
   }
@@ -187,5 +176,5 @@ if (length(fails)) {
   quit(save = "no", status = 1)
 }
 
-cat("\nPass-through is inert: candidates, data, truth, fold_info, `whole` and\n")
-cat("`cv_indep` are bit-identical to the source tree in every run checked.\n")
+cat("\nPass-through is inert: candidates, data, truth, fold_info and `whole`\n")
+cat("are bit-identical to the source tree in every run checked.\n")

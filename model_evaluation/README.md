@@ -72,12 +72,10 @@ The candidates' crossfitting is fixed at `V=10` single crossfit everywhere and
 is **not** what this study varies. The one exception is the 80:20 arm, where
 refitting them on a training split is the point (see below).
 
-`me_analysis.R` draws two *independent* fold assignments per replicate — one
-for the 9 candidates, one for `me_nuisance.R`'s scoring pipelines. That second
-draw was justified as preserving honesty. **It does not, and the justification
-has been retired** — see the next section. The draw itself is left in place so
-`me_analysis.R` keeps producing the shape the 358 completed runs already have;
-what changed is that it is now one arm among four rather than the default.
+`me_analysis.R` draws one fold assignment per replicate, for the 9
+candidates. The fold-based scoring arms reuse it. A second, *independent* draw
+for the scoring pipelines (the `cv_indep` arm) was removed before the
+2026-10-08 rerun — see the next section.
 
 ## Candidate models
 
@@ -120,23 +118,26 @@ them:
 - **H2O AutoML** — up to 20 auto-tuned models per target
   (`exclude_algos = c("DeepLearning", "XGBoost")`).
 
-### The four arms
+### The three arms
 
 What varies is **what data the evaluation nuisance sees relative to the data
 the candidate it is scoring was trained on**. That is the only axis; the
-candidate fits are identical across all four arms, because `me_strategies.R`
+candidate fits are identical across all three arms, because `me_strategies.R`
 reads them from the completed results rather than refitting them.
 
 | arm | nuisance trained on | predicted on | row-honest | decoupled from candidate |
 |---|---|---|---|---|
 | `whole` | all `n` rows | all `n` rows | ✗ | ✗ |
-| `cv_indep` | 90%, from a second *independent* fold draw | held-out 10% | ✓ | ✗ (90% overlap) |
 | `cv_shared` | the candidate's own `V-1` training folds | the candidate's held-out fold | ✓ | ✗ (identical training set) |
 | `holdout` | the candidate's held-out fold **only** | that same fold | ✗ | ✓ |
 
-**Why `cv_indep` is retired as the default.** The second independent draw was
-justified as stopping a candidate's `tau_hat` and the nuisance at the same row
-being fit on the identical training set. Two things are wrong with that:
+`whole` is fit by `me_analysis.R`; `cv_shared` and `holdout` by
+`me_strategies.R`.
+
+**Why `cv_indep` was removed (2026-10-08).** A fourth arm fit the nuisance
+leave-one-fold-out over a second, *independent* fold draw, justified as
+stopping a candidate's `tau_hat` and the nuisance at the same row being fit on
+the identical training set. Two things are wrong with that:
 
 - Row-level honesty — whether row `i`'s own `(Y_i, W_i)` entered the model
   predicting at row `i` — holds under **both** a shared and an independent
@@ -147,11 +148,10 @@ being fit on the identical training set. Two things are wrong with that:
   dependence.
 
 `crossfitting/README.md` makes the general version of this point — *"Re-
-randomising the stage-2 split cannot remove that dependence"* — which is why
-`scf_scf_new` is an arm to be *tested* there rather than the default. The arm
-is kept here (it is already computed, so it costs nothing) precisely so the
-claim becomes empirical: if `cv_indep` and `cv_shared` rank the candidates
-alike, that is the direct demonstration that the extra draw did nothing.
+randomising the stage-2 split cannot remove that dependence"*. The arm was
+carried while it was already computed and free; the correlated rerun would
+have paid for a full 10-fold nuisance pipeline per replicate to recompute it,
+and the report already discarded it, so it was removed with its fold draw.
 
 **What `holdout` gives up.** It is resubstitution — fit and predict on the
 same block — so every row's own `Y` is in the model that predicts it, `mu_DR`
@@ -293,8 +293,8 @@ enumerated, which is why one `me_per_model()` serves all three result trees:
 
 | tree | arms | score columns |
 |---|---|---|
-| `model_evaluation` | `cv`, `whole` | 1 + 8×2×2 = **33** |
-| `model_evaluation_strategies` | `whole`, `cv_indep`, `cv_shared`, `holdout` | 1 + 8×4×2 = **65** |
+| `model_evaluation` | `whole` | 1 + 8×1×2 = **17** |
+| `model_evaluation_strategies` | `whole`, `cv_shared`, `holdout` | 1 + 8×3×2 = **49** |
 | `model_evaluation_split` | `split` | 1 + 8×1×2 = **17** |
 
 The split tree needs no scoring variant because `me_split.R` stores `data` and
@@ -338,7 +338,7 @@ account for it.
 | `me_nuisance.R` | the two independent nuisance-evaluation pipelines — see below for why this exists outside the usual 7-file shape |
 | `me_analysis.R` | array entry point; one row of the grid per index |
 | `me_strategies.R` | second pass over completed runs — adds the `cv_shared` and `holdout` arms, writes to `model_evaluation_strategies` |
-| `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `whole`/`cv_indep` through bit-identically, and tracks known automl/holdout NA exceptions (see "Propensity trimming" above) separately from genuine failures |
+| `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `whole` through bit-identically, and tracks known automl/holdout NA exceptions (see "Propensity trimming" above) separately from genuine failures |
 | `me_split.R` | the 80:20 arm — the only script that refits the candidates |
 | `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript. Takes a tree: `main` (default) / `strategies` / `split` |
 | `me_collect.R` | gathers per-run files into `<prefix>_all.RDS`. Same tree argument |
@@ -541,7 +541,7 @@ exceptions rather than failures.
 Everything the new arms consume — `data$Y/W/X`, `truth`, `fold_info`, and each
 candidate's `tau` — is already saved per replicate. `me_strategies.R` reads
 those, so the DGM is never re-run and the 9 candidates are never refit: all
-four arms score the *identical* candidate fits, which is what makes the
+three arms score the *identical* candidate fits, which is what makes the
 comparison controlled rather than confounded with fit-to-fit variation. The
 only new fitting is the two new nuisance arms themselves, and (separately) the
 80:20 arm, which refits candidates because that is its entire purpose.

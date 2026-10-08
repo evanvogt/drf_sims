@@ -35,10 +35,12 @@
 #   cd R/jobscripts
 #   qsub -v ARCHIVE_ARGS="--label retired_2026-10 --trees continuous binary confidence_intervals" archive_old_results.sh
 #
-# Which trees: the res_path of every study in R/study_registry.R, plus
-# model_evaluation's strategies and split trees, which share me_config.R. A
+# Which trees: the res_path of every study in R/study_registry.R. A
 # res_path inside another (optimal_sf's sf_calibration/, inside the CI studies')
-# goes into its parent's .tar. Left alone: competing_risk/, whose DGM is its own
+# goes into its parent's .tar. Left alone: model_evaluation/, whose three trees
+# (main, strategies, split) were archived on 2026-09-28 and which re-runs on
+# the correlated rho = 0.5 DGM into results/correlated/ (since 2026-10-08), so
+# its config no longer names anything old; competing_risk/, whose DGM is its own
 # (competing_risk/surv_dgm.R) and was unchanged by the 2026-09-26 change (its
 # own 2026-10-01 retune is archived separately, by hand - competing_risk/
 # README.md), sample_size/correlated/'s studies (its two sample-size studies
@@ -54,7 +56,8 @@ suppressPackageStartupMessages(library(here))
 source(here("R", "pipeline.R"))
 source(here("R", "study_registry.R"))
 
-UNAFFECTED <- c("competing_risk", "correlated/continuous", "correlated/binary",
+UNAFFECTED <- c("competing_risk", "model_evaluation",
+                "correlated/continuous", "correlated/binary",
                 "correlated/confidence_intervals/continuous",
                 "correlated/confidence_intervals/binary",
                 "correlated/confidence_intervals/optimal_sf (cts)",
@@ -114,13 +117,7 @@ if (!is.null(explicit_trees)) {
   trees <- data.frame(study = explicit_trees, rel = explicit_trees)
 } else {
   studies <- study_registry[!study_registry$study_name %in% UNAFFECTED, ]
-  configs <- rbind(
-    studies[, c("study_name", "config_path", "config_var")],
-    data.frame(study_name = c("model_evaluation (strategies)",
-                              "model_evaluation (split)"),
-               config_path = "model_evaluation/me_config.R",
-               config_var = c("study_strat", "study_split"))
-  )
+  configs <- studies[, c("study_name", "config_path", "config_var")]
 
   # every config builds its res_path as file.path(dirname(here()), "results", ...);
   # the part after that is the tree's path inside results_root

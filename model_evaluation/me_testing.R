@@ -114,8 +114,8 @@ fake_nuisance_df <- function() fake_nuisance_df_n(n_fake)
 # Both pipelines x every arm in NUISANCE_ARMS, so the column count this
 # asserts tracks me_config.R rather than being typed here. me_per_model()
 # derives its columns from whatever the nuisance list carries, which is what
-# lets one scoring function serve the main study (2 arms), the strategies
-# tree (4) and the split tree (1) - so the check that matters is that it
+# lets one scoring function serve the main study (1 arm), the strategies
+# tree (3) and the split tree (1) - so the check that matters is that it
 # picks up EVERY arm it is handed, not that it produces some fixed number.
 fake_pipelines <- c("xgb", "automl")
 fake_nuis <- setNames(lapply(fake_pipelines, function(p) {
@@ -344,9 +344,9 @@ report(
 # property that has been retired. me_analysis.R's second independent fold
 # draw was justified as preserving honesty; it does not - row-level honesty
 # holds under a shared draw too, and an independent draw only cuts the two
-# training sets' overlap from 100% to (V-1)/V = 90%. See me_config.R's
-# NUISANCE_ARMS. The arm that replaces it (`cv_shared`) uses the candidates'
-# own folds deliberately, so this check would now fail for the right change.
+# training sets' overlap from 100% to (V-1)/V = 90%. The draw, and the
+# cv_indep arm it fed, are gone (me_config.R's NUISANCE_ARMS); `cv_shared`
+# uses the candidates' own folds deliberately.
 
 report(
   is.null(kfolds4$fold_pairs),
@@ -578,14 +578,12 @@ gen_asm <- generate_me_scenario_data(scenario = 6, n = n_asm)
 design_asm <- prepare_design_matrix(gen_asm$dataset)
 folds_asm <- split_folds(design_asm$Y, k = 10L)
 
-# what me_analysis.R would have written: cv + whole, under its own draw
+# what me_analysis.R would have written: the whole arm only
 old_asm <- list(
   data = list(Y = design_asm$Y, W = design_asm$W, X = design_asm$X),
   truth = gen_asm$truth,
   fold_info = folds_asm,
-  nuisances = list(xgb = list(
-    cv = fake_nuisance_df_n(n_asm), whole = fake_nuisance_df_n(n_asm)
-  ))
+  nuisances = list(xgb = list(whole = fake_nuisance_df_n(n_asm)))
 )
 
 # run_nuisance_arms() returns list(<pipeline> = list(<arm> = df)), so the arms
@@ -607,7 +605,6 @@ report(
 
 merged_asm <- list(
   whole     = old_asm$nuisances$xgb$whole,
-  cv_indep  = old_asm$nuisances$xgb$cv,
   cv_shared = new_asm$cv_shared,
   holdout   = new_asm$holdout
 )
@@ -617,9 +614,8 @@ report(
   "merged arm names match NUISANCE_ARMS in order"
 )
 report(
-  identical(merged_asm$whole, old_asm$nuisances$xgb$whole) &&
-    identical(merged_asm$cv_indep, old_asm$nuisances$xgb$cv),
-  "whole and cv_indep pass through bit-identically (cv -> cv_indep is a pure rename)"
+  identical(merged_asm$whole, old_asm$nuisances$xgb$whole),
+  "whole passes through bit-identically"
 )
 report(
   nrow(new_asm$cv_shared) == n_asm && nrow(new_asm$holdout) == n_asm,

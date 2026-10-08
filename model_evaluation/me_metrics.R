@@ -28,9 +28,9 @@
 # three result trees without an edit. With 8 score types (see me_score_types()
 # below) x 2 pipelines x however many arms:
 #
-#   main        cv, whole                                    -> 1 + 8x2x2 = 33
-#   strategies  whole, cv_indep, cv_shared, holdout           -> 1 + 8x4x2 = 65
-#   split       split                                         -> 1 + 8x1x2 = 17
+#   main        whole                                        -> 1 + 8x1x2 = 17
+#   strategies  whole, cv_shared, holdout                    -> 1 + 8x3x2 = 49
+#   split       split                                        -> 1 + 8x1x2 = 17
 #
 # The split tree works unchanged for a second reason too: me_split.R stores
 # `data` and `truth` ALREADY RESTRICTED to its 20% evaluation rows, so
@@ -214,7 +214,7 @@ me_per_model <- function(model_res, true_tau, model, sim_res, keys) {
   for (pipeline in names(sim_res$nuisances)) { # xgb, automl
     # whatever arms this tree carries - see the table above. Deliberately not
     # checked against NUISANCE_ARMS: the same function has to score the main
-    # tree's cv/whole and the split tree's single arm too.
+    # tree's whole-only and the split tree's single arm too.
     for (fold_type in names(sim_res$nuisances[[pipeline]])) {
       df <- sim_res$nuisances[[pipeline]][[fold_type]]
       arm <- arm_scores(tau_hat, df, Y, W)
