@@ -74,11 +74,10 @@ truth2 <- gen$truth[chunk2, , drop = FALSE]
 rownames(truth2) <- NULL
 
 # Folds and SuperLearner libraries for the DR SuperLearner (the forests are
-# whole-sample OOB and use neither), each sized to its own chunk. The fold rule
-# is sample_size/correlated/continuous/cts_corr_analysis.R's at its grid points
-# - 4 at 100, 5 at 250, 10 above - so a chunk of 250 is fit as that study's
-# n = 250 is.
-chunk_folds <- function(m) if (m <= 100) 4L else if (m <= 250) 5L else 10L
+# whole-sample OOB and use neither), each sized to its own chunk: 5 folds below
+# 500 rows, 10 from 500. Chunks run from 250 to 750 rows, so a fold's held-out
+# set is never under 50.
+chunk_folds <- function(m) if (m < 500) 5L else 10L
 n_folds1 <- chunk_folds(nrow(data1))
 n_folds2 <- chunk_folds(nrow(data2))
 sl_lib1 <- sl_libraries(nrow(data1))

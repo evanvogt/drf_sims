@@ -12,7 +12,7 @@ validation study checks and why.
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
 | runs | 100 — **1100 array jobs**, 2h walltime (provisional — see Sizing the job) |
-| folds | DR SuperLearner only: 5 for a chunk of ≤ 250, else 10 — `cts_corr_analysis.R`'s rule at its grid points |
+| folds | DR SuperLearner only: 5 for a chunk below 500 rows, else 10 |
 | results | `../results/validation/continuous/rho_0.5/scenario_2/1000/<interim_prop>/res_sim_<run>.RDS` |
 
 Each run draws one trial of `n` and splits it. Because the seed is the run alone,
