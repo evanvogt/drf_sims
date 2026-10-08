@@ -12,13 +12,35 @@ replicates on the remaining chunk.
 This is a robustness check for CATE-based subgroup discovery, not an
 estimator comparison — it exists nowhere else in the repo.
 
-| folder | |
+| folder / file | |
 |---|---|
 | `continuous/` | continuous outcome |
+| `binary/` | binary outcome, risk-difference scale |
+| `val_common.R` | what both arms share — see below |
 
-Only a continuous outcome is validated today. A `binary/` or
-`competing_risk/` sibling would slot in the same way `missing/binary/` and
-`sample_size/confidence_intervals/binary/` sit alongside their `continuous/` — same
-`<prefix>_val_*.R` file split, its own `jobscripts/`, its own README.
+Both arms run the same design: scenario 2 on the correlated (rho = 0.5) set of
+their outcome, one trial of 1000 split at eleven interim points, 100 runs, the
+same three estimators and the same four chunk comparisons. A
+`competing_risk/` sibling would slot in the same way: its own
+`<prefix>_val_*.R` file split, `jobscripts/` and README, sourcing
+`val_common.R`.
 
-See `continuous/README.md` for the design, estimators, file roles and status.
+## Shared code
+
+`val_common.R` holds everything the arms do identically:
+
+- `split_trial()` and `chunk_folds()` — the one-trial split, and the DR
+  SuperLearner's folds per chunk
+- `fit_val_methods()` — the three estimators and both importance measures on
+  one chunk
+- the TE-VIM, surrogate-TreeSHAP and interaction-test helpers
+- `chunk_validations()` — the four chunk comparisons
+
+Each arm's `<prefix>_val_models.R` sources it and fixes the outcome family
+(`gaussian()` / `binomial()`). Each arm's `<prefix>_val_analysis.R` then
+chooses the interaction tests' standard errors: classical for continuous, HC3
+for binary (`robust = TRUE` — see `binary/README.md`). This code moved out of
+`continuous/` unchanged when the binary arm was added (2026-10-08); the
+continuous arm's comparisons were checked identical before and after.
+
+See each arm's README for its design, file roles and status.

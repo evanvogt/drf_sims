@@ -1,5 +1,5 @@
 ##########
-# title: metrics for the interim-analysis validation study
+# title: metrics for the interim-analysis validation study, binary outcome
 ##########
 # get_results() (R/pipeline.R) already attaches the grouping columns
 # (rho, scenario, n, interim_prop, run) to every collected run, replacing the
@@ -7,9 +7,9 @@
 #
 # This does NOT reuse R/metrics.R::compute_metrics() - that function's
 # contract (per_model(model_res, true_tau, model, sim_res, keys)) assumes one
-# flat set of model results and a sim_res$truth$tau per run. A cts_val run
+# flat set of model results and a sim_res$truth$tau per run. A bin_val run
 # instead saves results1/results2/validations (two fitted chunks, already
-# compared against each other by cts_val_analysis.R), so the flattening below
+# compared against each other by bin_val_analysis.R), so the flattening below
 # is purpose-built - it reuses only the grouping-column plumbing from the
 # study config.
 
@@ -18,9 +18,9 @@ library(dplyr)
 library(tidyr)
 library(purrr)
 library(tibble)
-source(here("validation/continuous/cts_val_config.R"))
+source(here("validation/binary/bin_val_config.R"))
 
-all_results_df <- readRDS(file.path(study$res_path, "cts_val_all.RDS"))
+all_results_df <- readRDS(file.path(study$res_path, "bin_val_all.RDS"))
 
 #' Flatten the collected results into one row per (combination, run, model)
 #'
@@ -85,5 +85,5 @@ metrics <- list(subgroups = subgroups_metrics,
                 var_imps = var_imp_metrics,
                 top_var = top_var_metrics)
 
-saveRDS(metrics, file.path(study$res_path, "cts_val_metrics.RDS"))
+saveRDS(metrics, file.path(study$res_path, "bin_val_metrics.RDS"))
 print("metrics calculated!")

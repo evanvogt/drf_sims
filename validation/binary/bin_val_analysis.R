@@ -1,12 +1,13 @@
 ##########
-# title: interim-analysis validation - continuous outcome
+# title: interim-analysis validation - binary outcome
 ##########
 # Fits the three estimators (causal forest, DR random forest, DR SuperLearner)
-# on a trial split into two chronological chunks (before
-# and after an "interim analysis" at `interim_prop` of the way through), then
-# checks whether subgroups, CATE variance and variable-importance ranking
-# found on the first chunk hold up on the second. The splitting, fitting and
-# comparing are shared with binary/ - see validation/val_common.R.
+# on a trial split into two chronological chunks (before and after an "interim
+# analysis" at `interim_prop` of the way through), then checks whether
+# subgroups, CATE variance and variable-importance ranking found on the first
+# chunk hold up on the second. continuous/cts_val_analysis.R with a binary
+# outcome: the splitting, fitting and comparing are shared - see
+# validation/val_common.R.
 
 library(dplyr)
 library(furrr)
@@ -17,17 +18,16 @@ library(here)
 
 # functions
 source(here("R", "utils.R"))
-source(here("validation", "continuous", "cts_val_dgms.R"))
-source(here("validation", "continuous", "cts_val_models.R"))
-source(here("validation/continuous/cts_val_config.R"))
+source(here("validation", "binary", "bin_val_dgms.R"))
+source(here("validation", "binary", "bin_val_models.R"))
+source(here("validation", "binary", "bin_val_config.R"))
 
 # simulation parameters
 #
-# workers and grf_threads come off the jobscript's Rscript line rather than
-# being hardcoded here, so the PBS resource request and the R-level parallelism
-# cannot drift apart - same arrangement as sample_size/correlated/continuous/cts_corr_analysis.R. The
-# defaults reproduce what this script did before they were arguments, so a bare
-# `Rscript cts_val_analysis.R <i>` still works as a local smoke test.
+# workers and grf_threads come off the jobscript's Rscript line, so the PBS
+# resource request and the R-level parallelism cannot drift apart - as
+# continuous/. A bare `Rscript bin_val_analysis.R <i>` still works as a local
+# smoke test (5 workers, grf unthrottled).
 args <- commandArgs(trailingOnly = TRUE)
 
 i <- as.numeric(args[1])
@@ -50,7 +50,7 @@ rho <- param$rho
 setup_rng_stream(run)
 
 # One trial of n, split at the interim analysis - see split_trial()
-gen <- generate_continuous_scenario_data(scenario, n, rho)
+gen <- generate_binary_scenario_data(scenario, n, rho)
 chunks <- split_trial(gen, interim_prop)
 data1 <- chunks$data1
 data2 <- chunks$data2
@@ -62,9 +62,8 @@ n_folds2 <- chunk_folds(nrow(data2))
 sl_lib1 <- sl_libraries(nrow(data1))
 sl_lib2 <- sl_libraries(nrow(data2))
 
-# multisession workers are new R processes and inherit this, so setting it here
-# does control their OpenMP thread pools even though this process's own libraries
-# have already initialised - matches sample_size/correlated/continuous/cts_corr_analysis.R
+# multisession workers are new R processes and inherit this, so it keeps their
+# OpenMP thread pools in step with grf's num.threads - as continuous/
 if (!is.null(grf_threads)) Sys.setenv(OMP_NUM_THREADS = grf_threads)
 
 metaplan <- plan(multisession, workers = workers)
@@ -82,14 +81,16 @@ results2$data <- data2
 results2$truth <- chunks$truth2
 
 # The four chunk comparisons: subgroups, variances, var_imps, top_var_tests.
-# Classical standard errors in the interaction tests, as this arm has always
-# used (robust = FALSE).
-validations <- chunk_validations(results1, results2, data1, data2)
+# robust = TRUE: with a binary Y every interaction test is a linear probability
+# model - linear in the risk, the scale the treatment effect is on - whose
+# errors are heteroskedastic by construction, so its standard errors are HC3
+# (coef_pval(), validation/val_common.R) rather than the classical ones the
+# continuous arm uses.
+validations <- chunk_validations(results1, results2, data1, data2, robust = TRUE)
 
 results <- list(results1 = results1, results2 = results2, validations = validations)
 
-# under the path check/collect expect (combo_dir()) - built by hand here it would
-# not follow path_cols, which now lead with rho
+# under the path check/collect expect (combo_dir())
 output_dir <- combo_dir(study, param)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))

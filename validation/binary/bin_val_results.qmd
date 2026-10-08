@@ -1,5 +1,5 @@
 ---
-title: "Interim-analysis validation: results"
+title: "Interim-analysis validation, binary outcome: results"
 author: "Ellie Van Vogt"
 date: "`r Sys.Date()`"
 format:
@@ -24,7 +24,21 @@ library(patchwork)
 library(purrr)
 library(knitr)
 source(here("R", "figures.R"))
-source(here("validation/continuous/cts_val_config.R"))
+source(here("validation/binary/bin_val_config.R"))
+source(here("validation", "binary", "bin_val_dgms.R"))
+```
+
+```{r true-var, include=FALSE}
+# The reference Var(tau): b4^2 * Var(tanh(X4)), from one large draw of the
+# study's own DGM rather than a hand-entered constant, so it follows
+# R/dgm_scenarios.R if RD_SCALE ever moves. Here, ahead of the text, because
+# "What the truth is" quotes it inline. calib_n = the study's n keeps bW (and
+# so the risk bounds) where the study has them; bW is additive and does not
+# enter the variance either way. Monte Carlo SE on 2e5 draws is ~0.3%.
+set.seed(20261008)
+true_var_tau <- var(generate_scenario_data(
+  unique(study$grid$scenario), 2e5, set = corr_set("binary", unique(study$grid$rho)),
+  calib_n = unique(study$grid$n))$truth$tau)
 ```
 
 ## Does an interim finding survive the rest of the trial?
@@ -43,11 +57,13 @@ estimator comparison.
 
 | | |
 |---|---|
-| scenario | 2, correlated continuous set at rho = 0.5 (see below) |
+| outcome | binary, treatment effect on the risk-difference scale |
+| scenario | 2, correlated binary set at rho = 0.5 (see below) |
 | n | 1000, one trial split into its first `n * interim_prop` participants and the rest |
 | `interim_prop` | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
 | runs | 100 — **1100 array jobs** |
 | folds | DR SuperLearner only: 5 for a stage below 500 rows, else 10 |
+| interaction tests | linear probability models with HC3 standard errors |
 
 **Estimators**: `causal_forest`, `dr_random_forest` and `dr_superlearner`
 (`R/cate_models.R`). The question is whether one estimator's own findings
@@ -71,10 +87,24 @@ the interaction test below.
 
 ### What the truth is
 
-Scenario 2 of the continuous set is `TE_10[2]`: `tau = bW + b4 * X4`, with
-`b4 = -1` and `X4 ~ N(0, 1)`. `X3` and `X5` are generated (every scenario
-draws X1–X5) but do not modify the effect. (Before the 2026-09-26 renumbering this was scenario 3,
-and results produced then sit under `scenario_3/`.)
+Scenario 2 of the binary set is `TE_RD[2]`, on the risk-difference scale:
+`P(Y = 1 | x, W) = m0(x) + W * tau(x)` with `tau = bW + b4 * tanh(X4)`,
+`b4 = 0.082` (`RD_SCALE[2]`, the continuous scenario's `b4 = -1` with its sign
+reversed and scaled so every treated risk stays inside [0.01, 0.99]) and
+`X4 ~ N(0, 1)`. X1 and X2 only enter the control risk `m0`, so they are
+prognostic, not modifiers. `X3` and `X5` are generated but do not modify the
+effect.
+
+The heterogeneity is small: the CATE's SD is about 0.05 on the
+risk-difference scale, against an ATE of about −0.085 at n = 1000. With
+stages of 250–750 binary outcomes, every test below has much less power than
+in the continuous study. A low replication rate here partly reflects that
+power, not only a failure of the interim finding.
+
+Every interaction test is a linear probability model: `Y ~ W * v` is linear in
+the risk, the scale the effect is on, so `W:v` is a risk-difference
+interaction. Its errors are heteroskedastic by construction, so the standard
+errors are HC3 (`coef_pval()`, `validation/val_common.R`).
 
 The covariates are correlated: X1–X5 and X01–X03 come from a Gaussian copula
 with exchangeable latent correlation 0.5 (`R/dgm_scenarios.R`, CORRELATED
@@ -88,9 +118,10 @@ stages were drawn as two separate trials, each with its own `bW`.)
 
 Consequences used as reference lines below:
 
-- **`Var(tau) = b4^2 * Var(X4) = 1`**, in both stages and at every
-  `interim_prop`. The copula scales X4's latent column, so its variance is
-  unchanged by the correlation.
+- **`Var(tau) = b4^2 * Var(tanh(X4))`** ≈ `r signif(true_var_tau, 3)`, in both
+  stages and at every `interim_prop`, computed below by simulating the DGM. The
+  copula scales X4's latent column, so its distribution is unchanged by the
+  correlation, and `bW` is additive, so it does not enter.
 - **X4 is the only true HTE driver.** The other nine covariates in the
   fitted model (X1, X2, X3, X5, X01–X05) are noise as far as the CATE
   is concerned, and X4 should rank as the single most important one in both
@@ -111,7 +142,7 @@ Consequences used as reference lines below:
 res_path <- study$res_path
 fig_path <- here("../results/all_figures/validation")
 dir.create(fig_path, showWarnings = FALSE)
-metrics <- readRDS(file.path(res_path, "cts_val_metrics.RDS"))
+metrics <- readRDS(file.path(res_path, "bin_val_metrics.RDS"))
 
 # every estimator is shown: causal forest, DR random forest and DR SuperLearner.
 # scenario and the covariate correlation rho take one value each, so they are
@@ -204,7 +235,7 @@ ggplot(subgroups_long, aes(x = pval, colour = interim_prop, group = interim_prop
   labs(title = "Cumulative distribution of stage 2 subgroup p-values",
        x = "p-value (W x subgroup interaction)", y = "Cumulative proportion",
        colour = "Interim\nproportion")
-ggsave("cts_val_sg_cumu.png", path = fig_path, width = 20, height = 6 * n_models,
+ggsave("bin_val_sg_cumu.png", path = fig_path, width = 20, height = 6 * n_models,
        units = "cm")
 ```
 
@@ -227,8 +258,6 @@ ggplot(subgroup_prop, aes(x = interim_prop, y = prop_sig, colour = threshold,
   geom_point(size = 1.5) +
   facet_grid(model ~ which) +
   scale_x_continuous(breaks = sort(unique(subgroup_prop$interim_prop))) +
-  # 0.05 steps as before, but over the whole range: the other estimators can
-  # fall below the 0.45 the DR random forest alone never went under
   scale_y_continuous(breaks = seq(0, 1, 0.05)) +
   drf_scale() +
   scale_fill_paletteer_d("rcartocolor::Safe") +
@@ -236,7 +265,7 @@ ggplot(subgroup_prop, aes(x = interim_prop, y = prop_sig, colour = threshold,
   labs(title = "Proportion of successful stage 2 interaction tests",
        x = "Stage 1 proportion", y = "Proportion with p < threshold",
        colour = "Threshold", fill = "Threshold")
-ggsave("cts_val_sg_props.png", path = fig_path, width = 20, height = 6 * n_models,
+ggsave("bin_val_sg_props.png", path = fig_path, width = 20, height = 6 * n_models,
        units = "cm")
 
 ```
@@ -244,7 +273,8 @@ ggsave("cts_val_sg_props.png", path = fig_path, width = 20, height = 6 * n_model
 ## CATE variance stability
 
 Does the spread of estimated treatment effects in stage 1 (`vt1`) match the
-spread in stage 2 (`vt2`)? The dashed line is the true `Var(tau) = 1`.
+spread in stage 2 (`vt2`)? The dashed line is the true `Var(tau)`
+(≈ `r signif(true_var_tau, 3)`).
 
 ```{r variance-box, fig.height=3.5 * n_models}
 tidy_variances <- variances %>%
@@ -253,13 +283,13 @@ tidy_variances <- variances %>%
   mutate(stage = recode(stage, stage1 = "stage 1", stage2 = "stage 2"))
 
 ggplot(tidy_variances, aes(x = interim_lab, y = variance, fill = stage)) +
-  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_hline(yintercept = true_var_tau, linetype = "dashed") +
   geom_boxplot(alpha = 0.6, outlier.shape = NA, position = position_dodge(width = 0.8)) +
   facet_wrap(~model, ncol = 1) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
   labs(title = "CATE variance in early vs. late stage",
-       subtitle = "Dashed line: true Var(tau) = 1. stage 1 grows and stage 2 shrinks left to right.",
+       subtitle = paste0("Dashed line: true Var(tau) = ", signif(true_var_tau, 3), ". stage 1 grows and stage 2 shrinks left to right."),
        x = "Interim proportion", y = "Variance of estimated CATE", fill = "stage")
 ```
 

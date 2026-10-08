@@ -25,12 +25,12 @@
 #      where rpart predicted no bottom10 leaf into chunk 2 and the old
 #      positional index would have read whatever row happened to be there
 #   5. get_shap_vims returns one column per covariate IN X's column order.
-#      shap.values() sorts its output by importance, and cts_val_analysis.R
+#      shap.values() sorts its output by importance, and chunk_validations()
 #      ranks te_vims and shap_vims by position, so an unreindexed return would
 #      scramble every rank silently rather than erroring
 #   6. run_all_cate_methods runs all three estimators, including the DR
 #      SuperLearner, and attaches both te_vims and shap_vims to each, over the
-#      same covariates, so the rank comparison in cts_val_analysis.R has
+#      same covariates, so the rank comparison in chunk_validations() has
 #      matching rows to line up. Also prints how long one 250-row chunk took,
 #      step by step; most of it should be the DR SuperLearner's TE-VIM refits
 #   7. (full only) one replicate end to end, with cts_val_1.sh's "1 1"

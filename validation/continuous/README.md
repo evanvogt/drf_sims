@@ -1,7 +1,8 @@
 # Interim-analysis validation — continuous outcome
 
-The only validation study run today. See `validation/README.md` for what a
-validation study checks and why.
+See `validation/README.md` for what a validation study checks and why. The
+binary arm (`../binary/`) runs the same design, and the code both arms share
+lives in `../val_common.R`.
 
 ## Design
 
@@ -11,7 +12,7 @@ validation study checks and why.
 | scenario | 2 (simple HTE, continuous X4 — see `R/dgm_scenarios.R`, `DESC_10`; scenario 3 before the 2026-09-26 renumbering) |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 — **1100 array jobs**, 2h walltime (provisional — see Sizing the job) |
+| runs | 100 — **1100 array jobs**, 20 min walltime (see Sizing the job) |
 | folds | DR SuperLearner only: 5 for a chunk below 500 rows, else 10 |
 | results | `../results/validation/continuous/rho_0.5/scenario_2/1000/<interim_prop>/res_sim_<run>.RDS` |
 
@@ -94,9 +95,11 @@ finds a real interaction even though X5 modifies nothing. A run that nominates
 a proxy of X4 then "replicates" on `p_cts`. `p_cts_adj` is the `W:X_top`
 coefficient of `Y ~ W * (all covariates)` and should not flag it.
 
-The estimation logic behind these (both importance measures and
-`interaction_pval()`) is specific to this study — it isn't duplicated anywhere
-else in the repo, so it stays in `cts_val_models.R` rather than moving into `R/`.
+The comparisons are `chunk_validations()`, and the estimation logic behind them
+(both importance measures and `interaction_pval()`), in `../val_common.R`,
+shared with the binary arm. It is specific to these studies, so it stays in
+`validation/` rather than moving into `R/`. This arm calls `chunk_validations()`
+with classical standard errors (`robust = FALSE`), as it always has.
 
 ## Files
 
@@ -104,8 +107,9 @@ else in the repo, so it stays in `cts_val_models.R` rather than moving into `R/`
 |---|---|
 | `cts_val_config.R` | the parameter grid and results path — **the** definition |
 | `cts_val_dgms.R` | names this study's slice of `R/dgm_scenarios.R` |
-| `cts_val_models.R` | wraps `R/cate_models.R`'s causal_forest/DR-RF/DR-SL + the TE-VIM, TreeSHAP and interaction-test helpers |
-| `cts_val_analysis.R` | array entry point; fits both chunks, computes the four chunk comparisons |
+| `cts_val_models.R` | `run_all_cate_methods()`: `../val_common.R`'s `fit_val_methods()` with `family = gaussian()` |
+| `cts_val_analysis.R` | array entry point; splits the trial, fits both chunks, runs `chunk_validations()` |
+| `../val_common.R` | shared with `binary/`: the split, the estimators and importance measures, the interaction tests, the four comparisons |
 | `cts_val_run.R` | runs the whole grid in one RStudio session, 8 rows at a time — the no-queue alternative to `cts_val_1.sh` |
 | `cts_val_testing.R` | pre-submission verification — dependencies, grid, and the helpers above |
 | `cts_val_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
@@ -167,8 +171,8 @@ allocated. `cts_val_1.sh` now runs one worker with one grf thread
 (`cts_val_analysis.R <i> 1 1`) on `ncpus=1`. That is set by hand, as is the
 walltime. A row took roughly 3 min with the two forest estimators. The DR
 SuperLearner's TE-VIM refits (10 covariates × 5–10 folds of a 9-learner
-SuperLearner, per chunk) make it much longer, by an amount nobody has measured
-yet, so the 2h walltime is provisional. `cts_val_testing.R full` passes the
+SuperLearner, per chunk) make it longer; the walltime is now 20 min.
+`cts_val_testing.R full` passes the
 same `1 1`, so the replicate time it reports is the array job's. Check 6 also
 prints a step-by-step timing of one 250-row chunk. If a row is too slow on one
 core, raise `ncpus`, `ompthreads` and the `workers` argument together
@@ -203,6 +207,10 @@ Changed 2026-10-08, ahead of the rerun:
   Estimators and Variable importance. The TE-VIM scoring shared by all three
   is now one helper, `te_vim_scores()`; the two forest TE-VIMs compute exactly
   what they did before.
+- **Shared code moved to `../val_common.R`** when the binary arm was added:
+  the split, `fit_val_methods()`, the helpers and `chunk_validations()` (the
+  four comparisons, formerly inline in `cts_val_analysis.R`). The comparisons
+  were checked identical to the inline code at four interim points.
 - **`cts_val_rerun.sh` reset** to what `check_failed()` computes from
   `cts_val_1.sh`. It still asked for `ncpus=6:ompthreads=5:mem=12gb` from the
   old 5-worker setup, and `check_failed()` only ever raises a rerun's resources.
