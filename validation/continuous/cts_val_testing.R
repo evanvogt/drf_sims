@@ -28,9 +28,11 @@
 #      shap.values() sorts its output by importance, and cts_val_analysis.R
 #      ranks te_vims and shap_vims by position, so an unreindexed return would
 #      scramble every rank silently rather than erroring
-#   6. run_all_cate_methods attaches both te_vims and shap_vims to both
-#      estimators, over the same covariates, so the rank comparison in
-#      cts_val_analysis.R has matching rows to line up
+#   6. run_all_cate_methods runs all three estimators, including the DR
+#      SuperLearner, and attaches both te_vims and shap_vims to each, over the
+#      same covariates, so the rank comparison in cts_val_analysis.R has
+#      matching rows to line up. Also prints how long one 250-row chunk took,
+#      step by step; most of it should be the DR SuperLearner's TE-VIM refits
 #   7. (full only) one replicate end to end, with cts_val_1.sh's "1 1"
 #      arguments: results land in a directory named by the un-mangled
 #      interim_prop, the one trial is split n1 / n - n1, validations carries
@@ -67,7 +69,11 @@ report <- function(ok, msg) {
 # =============================================================================
 cat("\n=== 1. the new dependencies ===\n")
 
-for (pkg in c("xgboost", "SHAPforxgboost")) {
+# plus the DR SuperLearner's learners (R/sl_library.R). Those are in sim-env
+# for the sample-size studies already, but a missing one would only show up as
+# a learner the pretest silently drops
+for (pkg in c("xgboost", "SHAPforxgboost",
+              "SuperLearner", "glmnet", "gam", "earth", "ranger")) {
   ok <- requireNamespace(pkg, quietly = TRUE)
   report(ok, sprintf("%s is installed%s", pkg,
                      if (ok) sprintf(" (%s)", as.character(packageVersion(pkg))) else ""))
@@ -191,9 +197,25 @@ cat("\n=== 6. run_all_cate_methods attaches both measures ===\n")
 
 setup_rng_stream(1)
 gen_t <- generate_continuous_scenario_data(2, 250, study$grid$rho[1])
-fit_t <- run_all_cate_methods(data = gen_t$dataset, n_folds = 10)
+sl_t <- system.time(
+  fit_t <- run_all_cate_methods(data = gen_t$dataset, n_folds = 5,
+                                verbose_timing = TRUE)
+)[["elapsed"]]
+cat(sprintf("  NOTE  one 250-row chunk took %.1f min with %d worker(s); by step:\n",
+            sl_t / 60, workers))
+print(round(unlist(fit_t$timings), 1))
+fit_t$timings <- NULL
 
 covars <- colnames(as.matrix(gen_t$dataset[, -c(1:2)]))
+
+report(setequal(names(fit_t), c("causal_forest", "dr_random_forest", "dr_superlearner")),
+       sprintf("all three estimators ran (got %s)", paste(names(fit_t), collapse = ", ")))
+
+sl_m <- fit_t$dr_superlearner
+report(!is.null(sl_m) && length(sl_m$tau) == nrow(gen_t$dataset) && !anyNA(sl_m$tau),
+       "dr_superlearner: one crossfit tau per row, none missing")
+report(!is.null(sl_m) && all(is.finite(unlist(sl_m$te_vims[1, ]))),
+       "dr_superlearner: every dropped-covariate refit filled its folds (finite TE-VIMs)")
 
 for (model in names(fit_t)) {
   m <- fit_t[[model]]
@@ -250,6 +272,9 @@ if (!run_full) {
     report(setequal(names(val),
                     c("subgroups", "variances", "var_imps", "top_var_tests")),
            "validations carries all four chunk comparisons")
+    report(setequal(names(val$subgroups),
+                    c("causal_forest", "dr_random_forest", "dr_superlearner")),
+           "every comparison covers all three estimators")
 
     for (model in names(val$subgroups)) {
       sg <- val$subgroups[[model]]

@@ -1,10 +1,11 @@
 ##########
 # title: CATE estimation for the interim-analysis validation study
 ##########
-# The nuisance estimation and the two estimators (causal_forest,
-# dr_random_forest) live in R/cate_models.R - this study uses only those two,
-# because its question is whether subgroups/variance/variable-importance found
-# on one chunk of a trial replicate on the next, not which estimator is best.
+# The nuisance estimation and the three estimators (causal_forest,
+# dr_random_forest, dr_superlearner) live in R/cate_models.R. The question is
+# whether subgroups/variance/variable-importance found on one chunk of a trial
+# replicate on the next, not which estimator is best, so the oracle and
+# semi-oracle arms are not run.
 #
 # Adopting R/cate_models.R's run_causal_forest also switches this study's
 # causal-forest arm to the shared Y.hat.cf nuisance (a regression of Y on X
@@ -12,10 +13,10 @@
 # observed W plugged back in). That is a deliberate change, not an accident -
 # see validation/README.md's Status section.
 #
-# Both estimators (and the TE-VIM refits below) are whole-sample OOB now, not
-# fold-crossfit - see R/cate_models.R's crossfitting-strategy note. n_folds is
-# kept as a parameter only so the analysis driver's call site doesn't need to
-# change; it is otherwise unused.
+# The two forest estimators (and their TE-VIM refits below) are whole-sample
+# OOB, not fold-crossfit - see R/cate_models.R's crossfitting-strategy note.
+# n_folds is used by the DR SuperLearner alone: its nuisances, its stage 2 and
+# its TE-VIM refits all share one set of folds.
 #
 # The two variable-importance computations below (TE-VIM and surrogate
 # TreeSHAP) and the subgroup interaction test are genuinely study-specific -
@@ -39,12 +40,20 @@ source(here::here("R", "cate_models.R"))
 #'   R/cate_models.R::cate_methods(), and the same caveat: `timings` is then an
 #'   element of `results` that is not a model, so callers deriving a model list
 #'   from `names(results)` must exclude it (cts_val_analysis.R does).
+#' @param sl_lib the DR SuperLearner's libraries, list(W = , Y = , tau = ).
+#'   Defaults to R/sl_library.R's sl_libraries() at this chunk's size, which is
+#'   what cts_val_analysis.R passes too.
 run_all_cate_methods <- function(data, n_folds = 10, num.threads = NULL,
-                                 verbose_timing = FALSE) {
+                                 verbose_timing = FALSE,
+                                 sl_lib = sl_libraries(nrow(data))) {
 
   X <- as.matrix(data[, -c(1:2)])
   Y <- data$Y
   W <- data$W
+
+  # contiguous folds, as R/cate_models.R::cate_methods() builds them
+  fold_indices <- sort(seq(nrow(X)) %% n_folds) + 1
+  fold_list <- unique(fold_indices)
 
   timings <- list()
   time_step <- function(label, expr) {
@@ -82,6 +91,30 @@ run_all_cate_methods <- function(data, n_folds = 10, num.threads = NULL,
     X, results$dr_random_forest$tau
   ))
 
+  # SuperLearner wants a data.frame; the forests above keep the matrix. Its
+  # pseudo-outcome comes from its own SuperLearner nuisances, not nuisance_rf's,
+  # so its TE-VIMs are scored against that.
+  cat("Running DR SuperLearner...\n")
+  X_df <- as.data.frame(X)
+  nuisances_sl <- time_step("nuisance_sl",
+                            nuisance_sl(X_df, Y, W, fold_indices, sl_lib))
+  dropped_nuis <- attr(nuisances_sl, "sl_dropped")
+  attr(nuisances_sl, "sl_dropped") <- NULL
+
+  results$dr_superlearner <- time_step("dr_superlearner", run_dr_superlearner(
+    X_df, Y, W, nuisances_sl, fold_indices, fold_list, sl_lib))
+  results$dr_superlearner$te_vims <- time_step("sl_te_vims", get_te_vims_superlearner(
+    X_df, nuisances_sl$po, results$dr_superlearner$tau, fold_indices, sl_lib,
+    results$dr_superlearner$sl_dropped
+  ))
+  results$dr_superlearner$shap_vims <- time_step("sl_shap_vims", get_shap_vims(
+    X, results$dr_superlearner$tau
+  ))
+  # kept inside the model's own element: every top-level element of `results`
+  # other than data/truth/timings is read as a model by cts_val_analysis.R
+  results$dr_superlearner$sl_dropped <- rbind(dropped_nuis,
+                                              results$dr_superlearner$sl_dropped)
+
   if (verbose_timing) results$timings <- timings
 
   results
@@ -99,28 +132,23 @@ run_all_cate_methods <- function(data, n_folds = 10, num.threads = NULL,
 # `get_te_vims` covers estimators whose second stage is a plain regression
 # forest on a pseudo-outcome (DR Random Forest); `get_te_vims_causal_forest`
 # refits a causal_forest instead, since that estimator takes (X, Y, W)
-# directly rather than (X, pseudo-outcome).
+# directly rather than (X, pseudo-outcome). `get_te_vims_superlearner` is the
+# fold-crossfit exception: the DR SuperLearner's stage 2 is crossfit, so its
+# dropped-covariate refits are too, on the same folds.
 
-#' TE-VIMs for a DR-learner style estimator (pseudo-outcome regression)
+#' Score dropped-covariate CATE predictions against the full model's
 #'
-#' @param X covariate matrix
+#' The one TE-VIM calculation every refit function below shares: the increase
+#' in squared error against the pseudo-outcome from dropping each covariate,
+#' with its influence-function standard error.
+#'
 #' @param po pseudo-outcome vector
-#' @param tau full-model OOB CATE estimates
-#' @param num.threads grf thread count for each dropped-covariate refit. These
-#'   run one per worker, so leaving it NULL means every worker spawns a forest on
-#'   all visible cores at once, oversubscribing whatever PBS allocated.
-get_te_vims <- function(X, po, tau, num.threads = NULL) {
-  n_obs <- nrow(X)
-  covariates <- colnames(X)
-
-  sub_taus_list <- future_map(seq_along(covariates), function(i) {
-    new_X <- as.matrix(X[, -i])
-    predict(regression_forest(new_X, po, num.threads = num.threads))$predictions
-  }, .options = furrr_options(seed = TRUE))
-
-  sub_taus <- do.call(cbind, sub_taus_list)
-  colnames(sub_taus) <- covariates
-
+#' @param tau full-model out-of-sample CATE estimates
+#' @param sub_taus n x p matrix, column j the predictions without covariate j,
+#'   columns named by covariate
+#' @return data.frame, rows tevim and std_err, one column per covariate
+te_vim_scores <- function(po, tau, sub_taus) {
+  n_obs <- length(po)
   r_tau <- (po - tau)^2
 
   te_vims <- apply(sub_taus, 2, function(sub_tau) {
@@ -132,6 +160,28 @@ get_te_vims <- function(X, po, tau, num.threads = NULL) {
   }) %>% simplify2array()
 
   as.data.frame(te_vims)
+}
+
+#' TE-VIMs for a DR-learner style estimator (pseudo-outcome regression)
+#'
+#' @param X covariate matrix
+#' @param po pseudo-outcome vector
+#' @param tau full-model OOB CATE estimates
+#' @param num.threads grf thread count for each dropped-covariate refit. These
+#'   run one per worker, so leaving it NULL means every worker spawns a forest on
+#'   all visible cores at once, oversubscribing whatever PBS allocated.
+get_te_vims <- function(X, po, tau, num.threads = NULL) {
+  covariates <- colnames(X)
+
+  sub_taus_list <- future_map(seq_along(covariates), function(i) {
+    new_X <- as.matrix(X[, -i])
+    predict(regression_forest(new_X, po, num.threads = num.threads))$predictions
+  }, .options = furrr_options(seed = TRUE))
+
+  sub_taus <- do.call(cbind, sub_taus_list)
+  colnames(sub_taus) <- covariates
+
+  te_vim_scores(po, tau, sub_taus)
 }
 
 #' TE-VIMs for the causal forest, refitting a whole-sample causal_forest per
@@ -148,7 +198,6 @@ get_te_vims <- function(X, po, tau, num.threads = NULL) {
 #'   here, since a causal_forest cross-fits its own nuisances and so is the more
 #'   expensive of the two refits
 get_te_vims_causal_forest <- function(X, Y, W, po, tau, num.threads = NULL) {
-  n_obs <- nrow(X)
   covariates <- colnames(X)
 
   sub_taus_list <- future_map(seq_along(covariates), function(i) {
@@ -159,17 +208,60 @@ get_te_vims_causal_forest <- function(X, Y, W, po, tau, num.threads = NULL) {
   sub_taus <- do.call(cbind, sub_taus_list)
   colnames(sub_taus) <- covariates
 
-  r_tau <- (po - tau)^2
+  te_vim_scores(po, tau, sub_taus)
+}
 
-  te_vims <- apply(sub_taus, 2, function(sub_tau) {
-    r_subtau <- (po - sub_tau)^2
-    tevim <- sum(r_subtau - r_tau) / n_obs
-    infl <- r_subtau - r_tau - tevim
-    std_err <- sqrt(sum(infl^2)) / n_obs
-    list(tevim = tevim, std_err = std_err)
-  }) %>% simplify2array()
+#' TE-VIMs for the DR SuperLearner, refitting its crossfit stage 2 per dropped
+#' covariate
+#'
+#' Same pseudo-outcome, same folds, same stage-2 library as the full model
+#' (R/cate_models.R::stage_2_sl), with covariate j removed - so tau and every
+#' sub_tau are out-of-fold predictions of the same learner. Each fold reuses the
+#' library the full model's pretest left on that fold rather than pretesting
+#' again: the pretest only removes learners that error or predict non-finite
+#' values, which dropping one covariate does not change, and skipping it saves
+#' 9 two-fold fits per refit. The p x fold refits are one flat future_map, so
+#' extra workers spread across all of them.
+#'
+#' @param X covariate data.frame, as SuperLearner takes it
+#' @param po nuisance_sl()'s pseudo-outcome
+#' @param tau the full model's crossfit CATE estimates
+#' @param fold_indices the folds the full model used
+#' @param sl_lib list(W = , Y = , tau = ); the tau library is used
+#' @param sl_dropped run_dr_superlearner()'s dropped-learner table, whose
+#'   model == "tau" rows say what the full model's pretest removed per fold
+get_te_vims_superlearner <- function(X, po, tau, fold_indices, sl_lib,
+                                     sl_dropped = NULL) {
+  covariates <- colnames(X)
+  tau_lib <- as_sl_libs(sl_lib)$tau
 
-  as.data.frame(te_vims)
+  fold_lib <- function(fold) {
+    gone <- if (is.null(sl_dropped)) character() else
+      sl_dropped$learner[sl_dropped$model == "tau" & sl_dropped$fold == fold]
+    lib <- setdiff(tau_lib, gone)
+    if (length(lib) == 0) "SL.mean" else lib
+  }
+
+  jobs <- expand.grid(j = seq_along(covariates), fold = unique(fold_indices))
+
+  preds <- future_map(seq_len(nrow(jobs)), function(k) {
+    j <- jobs$j[k]
+    fold <- jobs$fold[k]
+    in_train <- fold_indices != fold
+    new_X <- X[, -j, drop = FALSE]
+    fit <- sl_fit_predict(po[in_train], new_X[in_train, , drop = FALSE],
+                          list(tau = new_X[!in_train, , drop = FALSE]),
+                          fold_lib(fold), family = gaussian())
+    fit$pred$tau
+  }, .options = furrr_options(seed = TRUE))
+
+  sub_taus <- matrix(NA_real_, length(po), length(covariates),
+                     dimnames = list(NULL, covariates))
+  for (k in seq_len(nrow(jobs))) {
+    sub_taus[fold_indices == jobs$fold[k], jobs$j[k]] <- preds[[k]]
+  }
+
+  te_vim_scores(po, tau, sub_taus)
 }
 
 

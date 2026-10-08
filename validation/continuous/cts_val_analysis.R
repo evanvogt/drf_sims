@@ -1,7 +1,8 @@
 ##########
 # title: interim-analysis validation - continuous outcome
 ##########
-# Fits both estimators on a trial split into two chronological chunks (before
+# Fits the three estimators (causal forest, DR random forest, DR SuperLearner)
+# on a trial split into two chronological chunks (before
 # and after an "interim analysis" at `interim_prop` of the way through), then
 # checks whether subgroups, CATE variance and variable-importance ranking
 # found on the first chunk hold up on the second.
@@ -9,6 +10,7 @@
 library(dplyr)
 library(furrr)
 library(grf)
+library(SuperLearner)
 library(rpart)
 library(here)
 
@@ -24,7 +26,7 @@ source(here("validation/continuous/cts_val_config.R"))
 # being hardcoded here, so the PBS resource request and the R-level parallelism
 # cannot drift apart - same arrangement as sample_size/correlated/continuous/cts_corr_analysis.R. The
 # defaults reproduce what this script did before they were arguments, so a bare
-# `Rscript cts_val_analysis.R <i>` (cts_val_testing.R check 7) still works.
+# `Rscript cts_val_analysis.R <i>` still works as a local smoke test.
 args <- commandArgs(trailingOnly = TRUE)
 
 i <- as.numeric(args[1])
@@ -71,8 +73,16 @@ truth1 <- gen$truth[chunk1, , drop = FALSE]
 truth2 <- gen$truth[chunk2, , drop = FALSE]
 rownames(truth2) <- NULL
 
-n_folds1 <- ifelse(nrow(data1) < 250, 5, 10)
-n_folds2 <- ifelse(nrow(data2) < 250, 5, 10)
+# Folds and SuperLearner libraries for the DR SuperLearner (the forests are
+# whole-sample OOB and use neither), each sized to its own chunk. The fold rule
+# is sample_size/correlated/continuous/cts_corr_analysis.R's at its grid points
+# - 4 at 100, 5 at 250, 10 above - so a chunk of 250 is fit as that study's
+# n = 250 is.
+chunk_folds <- function(m) if (m <= 100) 4L else if (m <= 250) 5L else 10L
+n_folds1 <- chunk_folds(nrow(data1))
+n_folds2 <- chunk_folds(nrow(data2))
+sl_lib1 <- sl_libraries(nrow(data1))
+sl_lib2 <- sl_libraries(nrow(data2))
 
 # multisession workers are new R processes and inherit this, so setting it here
 # does control their OpenMP thread pools even though this process's own libraries
@@ -84,12 +94,12 @@ on.exit(plan(metaplan), add = TRUE)
 
 # Fit both estimators on each chunk
 results1 <- run_all_cate_methods(data = data1, n_folds = n_folds1,
-                                 num.threads = grf_threads)
+                                 num.threads = grf_threads, sl_lib = sl_lib1)
 results1$data <- data1
 results1$truth <- truth1
 
 results2 <- run_all_cate_methods(data = data2, n_folds = n_folds2,
-                                 num.threads = grf_threads)
+                                 num.threads = grf_threads, sl_lib = sl_lib2)
 results2$data <- data2
 results2$truth <- truth2
 

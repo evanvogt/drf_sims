@@ -11,8 +11,8 @@ validation study checks and why.
 | scenario | 2 (simple HTE, continuous X4 — see `R/dgm_scenarios.R`, `DESC_10`; scenario 3 before the 2026-09-26 renumbering) |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 — **1100 array jobs**, 15 min walltime |
-| folds | 5 below n=250 per chunk, else 10 |
+| runs | 100 — **1100 array jobs**, 2h walltime (provisional — see Sizing the job) |
+| folds | DR SuperLearner only: 5 for a chunk of ≤ 250, else 10 — `cts_corr_analysis.R`'s rule at its grid points |
 | results | `../results/validation/continuous/rho_0.5/scenario_2/1000/<interim_prop>/res_sim_<run>.RDS` |
 
 Each run draws one trial of `n` and splits it. Because the seed is the run alone,
@@ -34,10 +34,18 @@ or sizes is a one-line change, not a rewrite.
 
 ## Estimators
 
-Only `causal_forest` and `dr_random_forest`, both from `R/cate_models.R` — the
-question here is whether one estimator's own findings persist across chunks,
-not which estimator is most accurate, so the oracle/semi-oracle/SuperLearner
-arms this repo's other studies carry are not run.
+`causal_forest`, `dr_random_forest` and `dr_superlearner`, all from
+`R/cate_models.R`. The question here is whether one estimator's own findings
+persist across chunks, not which estimator is most accurate, so the oracle and
+semi-oracle arms this repo's other studies carry are not run.
+
+The DR SuperLearner is fit as in the sample-size studies: `nuisance_sl()` and
+`run_dr_superlearner()`, single leave-one-fold-out crossfitting with the same
+folds for nuisances and stage 2, and `sl_libraries()` sized to each chunk. Every
+chunk is ≥ 250 rows, so it gets the full libraries apart from `SL.earth` in the
+outcome model below 500. Its pseudo-outcome comes from its own SuperLearner
+nuisances, and its TE-VIMs are scored against that rather than against
+`nuisance_rf()`'s.
 
 ## Variable importance
 
@@ -47,8 +55,12 @@ why both are kept — each gets its own chunk-1-vs-chunk-2 rank comparison, and
 each nominates its own top covariate for the interaction test below.
 
 - `te_vims` — refit the second stage with each covariate dropped in turn and
-  compare out-of-bag prediction error. How much worse is the CATE predicted
-  without this covariate?
+  compare out-of-sample prediction error. How much worse is the CATE predicted
+  without this covariate? Out-of-bag for the two forests. For the DR
+  SuperLearner it is a crossfit refit of its stage-2 SuperLearner on the same
+  folds (`get_te_vims_superlearner()`), one per covariate × fold. Each fold
+  reuses the library the full fit's pretest left there instead of pretesting
+  again. This is by far the most expensive step in a row.
 - `shap_vims` — fit a tuned xgboost surrogate to the estimated CATEs and take
   exact TreeSHAP of it, averaging |SHAP| over units. How much of each unit's
   estimated CATE is attributable to this covariate? This is "Strategy 3" /
@@ -56,7 +68,7 @@ each nominates its own top covariate for the interaction test below.
   `cvboost3()` with a reduced tuning grid (3 learning rates × 3 depths, 5-fold,
   ≤2000 rounds) — the paper's 24-combination search runs four times per array
   job across 1100 jobs. Because it reads only `(X, tau)` it applies unchanged to
-  both estimators, unlike the TE-VIMs which need an estimator-specific refit.
+  every estimator, unlike the TE-VIMs which need an estimator-specific refit.
 
 Both are larger-is-more-important, so `rank()` means the same thing for each.
 
@@ -92,7 +104,7 @@ else in the repo, so it stays in `cts_val_models.R` rather than moving into `R/`
 |---|---|
 | `cts_val_config.R` | the parameter grid and results path — **the** definition |
 | `cts_val_dgms.R` | names this study's slice of `R/dgm_scenarios.R` |
-| `cts_val_models.R` | wraps `R/cate_models.R`'s causal_forest/DR-RF + the TE-VIM, TreeSHAP and interaction-test helpers |
+| `cts_val_models.R` | wraps `R/cate_models.R`'s causal_forest/DR-RF/DR-SL + the TE-VIM, TreeSHAP and interaction-test helpers |
 | `cts_val_analysis.R` | array entry point; fits both chunks, computes the four chunk comparisons |
 | `cts_val_run.R` | runs the whole grid in one RStudio session, 8 rows at a time — the no-queue alternative to `cts_val_1.sh` |
 | `cts_val_testing.R` | pre-submission verification — dependencies, grid, and the helpers above |
@@ -130,7 +142,9 @@ source(here::here("validation", "continuous", "cts_val_run.R"))
 It runs 8 rows at a time, each as its own `Rscript cts_val_analysis.R <i> 1 1`
 subprocess — the identical command `cts_val_1.sh` gives one array index, so a
 row produced here and a row produced by the array are the same calculation and
-land in the same place. Budget roughly 7h for a full grid.
+land in the same place. A full grid took roughly 7h before the DR SuperLearner
+was added; with it, budget 1100 × (the replicate time `cts_val_testing.R full`
+reports) / 8.
 
 Rows that already have a results file are skipped (the same missing-run logic
 `cts_val_check.R` uses), so an interrupted session — or one that hits its
@@ -151,8 +165,16 @@ never measured, and until recently no `num.threads` reached grf at all, so each
 of those five workers spawned forests on every visible core whatever PBS had
 allocated. `cts_val_1.sh` now runs one worker with one grf thread
 (`cts_val_analysis.R <i> 1 1`) on `ncpus=1`. That is set by hand, as is the
-15 min walltime (against roughly 3 min a row). `cts_val_testing.R full` passes
-the same `1 1`, so the replicate time it reports is the array job's. The `syrup`
+walltime. A row took roughly 3 min with the two forest estimators. The DR
+SuperLearner's TE-VIM refits (10 covariates × 5–10 folds of a 9-learner
+SuperLearner, per chunk) make it much longer, by an amount nobody has measured
+yet, so the 2h walltime is provisional. `cts_val_testing.R full` passes the
+same `1 1`, so the replicate time it reports is the array job's. Check 6 also
+prints a step-by-step timing of one 250-row chunk. If a row is too slow on one
+core, raise `ncpus`, `ompthreads` and the `workers` argument together
+(`cts_val_analysis.R <i> k 1` on `ncpus=k:ompthreads=k`). The SuperLearner
+folds and the TE-VIM refits all run through `future_map()`, so they spread
+across the extra workers. The `syrup`
 resource sweep meant to measure the alternatives didn't work for this study
 (see the root README's "Resource profiling (removed)"). Read the replicate time
 that `cts_val_testing.R full` reports against the jobscript's walltime instead.
@@ -177,6 +199,10 @@ Changed 2026-10-08, ahead of the rerun:
 - **One trial, split.** See Design. The chunks used to be two separate draws,
   each with `bW` calibrated to its own size.
 - **`p_cts_adj`** in `top_var_tests` — see What is compared across chunks.
+- **DR SuperLearner added** as a third estimator, with crossfit TE-VIMs — see
+  Estimators and Variable importance. The TE-VIM scoring shared by all three
+  is now one helper, `te_vim_scores()`; the two forest TE-VIMs compute exactly
+  what they did before.
 - **`cts_val_rerun.sh` reset** to what `check_failed()` computes from
   `cts_val_1.sh`. It still asked for `ncpus=6:ompthreads=5:mem=12gb` from the
   old 5-worker setup, and `check_failed()` only ever raises a rerun's resources.
@@ -227,7 +253,7 @@ rebuild:
   (`cts_val_config.R`) and one file (`cts_val_all.RDS`).
 
 **Not implemented.** The "compare HTE tests between chunks" comparison was
-stubbed in the original code and still is. Both estimators' per-run objects
+stubbed in the original code and still is. All three estimators' per-run objects
 now carry `BLP_whole`/`independence_cate`/`independence_po` in the same shape
 `R/metrics.R::hte_test_metrics()` consumes, which is what a fifth chunk
 comparison (alongside subgroups/variance/var-imps/top-var) would build on.

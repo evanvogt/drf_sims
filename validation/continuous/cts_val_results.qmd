@@ -49,9 +49,10 @@ estimator comparison.
 | runs | 100 — **1100 array jobs** |
 | folds | 5 below n=250 per stage, else 10 |
 
-**Estimators**: only `causal_forest` and `dr_random_forest`
+**Estimators**: `causal_forest`, `dr_random_forest` and `dr_superlearner`
 (`R/cate_models.R`). The question is whether one estimator's own findings
-persist across stages (can add superlearner for larger interim proportions)
+persist across stages. The DR SuperLearner is crossfit, and its TE-VIMs come
+from crossfit refits of its stage-2 SuperLearner on the same folds.
 
 **Variable importance**: two measures, computed side by side for each estimator
 in each stage (`cts_val_models.R`).

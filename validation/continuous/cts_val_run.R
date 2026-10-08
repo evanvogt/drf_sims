@@ -18,12 +18,15 @@
 # calculation. cts_val_analysis.R is not modified, is called with the same
 # arguments, and gets the same fresh process a compute node gives it - no RNG
 # kind, plan() or OMP_NUM_THREADS state carried over from the row before. The
-# price is one R startup and package load per row, a few percent of a ~3 minute
-# row, and worth paying to keep the two paths interchangeable.
+# price is one R startup and package load per row, a small fraction of a row,
+# and worth paying to keep the two paths interchangeable.
 #
 # Rows whose results file already exists are skipped, so a session that is
 # interrupted - or that hits its walltime - is resumed by sourcing this file
-# again. A full grid from scratch is roughly 1100 x ~3 min / 8 ~ 7 hours.
+# again. Before the DR SuperLearner was added a row took ~3 min and a full grid
+# ~7 hours here; with its TE-VIM refits a row is unmeasured but much longer, so
+# read cts_val_testing.R full's replicate time before sizing a session -
+# 1100 x <that> / 8 is the wall time.
 #
 # ---- what it deliberately does not do ---------------------------------------
 # It never writes jobscripts/failed_ids.txt and never edits cts_val_rerun.sh.
@@ -45,7 +48,7 @@ workers       <- 8      # grid rows in flight at once - one core each
 inner_workers <- 1      # -> cts_val_analysis.R's `workers` arg  \  the 1 1 on
 grf_threads   <- 1      # -> its `grf_threads` arg               /  cts_val_1.sh
 overwrite     <- FALSE  # TRUE re-runs rows that already have a results file
-row_timeout   <- 1800   # seconds before a row is killed; 0 disables
+row_timeout   <- 7200   # seconds before a row is killed (cts_val_1.sh's walltime); 0 disables
 poll_interval <- 2      # seconds between checks for a finished row
 
 # EDIT ME to run a subset - e.g. ids <- grid_indices(study, interim_prop = 0.25)
