@@ -31,7 +31,7 @@ source(here("validation/continuous/cts_val_config.R"))
 
 If a subgroup, a CATE ranking of covariates, or the spread of estimated
 treatment effects looks real partway through a trial, does it still look real
-once more data has accrued? This study fits two CATE estimators on the first
+once more data has accrued? This study fits three CATE estimators on the first
 `interim_prop` of a simulated trial and checks whether what they find there —
 top and bottom responder subgroups, the variance of the estimated CATEs, the
 ranking of covariates by variable importance, and whether the single most
@@ -113,15 +113,15 @@ fig_path <- here("../results/all_figures/validation")
 dir.create(fig_path, showWarnings = FALSE)
 metrics <- readRDS(file.path(res_path, "cts_val_metrics.RDS"))
 
-# restrict to DR learner for the chapter, put causal forest results in the appendix
-metrics <- lapply(metrics, function(df) {
-  df %>% filter(model == "dr_random_forest")
-})
+# every estimator is shown: causal forest, DR random forest and DR SuperLearner.
+# scenario and the covariate correlation rho take one value each, so they are
+# dropped; any_of() because older metrics files carry no rho column.
+subgroups <- metrics$subgroups %>% select(-any_of(c("scenario", "rho"))) %>% apply_labels()
+variances <- metrics$variances %>% select(-any_of(c("scenario", "rho"))) %>% apply_labels()
+var_imps  <- metrics$var_imps  %>% select(-any_of(c("scenario", "rho"))) %>% apply_labels()
+top_var   <- metrics$top_var   %>% select(-any_of(c("scenario", "rho"))) %>% apply_labels()
 
-subgroups <- metrics$subgroups %>% select(-scenario) %>% apply_labels()
-variances <- metrics$variances %>% select(-scenario) %>% apply_labels()
-var_imps  <- metrics$var_imps  %>% select(-scenario) %>% apply_labels()
-top_var   <- metrics$top_var   %>% select(-scenario) %>% apply_labels()
+n_models <- length(unique(subgroups$model))
 
 # interim_prop stays numeric so it can carry an axis; `interim_lab` is the short
 # form for the few plots that still need one panel per interim point. Built from
@@ -194,7 +194,7 @@ subgroups_long <- subgroups %>%
          which = factor(which, levels = c("Top 10%", "Bottom 10%")))
 ```
 
-```{r subgroup-ecdf, fig.width=10, fig.height=6}
+```{r subgroup-ecdf, fig.width=10, fig.height=8}
 ggplot(subgroups_long, aes(x = pval, colour = interim_prop, group = interim_prop)) +
   stat_ecdf(geom = "step", linewidth = 0.5, na.rm = TRUE) +
   geom_vline(xintercept = 0.1, linetype = "dashed") +
@@ -204,10 +204,11 @@ ggplot(subgroups_long, aes(x = pval, colour = interim_prop, group = interim_prop
   labs(title = "Cumulative distribution of stage 2 subgroup p-values",
        x = "p-value (W x subgroup interaction)", y = "Cumulative proportion",
        colour = "Interim\nproportion")
-ggsave("cts_val_sg_cumu.png", path = fig_path, width = 20, height = 12, units = "cm")
+ggsave("cts_val_sg_cumu.png", path = fig_path, width = 20, height = 6 * n_models,
+       units = "cm")
 ```
 
-```{r subgroup-prop, fig.width=10, fig.height=6}
+```{r subgroup-prop, fig.width=10, fig.height=8}
 subgroup_prop <- subgroups_long %>%
   tidyr::crossing(threshold = c(0.05, 0.1)) %>%
   mutate(is_sig = pval < threshold,
@@ -224,16 +225,19 @@ ggplot(subgroup_prop, aes(x = interim_prop, y = prop_sig, colour = threshold,
   geom_ribbon(aes(fill = threshold), alpha = 0.15, colour = NA) +
   geom_line() +
   geom_point(size = 1.5) +
-  facet_grid(~which) +
+  facet_grid(model ~ which) +
   scale_x_continuous(breaks = sort(unique(subgroup_prop$interim_prop))) +
-  scale_y_continuous(breaks = seq(0.45, 1, 0.05)) +
+  # 0.05 steps as before, but over the whole range: the other estimators can
+  # fall below the 0.45 the DR random forest alone never went under
+  scale_y_continuous(breaks = seq(0, 1, 0.05)) +
   drf_scale() +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
   labs(title = "Proportion of successful stage 2 interaction tests",
        x = "Stage 1 proportion", y = "Proportion with p < threshold",
        colour = "Threshold", fill = "Threshold")
-ggsave("cts_val_sg_props.png", path = fig_path, width = 20, height = 12, units = "cm")
+ggsave("cts_val_sg_props.png", path = fig_path, width = 20, height = 6 * n_models,
+       units = "cm")
 
 ```
 
@@ -242,7 +246,7 @@ ggsave("cts_val_sg_props.png", path = fig_path, width = 20, height = 12, units =
 Does the spread of estimated treatment effects in stage 1 (`vt1`) match the
 spread in stage 2 (`vt2`)? The dashed line is the true `Var(tau) = 1`.
 
-```{r variance-box, fig.height=9}
+```{r variance-box, fig.height=3.5 * n_models}
 tidy_variances <- variances %>%
   rename(stage1 = vt1, stage2 = vt2) %>%
   pivot_longer(cols = c(stage1, stage2), names_to = "stage", values_to = "variance") %>%
@@ -305,7 +309,7 @@ is the most important.** X4 is the only true HTE driver, so a working
 estimator should rank it `r n_covariates` (most important) in both stages,
 under both measures.
 
-```{r rank-agreement}
+```{r rank-agreement, fig.height=5}
 rank_corr <- var_imps %>%
   group_by(model, measure, interim_prop, run) %>%
   filter(n() >= 2) %>%
@@ -324,6 +328,7 @@ ggplot(rank_corr_summary, aes(x = interim_prop, y = mean_rho, colour = measure,
   geom_ribbon(aes(fill = measure), alpha = 0.15, colour = NA) +
   geom_line() +
   geom_point(size = 1.5) +
+  facet_wrap(~model) +
   scale_x_continuous(breaks = sort(unique(rank_corr_summary$interim_prop))) +
   drf_scale() +
   scale_fill_paletteer_d("rcartocolor::Safe") +
@@ -333,7 +338,7 @@ ggplot(rank_corr_summary, aes(x = interim_prop, y = mean_rho, colour = measure,
        colour = "Measure", fill = "Measure")
 ```
 
-```{r rank-mean, fig.height=9}
+```{r rank-mean, fig.height=3.5 * n_models}
 mean_vi <- var_imps %>%
   group_by(variables, model, measure, interim_prop) %>%
   summarise(mean_vi1 = mean(vi1, na.rm = TRUE),
@@ -356,14 +361,14 @@ ggplot(mean_vi, aes(x = interim_prop, y = mean_rank, colour = variables,
        colour = "Covariate", linetype = "stage")
 ```
 
-```{r rank-change, fig.height=9}
+```{r rank-change, fig.height=3.5 * n_models}
 top_vars <- var_imps %>%
   group_by(variables, model, measure, interim_prop) %>%
   summarise(mean_abs_change = mean(abs(diff), na.rm = TRUE), .groups = "drop")
 
 ggplot(top_vars, aes(x = interim_prop, y = mean_abs_change, colour = variables)) +
   geom_line() +
-  facet_grid(~ measure) +
+  facet_grid(model ~ measure) +
   scale_x_continuous(breaks = sort(unique(top_vars$interim_prop))) +
   scale_colour_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
@@ -371,7 +376,7 @@ ggplot(top_vars, aes(x = interim_prop, y = mean_abs_change, colour = variables))
        x = "Interim proportion", y = "Mean |rank change|", colour = "Covariate")
 ```
 
-```{r x4-top}
+```{r x4-top, fig.height=5}
 x4_top <- var_imps %>%
   group_by(model, measure, interim_prop, run) %>%
   summarise(top1 = variables[which.max(vi1)] == "X4",
@@ -387,6 +392,7 @@ x4_top <- var_imps %>%
 ggplot(x4_top, aes(x = interim_prop, y = p_top_both, colour = measure)) +
   geom_line() +
   geom_point(size = 1.5) +
+  facet_wrap(~model) +
   scale_x_continuous(breaks = sort(unique(x4_top$interim_prop))) +
   ylim(0, 1) +
   drf_scale() +
@@ -428,7 +434,7 @@ top_var_prop <- top_var_long %>%
             .groups = "drop")
 ```
 
-```{r top-var-prop, fig.height=9}
+```{r top-var-prop, fig.height=10}
 ggplot(top_var_prop, aes(x = interim_prop, y = prop_sig, colour = model,
                          ymin = prop_sig - qnorm(0.975) * mcse,
                          ymax = prop_sig + qnorm(0.975) * mcse)) +
@@ -438,12 +444,13 @@ ggplot(top_var_prop, aes(x = interim_prop, y = prop_sig, colour = model,
   geom_point(size = 1.5) +
   facet_grid(form ~ measure) +
   scale_x_continuous(breaks = sort(unique(top_var_prop$interim_prop))) +
-  ylim(0, 1) +
+  # coord_cartesian, not ylim(): ylim() drops any ribbon that pokes past 0 or 1
+  coord_cartesian(ylim = c(0, 1)) +
   drf_scale() +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
   labs(title = "Proportion of runs where the interim's top covariate still interacts in stage 2",
-       subtitle = "Ribbon: +/- 1 Monte Carlo SE. Dashed line: nominal 5%. The continuous form should dominate the median split.",
+       subtitle = "Ribbon: 95% Monte Carlo interval. Dashed line: nominal 5%. The continuous form should dominate the median split.",
        x = "Interim proportion", y = "Proportion with p < 0.05",
        colour = "Model", fill = "Model")
 ```
@@ -499,8 +506,10 @@ runs_per_cell <- subgroups %>%
   group_by(model, interim_prop) %>%
   summarise(runs = n(), .groups = "drop")
 
+# subgroup_prop carries both thresholds; the table reports p < 0.05, as every
+# other column does - pivoting both would make each cell a list
 headline <- subgroup_prop %>%
-  filter(interim_prop %in% landmarks) %>%
+  filter(interim_prop %in% landmarks, threshold == "0.05") %>%
   select(model, which, interim_prop, prop_sig) %>%
   pivot_wider(names_from = which, values_from = prop_sig, names_prefix = "sig_") %>%
   left_join(runs_per_cell, by = c("model", "interim_prop")) %>%
