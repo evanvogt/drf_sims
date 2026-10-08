@@ -3,7 +3,7 @@
 # candidate models + 2 nuisance pipelines x 2 fold regimes of prediction
 # data, vs. continuous's 5 CATE-model results). Measured at ~0.9MB/run via
 # object.size() against ~0.18MB/run for a comparable continuous object -
-# heavier per file, but this study has far fewer files (600 vs. 4000), so
+# heavier per file, but this study has far fewer files (1200 vs. 4000), so
 # the aggregate is comparable order of magnitude. See README.md.
 #PBS -l walltime=01:00:00
 #PBS -l select=1:ncpus=2:ompthreads=2:mem=100gb

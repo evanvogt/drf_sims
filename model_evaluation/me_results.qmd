@@ -43,7 +43,7 @@ differ expensively.
 
 ### Design
 
-Four scenarios crossed with three sample sizes, 50 replicates each — **600
+Four scenarios crossed with three sample sizes, 100 replicates each — **1200
 array jobs**. Scenarios are indices into `R/dgm_scenarios.R`'s
 `set = "continuous_corr_0.5"`: `continuous/`'s scenario table with the
 covariates correlated at latent ρ = 0.5 (`sample_size/correlated/README.md`).
@@ -56,7 +56,7 @@ covariates, so the two reports share scenarios, not data.
 | scenarios | 1 (Null), 6 (Simple), 8 (Interaction), 4 (Non-linear) |
 | covariates | correlated, ρ = 0.5 |
 | n | 250, 500, 1000 |
-| runs | 50 |
+| runs | 100 |
 | folds | V = 10, single crossfitting, all n |
 
 
@@ -535,7 +535,7 @@ runs_present <- metrics %>%
   count(scenario, n, name = "runs") %>%
   pivot_wider(names_from = n, values_from = runs, names_prefix = "n = ")
 
-kable(runs_present, caption = "Replicates present per cell (50 expected)")
+kable(runs_present, caption = "Replicates present per cell (100 expected)")
 ```
 
 ```{r completeness-na}

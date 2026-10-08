@@ -13,7 +13,7 @@
 # Not an array job, and sized for a single H2O JVM (mem=10G heap) plus the
 # candidate fits at n=250.
 #PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=4:ompthreads=2:mem=12gb
+#PBS -l select=1:ncpus=4:ompthreads=4:mem=12gb
 #PBS -N me_testing
 #PBS -o logs_testing/
 #PBS -e logs_testing/

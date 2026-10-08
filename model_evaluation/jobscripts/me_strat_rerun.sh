@@ -3,13 +3,13 @@
 #
 # NOTE: me_check.R deliberately does NOT write that file automatically for
 # this tree (it runs check_failed with write=FALSE) - study_strat's grid is
-# all 600 rows, so any runs excluded from the main study would be reported
+# all 1200 rows, so any runs excluded from the main study would be reported
 # missing forever and queued here forever. `Rscript me_check.R strategies`
 # prints the indices that genuinely need resubmitting; put those in
-# failed_ids_strat.txt by hand and set -J to match - keep the %N at 4 or
+# failed_ids_strat.txt by hand and set -J to match - keep the %N at 10 or
 # below, as in me_strategies.sh.
 #PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=10:ompthreads=1:mem=16gb
+#PBS -l select=1:ncpus=10:ompthreads=10:mem=16gb
 #PBS -J 1-2%1
 #PBS -N me_strat_rerun
 #PBS -o logs_strat_rerun/

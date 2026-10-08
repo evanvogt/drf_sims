@@ -11,8 +11,8 @@
 # blocks - where H2O's per-call JVM overhead, not model size, is what
 # dominates. Budget on the order of the original job's nuisance half.
 #
-# -J is 1-600 and NOT the count of completed runs: the array index has to keep
-# meaning the same row of the same 600-row grid as me_1.sh. Runs that have no
+# -J is 1-1200 and NOT the count of completed runs: the array index has to keep
+# meaning the same row of the same 1200-row grid as me_1.sh. Runs that have no
 # source file exit 0 with a message.
 #
 # 10 cores all go to n_cores (XGBoost nthread / H2O nthreads) - there are no
@@ -23,8 +23,8 @@
 # %N throttle: same constraint as me_1.sh - each concurrent task starts its
 # own H2O JVM cluster with a 10G heap.
 #PBS -l walltime=01:00:00
-#PBS -l select=1:ncpus=10:ompthreads=1:mem=16gb
-#PBS -J 1-600%4
+#PBS -l select=1:ncpus=10:ompthreads=10:mem=16gb
+#PBS -J 1-1200%10
 #PBS -N me_strat
 #PBS -o logs_strat/
 #PBS -e logs_strat/
