@@ -15,7 +15,7 @@
 #
 # %10: each concurrent task starts its own H2O JVM, and too many at once makes
 # the H2O calls fail. See README.md.
-#PBS -l walltime=01:00:00
+#PBS -l walltime=00:30:00
 #PBS -l select=1:ncpus=10:ompthreads=10:mem=24gb
 #PBS -J 1-1200%10
 #PBS -N me_1
