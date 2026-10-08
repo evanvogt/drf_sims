@@ -1,138 +1,112 @@
 ##########
-# title: figures for the thesis chapter - cts miss CI
+# title: figures for the thesis chapter - missing covariates, MI intervals
 ##########
+# The MI confidence-interval example (missing/ci_example/): how to build a CATE
+# interval after multiple imputation, continuous outcome only. One cell of the
+# missing-data design - n = 500, 30% missing in both covariate types, MAR,
+# multiple imputation - so what varies is scenario x estimator x the strategy
+# combine_mi_ci() (R/bootstrap_ci.R) uses to pool the per-imputation bootstrap
+# intervals. A separate script from missing.R, as ss_ci.R is from
+# sample_size.R: different metrics file, metrics and design.
+#
+# One figure, three rows sharing the x axis: marginal coverage, simultaneous
+# coverage and mean interval length, each by pooling strategy on x, estimator
+# by colour, scenario across. Notes:
+#   - all units only. The metrics file also scores the complete and incomplete
+#     units (_cu / _iu, interval_metrics_split() in R/metrics.R); the
+#     diagnostic figures (missing/ci_example/cts_miss_ci_results.R) show those;
+#   - simultaneous coverage is 0/1 per run, so it gets the binomial MCSE,
+#     marginal coverage and length the general one (summarise_metrics());
+#   - coverage is drawn on [0, 1] with the nominal 0.95 dashed; length shares
+#     one y scale across the scenarios;
+#   - each estimator keeps the colour it has in the other thesis figures (Safe,
+#     by its place in MODEL_LABELS, as ss_ci.R), although only four of them
+#     (CI_MODELS) have intervals.
+#
+# The scenarios are the main study's 1-4 (missing/ci_example/README.md), so
+# they take the sample-size chapter's labels, as missing.R does.
+#
+# Writes to ../results/thesis_figures/miss_cts_ci/miss_cts_ci_all.png
 
-# libraries
-# Labels, palette and figure sizing come from R/figures.R.
 library(here)
 library(patchwork)
-library(purrr)
-library(ggridges)
-library(scales)
 source(here("R", "figures.R"))
+
 # paths
 path <- here()
 res_path <- file.path(dirname(path), "results", "missing", "ci_example")
 fig_path <- file.path(dirname(path), "results", "thesis_figures", "miss_cts_ci")
-dir.create(fig_path, showWarnings = F, recursive = T)
+dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
-metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS"))
+NOMINAL <- 0.95
 
-# tidy up. MISS_SCENARIO_LABELS and the pooling-strategy labels now come from
-# R/figures.R; `strategy` is what cts_miss_ci_metrics.R actually writes (this
-# script used to name it CI_method, a column the metrics file never had).
-metrics <- metrics %>%
-  filter(scenario %in% c(1, 2, 3, 4)) %>%
-  apply_labels(MISS_SCENARIO_LABELS) %>%
-  mutate(n = factor(n, levels = c(100, 250, 500, 1000)))
+# one row of the figure each, top to bottom; `binomial` marks a per-run 0/1
+# indicator, `coverage` gets the nominal line and the [0, 1] scale
+CI_METRICS <- tibble::tribble(
+  ~stem,       ~col,                    ~lab,                    ~coverage, ~binomial,
+  "marg_cov",  "marginal_coverage",     "Marginal coverage",     TRUE,      FALSE,
+  "simul_cov", "simultaneous_coverage", "Simultaneous coverage", TRUE,      TRUE,
+  "ci_len",    "mean_ci_length",        "Mean interval length",  FALSE,     FALSE
+)
 
+metrics <- readRDS(file.path(res_path, "cts_miss_ci_metrics.RDS")) %>%
+  filter(scenario %in% 1:4)
 
-# per scenario summaries
-#
-# mcse denominator is sqrt(sum(!is.na(x))), matching the non-NA count of that
-# column - not sqrt(n()), the whole group's row count regardless of NAs.
-# mcse_mar_cov/mcse_sim_cov/mcse_ci_len previously had NO denominator at all
-# (just sd(x)) - those were raw standard deviations plotted as if they were
-# standard errors, inflating the error bars by sqrt(n_runs).
-metrics_summary <- metrics %>%
-  group_by(scenario, n, type, prop, mechanism, method, model, strategy) %>%
-  summarise(
-    mean_bias = mean(bias, na.rm = T),
-    mcse_bias = sd(bias, na.rm = T)/sqrt(sum(!is.na(bias))),
-    mean_mse = mean(mse, na.rm = T),
-    mcse_mse = sd(mse, na.rm = T)/sqrt(sum(!is.na(mse))),
-    mean_mar_cov = mean(marginal_coverage, na.rm = T),
-    mcse_mar_cov = sd(marginal_coverage, na.rm = T)/sqrt(sum(!is.na(marginal_coverage))),
-    # simultaneous_coverage is a genuine 0/1 indicator per run (whole-band
-    # coverage), so it gets the exact binomial MCSE, not the general one
-    # marginal_coverage above uses (that's a proportion over many units
-    # within a run, not Bernoulli at the run level)
-    mean_sim_cov = mean(simultaneous_coverage, na.rm = T),
-    mcse_sim_cov = sqrt(mean_sim_cov * (1 - mean_sim_cov)/sum(!is.na(simultaneous_coverage))),
-    mean_ci_len = mean(mean_ci_length, na.rm = T),
-    mcse_ci_len = sd(mean_ci_length, na.rm = T)/sqrt(sum(!is.na(mean_ci_length))),
-    .groups = "drop"
-  )
+metrics_summary <- summarise_metrics(
+  metrics,
+  c("scenario", "model", "strategy"),
+  cols = setNames(CI_METRICS$col, CI_METRICS$stem),
+  binomial = CI_METRICS$stem[CI_METRICS$binomial],
+  count_na = character()
+) %>%
+  apply_labels(SS_SCENARIO_LABELS)
 
-# error bars below are a 95% CI (mean +/- qnorm(0.975) x MCSE), not a raw
-# +/- 1x MCSE (~68% coverage) - see R/figures.R's point_range_plot() (its alpha doc)
-z <- qnorm(0.975)
+model_levels <- levels(metrics_summary$model)
+safe <- as.character(paletteer_d("rcartocolor::Safe", length(MODEL_LABELS)))
+pal_values <- setNames(safe[match(model_levels, MODEL_LABELS)], model_levels)
 
-# combining everything into a single plot?
+#' One row of the figure: one metric, scenarios across
+#'
+#' @param m one row of CI_METRICS
+#' @param top TRUE for the top row, the only one with the scenario strips
+#' @param bottom TRUE for the bottom row, the only one with the x axis labels
+#'   and title
+ci_row <- function(m, top = FALSE, bottom = FALSE) {
+  p <- point_range_plot(
+    metrics_summary,
+    m$stem,
+    m$lab,
+    x = "strategy",
+    colour = "model",
+    facet_rows = NULL,
+    facet_cols = "scenario",
+    facet_scales = "fixed",
+    hline = if (m$coverage) NOMINAL else NULL,
+    palette = scale_colour_manual(values = pal_values, limits = model_levels)
+  ) +
+    labs(x = "Pooling strategy", colour = NULL) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 
+  # coord, not scale, limits: a scale limit would drop an error bar that
+  # crosses 0 or 1 rather than clip it
+  if (m$coverage) p <- p + coord_cartesian(ylim = c(0, 1))
+  if (!bottom) {
+    p <- p + theme(axis.text.x = element_blank(), axis.title.x = element_blank())
+  }
+  if (!top) {
+    p <- p + theme(strip.text.x = element_blank(),
+                   strip.background.x = element_blank())
+  }
+  p
+}
 
-# marginal coverage
-mar_cov_plot <- metrics %>%
-  ggplot(aes(x=strategy, y = marginal_coverage, colour = model)) +
-  geom_hline(yintercept = 0.95, linetype = "dashed") +
-  geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario) +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "Marginal coverage",
-       x = "Method")
+n_rows <- nrow(CI_METRICS)
+rows <- lapply(seq_len(n_rows), function(i) {
+  ci_row(CI_METRICS[i, ], top = i == 1, bottom = i == n_rows)
+})
 
-# summary
-mar_cov_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = strategy, y = mean_mar_cov, colour = model, ymin = mean_mar_cov - z * mcse_mar_cov, ymax = mean_mar_cov + z * mcse_mar_cov)) +
-  geom_hline(yintercept = 0.95, linetype = "dashed") +
-  geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
-  facet_wrap(~scenario) +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "Marginal Coverage",
-       x = "Method")
+fig <- wrap_plots(rows, ncol = 1) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 
-# simultaneous coverage
-sim_cov_plot <- metrics %>%
-  ggplot(aes(x=strategy, y = simultaneous_coverage, colour = model)) +
-  geom_hline(yintercept = 0.95, linetype = "dashed") +
-  geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario) +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "Simultaneous coverage",
-       x = "Method") +
-  theme(axis.text.x = element_text(angle = 90))
-
-# summary
-sim_cov_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = strategy, y = mean_sim_cov, colour = model, ymin = mean_sim_cov - z * mcse_sim_cov, ymax = mean_sim_cov + z * mcse_sim_cov)) +
-  geom_hline(yintercept = 0.95, linetype = "dashed") +
-  geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
-  facet_wrap(~scenario) +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "Simultaneous coverage",
-       x = "Method")
-
-# CI length
-ci_len_plot <- metrics %>%
-  ggplot(aes(x=strategy, y = mean_ci_length, colour = model)) +
-  geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_wrap(~scenario) +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "CI length",
-       x = "Method")
-
-# summary
-ci_len_sum_plot <- metrics_summary %>%
-  ggplot(aes(x = strategy, y = mean_ci_len, colour = model, ymin = mean_ci_len - z * mcse_ci_len, ymax = mean_ci_len + z * mcse_ci_len)) +
-  geom_point(position = position_dodge(width = 0.5), size = 2) +
-  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3) +
-  facet_wrap(~scenario) +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  theme_minimal() +
-  labs(y = "CI length",
-       x = "Method")
-
-# combine the plots
-mar <- mar_cov_sum_plot + facet_grid(cols = vars(scenario)) + theme(axis.text.x = element_text(angle = 90)) + scale_y_continuous(breaks = c(0, 0.2, 0.4, 0.6, 0.8))
-sim <- sim_cov_sum_plot + facet_grid(cols = vars(scenario)) + theme(axis.text.x = element_text(angle = 90)) + ylim(0,1)
-len <- ci_len_sum_plot + facet_grid(cols = vars(scenario)) + theme(axis.text.x = element_text(angle = 90)) 
-
-(mar / len) + plot_layout(guides = "collect")
-ggsave("miss_cts_ci_all.png", path = fig_path, width = 21, height = 15, units = "cm")
+save_fig("miss_cts_ci_all.png", fig_path, width = 21, height = 20, plot = fig)
