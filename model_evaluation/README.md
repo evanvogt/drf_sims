@@ -19,14 +19,14 @@ beyond that floor.
 ## Design
 
 Four scenarios varying the structure of the CATE, crossed with three sample
-sizes, 30 runs each — **360 array jobs**.
+sizes, 50 runs each — **600 array jobs** (30 before 2026-10-08).
 
 | | |
 |---|---|
 | scenarios | 1, 4, 6, 8 (see `R/dgm_scenarios.R`, `DESC_10`) |
 | covariates | correlated, latent ρ = 0.5 (`me_dgms.R`'s `ME_RHO`) |
 | n | 250, 500, 1000 |
-| runs | 30 |
+| runs | 50 |
 | folds | 10 (all n — see "Crossfitting strategy" below) |
 | results | `../results/correlated/model_evaluation/scenario_<k>/<n>/res_sim_<run>.RDS` |
 
@@ -47,13 +47,13 @@ the way true PEHE would — doesn't need every CATE-structure re-litigated to
 answer. `crossfitting/cf_analysis.R` made the same call for the same reason
 (`scenario = c(1, 4, 6, 8)`); this study reuses its exact subset.
 
-**Why 30 runs, not `continuous/`'s 100.** Each replicate here is far more
+**Why 50 runs, not `continuous/`'s 100.** Each replicate here is far more
 expensive than a `continuous/` replicate: 9 single-crossfit candidate-model
 fits, *plus* two independent nuisance-evaluation pipelines (XGBoost with a
 36-combination CV grid search, and H2O AutoML with up to 20 auto-tuned
 models), each across the nuisance arms and 4 nuisance targets. See "Sizing the
 array job" below — the real per-replicate cost has never been measured, so
-even 30 is provisional.
+even 50 is provisional.
 
 ## Crossfitting strategy
 
@@ -443,7 +443,7 @@ there (it should not).
 The main study:
 
 ```bash
-qsub model_evaluation/jobscripts/me_1.sh            # the study itself - 1-360
+qsub model_evaluation/jobscripts/me_1.sh            # the study itself - 1-600
 Rscript model_evaluation/me_check.R                 # writes failed_ids.txt if any are missing
 qsub model_evaluation/jobscripts/me_collect.sh
 qsub model_evaluation/jobscripts/me_metrics.sh
@@ -454,7 +454,7 @@ reads the completed results and adds arms to them (see `me_strategies.R`'s
 header for why that is sound):
 
 ```bash
-qsub    model_evaluation/jobscripts/me_strategies.sh      # 1-360, reads the main tree
+qsub    model_evaluation/jobscripts/me_strategies.sh      # 1-600, reads the main tree
 Rscript model_evaluation/me_check.R strategies            # progress / completion
 qsub    model_evaluation/jobscripts/me_strategies_verify.sh
 qsub -v TREE=strategies model_evaluation/jobscripts/me_collect.sh
@@ -464,7 +464,7 @@ qsub -v TREE=strategies model_evaluation/jobscripts/me_metrics.sh
 The 80:20 arm, independent of the above:
 
 ```bash
-qsub    model_evaluation/jobscripts/me_split.sh           # 1-240 (n = 500, 1000 only)
+qsub    model_evaluation/jobscripts/me_split.sh           # 1-400 (n = 500, 1000 only)
 Rscript model_evaluation/me_check.R split
 qsub -v TREE=split model_evaluation/jobscripts/me_collect.sh
 qsub -v TREE=split model_evaluation/jobscripts/me_metrics.sh
@@ -491,8 +491,8 @@ and only new ones were appended — the same kind of inertness proof
 **Checking progress of the derived trees.** `Rscript me_check.R strategies`
 runs `check_failed(..., write = FALSE)` and reports how many runs are done.
 Note the completion criterion is *not* zero missing: `study_strat`'s grid is
-all 360 rows (the array index has to keep meaning the same grid row), so the
-2 runs excluded from the main study are reported missing forever. `me_check.R`
+all 600 rows (the array index has to keep meaning the same grid row), so any
+runs excluded from the main study are reported missing forever. `me_check.R`
 diffs the two trees and separates "missing because there is no source run"
 from "missing because this pass failed" — only the latter needs resubmitting,
 which is also why `failed_ids_strat.txt` is not written automatically.
@@ -504,11 +504,25 @@ the repo. The rendered `.html` is gitignored, as every other study's report is.
 
 ## Sizing the array job
 
-`me_1.sh`'s `#PBS -l` lines and trailing `Rscript` args (`workers`/`n_cores`,
-currently `2 2`) are **placeholders** set by hand. They were never measured:
-the `syrup` profiling sweep meant to replace them didn't work for this study
-(see the root README's "Resource profiling (removed)"). They were enough for
-the main study to complete. If you resize them, keep in mind:
+`me_1.sh`'s `#PBS -l` lines and trailing `Rscript` args (`workers`/`n_cores`)
+are set by hand, never measured: the `syrup` profiling sweep meant to replace
+them didn't work for this study (see the root README's "Resource profiling
+(removed)"). Since 2026-10-08 they are:
+
+| jobscript | select | trailing args |
+|---|---|---|
+| `me_1.sh` | `ncpus=10:ompthreads=1:mem=24gb` | `10 10` |
+| `me_rerun.sh` | `ncpus=11:ompthreads=1:mem=29gb` (what `check_failed()` derives from `me_1.sh`) | `10 10` |
+| `me_split.sh` | `ncpus=10:ompthreads=1:mem=24gb` | `10 10` |
+| `me_strategies.sh`, `me_strat_rerun.sh` | `ncpus=10:ompthreads=1:mem=16gb` | `10` |
+
+Why 10: each candidate is crossfit over 10 folds in parallel, so 10 workers
+run every fold loop in one round; 5 would take two rounds, and so would 8.
+`ompthreads=1` stops each worker session inheriting a multi-threaded BLAS;
+XGBoost and H2O take their thread counts from `n_cores`, not from it.
+`me_strategies.sh` has no workers, and its fold loops run one after another,
+so its 10 cores only feed XGBoost/H2O threads on small data - expect much less
+speed-up there. Every walltime is still a placeholder. Keep in mind:
 
 - **Two knobs, two sequential phases.** `workers` (the `future` multisession
   backend, controlling the 9 candidate models' single-crossfit fold-wise
@@ -518,16 +532,18 @@ the main study to complete. If you resize them, keep in mind:
   `max(workers, n_cores)`, not the sum, since the two are never both active at
   once.
 - **H2O's JVM is a separate Java process.** Each task starts its own H2O JVM
-  with a `mem = "10G"` heap, so `mem=` has to cover that on top of R. Check
-  the request against `qstat -fx <jobid> | grep resources_used` on the first
-  real subjobs.
+  with a `mem = "10G"` heap, so `mem=` has to cover that on top of R - and in
+  `me_1.sh`/`me_split.sh` on top of the 10 worker sessions too, which stay
+  alive through the nuisance phase. Check the request against
+  `qstat -fx <jobid> | grep resources_used` on the first real subjobs.
 
-**The array's concurrency throttle (`-J 1-360%N`) is a separate problem from
+**The array's concurrency throttle (`-J 1-600%N`) is a separate problem from
 the per-task request.** Each concurrent task starts its own H2O JVM
 cluster with a `mem = "10G"` heap — nothing like `continuous/`'s `%190` or
-`crossfitting/`'s `%380` is safe here. `N` needs setting from the specific
-HPC queue's real memory/fair-share limits, which needs consulting whoever
-manages the allocation, not just measuring one replicate's own footprint.
+`crossfitting/`'s `%380` is safe here; every array runs at `%4`.
+`me_check.R` passes `throttle = 4` to `check_failed()`, so the `-J` it writes
+into `me_rerun.sh` stays at `%4` too (its default is `%100`). With `%4` the
+main array takes about 150 times one run's walltime (600 / 4).
 
 **Package availability.** `h2o`, `xgboost`, `caret`, `tidyverse` are
 confirmed present in this machine's local ambient R library — `benchtm` is

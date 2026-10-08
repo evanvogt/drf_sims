@@ -27,11 +27,11 @@ study <- study_config(
   grid = expand.grid(
     scenario = c(1, 4, 6, 8),
     n = c(250, 500, 1000),
-    run = c(1:30),
+    run = c(1:50),
     stringsAsFactors = FALSE
   ),
   path_cols   = c("scenario", "n"),
-  n_sims      = 30,
+  n_sims      = 50,
   failed_file = here("model_evaluation", "jobscripts", "failed_ids.txt")
 )
 
@@ -100,7 +100,7 @@ HOLDOUT_MIN_BLOCK <- 40L
 # unchanged - the whole point of R/pipeline.R taking the study as an argument.
 
 # me_strategies.R: a second pass over `study`'s results, adding the cv_shared
-# and holdout arms. Same 360-row grid, because the array index must keep
+# and holdout arms. Same 600-row grid, because the array index must keep
 # meaning the same row of the same grid. Written to a PARALLEL tree, not back
 # into study$res_path, so me_strategies_verify.R can diff the two.
 study_strat <- study_config(
@@ -128,11 +128,11 @@ study_split <- study_config(
   grid = expand.grid(
     scenario = c(1, 4, 6, 8),
     n = c(500, 1000),
-    run = c(1:30),
+    run = c(1:50),
     stringsAsFactors = FALSE
   ),
   path_cols   = c("scenario", "n"),
-  n_sims      = 30,
+  n_sims      = 50,
   failed_file = here("model_evaluation", "jobscripts", "failed_ids_split.txt")
 )
 

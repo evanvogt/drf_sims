@@ -1,9 +1,9 @@
 ##########
 # title: run the me_strategies nuisance-arm pass inside one RStudio session
 ##########
-# The no-queue alternative to `qsub jobscripts/me_strategies.sh`. Same 360
+# The no-queue alternative to `qsub jobscripts/me_strategies.sh`. Same 600
 # grid rows and the same results, but 6 at a time inside an interactive
-# session rather than 360 array jobs waiting to be scheduled.
+# session rather than 600 array jobs waiting to be scheduled.
 #
 # ---- how to run it ----------------------------------------------------------
 #   request an RStudio session with 8 cores and 64gb, then

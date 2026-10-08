@@ -2,7 +2,7 @@
 # Reruns only the array indices listed in failed_ids.txt by me_check.R.
 # -J and the resource request are rewritten by check_failed(); do not hand-edit.
 #PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=3:ompthreads=2:mem=12gb
+#PBS -l select=1:ncpus=11:ompthreads=1:mem=29gb
 #PBS -J 1-2%1
 #PBS -N me_rerun
 #PBS -o logs_rerun/
@@ -22,4 +22,4 @@ jobid=$(sed -n "${PBS_ARRAY_INDEX}p" "${PBS_O_WORKDIR}/failed_ids.txt")
 cd "${PBS_O_WORKDIR}/.."
 
 # Trailing args are workers/n_cores - keep these in sync with me_1.sh's.
-Rscript me_analysis.R "$jobid" 1 1
+Rscript me_analysis.R "$jobid" 10 10

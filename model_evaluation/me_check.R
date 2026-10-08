@@ -10,7 +10,7 @@
 #   Rscript me_check.R split           # the 80:20 arm (me_split.R)
 #
 # WHY THE DERIVED TREES ARE CHECKED WITHOUT WRITING. study_strat's grid is all
-# 360 rows, because the array index has to keep meaning the same row of the
+# 600 rows, because the array index has to keep meaning the same row of the
 # same grid as me_analysis.R's. But 2 of those runs have no source file - they
 # failed repeatedly in the main study and are deliberately excluded - so
 # check_failed() will report them missing forever. Writing that to
@@ -20,7 +20,7 @@
 # (documented in R/pipeline.R as touching nothing) and the success condition
 # is "exactly the runs the source tree is also missing", not "none".
 #
-# The same applies to study_split, whose 240-row grid is the n = 500/1000
+# The same applies to study_split, whose 400-row grid is the n = 500/1000
 # slice: its expected count already excludes n = 250, but not the excluded
 # runs that fall inside that slice.
 
@@ -33,7 +33,9 @@ if (is.na(which_study)) which_study <- "main"
 st <- me_study(which_study)
 
 if (which_study == "main") {
-  check_failed(st)
+  # %4 in the rerun's -J, as in me_1.sh: each concurrent task starts its own
+  # H2O JVM, and update_rerun_script()'s default of %100 makes the H2O calls fail
+  check_failed(st, throttle = 4)
 } else {
   missing_idx <- check_failed(st, write = FALSE)
 
