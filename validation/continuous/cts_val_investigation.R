@@ -15,22 +15,37 @@
 #   - one trial split at the interim instead of two separate draws (2026-10-08)
 #   - the DR SuperLearner as a third model, HC3 interaction tests (2026-10-08)
 #
-# Two parts:
+# Three parts:
 #   metrics  the archived and current cts_val_metrics.RDS side by side, per
 #            model and interim point, for each of the four chunk comparisons.
 #            A rho = 0 arm shows up as its own column set once it is collected.
+#   se       separates the HC3 switch from everything else, on the real runs.
+#            Every current per-run file is re-scored with chunk_validations()
+#            twice, classical and HC3, from its saved fits - the tests are
+#            deterministic given the saved tau and importances, so only the
+#            standard errors differ. Then, per test:
+#              August (classical) -> now classical   the DGM, the estimators
+#                                                    and the design
+#              now classical -> now HC3              the standard errors alone
+#            The August runs are classical only: the archive keeps their
+#            metrics but not the per-run fits, so they cannot be re-scored.
 #   sim      an oracle check that needs no fitted model: the true top/bottom 10%
 #            tau subgroup (what a perfect estimator and tree would hand on), and
 #            the X4 proxy X5, interaction-tested at chunk-2 sizes under the
 #            August DGM and the current one at rho = 0 and 0.5, with classical
-#            and HC3 standard errors. Differences there are the DGM and HC3
-#            alone; whatever the metrics move by beyond them is the estimators
-#            (T-learner nuisances, the two extra covariates).
+#            and HC3 standard errors. It splits the first step above: the
+#            August -> now classical change here is the DGM alone, and whatever
+#            the real runs move by beyond it is the estimators (T-learner
+#            nuisances, the two extra covariates).
 #
 # Usage, from the repo root or validation/continuous/:
-#   Rscript cts_val_investigation.R [all|metrics|sim] [sim_reps]
+#   Rscript cts_val_investigation.R [all|metrics|se|sim] [sim_reps]
 # Defaults: all, 1000 reps per DGM and chunk size. Tables print to the console
 # and are written as CSVs to <current metrics folder>/investigation/.
+#
+# `se` reads every rho_<value>/ folder under the results path, whatever rho the
+# config currently holds, so both arms are re-scored without editing the config.
+# It reads ~1100 per-run files per rho; expect several minutes per arm.
 
 library(here)
 library(dplyr)
@@ -40,7 +55,7 @@ source(here("validation/continuous/cts_val_config.R"))
 args <- commandArgs(trailingOnly = TRUE)
 part <- if (length(args) >= 1) args[1] else "all"
 sim_reps <- if (length(args) >= 2) as.integer(args[2]) else 1000L
-stopifnot(part %in% c("all", "metrics", "sim"))
+stopifnot(part %in% c("all", "metrics", "se", "sim"))
 
 LANDMARKS <- c(0.25, 0.5, 0.75)
 
@@ -201,6 +216,152 @@ run_metrics_part <- function() {
 }
 
 ###################
+# Standard errors: classical vs HC3 on the current runs
+###################
+
+#' Every interaction p-value in one validations object, long
+#'
+#' The two subgroup tests (measure NA) and, per importance measure, the three
+#' top-covariate tests. p_cts_adj is NA where a run predates it.
+extract_pvals <- function(val) {
+  sg <- bind_rows(lapply(names(val$subgroups), function(model) {
+    p <- val$subgroups[[model]]
+    tibble(model = model, measure = NA_character_, x_top = NA_character_,
+           test = c("subgroup_top", "subgroup_bottom"),
+           p = unname(p[c("top", "bottom")]))
+  }))
+  tv <- bind_rows(lapply(names(val$top_var_tests), function(model) {
+    t <- as.data.frame(val$top_var_tests[[model]])
+    if (!"p_cts_adj" %in% names(t)) t$p_cts_adj <- NA_real_
+    t %>%
+      transmute(model = model, measure, x_top, p_cts, p_cts_adj, p_split) %>%
+      pivot_longer(c(p_cts, p_cts_adj, p_split), names_to = "test", values_to = "p")
+  }))
+  bind_rows(sg, tv)
+}
+
+#' The same, from the archived metrics tables - classical only
+old_pvals_long <- function(old) {
+  sg <- old$subgroups %>%
+    pivot_longer(c(top_pval, bottom_pval), names_to = "test", values_to = "p") %>%
+    mutate(test = recode(test, top_pval = "subgroup_top", bottom_pval = "subgroup_bottom"),
+           measure = NA_character_)
+  tv <- old$top_var
+  if (!"measure" %in% names(tv)) tv$measure <- "tevim"
+  tv <- tv %>%
+    pivot_longer(any_of(c("p_cts", "p_cts_adj", "p_split")),
+                 names_to = "test", values_to = "p")
+  bind_rows(sg, tv) %>%
+    transmute(arm, se = "classical", model, measure, test, interim_prop, run, p)
+}
+
+#' Every current per-run file, under every rho_<value>/ folder present
+current_run_files <- function() {
+  rhos <- sub("^rho_", "", list.files(study$res_path, pattern = "^rho_"))
+  if (length(rhos) == 0) stop("no rho_<value>/ folders under ", study$res_path)
+  base <- unique(study$grid[, setdiff(names(study$grid), "rho"), drop = FALSE])
+  grid <- tidyr::crossing(rho = rhos, base)
+  grid$file <- vapply(seq_len(nrow(grid)), function(i) {
+    file.path(combo_dir(study, grid[i, , drop = FALSE]),
+              paste0("res_sim_", grid$run[i], ".RDS"))
+  }, character(1))
+  grid[file.exists(grid$file), ]
+}
+
+#' Re-score one run classical and HC3 from its saved fits
+#'
+#' Also checks the HC3 re-score against the p-values the run saved: they should
+#' be identical (rpart, the ranks and the lm fits are all deterministic). A
+#' mismatch means the run was made by different code - classical standard
+#' errors, or before a later change to chunk_validations().
+rescore_run <- function(file) {
+  res <- readRDS(file)
+  r1 <- res$results1
+  r2 <- res$results2
+  classical <- extract_pvals(chunk_validations(r1, r2, r1$data, r2$data, robust = FALSE))
+  hc3 <- extract_pvals(chunk_validations(r1, r2, r1$data, r2$data, robust = TRUE))
+  stored <- extract_pvals(res$validations)
+  matches <- nrow(stored) == nrow(hc3) && isTRUE(all.equal(stored$p, hc3$p))
+  list(p = bind_rows(classical = classical, hc3 = hc3, .id = "se"),
+       stored_matches_hc3 = matches)
+}
+
+run_se_part <- function() {
+  # chunk_validations() and the interaction tests
+  source(here("validation", "val_common.R"))
+
+  files <- current_run_files()
+  cat("re-scoring", nrow(files), "runs across rho =",
+      paste(unique(files$rho), collapse = ", "), "\n")
+
+  rescored <- vector("list", nrow(files))
+  matches <- logical(nrow(files))
+  for (i in seq_len(nrow(files))) {
+    if (i %% 100 == 0) cat("  ", i, "/", nrow(files), "\n")
+    r <- rescore_run(files$file[i])
+    matches[i] <- r$stored_matches_hc3
+    rescored[[i]] <- r$p %>%
+      mutate(arm = paste0("now rho=", files$rho[i]),
+             interim_prop = files$interim_prop[i], run = files$run[i])
+  }
+  rescored <- bind_rows(rescored)
+  write.csv(rescored, file.path(out_dir, "se_rescored_per_run.csv"), row.names = FALSE)
+
+  check <- files %>%
+    mutate(arm = paste0("now rho=", rho), stored_matches_hc3 = matches) %>%
+    group_by(arm) %>%
+    summarise(runs = n(), stored_matches_hc3 = sum(stored_matches_hc3), .groups = "drop")
+  report(check, "se_check",
+         "Check: HC3 re-score identical to the saved p-values (should be every run)")
+
+  # ---- now: classical vs HC3, same fits
+  rates <- rescored %>%
+    group_by(arm, se, model, measure, test, interim_prop) %>%
+    summarise(reject = prop_sig(p), .groups = "drop")
+
+  se_effect <- rates %>%
+    pivot_wider(names_from = se, values_from = reject) %>%
+    mutate(hc3_minus_classical = hc3 - classical)
+  write.csv(se_effect, file.path(out_dir, "se_effect_all.csv"), row.names = FALSE)
+  report(se_effect %>% filter(interim_prop %in% LANDMARKS) %>%
+           arrange(test, model, measure, interim_prop, arm),
+         "se_effect", "Standard errors alone: proportion p < 0.05, classical vs HC3 on the same fits")
+
+  # per-run disagreement: how many runs cross 0.05 in each direction
+  crossings <- rescored %>%
+    select(arm, se, model, measure, test, interim_prop, run, p) %>%
+    pivot_wider(names_from = se, values_from = p) %>%
+    group_by(arm, test, model) %>%
+    summarise(pairs = sum(!is.na(classical) & !is.na(hc3)),
+              sig_classical_only = sum(classical < 0.05 & hc3 >= 0.05, na.rm = TRUE),
+              sig_hc3_only = sum(hc3 < 0.05 & classical >= 0.05, na.rm = TRUE),
+              median_p_ratio_hc3_to_classical = median(hc3 / classical, na.rm = TRUE),
+              .groups = "drop")
+  report(crossings, "se_crossings",
+         "Standard errors alone: runs whose verdict at 0.05 flips (all interim points)")
+
+  # ---- decomposition: August (classical) -> now classical -> now HC3
+  if (!file.exists(old_tar)) {
+    cat("\narchived run not found, decomposition skipped:", old_tar, "\n")
+    return(invisible())
+  }
+  old_rates <- old_pvals_long(harmonise(read_old_metrics(), "aug")) %>%
+    group_by(arm, se, model, measure, test, interim_prop) %>%
+    summarise(reject = prop_sig(p), .groups = "drop")
+
+  decomposition <- bind_rows(old_rates, rates) %>%
+    mutate(column = paste(arm, se)) %>%
+    select(-arm, -se) %>%
+    pivot_wider(names_from = column, values_from = reject) %>%
+    arrange(test, model, measure, interim_prop)
+  write.csv(decomposition, file.path(out_dir, "se_decomposition_all.csv"), row.names = FALSE)
+  report(decomposition %>% filter(interim_prop %in% LANDMARKS),
+         "se_decomposition",
+         paste("Proportion p < 0.05. aug classical -> now classical: DGM, estimators",
+               "and design. now classical -> now hc3: standard errors alone."))
+}
+
+###################
 # Oracle simulation: the DGM and HC3 without any estimator
 ###################
 # Chunk-2 sizes for interim_prop 0.75 / 0.5 / 0.25. The subgroups are the true
@@ -278,15 +439,20 @@ run_sim_part <- function() {
   }
   sims <- bind_rows(sims)
 
+  # one row per DGM x size x standard error, so reading down a pair of rows is
+  # the HC3 effect and reading across DGMs at one standard error is the DGM's
   summary_tab <- sims %>%
-    pivot_longer(-c(dgm, chunk2_n, resid_sd_top10), names_to = "test", values_to = "p") %>%
-    group_by(dgm, chunk2_n, test) %>%
+    pivot_longer(-c(dgm, chunk2_n, resid_sd_top10), names_to = "test_se",
+                 values_to = "p") %>%
+    mutate(se = sub("^.*_(classical|hc3)$", "\\1", test_se),
+           test = sub("_(classical|hc3)$", "", test_se)) %>%
+    group_by(dgm, chunk2_n, se, test) %>%
     summarise(reject = prop_sig(p), .groups = "drop") %>%
     pivot_wider(names_from = test, values_from = reject) %>%
     left_join(sims %>% group_by(dgm, chunk2_n) %>%
                 summarise(mean_resid_sd = mean(resid_sd_top10), .groups = "drop"),
               by = c("dgm", "chunk2_n")) %>%
-    arrange(chunk2_n, dgm)
+    arrange(chunk2_n, dgm, se)
 
   report(summary_tab, "oracle_sim",
          paste0("Oracle subgroups and X5 proxy: rejection rate at 0.05 (", sim_reps,
@@ -294,6 +460,7 @@ run_sim_part <- function() {
 }
 
 if (part %in% c("all", "metrics")) run_metrics_part()
+if (part %in% c("all", "se")) run_se_part()
 if (part %in% c("all", "sim")) run_sim_part()
 
 cat("\nCSVs written to", out_dir, "\n")
