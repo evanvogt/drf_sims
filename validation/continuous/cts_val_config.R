@@ -19,7 +19,7 @@ study <- study_config(
   prefix   = "cts_val",
   res_path = file.path(dirname(here()), "results", "validation", "continuous"),
   grid = expand.grid(
-    rho = 0.5,
+    rho = c(0, 0.5),
     scenario = 2,
     n = 1000,
     # round() is load-bearing, not cosmetic: interim_prop is a path_cols entry,
