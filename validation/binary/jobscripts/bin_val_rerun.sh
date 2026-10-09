@@ -2,12 +2,12 @@
 # Reruns only the array indices listed in failed_ids.txt by bin_val_check.R.
 # -J and the resource request are rewritten by check_failed(); the values here
 # are what it computes from bin_val_1.sh, so the first check leaves them alone.
-#PBS -l walltime=00:40:00
-#PBS -l select=1:ncpus=2:ompthreads=1:mem=4gb
-#PBS -J 1-2%100
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=2:ompthreads=1:mem=6gb
+#PBS -J 1-30%100
 #PBS -N bin_val_rerun
+#PBS -j oe
 #PBS -o logs_rerun/
-#PBS -e logs_rerun/
 
 module purge
 module add tools/prod

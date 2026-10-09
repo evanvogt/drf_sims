@@ -2,9 +2,9 @@
 # Reruns only the array indices listed in failed_ids.txt by cts_val_check.R.
 # -J and the resource request are rewritten by check_failed(); the values here
 # are what it computes from cts_val_1.sh, so the first check leaves them alone.
-#PBS -l walltime=04:00:00
-#PBS -l select=1:ncpus=2:ompthreads=1:mem=4gb
-#PBS -J 1-2%100
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=1:ompthreads=1:mem=6gb
+#PBS -J 1-33
 #PBS -N cts_val_rerun
 #PBS -o logs_rerun/
 #PBS -e logs_rerun/
