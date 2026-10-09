@@ -146,9 +146,20 @@ predict.SL.glmnet.int.1se <- no_predict
 #' hold ~2 events - binary scenario 4, whose treated risk is low - so every
 #' learner errors on some inner fold ("All algorithms dropped from library").
 #'
+#' ZERO WEIGHTS. When NNLS gives every learner weight 0, SuperLearner only
+#' warns ("All algorithms have zero weight") and SL.predict is 0 on every row -
+#' not an estimate of anything. It happens to the DR-learner's stage 2 on a
+#' binary outcome: the risk-difference effect is small next to the
+#' pseudo-outcome's noise, so every learner's CV predictions, SL.mean's
+#' leave-fold-out mean above all, are uncorrelated or negatively correlated
+#' with the held-out pseudo-outcomes, and NNLS has no intercept to fall back
+#' on. The fit then uses the discrete SuperLearner - the single learner with
+#' the lowest CV risk - with a warning, and `zero_weights` names it.
+#'
 #' @param newX_list named list of covariate data.frames, each with X's columns
 #' @return list(pred = named list of numeric vectors, coef = ensemble weights
-#'   (NULL after a failed fit), failed = NA or the error message)
+#'   (NULL after a failed fit), failed = NA or the error message,
+#'   zero_weights = NA or the learner used because every weight was 0)
 sl_fit_predict <- function(Y, X, newX_list, SL.library, family = gaussian(),
                            obsWeights = NULL, cvControl = list()) {
   sizes <- vapply(newX_list, NROW, integer(1))
@@ -167,20 +178,43 @@ sl_fit_predict <- function(Y, X, newX_list, SL.library, family = gaussian(),
     warning("sl_fit_predict: SuperLearner failed (", msg, "); predicting the mean of Y.")
     w <- if (is.null(obsWeights)) rep(1, length(Y)) else obsWeights
     pred <- rep(stats::weighted.mean(Y, w), sum(sizes))
-    return(list(pred = split(pred, piece), coef = NULL, failed = msg))
+    return(list(pred = split(pred, piece), coef = NULL, failed = msg,
+                zero_weights = NA_character_))
   }
 
   pred <- as.numeric(fit$SL.predict)
-  list(pred = split(pred, piece), coef = fit$coef, failed = NA_character_)
+  zero_weights <- NA_character_
+  if (all(fit$coef == 0)) {
+    ok <- is.finite(fit$cvRisk)
+    if (length(fit$errorsInLibrary)) ok <- ok & !fit$errorsInLibrary
+    if (any(ok)) {
+      best <- which(ok)[which.min(fit$cvRisk[ok])]
+      zero_weights <- names(fit$cvRisk)[best]
+      pred <- as.numeric(fit$library.predict[, best])
+    } else {
+      zero_weights <- "(none usable, used the mean)"
+      w <- if (is.null(obsWeights)) rep(1, length(Y)) else obsWeights
+      pred <- rep(stats::weighted.mean(Y, w), sum(sizes))
+    }
+    warning("sl_fit_predict: every ensemble weight is zero; using ", zero_weights, ".")
+  }
+  list(pred = split(pred, piece), coef = fit$coef, failed = NA_character_,
+       zero_weights = zero_weights)
 }
 
-#' Record a failed sl_fit_predict() fit in a pretested library's "dropped"
-#' attribute, so dropped_table() reports it alongside the pretest's drops
+#' Record a failed or zero-weight sl_fit_predict() fit in a pretested library's
+#' "dropped" attribute, so dropped_table() reports it alongside the pretest's
+#' drops
 mark_failed_fit <- function(lib, fit) {
   if (!is.na(fit$failed)) {
     attr(lib, "dropped") <- c(attr(lib, "dropped"),
                               "(whole fit)" = paste("SuperLearner failed, used the mean:",
                                                     fit$failed))
+  }
+  if (!is.null(fit$zero_weights) && !is.na(fit$zero_weights)) {
+    attr(lib, "dropped") <- c(attr(lib, "dropped"),
+                              "(whole fit)" = paste("all ensemble weights zero, used",
+                                                    fit$zero_weights))
   }
   lib
 }

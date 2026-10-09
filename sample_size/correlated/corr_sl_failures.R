@@ -8,7 +8,10 @@
 #   pretest drops   pretest_superlearner() fits each candidate alone with 2-fold
 #                   CV and drops one that errors or predicts non-finite values
 #   "(whole fit)"   the live SuperLearner() errored, so every prediction in that
-#                   fold/model is the training mean (mark_failed_fit())
+#                   fold/model is the training mean (mark_failed_fit()); or
+#                   every ensemble weight was zero and the fit used the
+#                   lowest-CV-risk learner alone (reason "all ensemble weights
+#                   zero, ...", runs after 2026-10-09 only)
 # Nothing downstream reads it. This summarises it for both outcomes. One more
 # event is derived rather than saved: when the pretest drops every learner in a
 # library, the fit falls back to SL.mean alone (bug K); that shows here as a
@@ -60,6 +63,8 @@ FITS_PER_FOLD <- length(LIB_SLOT)
 
 reason_class <- function(learner, reason) {
   case_when(
+    learner == "(whole fit)" &
+      startsWith(reason, "all ensemble weights zero") ~ "whole fit: zero weights",
     learner == "(whole fit)"               ~ "whole fit failed",
     startsWith(reason, "error:")           ~ "pretest: error",
     reason == "error inside SuperLearner"  ~ "pretest: error inside SuperLearner",

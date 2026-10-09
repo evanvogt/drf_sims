@@ -533,12 +533,18 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE) 
   # W:v coefficient by name. This used to be two positional lookups, and the
   # bottom one read `pvals_bottom[1]` - the intercept - so bottom_pval was never
   # a subgroup test at all. Results from before that fix are not comparable.
+  #
+  # The groups are cut on rank(tau1), not tau1: a tau1 with tied values (a DR
+  # SuperLearner fold predicting one constant) gives tied quantiles, and cut()
+  # stops on non-unique breaks. Where tau1 has no ties the groups are the same
+  # as cutting tau1 itself; ties are broken by row order.
   subgroups <- list()
   for (model in models) {
     tau1 <- results1[[model]]$tau
+    rank1 <- rank(tau1, ties.method = "first")
 
-    group <- cut(tau1,
-                 breaks = quantile(tau1, probs = c(0, 0.1, 0.9, 1)),
+    group <- cut(rank1,
+                 breaks = quantile(rank1, probs = c(0, 0.1, 0.9, 1)),
                  labels = c("bottom10", "middle", "top10"),
                  include.lowest = TRUE)
     df_train <- data.frame(group = group, X1)
