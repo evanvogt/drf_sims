@@ -5,9 +5,9 @@
 #
 # failed_cts_ids.txt, not failed_ids.txt: this jobscripts directory serves both
 # optimal_sf studies, so the bin and cts todo lists are named apart.
-#PBS -l walltime=8:00:00
-#PBS -l select=1:ncpus=4:ompthreads=4:mem=5gb
-#PBS -J 1-1367%25
+#PBS -l walltime=08:00:00
+#PBS -l select=1:ncpus=4:ompthreads=4:mem=9gb
+#PBS -J 1-739%50
 #PBS -N ci_sf_corr_cts_rerun
 #PBS -o logs_cts_rerun/
 #PBS -j oe
