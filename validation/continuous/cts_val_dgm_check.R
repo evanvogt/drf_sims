@@ -17,19 +17,30 @@
 # W, X and noise, its estimators are fit from the same seeds, and a difference
 # between two cells is that one factor, not seed noise.
 #
-# Cells (CELLS below), all scenario 2 at rho = 0 (rho is already ruled out):
+# Cells (CELLS below), scenario 2 at rho = 0 by default:
 #   now        the current design: one trial of 1000 split, bug O baseline,
 #              10 covariates, T-learner nuisances
 #   chunk_bW   bW calibrated within each chunk - the two-draw design
 #   aug_base   the pre-bug-O baseline: Y = 0.3 - 0.05 X1 + 2 X2 + W tau + err,
 #              and its bW rule (75% power, sd = s_err + s2). tau's spread is
 #              unchanged; X2's prognostic variance goes from 1 to 4
-#   8_covs     X3 and X5 dropped - they were not drawn in August
+#   aug_covs   August's covariate set: X3 and X5 only where tau uses them (they
+#              were drawn only then). In scenario 2, X3 and X5 dropped
 #   s_learner  the August S-learner nuisance (nuisance_rf_s below). Only the DR
 #              random forest uses it: the causal forest fits its own nuisances,
 #              so its rows here must equal `now`'s exactly - a built-in check
 #              that the pairing works
 #   august     all of the above at once - should reproduce the archived rates
+#
+# Other scenarios and rho. `scenario=<k>` and `rho=<r>` (a continuous_corr_<r>
+# set, so 0 or 0.5) run the same factorial on another CATE, e.g. to see how hard
+# a candidate makes subgroup replication before switching the study to it. The
+# August cells (aug_base, august) and the comparison with the real runs exist
+# only for scenario 2 - the only scenario the study has run, and the one
+# baseline AUG below holds - so they are dropped elsewhere; aug_covs is dropped
+# where tau uses both X3 and X5, as it would equal `now`. Each scenario and rho
+# gets its own folder, cache included. A CATE not in R/dgm_scenarios.R needs a
+# row there first: the trial comes from generate_continuous_scenario_data().
 #
 # The subgroup tests need only chunk 1's tau, so by default only chunk 1 is
 # fitted. `oracle_tau` is a third "model": the true tau of chunk 1 through the
@@ -41,15 +52,20 @@
 # take more than ten times as long: run it on fewer runs, or cut CELLS down.
 #
 # Usage, from the repo root or validation/continuous/:
-#   Rscript cts_val_dgm_check.R [runs] [workers] [vims]
-# Defaults: 100 runs, all cores but one, no vims. Each run is cached under
-# <current metrics folder>/investigation/dgm_check/, so an interrupted job
-# resumes, and a finished one re-summarises without refitting. Tables print to
-# the console and are written there as CSVs.
+#   Rscript cts_val_dgm_check.R [runs] [workers] [vims] [scenario=<k>] [rho=<r>]
+# e.g. Rscript cts_val_dgm_check.R 100 13 scenario=3 rho=0.5
+# Defaults: 100 runs, all cores but one, no vims, scenario 2, rho 0. Each run is
+# cached under <current metrics folder>/investigation/dgm_check/
+# scenario_<k>/rho_<r>/, so an interrupted job resumes, and a finished one
+# re-summarises without refitting. Tables print to the console and are written
+# there as CSVs.
 #
 # Run r uses setup_rng_stream(r) and generate_continuous_scenario_data() exactly
-# as cts_val_analysis.R does, so cell `now` is run r of the real rho = 0 arm,
-# participant for participant (its forests are fit from different seeds).
+# as cts_val_analysis.R does, so in scenario 2 cell `now` is run r of the real
+# arm at that rho, participant for participant (its forests are fit from
+# different seeds). Every scenario draws the same W, X and noise for a run, so
+# the same run number across scenarios is the same participants under a
+# different CATE.
 
 library(here)
 library(dplyr)
@@ -65,25 +81,43 @@ source(here("validation", "val_common.R"))
 
 args <- commandArgs(trailingOnly = TRUE)
 with_vims <- "vims" %in% args
-num_args <- suppressWarnings(as.integer(args[args != "vims"]))
+#' The value of a key=value argument, or `default`
+key_arg <- function(key, default) {
+  hit <- sub(paste0("^", key, "="), "", grep(paste0("^", key, "="), args, value = TRUE))
+  if (length(hit) == 0) default else as.numeric(hit[1])
+}
+num_args <- suppressWarnings(as.integer(args[args != "vims" & !grepl("=", args)]))
 n_runs <- if (length(num_args) >= 1 && !is.na(num_args[1])) num_args[1] else 100L
 workers <- if (length(num_args) >= 2 && !is.na(num_args[2])) num_args[2] else
   max(1L, parallel::detectCores() - 1L)
 
-SCENARIO <- 2
+SCENARIO <- key_arg("scenario", 2)
 N <- 1000
-RHO <- 0
+RHO <- key_arg("rho", 0)
 INTERIMS <- c(0.25, 0.5, 0.75)
+
+NOW_PARAMS <- local({
+  p <- resolve_set(corr_set("continuous", RHO))
+  if (!SCENARIO %in% p$scenario) stop("no scenario ", SCENARIO, " in continuous_corr_", RHO)
+  p[p$scenario == SCENARIO, ]
+})
+
+# the covariates this scenario's tau uses, read off te_expr - what a variable
+# importance measure should put on top
+MODIFIERS <- Filter(function(v) te_uses(NOW_PARAMS, v), c("X3", "X4", "X5"))
 
 CELLS <- tribble(
   ~cell,       ~baseline, ~covariates, ~calibration, ~nuisance,
-  "now",       "now",     10,          "trial",      "T",
-  "chunk_bW",  "now",     10,          "chunk",      "T",
-  "aug_base",  "aug",     10,          "trial",      "T",
-  "8_covs",    "now",     8,           "trial",      "T",
-  "s_learner", "now",     10,          "trial",      "S",
-  "august",    "aug",     8,           "chunk",      "S"
+  "now",       "now",     "all",       "trial",      "T",
+  "chunk_bW",  "now",     "all",       "chunk",      "T",
+  "aug_base",  "aug",     "all",       "trial",      "T",
+  "aug_covs",  "now",     "aug",       "trial",      "T",
+  "s_learner", "now",     "all",       "trial",      "S",
+  "august",    "aug",     "aug",       "chunk",      "S"
 )
+# see "Other scenarios and rho" in the header
+if (SCENARIO != 2) CELLS <- filter(CELLS, baseline != "aug")
+if (all(c("X3", "X5") %in% MODIFIERS)) CELLS <- filter(CELLS, covariates != "aug")
 
 # the current metrics and the archived August ones - as cts_val_investigation.R
 # finds them
@@ -94,8 +128,10 @@ old_tar <- file.path(dirname(here()), "results", "_archive", "pre_2026-09-26",
                      "validation__continuous.tar")
 old_member <- "validation/continuous/cts_val_metrics.RDS"
 
-out_dir <- file.path(if (is.na(new_path)) study$res_path else dirname(new_path),
-                     "investigation", "dgm_check")
+inv_dir <- file.path(if (is.na(new_path)) study$res_path else dirname(new_path),
+                     "investigation")
+out_dir <- file.path(inv_dir, "dgm_check", paste0("scenario_", SCENARIO),
+                     paste0("rho_", RHO))
 run_dir <- file.path(out_dir, if (with_vims) "runs_vims" else "runs")
 dir.create(run_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -113,12 +149,9 @@ prop_sig <- function(p) if (all(is.na(p))) NA_real_ else mean(p < 0.05, na.rm = 
 # Building a cell's chunks
 ###################
 
-NOW_PARAMS <- local({
-  p <- resolve_set(corr_set("continuous", RHO))
-  p[p$scenario == SCENARIO, ]
-})
-
-# the August baseline (R/dgm_scenarios.R at d89458b, continuous scenario 3)
+# the August baseline of scenario 2 (R/dgm_scenarios.R at d89458b, where it
+# was continuous scenario 3). Other scenarios had other baselines then, and
+# their August cells are not run
 AUG <- list(b0 = 0.3, b1 = -0.05, b2 = 2, s_err = 0.5, s2 = 1)
 
 #' bW under a baseline's own calibration rule, at n
@@ -133,7 +166,7 @@ bW_for <- function(baseline, n) {
 
 #' One chunk of the split trial, as a cell would have generated it
 #'
-#' tau - bW_trial is the bW-free heterogeneity (-X4), and
+#' tau - bW_trial is the bW-free heterogeneity g (-X4 in scenario 2), and
 #' Y - p0 - W * tau the trial's own noise, so the outcome is rebuilt from the
 #' same participants under the cell's baseline and bW. The current design's
 #' chunk is returned untouched rather than rebuilt, so cell `now` is the real
@@ -156,7 +189,9 @@ cell_chunk <- function(data, truth, bW_trial, cell) {
     }
     data$Y <- m0 + data$W * tau + err
   }
-  if (cell$covariates == 8) data <- data[, setdiff(names(data), c("X3", "X5"))]
+  if (cell$covariates == "aug") {
+    data <- data[, setdiff(names(data), setdiff(c("X3", "X5"), MODIFIERS))]
+  }
 
   list(data = data, tau = tau, bW = bW)
 }
@@ -300,13 +335,19 @@ score_vims <- function(fits1, fits2, data1, data2, sub_pvals) {
         stop("score_subgroups() disagrees with chunk_validations() for ", model, ", ", se)
       }
       tv <- as.data.frame(val$top_var_tests[[model]])
-      vi <- val$var_imps[[model]]
-      x4_rank <- vi %>% filter(variables == "X4") %>% select(measure, x4_vi1 = vi1, x4_vi2 = vi2)
+      # the best-ranked true modifier in each chunk (NA in scenario 1, which has none)
+      mod_rank <- val$var_imps[[model]] %>%
+        group_by(measure) %>%
+        summarise(mod_vi1 = if (any(variables %in% MODIFIERS))
+                    max(vi1[variables %in% MODIFIERS]) else NA_real_,
+                  mod_vi2 = if (any(variables %in% MODIFIERS))
+                    max(vi2[variables %in% MODIFIERS]) else NA_real_,
+                  .groups = "drop")
       out[[length(out) + 1]] <- tv %>%
-        left_join(x4_rank, by = "measure") %>%
+        left_join(mod_rank, by = "measure") %>%
         pivot_longer(c(p_cts, p_cts_adj, p_split), names_to = "p_type", values_to = "p") %>%
         transmute(model = model, test = paste0("topvar_", measure, "_", p_type), se = se, p,
-                  x_top, x_top2, p_cov = ncol(data1) - 2, x4_vi1, x4_vi2)
+                  x_top, x_top2, p_cov = ncol(data1) - 2, mod_vi1, mod_vi2)
     }
   }
   bind_rows(out)
@@ -463,11 +504,12 @@ report(diag_sum, "subgroup_diagnostics",
              "precision1), chunk-2 true contrast (contrast2) and residual SD (resid_sd2)"))
 
 # ---- does the simulation reproduce the real runs at both ends?
-#' Real subgroup rejection rates: the rho = 0 arm (HC3) and August (classical)
+#' Real subgroup rejection rates: the arm at RHO (HC3) and August (classical)
 #'
-#' The rho = 0 arm comes from the current metrics if they hold it, otherwise
-#' from cts_val_investigation.R's subgroups_all.csv beside out_dir, which keeps
-#' the rates of whatever metrics it was run against.
+#' The arm at RHO comes from the current metrics if they hold it, otherwise
+#' from cts_val_investigation.R's subgroups_all.csv in inv_dir, which keeps
+#' the rates of whatever metrics it was run against. Scenario 2 only - the
+#' study has run no other.
 read_real <- function() {
   to_rates <- function(df, source) {
     df %>%
@@ -483,11 +525,14 @@ read_real <- function() {
 
   real <- list()
   now <- if (!is.na(new_path)) as.data.frame(readRDS(new_path)$subgroups) else NULL
+  if (!is.null(now) && "scenario" %in% names(now)) {
+    now <- now[as.numeric(as.character(now$scenario)) == SCENARIO, ]
+  }
   if (!is.null(now) && "rho" %in% names(now)) {
     rhos <- unique(as.character(now$rho))
     now <- now[as.numeric(as.character(now$rho)) == RHO, ]
   }
-  investigation_csv <- file.path(dirname(out_dir), "subgroups_all.csv")
+  investigation_csv <- file.path(inv_dir, "subgroups_all.csv")
   if (!is.null(now) && nrow(now) > 0) {
     real$now <- to_rates(now, "real_now_hc3")
   } else if (file.exists(investigation_csv)) {
@@ -519,35 +564,38 @@ read_real <- function() {
   bind_rows(real)
 }
 
-real <- read_real()
-sim_ends <- rates %>%
-  filter((cell == "now" & se == "hc3") | (cell == "august" & se == "classical")) %>%
-  transmute(source = paste0("sim_", cell, "_", se), model, test, interim_prop, reject)
-report(bind_rows(real, sim_ends) %>%
-         pivot_wider(names_from = source, values_from = reject) %>%
-         select(model, test, interim_prop, any_of(c("real_now_hc3", "sim_now_hc3",
-                                                    "real_august_classical",
-                                                    "sim_august_classical"))) %>%
-         arrange(test, model, interim_prop),
-       "subgroup_vs_real",
-       paste("Calibration: the simulated `now` and `august` cells against the real",
-             "rho = 0 and archived August rates. If both pairs agree (within ~0.1 at",
-             "100 runs), the cells above account for the whole gap"))
+if (SCENARIO == 2) {
+  real <- read_real()
+  sim_ends <- rates %>%
+    filter((cell == "now" & se == "hc3") | (cell == "august" & se == "classical")) %>%
+    transmute(source = paste0("sim_", cell, "_", se), model, test, interim_prop, reject)
+  report(bind_rows(real, sim_ends) %>%
+           pivot_wider(names_from = source, values_from = reject) %>%
+           select(model, test, interim_prop, any_of(c("real_now_hc3", "sim_now_hc3",
+                                                      "real_august_classical",
+                                                      "sim_august_classical"))) %>%
+           arrange(test, model, interim_prop),
+         "subgroup_vs_real",
+         paste0("Calibration: the simulated `now` and `august` cells against the real ",
+                "rho = ", RHO, " and archived August rates. If both pairs agree (within ",
+                "~0.1 at 100 runs), the cells above account for the whole gap"))
+}
 
 # ---- secondary: the top-covariate tests
 if (with_vims && nrow(vimrows) > 0) {
   tv <- vimrows %>%
     group_by(cell, model, test, se, interim_prop) %>%
     summarise(reject = prop_sig(p),
-              x4_picked = mean(x_top == "X4"),
-              x4_rank1_scaled = mean(x4_vi1 / p_cov),
+              modifier_picked = mean(x_top %in% MODIFIERS),
+              modifier_rank1_scaled = mean(mod_vi1 / p_cov),
               chunks_agree = mean(x_top == x_top2),
               .groups = "drop") %>%
     cell_order() %>%
     arrange(se, test, model, interim_prop, cell)
   report(tv %>% filter(se == "hc3"), "topvar_rates",
-         paste("Top-covariate tests (HC3): proportion p < 0.05, how often chunk 1",
-               "picked X4, X4's rank / p, and how often the chunks agree on the top"))
+         paste0("Top-covariate tests (HC3): proportion p < 0.05, how often chunk 1 ",
+                "picked a true modifier (", paste(MODIFIERS, collapse = ", "),
+                "), the best one's rank / p, and how often the chunks agree on the top"))
   write.csv(tv, file.path(out_dir, "topvar_rates_all.csv"), row.names = FALSE)
 }
 
