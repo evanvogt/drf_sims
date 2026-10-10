@@ -416,8 +416,10 @@ get_ipw <- function(X, Y, D, W, horizon, censor, num.threads = NULL) {
     num.threads = num.threads
   )$predictions
 
-  # get weights for non censored (clipped)
-  observed <- (D != censor)
+  # get weights for non censored (clipped). A unit still at risk at the horizon
+  # is observed whatever happens to it afterwards: its min(Y, horizon) is known,
+  # and its weight is 1 / P(uncensored at horizon), as in the grf tutorial
+  observed <- (D != censor) | (Y >= horizon)
   epsilon <- 1e-3
   ipw <- 1 / pmax(censor_prob, epsilon)
 
@@ -427,7 +429,8 @@ get_ipw <- function(X, Y, D, W, horizon, censor, num.threads = NULL) {
 #
 # Whole-sample, grf-internal crossfitting ("cf_default"), matching
 # R/cate_models.R::run_causal_forest. The forest is fit only on `include` -
-# observations not censored and free of the competing event - so OOB predictions
+# observations not censored and free of the competing event before the horizon
+# (anything after it does not change min(Y, horizon)) - so OOB predictions
 # exist for those rows only; the excluded rows never entered the forest at all,
 # so a plain newdata prediction for them is honest. Same pattern as
 # crossfitting/cf_models.R::nuisance_oob_rf.
@@ -504,8 +507,8 @@ csf_cs <- function(X, Y, D, W, horizon, event = 1, num.threads = NULL, X_ps = NU
   return(predict(forest, num.threads = num.threads)$predictions)
 }
 # CSF - keep competing events in the risk set
-# Whole sample, as csf_cs. When censoring is present the forest is fit on the
-# uncensored subset only, so the excluded rows get a newdata prediction - see
+# Whole sample, as csf_cs. When censoring is present the forest is fit only on
+# units not censored before the horizon, so the excluded rows get a newdata prediction - see
 # cf_ipw above for why that is honest.
 csf_sh <- function(X, Y, D, W, horizon, event = 1, num.threads = NULL, X_ps = NULL) {
   n_obs <- nrow(X)

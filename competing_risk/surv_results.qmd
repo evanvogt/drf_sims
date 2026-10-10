@@ -54,7 +54,7 @@ Fixed at **n = 500**, censoring **on/off**, **500 runs**, horizon = 28. Full
 design in `competing_risk/README.md`.
 
 Covariates are drawn from a Gaussian copula at two latent correlations,
-**ρ = 0.5** (X1, X2, X3 and the noise X01–X03 correlated: the primary
+**ρ = 0.5** (X1, X2, X3 and the noise X4, X5, X01–X03 correlated: the primary
 analysis, and every section below except "Sensitivity analysis") and
 **ρ = 0** (independent: the sensitivity analysis). τ(x) is the same function
 at both; the runs share their seeds, so that section compares the two ρ with
@@ -636,7 +636,7 @@ kable(
 ## Sensitivity analysis: independent covariates (ρ = 0)
 
 Every section above is ρ = 0.5, where the modifier X3 is correlated with the
-prognostic X1 and X2 (about 0.3–0.4) and with the noise X01–X03, which become
+prognostic X1 and X2 (about 0.3–0.4) and with the noise X4, X5 and X01–X03, which become
 partial proxies for it. At ρ = 0 all covariates are independent. The true
 CATE function, the event mix and the scenarios' X3 separation barely move
 between the two (`surv_dgm_check.R`; ADEMP "What the DGM implies"), so a

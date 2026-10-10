@@ -148,10 +148,13 @@ truth_individual <- function(shape1, shape2, scale1_1, scale1_0, scale2_1, scale
 #' @param scenario Integer 1-7 specifying the data generation scenario
 #' Covariates come from the copula (correlated_covariates(), R/dgm_scenarios.R)
 #' at every rho, 0 included, so a run at rho = 0 and at rho = 0.5 is paired.
-#' The copula draws X1-X5 and X01-X03; this study keeps X1, X2, X3 and X01-X03
-#' (exchangeable correlation rho among those six) and drops X4/X5. X04/X05, the
-#' categorical pair, are independent of everything. Marginals are unchanged:
-#' X1 ~ Bernoulli(0.4), X2 ~ N(0, 1), X3 ~ Bernoulli(0.7), X01-X03 ~ N(0, 1).
+#' The copula draws X1-X5 and X01-X03 (exchangeable correlation rho among all
+#' eight), and the study keeps all of them, so the covariate set is
+#' sample_size/'s: X1-X5, X01-X05. Only X1-X3 enter the hazards; X4/X5 are noise
+#' here. Until 2026-10-10 X4/X5 were drawn and dropped - adding them consumed no
+#' extra draws, so W, Y, D and the truth of every run are unchanged. X04/X05, the
+#' categorical pair, are independent of everything. Marginals:
+#' X1 ~ Bernoulli(0.4), X2 ~ N(0, 1), X3 ~ Bernoulli(0.7), X4, X5, X01-X03 ~ N(0, 1).
 #'
 #' DRAW ORDER (part of the contract - runs are reproduced by index):
 #'     W, Z-block (n x 8), cats, U, cause, [C]
@@ -182,8 +185,11 @@ generate_surv_data <- function(scenario, n, rho = 0, return_truth = TRUE,
   X1 <- cv$X1
   X2 <- cv$X2
   X3 <- cv$X3
-  # noise: X01-X03 correlated with X1-X3 (proxies, never in the hazards),
-  # X04/X05 indicators of an independent 3-level factor
+  # noise: X4/X5 (sample_size/'s continuous effect modifiers, here in no
+  # hazard) and X01-X03, all correlated with X1-X3 at rho; X04/X05 indicators
+  # of an independent 3-level factor
+  X4 <- cv$X4
+  X5 <- cv$X5
   X01 <- cv$X01
   X02 <- cv$X02
   X03 <- cv$X03
@@ -235,6 +241,8 @@ generate_surv_data <- function(scenario, n, rho = 0, return_truth = TRUE,
     X1 = X1,
     X2 = X2,
     X3 = X3,
+    X4 = X4,
+    X5 = X5,
     X01 = X01,
     X02 = X02,
     X03 = X03,

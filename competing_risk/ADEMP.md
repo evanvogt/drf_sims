@@ -35,23 +35,26 @@ Implementation: `surv_dgm.R::generate_surv_data()`, parameters in
 - Prognostic for both events: `X1 ~ Bernoulli(0.4)`, `X2 ~ N(0, 1)`
 - Effect modifier (drawn in every scenario, whether or not it is used):
   `X3 ~ Bernoulli(0.7)`
-- Noise: `X01`–`X03 ~ N(0, 1)`; `X04`, `X05` indicators of a 3-level factor
-  (0.45 / 0.30 / 0.25)
+- Noise: `X4`, `X5`, `X01`–`X03 ~ N(0, 1)`; `X04`, `X05` indicators of a
+  3-level factor (0.45 / 0.30 / 0.25)
 
-So every estimator sees 8 covariates (X1, X2, X3, X01–X05). Unlike
-`sample_size/` there is no X4 / X5: the only effect modifier is the binary X3.
+So every estimator sees 10 covariates (X1–X5, X01–X05), the same set as
+`sample_size/`. Unlike there, X4 / X5 are noise: the only effect modifier is
+the binary X3. (Until 2026-10-10 X4 / X5 were drawn and dropped, so estimators
+saw 8 covariates; keeping them took no extra random draws, so each run's W, Y,
+D and truth are unchanged.)
 
-**Correlation (since 2026-10-01).** X1, X2, X3 and X01–X03 come from the
+**Correlation (since 2026-10-01).** X1–X5 and X01–X03 come from the
 Gaussian copula the missing-data and `sample_size/correlated/` sets use
 (`correlated_covariates()`, `R/dgm_scenarios.R`). A latent
 `Z ~ N(0, R)` over X1–X5 and X01–X03, with R exchangeable at ρ, is drawn. X1
-and X3 are Z thresholded at their prevalences, while X2 and X01–X03 are Z
-itself, so every marginal is as above. This study drops the copula's X4 and
-X5 columns. X04 / X05 are independent of everything. ρ ∈ `CORR_RHOS` = {0,
+and X3 are Z thresholded at their prevalences, while X2, X4, X5 and X01–X03
+are Z itself, so every marginal is as above. X04 / X05 are independent of
+everything. ρ ∈ `CORR_RHOS` = {0,
 0.5} is a design factor. ρ = 0.5 (correlated) is the primary analysis and
 ρ = 0 (independent) the sensitivity analysis (since 2026-10-06; before that
 the roles were the other way round). At ρ = 0.5 the observed correlations are about 0.5 between continuous covariates and
-0.3–0.4 for pairs involving X1 or X3. The noise X01–X03 are then partial
+0.3–0.4 for pairs involving X1 or X3. The noise X4, X5 and X01–X03 are then partial
 proxies for X3 (and X1, X2), although they never enter a hazard. The hazards,
 the coefficients and so τ(x) are the same at both ρ. Only the covariates'
 joint distribution moves.
@@ -275,7 +278,7 @@ RMST2 21.2.
   values").
 
 What ρ does change is the estimation problem. X3 now travels with the
-prognostic X1 and X2, and the noise X01–X03 become proxies for all three.
+prognostic X1 and X2, and the noise X4, X5 and X01–X03 become proxies for all three.
 
 ## Estimands
 
@@ -309,7 +312,7 @@ Each CATE is the treated minus the control value at the same x.
 
 Implementation: `surv_models.R::all_cate_surv_models()`, called once per run
 by `surv_analysis.R` with `n_folds = 10`, `horizon = 28` and
-`sl_libraries(500)`. Inputs are X (the 8 covariates as generated, no scaling),
+`sl_libraries(500)`. Inputs are X (the 10 covariates as generated, no scaling),
 W, the observed time Y and the status D ∈ {0 censored, 1 E1, 2 E2}.
 
 Sixteen arms (`framework` in the results):
@@ -338,7 +341,7 @@ et al. 2025), is **disabled**: `pseudoyl()` returns NA for the max-time unit
 of each split, and nothing guards it (README "Known issues").
 
 All forests are grf at its defaults (as in `sample_size/ADEMP.md`: 2000 trees,
-honest, `min.node.size` 5, `mtry` = all 8 covariates here), apart from the
+honest, `min.node.size` 5, `mtry` = all 10 covariates here), apart from the
 `rsf_dr_*` outcome models, which are randomForestSRC at its defaults (500
 trees, `nodesize` 15, composite Gray splitting). Every estimated
 propensity in a DR-learner is trimmed to [0.05, 0.95] (`trim_ps`); the causal
@@ -353,19 +356,20 @@ forests' internal propensities are not.
     `censoring = FALSE` these are all about 1.
   - For event k, a second survival forest for the time to the *other* cause,
     weighted the same way, and the two weights multiplied. Units that were
-    censored or had the competing event (at any time, including after τ) are
-    dropped.
+    censored or had the competing event before τ are dropped; a unit with
+    Y ≥ τ is kept whatever its D, since min(Y, τ) is known (grf tutorial:
+    keep D = k or Y ≥ τ).
   - `causal_forest(X, min(Y, τ), W, sample.weights = w)` on the kept units:
     OOB τ̂ for them, a newdata prediction for the dropped ones.
-  - Composite: censoring weights only, every uncensored unit kept.
+  - Composite: censoring weights only, every unit not censored before τ kept.
 - **`csf_cs`**: `causal_survival_forest(X, Y, W, 1{D = k}, target = "RMST",
   horizon = 28)` on the whole sample, the competing event treated as censoring (grf
   estimates the covariate-dependent censoring itself). Composite: event =
   either cause. OOB predictions.
 - **`csf_sh`**: event indicator 1{D = k}, with a competing event's time moved to τ + 1, so
   that the unit stays in the risk set and never has event k before the
-  horizon. That targets τ − RMTL_k. If any unit is censored before τ, every
-  censored unit is dropped and the rest weighted by the censoring weights
+  horizon. That targets τ − RMTL_k. If any unit is censored before τ, the
+  units censored before τ are dropped and the rest weighted by the censoring weights
   above; dropped units get a newdata prediction. Otherwise, whole sample, no
   weights.
 

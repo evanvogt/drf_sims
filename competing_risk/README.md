@@ -80,7 +80,7 @@ the old tree by hand before resubmitting. From `results/`:
 remove `competing_risk/` so `surv_check.R` and `surv_collect.R` don't mix the
 two DGMs.
 
-**Correlated covariates added 2026-10-01.** X1, X2, X3 and the noise X01–X03
+**Correlated covariates added 2026-10-01.** X1, X2, X3 and the noise X01–X03 (X4, X5 too since 2026-10-10)
 now come from the copula `sample_size/correlated/` uses
 (`correlated_covariates()` in `R/dgm_scenarios.R`), at ρ ∈ {0, 0.5}. That
 makes ρ a grid factor and a `rho_<ρ>/` level in the results path. Key points:
@@ -95,6 +95,19 @@ makes ρ a grid factor and a `rho_<ρ>/` level in the results path. Key points:
 - The two ρ share each run's seed, so compare them with paired per-run
   differences. `surv_results.qmd`, "Sensitivity analysis", does this.
 - Every other section of the report is ρ = 0.5.
+
+**X4 / X5 kept and IPW fixed, 2026-10-10.** Two changes, both needing a full rerun:
+
+- The dataset now carries the copula's X4 and X5, which used to be drawn and
+  then dropped. Estimators see the same 10 covariates as `sample_size/` (X1–X5, X01–X05).
+  X4 and X5 are noise here: they enter no hazard. No extra random draws, so each
+  run's W, Y, D and truth are unchanged. Only the estimators' inputs change.
+- `get_ipw()` used to drop every unit censored or with the competing event, even
+  after the horizon. Now a unit with Y ≥ 28 is kept, as in the grf tutorial.
+  This changes `ipw` (badly biased before, event 2 worst) and `csf_sh` when
+  `censoring = TRUE`.
+
+Archive the earlier results the same way as above (`_archive/pre_2026-10-10/`).
 
 ### Scenario 5 flips the sign of the RMTL1 CATE — expect it
 
