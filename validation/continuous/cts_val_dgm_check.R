@@ -58,7 +58,8 @@
 # cached under <current metrics folder>/investigation/dgm_check/
 # scenario_<k>/rho_<r>/, so an interrupted job resumes, and a finished one
 # re-summarises without refitting. Tables print to the console and are written
-# there as CSVs.
+# there as CSVs. On the cluster, jobscripts/cts_val_dgm_check.sh runs it as one
+# job (scenario, rho, runs and vims set with qsub -v; see its header).
 #
 # Run r uses setup_rng_stream(r) and generate_continuous_scenario_data() exactly
 # as cts_val_analysis.R does, so in scenario 2 cell `now` is run r of the real
