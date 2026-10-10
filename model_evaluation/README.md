@@ -51,7 +51,7 @@ answer. `crossfitting/cf_analysis.R` made the same call for the same reason
 9 single-crossfit candidate-model fits, *plus* two independent
 nuisance-evaluation pipelines (XGBoost with a 36-combination CV grid search,
 and H2O AutoML with up to 20 auto-tuned models), each across the nuisance arms
-and 4 nuisance targets - so the study used to stop at 30. It runs 100 since
+and 2 nuisance targets - so the study used to stop at 30. It runs 100 since
 2026-10-08, with 10 cores per task and 10 tasks at once (see "Sizing the array
 job" below); the real per-replicate cost has still never been measured.
 
@@ -374,7 +374,7 @@ known, expected limitation rather than a bug to chase: they're listed in
 them separately from genuine failures instead of failing on them. Downstream,
 this is contained rather than corrupting — `me_metrics.R`'s score functions
 use bare `mean()`/`sum()`, so an affected run only goes `NA` in its 8
-`*_holdout_automl` columns (of 65), and `me_results.qmd`'s existing
+`*_holdout_automl` columns (of 49), and `me_results.qmd`'s existing
 `sum(is.na(.x))` completeness audit and `na.rm = TRUE` aggregation already
 account for it.
 
