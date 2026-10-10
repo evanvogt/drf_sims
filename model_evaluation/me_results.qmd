@@ -214,7 +214,7 @@ level_labels <- c(
 )
 
 # Display labels are BUILT from the parsed axes rather than typed out: the main
-# tree now carries 33 score columns and the strategies tree 65, so a hand-kept
+# tree now carries 17 score columns and the strategies tree 49, so a hand-kept
 # lookup would be both unreadable and a silent source of NA labels the first
 # time a score family is added.
 label_or_id <- function(x) ifelse(is.na(level_labels[x]), x, level_labels[x])
