@@ -136,7 +136,11 @@ framework_family <- c(
   # the outcome model is the RSF on (Y, D), not a regression on pseudo-values;
   # pseudo-values enter the DR correction term only
   rsf_dr_oob = "DR: RSF on (Y, D)",
-  rsf_dr_scf = "DR: RSF on (Y, D)"
+  rsf_dr_scf = "DR: RSF on (Y, D)",
+  # semi-oracles: the production arm's outcome models, true propensity 0.5
+  pseudo_dr_whole_oob_semi = "DR: RF on PV",
+  sl_dr_whole_semi = "DR: SL on PV",
+  rsf_dr_oob_semi = "DR: RSF on (Y, D)"
 )
 family_levels <- c(
   "IPW",
@@ -167,7 +171,10 @@ framework_variant <- c(
   # the RSF outcome model fits (Y, D), so the whole/cvps pseudo-value factor
   # has nothing to act on - these arms vary the fitting only
   rsf_dr_oob = "oob",
-  rsf_dr_scf = "scf"
+  rsf_dr_scf = "scf",
+  pseudo_dr_whole_oob_semi = "semi",
+  sl_dr_whole_semi = "semi",
+  rsf_dr_oob_semi = "semi"
 )
 variant_levels <- c(
   "single",
@@ -178,7 +185,8 @@ variant_levels <- c(
   "scf",
   "whole",
   "cvps",
-  "split"
+  "split",
+  "semi"
 )
 variant_labels <- c(
   single = "(single arm)",
@@ -189,7 +197,8 @@ variant_labels <- c(
   scf = "Single CF",
   whole = "Whole-sample PV",
   cvps = "Crossfit PV",
-  split = "Split PV"
+  split = "Split PV",
+  semi = "Semi-oracle (e = 0.5)"
 )
 
 # tidy up

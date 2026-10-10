@@ -96,7 +96,8 @@ makes ρ a grid factor and a `rho_<ρ>/` level in the results path. Key points:
   differences. `surv_results.qmd`, "Sensitivity analysis", does this.
 - Every other section of the report is ρ = 0.5.
 
-**X4 / X5 kept and IPW fixed, 2026-10-10.** Two changes, both needing a full rerun:
+**X4 / X5 kept and IPW fixed, 2026-10-10.** Two changes, both needing a full
+rerun (semi-oracle DR arms were added in the same rerun - see "Estimators"):
 
 - The dataset now carries the copula's X4 and X5, which used to be drawn and
   then dropped. Estimators see the same 10 covariates as `sample_size/` (X1–X5, X01–X05).
@@ -161,6 +162,16 @@ pseudo-observation construction (Cwiling et al. 2025) is currently **disabled**
 The two pseudo-value frameworks and the SuperLearner ones each ship in
 **several arms**, because this study also asks how the pseudo-values should be
 built — see "Crossfitting" below.
+
+**Semi-oracle DR-learners (since 2026-10-10).** `pseudo_dr_whole_oob_semi`,
+`sl_dr_whole_semi` and `rsf_dr_oob_semi` repeat the three production
+DR-learners with the true propensity 0.5 (`TRUE_PS`) in the pseudo-outcome
+in place of the estimated one. They reuse the parent arm's fitted outcome models
+(the nuisance functions return `po_semi` next to `po`), so each pair differs in
+the propensity alone. The only extra fit is stage 2, about +18% per job, nearly
+all of it from the SuperLearner stage 2. They run after the RSF arms, so the
+other arms keep their RNG stream. In `surv_results.qmd` they are variant
+"Semi-oracle (e = 0.5)" within their parent's family.
 
 **The truth column depends on the framework**, which is why
 `surv_metrics.R` carries `framework_truth_map`: `ipw` and `csf_cs` remove

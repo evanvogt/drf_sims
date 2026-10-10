@@ -315,7 +315,8 @@ by `surv_analysis.R` with `n_folds = 10`, `horizon = 28` and
 `sl_libraries(500)`. Inputs are X (the 10 covariates as generated, no scaling),
 W, the observed time Y and the status D ∈ {0 censored, 1 E1, 2 E2}.
 
-Sixteen arms (`framework` in the results):
+Nineteen arms (`framework` in the results): sixteen estimators, plus three
+semi-oracle twins of the production DR-learners:
 
 | arm | family | how the competing event is handled | targets | fitting | pseudo-values |
 |---|---|---|---|---|---|
@@ -335,6 +336,9 @@ Sixteen arms (`framework` in the results):
 | `sl_dr_cvps` | 〃 | 〃 | 〃 | single crossfit, both stages | leave-one-fold-out (training only) |
 | `rsf_dr_oob` | RSF DR-learner (randomForestSRC) | Aalen–Johansen CIF in the forest's leaves | 〃 | whole-sample OOB outcome model, grf ê and stage 2 | whole (correction term only) |
 | `rsf_dr_scf` | 〃 | 〃 | 〃 | single crossfit, both stages | whole (correction term only) |
+| `pseudo_dr_whole_oob_semi` | semi-oracle RF DR-learner | as `pseudo_dr_whole_oob` | 〃 | as `pseudo_dr_whole_oob`, e(x) = 0.5 known | whole |
+| `sl_dr_whole_semi` | semi-oracle SuperLearner DR-learner | as `sl_dr_whole` | 〃 | as `sl_dr_whole`, e(x) = 0.5 known | whole |
+| `rsf_dr_oob_semi` | semi-oracle RSF DR-learner | as `rsf_dr_oob` | 〃 | as `rsf_dr_oob`, e(x) = 0.5 known | whole (correction term only) |
 
 A seventeenth, `sl_dr_split` (DR-learner on split pseudo-observations, Cwiling
 et al. 2025), is **disabled**: `pseudoyl()` returns NA for the max-time unit
@@ -427,6 +431,12 @@ The outcome model is fit separately in each arm (a T-learner), as in
   never saw the unit; `_scf` fits every forest on the rows outside k. ê and
   stage 2 are the grf ones of `pseudo_dr_whole_oob` / `pseudo_dr_*_scf`. θ
   enters only the correction term, so these arms have no cvps variant.
+- **Semi-oracles (`*_semi`, since 2026-10-10)**: `pseudo_dr_whole_oob`,
+  `sl_dr_whole` and `rsf_dr_oob` again, with the true propensity e(x) = 0.5
+  in φ̂ in place of ê (untrimmed; it needs no trimming). Each reuses its
+  parent's fitted μ̂0, μ̂1 and stage-2 learner, so a pair differs in the
+  propensity alone and the parent-minus-semi-oracle difference is what
+  estimating ê costs or gains. The extra fit is one stage 2 per estimand.
 - **The correction term always uses the whole-sample θ.** cvps has no
   pseudo-value for the held-out rows, so in the DR arms "cvps" changes only the
   pseudo-values the nuisance regressions are *trained* on. Do not report the

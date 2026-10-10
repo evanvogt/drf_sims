@@ -24,7 +24,9 @@ workers <- 2
 # The SuperLearner arms have no OOB analogue, so they are scf throughout and vary
 # the pseudo-values only (sl_*_whole vs sl_*_cvps). The random survival forest
 # DR-learner fits (Y, D) rather than pseudo-values, so it varies the fitting only
-# (rsf_dr_oob vs rsf_dr_scf) - but it targets the same RMTL truth.
+# (rsf_dr_oob vs rsf_dr_scf) - but it targets the same RMTL truth. The *_semi
+# arms are semi-oracle twins of the three production DR-learners (true
+# propensity 0.5), scored against the same RMTL truth.
 #
 # NOTE: frameworks_run below is intersect(names(sim_res), frameworks), so a
 # framework missing from ANY of these three lists is dropped silently rather than
@@ -38,7 +40,8 @@ frameworks <- c(
   "sl_t_whole", "sl_t_cvps",
   "sl_dr_whole", "sl_dr_cvps",
   "sl_t_split",
-  "rsf_dr_oob", "rsf_dr_scf"
+  "rsf_dr_oob", "rsf_dr_scf",
+  "pseudo_dr_whole_oob_semi", "sl_dr_whole_semi", "rsf_dr_oob_semi"
 )
 
 # every pseudo-value framework shares the same targets and truth columns

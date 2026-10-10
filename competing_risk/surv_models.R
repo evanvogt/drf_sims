@@ -42,14 +42,23 @@ DEFAULT_SL_LIBRARY <- sl_libraries(Inf)
 # estimated propensity model and nothing else - see R/cate_models.R::cbind_ps.
 # The grf causal forests take a propensity fit on X and X_ps (ps_oob) in place
 # of their own. The sl_t_* T-learners have no propensity.
+#
+# The *_semi arms (since 2026-10-10) are semi-oracle twins of the three
+# production DR-learners: the same outcome models, with the true propensity
+# TRUE_PS in the pseudo-outcome (po_semi) in place of the estimated W.hat. They
+# reuse their parent's nuisances, so each pair differs in the propensity alone
+# and the only extra fit is stage 2.
 SURV_MODELS <- c(
   "ipw", "csf_cs", "csf_sh",
   "pseudo_cf_whole_oob", "pseudo_cf_whole_scf", "pseudo_cf_cvps_scf",
   "pseudo_dr_whole_oob", "pseudo_dr_whole_scf", "pseudo_dr_cvps_scf",
   "sl_t_whole", "sl_t_cvps", "sl_t_split",
   "sl_dr_whole", "sl_dr_cvps",
-  "rsf_dr_oob", "rsf_dr_scf"
+  "rsf_dr_oob", "rsf_dr_scf",
+  "pseudo_dr_whole_oob_semi", "sl_dr_whole_semi", "rsf_dr_oob_semi"
 )
+# W ~ Bernoulli(0.5) in every scenario (surv_dgm.R): the semi-oracle propensity
+TRUE_PS <- 0.5
 SURV_ESTIMANDS <- c("RMTL1", "RMTL2", "RMSTc")
 # estimand -> list(name, event) for the ipw / csf_cs / csf_sh frameworks
 SURV_FRAMEWORK_EVENTS <- list(
@@ -178,7 +187,7 @@ all_cate_surv_models <- function(
 
   message("Pseudo-value DR Learner nuisances (whole_oob, whole_scf, cvps_scf)...")
   nuis_dr <- list()
-  if (want("pseudo_dr_whole_oob")) {
+  if (want("pseudo_dr_whole_oob") || want("pseudo_dr_whole_oob_semi")) {
     nuis_dr$whole_oob <- by_estimand(function(e) {
       nuisance_pseudo_rf_oob(X, ps_whole(e), W, num.threads, X_ps = X_ps)
     })
@@ -262,11 +271,11 @@ all_cate_surv_models <- function(
     )
   }
 
-  if (want("sl_dr_whole") || want("sl_dr_cvps")) {
+  if (want("sl_dr_whole") || want("sl_dr_cvps") || want("sl_dr_whole_semi")) {
     message("SuperLearner DR-learner (whole and cvps pseudo-obs)...")
   }
   nuis_sl <- list()
-  if (want("sl_dr_whole")) {
+  if (want("sl_dr_whole") || want("sl_dr_whole_semi")) {
     nuis_sl$whole <- by_estimand(function(e) {
       nuisance_pseudo_sl(
         X,
@@ -307,11 +316,11 @@ all_cate_surv_models <- function(
 
   # Last of the fitted arms on purpose: rfsrc() draws its seed from R's RNG, so
   # placing it here leaves every arm above on the stream it had before.
-  if (want("rsf_dr_oob") || want("rsf_dr_scf")) {
+  if (want("rsf_dr_oob") || want("rsf_dr_scf") || want("rsf_dr_oob_semi")) {
     message("Random survival forest DR-learner (oob, scf)...")
   }
   nuis_rsf <- list()
-  if (want("rsf_dr_oob")) {
+  if (want("rsf_dr_oob") || want("rsf_dr_oob_semi")) {
     nuis_rsf$oob <- nuisance_rsf_oob(X, Y, D, W, horizon, pseudo_whole, num.threads,
                                      X_ps = X_ps)
   }
@@ -337,6 +346,29 @@ all_cate_surv_models <- function(
   if (want("rsf_dr_scf")) {
     results$rsf_dr_scf <- by_estimand(function(e) {
       stage_2_rf_scf(X, nuis_rsf$scf[[e]]$po, fold_indices, fold_list, num.threads)
+    })
+  }
+
+  # Semi-oracle DR-learners: the parent arm's stage 2 on po_semi, the
+  # pseudo-outcome with e(x) = TRUE_PS. After the RSF arms so that every arm
+  # above stays on the RNG stream it had before these existed.
+  if (any(vapply(c("pseudo_dr_whole_oob_semi", "sl_dr_whole_semi", "rsf_dr_oob_semi"),
+                 want, logical(1)))) {
+    message("Semi-oracle DR-learners (RF, SL, RSF)...")
+  }
+  if (want("pseudo_dr_whole_oob_semi")) {
+    results$pseudo_dr_whole_oob_semi <- by_estimand(function(e) {
+      stage2_whole_rf(X, nuis_dr$whole_oob[[e]]$po_semi, num.threads = num.threads)$tau
+    })
+  }
+  if (want("sl_dr_whole_semi")) {
+    results$sl_dr_whole_semi <- by_estimand(function(e) {
+      pseudo_dr_sl(X, nuis_sl$whole[[e]]$po_semi, fold_indices, fold_list, sl_library)
+    })
+  }
+  if (want("rsf_dr_oob_semi")) {
+    results$rsf_dr_oob_semi <- by_estimand(function(e) {
+      stage2_whole_rf(X, nuis_rsf$oob[[e]]$po_semi, num.threads = num.threads)$tau
     })
   }
 
@@ -742,9 +774,12 @@ nuisance_pseudo_rf_oob <- function(X, pseudo, W, num.threads = NULL, X_ps = NULL
 
   pseudo.hat <- W * pseudo1.hat + (1 - W) * pseudo0.hat
   po <- dr_pseudo(pseudo, W, pseudo1.hat, pseudo0.hat, W.hat)
+  # same outcome models, true propensity: pseudo_dr_whole_oob_semi's outcome
+  po_semi <- dr_pseudo(pseudo, W, pseudo1.hat, pseudo0.hat, TRUE_PS)
 
   list(
     po = po,
+    po_semi = po_semi,
     pseudo.hat = pseudo.hat,
     pseudo0.hat = pseudo0.hat,
     pseudo.hat.cf = pseudo.hat.cf,
@@ -881,7 +916,7 @@ stage_2_rf_scf <- function(X, po, fold_indices, fold_list, num.threads = NULL) {
 # estimates. W.hat and stage 2 are the grf ones the pseudo_dr arms use, so the
 # outcome model is the only thing that differs from pseudo_dr_whole_*.
 RSF_ESTIMANDS <- c("RMTL1", "RMTL2", "RMSTc")
-RSF_NUISANCES <- c("po", "pseudo.hat", "pseudo0.hat", "pseudo.hat.cf", "W.hat")
+RSF_NUISANCES <- c("po", "po_semi", "pseudo.hat", "pseudo0.hat", "pseudo.hat.cf", "W.hat")
 
 #' Competing-risks forest on (Y, D), censored at the horizon
 #'
@@ -948,14 +983,15 @@ rsf_predict_rmtl <- function(fit, X_new, horizon) {
 
 #' The DR nuisance list for each estimand, from n x 3 outcome-model matrices
 #'
-#' Same fields as nuisance_pseudo_rf_oob / _scf return, so
+#' Same fields as nuisance_pseudo_rf_oob returns, so
 #' surv_nuisance_extract.R reads these arms unchanged. `pseudo` is
 #' pseudo_all()'s list (ps_RMTL1, ps_RMTL2, ps_RMSTc), already subset to the
-#' rows in hand.
+#' rows in hand. po_semi (true propensity) feeds rsf_dr_oob_semi.
 rsf_dr_nuisances <- function(pseudo, W, mu0, mu1, mu_cf, W.hat) {
   setNames(lapply(RSF_ESTIMANDS, function(e) {
     list(
       po = dr_pseudo(pseudo[[paste0("ps_", e)]], W, mu1[, e], mu0[, e], W.hat),
+      po_semi = dr_pseudo(pseudo[[paste0("ps_", e)]], W, mu1[, e], mu0[, e], TRUE_PS),
       pseudo.hat = W * mu1[, e] + (1 - W) * mu0[, e],
       pseudo0.hat = mu0[, e],
       pseudo.hat.cf = mu_cf[, e],
@@ -1438,10 +1474,19 @@ nuisance_pseudo_sl <- function(
         pseudo0.hat,
         W.hat
       )
+      # same outcome models, true propensity: sl_dr_whole_semi's outcome
+      po_semi <- dr_pseudo(
+        pseudo_whole[in_test],
+        W_test,
+        pseudo1.hat,
+        pseudo0.hat,
+        TRUE_PS
+      )
 
       list(
         fold = fold,
         po = po,
+        po_semi = po_semi,
         pseudo.hat = pseudo.hat,
         pseudo0.hat = pseudo0.hat,
         pseudo.hat.cf = pseudo.hat.cf,
@@ -1454,7 +1499,7 @@ nuisance_pseudo_sl <- function(
   scatter_folds(
     cross_fits,
     fold_indices,
-    c("po", "pseudo.hat", "pseudo0.hat", "pseudo.hat.cf", "W.hat")
+    c("po", "po_semi", "pseudo.hat", "pseudo0.hat", "pseudo.hat.cf", "W.hat")
   )
 }
 
