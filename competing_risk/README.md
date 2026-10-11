@@ -320,8 +320,8 @@ the walltime and 10x the memory — so this is code, not resources.
 
 They are **not** the bug that fix addressed. Both routes below were reproduced
 end to end locally with `Rscript surv_analysis.R <index>`, whose error handler
-prints the call stack; `surv_failed_diagnose.R` stages 2 and 3 separate them and
-score them against 100 successful controls. Artefacts in
+prints the call stack; the diagnostic script `surv_failed_diagnose.R` (now at git tag `diagnostics-2026-10`) separated them and
+scored them against 100 successful controls. Artefacts in
 `<results>/competing_risk/diagnostics/round2/`.
 
 | | count | dies in | error |
@@ -459,7 +459,7 @@ The crossfitting change above did **not** touch this. The split-pseudo arms use
 a 3-way train/KM/validation split that is the estimator's definition rather
 than a crossfitting choice, so they were deliberately left alone.
 
-Diagnosed and reproduced end-to-end in `surv_dr_split_na_diagnose.R`
+Diagnosed and reproduced end-to-end in `surv_dr_split_na_diagnose.R` (now at git tag `diagnostics-2026-10`)
 (confirmed on R 4.5.3 / `pseudo` 1.4.3 / `SuperLearner` 2.0.29; the cluster
 runs R 4.3.2 with different package versions, so behaviour there is
 unverified). Fixing it needs a design decision, since there's no
@@ -485,29 +485,18 @@ Rscript R/regression_check.R baseline competing_risk
 queue" above), `surv_check.R`, `surv_collect.R`, `surv_metrics.R`.
 `surv_dgm_check.R` produces ADEMP's "What the DGM implies" numbers (event mix,
 population truths, X3 separation) for each ρ.
-`scratch_dgm_params_check.R` is exploratory.
 `single_event/` is a separate, smaller study: event 1 with event 2 removed,
 reusing this study's arms (see its README).
-`surv_dr_split_na_diagnose.R` reproduces and traces the split-DR-learner
-NA bug documented in "Known issues" above.
-`surv_failed_diagnose.R` is the diagnostic that found both the 225-run failure
-and the 19-run one: it decodes `jobscripts/failed_ids.txt` against the grid
-(stage 1), probes every failed index against a control sample for each known
-failure route (stage 2), reruns each arm of `all_cate_surv_models()` separately
-and keeps going past a failure so one run reports all of them (stage 3), and
-triages PBS `.o` files (stage 4). Point it at the next batch of missing runs
-rather than starting from scratch:
-
-```bash
-Rscript surv_failed_diagnose.R --out=<results>/diagnostics/round3
-Rscript surv_failed_diagnose.R --stage=3 --ids=295,923 --out=...
-```
-
-**Pass `--out`.** Stage 2 and stage 3 overwrite `failed_probe.csv` and
-`failed_arms.csv` in place, so a fresh run silently destroys the previous round's
-evidence — which is how round 1's 325-row probe was lost (its `stage2.log` still
-carries the per-index lines, the CSV does not). Round 2's artefacts are under
-`diagnostics/round2/`.
+The diagnostic scripts are no longer in the working tree. `surv_dr_split_na_diagnose.R`
+reproduced and traced the split-DR-learner NA bug documented in "Known issues" above.
+`surv_failed_diagnose.R` found both the 225-run failure and the 19-run one: it decoded
+`jobscripts/failed_ids.txt` against the grid, probed every failed index against a control
+sample for each known failure route, reran each arm of `all_cate_surv_models()` separately
+and kept going past a failure so one run reported all of them, and triaged PBS `.o` files.
+Both are at git tag `diagnostics-2026-10`; restore one with
+`git show diagnostics-2026-10:competing_risk/surv_failed_diagnose.R > surv_failed_diagnose.R`.
+Pass `--out` to it: its stage 2 and 3 overwrite their CSVs in place. Round 2's artefacts are
+under `<results>/competing_risk/diagnostics/round2/`.
 
 Its stage-2 mode labels are versioned against the code, not against history: the
 round-1 labels would have relabelled route C as "the bug we already fixed" and

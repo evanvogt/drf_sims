@@ -19,8 +19,7 @@ here).
 | `cts_miss_models.R` | `family = gaussian()`, `profile = "missing"`, `ipw` threaded through |
 | `cts_miss_analysis.R` | array entry point |
 | `cts_miss_results.R` / `.qmd` | every metric, to `results/all_figures/` — the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts.R` |
-| `mi_scratch.R` | exploratory, unmaintained |
-| `results_cts_miss.{R,Rmd,html}` | **superseded** by `cts_miss_results.R`/`.qmd` — kept for reference, renamed to the repo's legacy convention (cf. `continuous/results_cts.R`). Points at the old HPC path `/rds/general/...` and at `results/new_format/metrics_cts_miss_df.RDS`, neither of which exists any more; scenarios are `"scenario_5"` strings, and only bias and MSE are plotted. It was called `cts_miss_results.*`, so its `.html` was being clobbered by the new `.qmd`'s render output. |
+| `results_cts_miss.R` | removed 2026-10-11 (git tag `diagnostics-2026-10`): superseded by `cts_miss_results.R`/`.qmd`; it pointed at a cluster path and a metrics file that no longer exist |
 
 The `ipw` argument is the only thing separating this study's estimators from
 `continuous/`: it becomes grf `sample.weights` and SuperLearner `obsWeights`.

@@ -379,8 +379,8 @@ all_cate_surv_models <- function(
   # unlike pseudo_crossfit() there is no NA
   # fallback here, so the NA reaches stage_2_sl_vec()'s SuperLearner() call
   # and aborts the run. Diagnosed and reproduced in
-  # surv_dr_split_na_diagnose.R. nuisance_pseudo_sl_split()/stage_2_sl_vec()
-  # are left defined below for that diagnostic script and for the fix.
+  # surv_dr_split_na_diagnose.R (git tag diagnostics-2026-10).
+  # nuisance_pseudo_sl_split()/stage_2_sl_vec() are left defined below for the fix.
   #
   # message("SuperLearner DR-learner (split pseudo-obs)...")
   # sl_split_nuisances <- nuisance_pseudo_sl_split(
@@ -1208,7 +1208,7 @@ pseudo_sl_t_standard <- function(
 #
 # This function used to take down the whole run, and was the ONLY arm that did:
 # 225 of the 1400 array indices never produced a res_sim_*.RDS, and
-# surv_failed_diagnose.R traced every reproducible one of them to here, by two
+# surv_failed_diagnose.R (git tag diagnostics-2026-10) traced every reproducible one of them to here, by two
 # routes. It was the only SuperLearner call site in this study that both passed
 # `sl_library` unvalidated AND computed its pseudo-values with an unguarded
 # pseudoyl(), so it was missing both of the guards the rest of the file has:
@@ -1538,7 +1538,8 @@ pseudo_dr_sl <- function(
 # was untrimmed, and it was refit once per estimand on identical data; it is
 # now fit once per fold. The all-zero failsafes use isTRUE() so that an NA
 # training pseudo-value (pseudoyl's max-time bug) still flows through to NA in
-# po rather than erroring here - surv_dr_split_na_diagnose.R relies on that.
+# po rather than erroring here - surv_dr_split_na_diagnose.R (git tag
+# diagnostics-2026-10) relied on that.
 nuisance_pseudo_sl_split <- function(
   X,
   Y,
@@ -1654,9 +1655,8 @@ nuisance_pseudo_sl_split <- function(
 #
 # Now functionally redundant with R/cate_models.R::stage_2_sl's is.vector(po)
 # branch, which additionally pretests the library. Kept because the disabled
-# sl_dr_split block in all_cate_surv_models() and surv_dr_split_na_diagnose.R
-# both reference it by name, and the split-pseudo arms are out of scope for the
-# crossfitting change. Fold it into stage_2_sl when that NA bug is fixed.
+# sl_dr_split block in all_cate_surv_models() references it by name, and the
+# split-pseudo arms are out of scope for the crossfitting change. Fold it into stage_2_sl when that NA bug is fixed.
 stage_2_sl_vec <- function(
   X,
   po_vec,

@@ -7,7 +7,7 @@
 # Added when the cluster was keeping only the PBS `.o` files: R sends errors -
 # and every message() in all_cate_surv_models() - to stderr, so when 225 array
 # indices died there was nothing in the logs to say why and it took a local
-# reproduction to find out (see surv_failed_diagnose.R). The jobscripts now use
+# reproduction to find out (see surv_failed_diagnose.R, at git tag diagnostics-2026-10). The jobscripts now use
 # `#PBS -j oe`, so stderr is merged into the `.o` file and R's own "Error in"
 # line lands there too (the message appears twice). The handler is kept for
 # what R does not print by default: the array args and the call stack. It still

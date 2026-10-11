@@ -124,7 +124,6 @@ validation/           do CATE subgroups/variance/importance found at an interim
 results_processing/   thesis figures and tables
 tests/                quick invariant checks (Rscript tests/run_tests.R)
 docs/                 DEVLOG.md - bug ledger and re-run history
-scratch/              unmaintained exploratory code
 ```
 
 Each study folder has the same shape:
