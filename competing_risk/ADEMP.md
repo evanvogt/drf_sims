@@ -122,20 +122,7 @@ which cuts the competition.
 How well the scenarios separate on the RMTL scale is measured as the smallest
 X3 difference in the true CATE on an event the label says is heterogeneous,
 divided by the largest *induced* X3 difference on an event the label says is
-not (population values, X3 = 1 minus X3 = 0, in days):
-
-| scenario | RMTL1 X3 diff, old | RMTL1, now | RMTL2 X3 diff, old | RMTL2, now |
-|---|---|---|---|---|
-| 3 | 4.15 | 3.97 | −1.29 (induced) | −0.85 (induced) |
-| 4 | 3.68 | 4.10 | −0.63 (induced) | −0.65 (induced) |
-| 5 | 0.70 (induced) | 0.68 (induced) | −1.17 | −1.99 |
-| 6 | 0.57 (induced) | 0.80 (induced) | −0.69 | −1.87 |
-| 7 | 4.01 | 5.05 | −0.99 | −2.22 |
-| **separation** | 5.3 | 4.9 | **0.53** | **2.2** |
-
-The induced differences can't be removed: in competing risks an effect on one
-cause always moves the other cause's CIF. What the retune achieves is that every
-labelled effect is now at least twice the size of any induced one.
+not (population values, X3 = 1 minus X3 = 0, in days).
 
 The parameters were tuned at ρ = 0 and are not retuned for ρ = 0.5. That keeps
 τ(x) a single function across ρ. Under correlation the plain X3 = 1 minus
@@ -144,11 +131,28 @@ X3 = 1, so `surv_dgm_check.R` reports it two ways:
 
 - **marginal**: the plain X3 = 1 minus X3 = 0 contrast;
 - **standardised**: X3 switched, with (X1, X2) held at their own
-  distribution.
+  distribution. This is X3's own effect.
 
-At ρ = 0 the two agree. At ρ = 0.5 the separation is 5.7 (marginal) / 4.96
-(standardised) for RMTL1, and 2.23 / 2.20 for RMTL2. So the labels hold at
-both ρ.
+The "now" columns are at the primary ρ = 0.5, as marginal / standardised. The
+"old" columns are the pre-2026-10-01 parameters, whose covariates were
+independent:
+
+| scenario | RMTL1 X3 diff, old | RMTL1, now | RMTL2 X3 diff, old | RMTL2, now |
+|---|---|---|---|---|
+| 3 | 4.15 | 3.94 / 3.98 | −1.29 (induced) | −0.80 / −0.85 (induced) |
+| 4 | 3.68 | 4.02 / 4.11 | −0.63 (induced) | −0.57 / −0.65 (induced) |
+| 5 | 0.70 (induced) | 0.61 / 0.68 (induced) | −1.17 | −1.93 / −1.99 |
+| 6 | 0.57 (induced) | 0.69 / 0.80 (induced) | −0.69 | −1.79 / −1.87 |
+| 7 | 4.01 | 4.96 / 5.06 | −0.99 | −2.14 / −2.22 |
+| **separation** | 5.3 | 5.7 / 5.0 | **0.53** | **2.2 / 2.2** |
+
+At ρ = 0 the two contrasts agree and equal the standardised column above to
+within 0.02. The separation there is 4.9 for RMTL1 and 2.2 for RMTL2. So the
+labels hold at both ρ.
+
+The induced differences can't be removed: in competing risks an effect on one
+cause always moves the other cause's CIF. What the retune achieves is that every
+labelled effect is now at least twice the size of any induced one.
 
 ### Design
 
@@ -187,41 +191,41 @@ changed.
 
 ### What the DGM implies
 
-For the parameters as of 2026-10-01, from `Rscript surv_dgm_check.R`. The
-event mix comes from `generate_surv_data()` at n = 20,000 per (ρ, scenario,
-censoring) cell, seeded once rather than with the study's streams, so it is
-illustrative. The truths are population values: `truth_individual()` on an
-X1 × X3 × 41-point X2 grid, interpolated in X2 over 200,000 copula draws per
-ρ. The tables are for ρ = 0, where the parameters were tuned. The primary
-ρ = 0.5 differs from them only within simulation noise (see "At ρ = 0.5
-almost nothing above moves" below).
+For the parameters as of 2026-10-01, from `Rscript surv_dgm_check.R` (last
+run 2026-10-11). The event mix comes from `generate_surv_data()` at n = 20,000
+per (ρ, scenario, censoring) cell, seeded once rather than with the study's
+streams, so it is illustrative. The truths are population values:
+`truth_individual()` on an X1 × X3 × 41-point X2 grid, interpolated in X2 over
+200,000 copula draws per ρ. The tables are for the primary ρ = 0.5. The
+sensitivity ρ = 0, where the parameters were tuned, differs from them only
+within simulation noise (see "At ρ = 0 almost nothing above moves" below).
 
 **Event mix by the horizon.** The control arm is the same in every scenario:
-E1 0.52–0.54, E2 0.32–0.34, still event-free at 28 about 0.14. With censoring
-on, that becomes E1 0.48–0.50, E2 0.30–0.31, censored before 28 about 0.08,
-and about 0.12 observed past 28. Treated arm:
+E1 0.52–0.54, E2 0.32–0.33, still event-free at 28 0.13–0.15. With censoring
+on, that becomes E1 0.48–0.50, E2 0.30–0.32, censored before 28 about 0.08,
+and 0.11–0.12 observed past 28. Treated arm:
 
 | scenario | E1 by 28 | E2 by 28 | event-free at 28 | censored before 28 (censoring on) | observed past 28 (censoring on) |
 |---|---|---|---|---|---|
-| 1 | 0.63 | 0.29 | 0.083 | 0.073 | 0.071 |
-| 2 | 0.58 | 0.25 | 0.168 | 0.091 | 0.139 |
-| 3 | 0.72 | 0.24 | 0.035 | 0.058 | 0.031 |
-| 4 | 0.78 | 0.18 | 0.038 | 0.062 | 0.036 |
-| 5 | 0.63 | 0.17 | 0.197 | 0.099 | 0.165 |
-| 6 | 0.74 | 0.15 | 0.114 | 0.081 | 0.100 |
-| 7 | 0.83 | 0.13 | 0.045 | 0.068 | 0.039 |
+| 1 | 0.63 | 0.29 | 0.082 | 0.073 | 0.073 |
+| 2 | 0.58 | 0.25 | 0.169 | 0.086 | 0.141 |
+| 3 | 0.72 | 0.25 | 0.033 | 0.063 | 0.023 |
+| 4 | 0.79 | 0.18 | 0.035 | 0.062 | 0.033 |
+| 5 | 0.64 | 0.16 | 0.198 | 0.089 | 0.173 |
+| 6 | 0.73 | 0.15 | 0.114 | 0.085 | 0.098 |
+| 7 | 0.84 | 0.13 | 0.038 | 0.063 | 0.034 |
 
-- The horizon still truncates most of the restricted means, but 4–20% of each
-  arm is event-free at 28. Censoring now matters more than it did: 6–10% of
+- The horizon still truncates most of the restricted means, but 3–20% of each
+  arm is event-free at 28. Censoring now matters more than it did: 6–9% of
   an arm is censored before the horizon.
 - Every cell has units observed past 28: about 30 controls per run and at
-  least about 8 treated, even in scenario 3 with censoring on. The chance that
-  nobody is past 28 in a run of 500 is below 1e-17 in every cell, so route C
+  least about 6 treated, even in scenario 3 with censoring on. The chance that
+  nobody is past 28 in a run of 500 is below 1e-15 in every cell, so route C
   (README "Known issues", NA whole-sample pseudo-values) should not recur. It
   needed scenarios where no treated unit reached 28.
-- The fewest treated E2s are in scenario 7, about 13% or roughly 32 units, against 3% before.
-  So the near-constant treated-arm RMTL2 pseudo-values behind route A' should
-  be much rarer.
+- The fewest treated E2s are in scenario 7, about 12.5% or roughly 31 units,
+  against 3% before. So the near-constant treated-arm RMTL2 pseudo-values
+  behind route A' should be much rarer.
 
 **The true CATEs.** Population mean (SD), in days. Control-arm levels:
 RMTL1 6.9, RMTL2 5.7, RMSTc 15.4 (they sum to 28), net RMST1 19.1, net
@@ -229,53 +233,56 @@ RMST2 21.2.
 
 | scenario | τ_RMTL1 | τ_RMTL2 | τ_RMSTc | τ_RMST1_cs | τ_RMST2_cs | cor(τ_RMTL1, τ_RMTL2) |
 |---|---|---|---|---|---|---|
-| 1 | 1.82 (0.09) | −0.35 (0.07) | −1.47 (0.03) | −2.16 (0.10) | 0 | −0.96 |
-| 2 | 0.51 (0.11) | −1.49 (0.08) | 0.97 (0.03) | 0 | 1.74 (0.14) | −0.99 |
-| 3 | 4.59 (1.82) | −0.94 (0.42) | −3.65 (1.43) | −5.24 (2.02) | 0 | −0.94 |
-| 4 | 5.29 (1.89) | −2.21 (0.37) | −3.08 (1.58) | −5.24 (2.02) | 1.74 (0.14) | −0.86 |
-| 5 | 0.99 (0.38) | −2.88 (0.93) | 1.89 (0.60) | 0 | 3.41 (1.14) | −0.91 |
-| 6 | 2.98 (0.48) | −3.06 (0.88) | 0.08 (0.50) | −2.16 (0.10) | 3.41 (1.14) | −0.90 |
-| 7 | 5.96 (2.33) | −3.31 (1.05) | −2.65 (1.30) | −5.24 (2.02) | 3.41 (1.14) | −0.99 |
+| 1 | 1.82 (0.08) | −0.35 (0.06) | −1.47 (0.03) | −2.17 (0.09) | 0 | −0.96 |
+| 2 | 0.51 (0.09) | −1.49 (0.07) | 0.98 (0.02) | 0 | 1.74 (0.12) | −0.99 |
+| 3 | 4.60 (1.81) | −0.93 (0.39) | −3.67 (1.44) | −5.27 (2.01) | 0 | −0.95 |
+| 4 | 5.30 (1.85) | −2.20 (0.31) | −3.10 (1.58) | −5.27 (2.01) | 1.74 (0.12) | −0.87 |
+| 5 | 0.97 (0.33) | −2.86 (0.90) | 1.89 (0.61) | 0 | 3.38 (1.08) | −0.92 |
+| 6 | 2.97 (0.41) | −3.05 (0.84) | 0.08 (0.51) | −2.17 (0.09) | 3.38 (1.08) | −0.89 |
+| 7 | 5.96 (2.29) | −3.29 (1.00) | −2.66 (1.30) | −5.27 (2.01) | 3.38 (1.08) | −0.99 |
 
 τ_RMST1 and τ_RMST2 (subdistribution) are −τ_RMTL1 and −τ_RMTL2 exactly.
 
 - **An effect on one cause moves the other's CIF.** In scenarios 2 and 5 the
   treatment does not touch the E1 hazard, yet τ_RMTL1 is +0.5 and +1.0: fewer
   E2s leave more units at risk of E1. The net truth τ_RMST1_cs is
-  identically 0 there. Likewise τ_RMTL2 is −0.35 and −0.94 in scenarios 1 and
+  identically 0 there. Likewise τ_RMTL2 is −0.35 and −0.93 in scenarios 1 and
   3, where τ_RMST2_cs is identically 0.
-- **Scenario 5's RMTL1 heterogeneity is all induced** (cor −0.91 with
+- **Scenario 5's RMTL1 heterogeneity is all induced** (cor −0.92 with
   τ_RMTL2), so an estimator that tracks the real, event-2, signal lands
   anti-correlated with τ_RMTL1. See README "Scenario 5 flips the sign".
 - **Where X3 acts.** See the separation table under "Why these values": on
-  RMTL1 the X3 difference is 4.0–5.1 in scenarios 3, 4 and 7 against an induced
-  0.7–0.8 in 5 and 6. On RMTL2 it is 1.9–2.2 in scenarios 5, 6 and 7 against
-  an induced 0.65–0.85 in 3 and 4. On the net scale, X3 acts only where the
-  labels say.
+  RMTL1, X3's own (standardised) difference is 4.0–5.1 in scenarios 3, 4 and
+  7 against an induced 0.7–0.8 in 5 and 6 (marginal 3.9–5.0 against 0.6–0.7).
+  On RMTL2 it is 1.9–2.2 in scenarios 5, 6 and 7 against an induced
+  0.65–0.85 in 3 and 4 (marginal 1.8–2.1 against 0.6–0.8). On the net scale,
+  X3 acts only where the labels say.
 - **"ATE" scenarios are close to null on the time scale, but not null.**
-  Scenario 1's τ_RMTL1 has SD 0.09 and τ_RMST1_cs 0.10, all from X1 and X2
+  Scenario 1's τ_RMTL1 has SD 0.08 and τ_RMST1_cs 0.09, all from X1 and X2
   (see "Performance measures").
 - **Scenario 6's composite effect averages out.** The E1 and E2 effects
-  offset on RMSTc, so τ_RMSTc has mean 0.08 but changes sign with X3: −0.67
-  at X3 = 0 and +0.39 at X3 = 1.
+  offset on RMSTc, so τ_RMSTc has mean 0.08 but changes sign with X3: −0.69
+  at X3 = 0 and +0.41 at X3 = 1.
 
-**At ρ = 0.5 almost nothing above moves.**
+**At ρ = 0 almost nothing above moves.**
 
-- **Event mix:** within about 0.01 of the ρ = 0 tables, both arms and both
-  censoring settings. The marginals are the same, and only the covariates'
-  joint distribution changes. A check at n = 100,000 in scenario 4 gives
-  treated E1 0.779 / 0.782 and event-free 0.042 / 0.037 at ρ = 0 / 0.5. The
-  script's n = 20,000 cells carry up to about ±0.01 of simulation noise, so
-  read single cells loosely.
-- **τ means:** within 0.03 days of ρ = 0 everywhere.
-- **τ SDs:** the same or slightly smaller. The largest drops are τ_RMTL2 in
-  scenario 4 (0.37 → 0.31) and τ_RMTL1 in scenario 5 (0.38 → 0.33). X1 raises
-  both hazards and X2 lowers them, so positive correlation between X1 and X2
-  partly cancels their prognostic heterogeneity.
-- **Correlations:** cor(τ_RMTL1, τ_RMTL2) is within 0.02 of ρ = 0.
-- **Scenario 6's RMSTc:** −0.69 / +0.41 at X3 = 0 / 1.
-- **Separation:** the RMTL scale still separates as labelled (see "Why these
-  values").
+- **Event mix:** within about 0.01 of the ρ = 0.5 tables, both arms and both
+  censoring settings, allowing for simulation noise. The marginals are the
+  same, and only the covariates' joint distribution changes. A check at
+  n = 100,000 in scenario 4 gives treated E1 0.779 / 0.782 and event-free
+  0.042 / 0.037 at ρ = 0 / 0.5. The script's n = 20,000 cells carry up to
+  about ±0.01 of simulation noise (±0.02 in the odd cell, e.g. scenario 4's
+  treated E1 0.765 / 0.786), so read single cells loosely.
+- **τ means:** within 0.03 days of ρ = 0.5 everywhere.
+- **τ SDs:** the same or slightly larger. The largest rises are τ_RMTL1 in
+  scenarios 5 and 6 (0.33 → 0.39, 0.41 → 0.48) and τ_RMTL2 in scenario 4
+  (0.31 → 0.37). X1 raises both hazards and X2 lowers them, so at ρ = 0.5
+  the positive correlation between X1 and X2 partly cancels their prognostic
+  heterogeneity; at ρ = 0 it does not.
+- **Correlations:** cor(τ_RMTL1, τ_RMTL2) is within 0.02 of ρ = 0.5.
+- **Scenario 6's RMSTc:** −0.67 / +0.39 at X3 = 0 / 1.
+- **Separation:** 4.9 for RMTL1 and 2.2 for RMTL2, with the marginal and
+  standardised contrasts equal (see "Why these values").
 
 What ρ does change is the estimation problem. X3 now travels with the
 prognostic X1 and X2, and the noise X4, X5 and X01–X03 become proxies for all three.
@@ -303,8 +310,8 @@ Each CATE is the treated minus the control value at the same x.
 - **Sign.** An RMTL CATE is positive when the event comes sooner; an RMST
   CATE is negative. Each arm is scored against its own truth, so the sign of a
   correlation means the same in every family, but the families' "Event 1" rows
-  are different estimands with different spreads (scenario 3: SD 1.82 for
-  τ_RMTL1, 2.02 for τ_RMST1_cs). Absolute errors therefore do not compare
+  are different estimands with different spreads (scenario 3: SD 1.81 for
+  τ_RMTL1, 2.01 for τ_RMST1_cs). Absolute errors therefore do not compare
   directly across families.
 - No HTE tests and no intervals: the study is point estimation only.
 
@@ -520,8 +527,8 @@ failures. The README notes this for scenario 5's Event 1 only.
 
 **Scenario 1 is not null.** `cate_metrics()` hard-codes scenario 1 as the
 no-heterogeneity scenario (the `sample_size/` convention) and stores Pearson
-and Spearman as 0 there. Here scenario 1's CATE varies with X1 and X2 (SD 0.09
-for τ_RMTL1, 0.10 for τ_RMST1_cs), so since 2026-10-06 `surv_metrics.R`
+and Spearman as 0 there. Here scenario 1's CATE varies with X1 and X2 (SD 0.08
+for τ_RMTL1, 0.09 for τ_RMST1_cs at ρ = 0.5; 0.09 and 0.10 at ρ = 0), so since 2026-10-06 `surv_metrics.R`
 recomputes Pearson, Spearman and the C-statistic in every scenario. A
 `surv_metrics.RDS` written before then has placeholders (0, 0, 0.5) in those
 columns for scenario 1: rerun `surv_metrics.R` (no simulation rerun needed).

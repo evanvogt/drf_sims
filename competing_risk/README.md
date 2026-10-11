@@ -122,7 +122,7 @@ property of the scenario, not a bug, and three things pin that down:
   Every bit of `tau_RMTL1` heterogeneity is the competing-risk artefact: the
   treatment changes who is still at risk for event 1, nothing else.
 - **The two truths are near-mirror images.** `cor(tau_RMTL1, tau_RMTL2) = −0.93`
-  in the truth itself (−0.91 under the current parameters), because the RMTL1 heterogeneity is mechanically induced by
+  in the truth itself (−0.92 under the current parameters at the primary ρ = 0.5, −0.91 at ρ = 0), because the RMTL1 heterogeneity is mechanically induced by
   the RMTL2 heterogeneity. So an estimator that tracks the real (event-2) signal
   correctly lands anti-correlated with the *induced* RMTL1 estimand.
 - **It is consistent across arms**, including `sl_t_split`, whose internals were
@@ -306,10 +306,10 @@ is the only thing that differs from `pseudo_dr_whole_*`.
 
 > **Old DGM.** Everything in this section was measured under the
 > pre-2026-10-01 parameters. Route C needed a run where nobody was observed
-> past 28. Under the current parameters about 30 controls and at least about 8
+> past 28. Under the current parameters about 30 controls and at least about 6
 > treated units are past 28 in every cell, so route C should not recur. Route
 > A' needed a near-constant treated-arm RMTL2 cell, which is now much less
-> likely (at least about 13% treated E2s, against 3% before). Neither code
+> likely (at least about 12.5% treated E2s, against 3% before). Neither code
 > path is guarded, so both remain possible in principle. Confirm against the
 > new array's `failed_ids.txt`.
 
