@@ -184,14 +184,21 @@ introduce_missingness <- function(data, type, prop, mech, U = NULL) {
 #' @param n_imp number of imputations for method = "multiple_imputation"
 #' @return list with `data`, plus `retained_indices` for the row-dropping methods
 #'   and `ipw` for the IPW method. For multiple imputation `data` is a list of
-#'   n_imp completed datasets.
+#'   n_imp completed versions. The same shape comes back when nothing is
+#'   missing: the data as they are, every row retained, unit weights. (It used
+#'   to return the bare data.frame, which generate_and_process_data() read as a
+#'   list with no `data` and so lost the dataset.)
 handle_missingness <- function(data, method, n_imp = 50) {
 
+  method <- match.arg(method, MISS_METHODS)
   if (!any(is.na(data))) {
     message("No missing data found. Returning original dataset.")
-    return(data)
+    return(list(
+      data = if (method == "multiple_imputation") rep(list(data), n_imp) else data,
+      retained_indices = rep(TRUE, nrow(data)),
+      ipw = rep(1, nrow(data))
+    ))
   }
-  method <- match.arg(method, MISS_METHODS)
 
   switch(method,
     "complete_cases" = {

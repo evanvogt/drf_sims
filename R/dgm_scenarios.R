@@ -383,7 +383,8 @@ SCENARIO_SETS <- c(SCENARIO_SETS, unlist(lapply(CORR_RHOS, function(rho) {
 }), recursive = FALSE))
 
 # which sets produce a binary outcome
-BINARY_SETS <- c("binary", "binary_missing", corr_set("binary", CORR_RHOS))
+BINARY_SETS <- c("binary", "binary_missing", "binary_missing_fixed",
+                 corr_set("binary", CORR_RHOS))
 
 #' Resolve a scenario-set name to its table
 #'
