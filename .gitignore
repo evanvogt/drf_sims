@@ -1,8 +1,8 @@
 # gitignore
 ssh*
-# ignore log files
-*.e*
-*.o*
+# ignore PBS log files (<jobname>.e12345, .o12345, and array forms .o12345.1) -
+# not every file with a dot followed by e or o, which also hid .eps, .out, .org
+*.[eo][0-9]*
 *.ER
 *.OU
 *logs*/
