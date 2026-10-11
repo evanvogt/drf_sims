@@ -352,8 +352,8 @@ save_fig <- function(
 #' @param metric metric stem, e.g. "bias" - expects mean_<metric>/mcse_<metric>
 #' @param y_lab axis label
 #' @param facet_rows,facet_cols character vectors of column names to facet by
-#'   (NULL to skip that dimension), passed to facet_grid() via vars() - as
-#'   lollipop_plot(). Default to the mechanism/scenario grid this function
+#'   (NULL to skip that dimension), passed to facet_grid() via vars().
+#'   Default to the mechanism/scenario grid this function
 #'   originally hardcoded, so existing callers are unaffected.
 #' @param facet_scales passed to facet_grid
 #' @param alpha error bar is a (1 - alpha) CI, i.e. mean +/- qnorm(1 -
@@ -475,100 +475,6 @@ point_range_plot <- function(
   if (!is.null(shape_palette)) {
     p <- p + shape_palette
   }
-
-  p +
-    if (blank_x) {
-      theme(axis.text.x = element_blank())
-    } else {
-      theme(axis.text.x = element_text(angle = 90))
-    }
-}
-
-#' Lollipop plot of a summarised metric: stick + point + a narrow MCSE bracket
-#'
-#' The rsimsum-style alternative to point_range_plot(): a segment from a
-#' reference value (`hline`) up to the point estimate, a point at the tip, and
-#' a narrow errorbar bracket at the tip for the (1 - alpha) MCSE-based CI -
-#' rather than one wide errorbar spanning the full range. Useful whenever the
-#' story is deviation from a target (0 bias, 1 correlation, a target
-#' power/coverage), which several of the ICTMC poster panels want - see
-#' results_processing/poster_figs/R/candidates.R.
-#'
-#' Facet rows/cols are parameters rather than hardcoded, unlike
-#' point_range_plot()'s fixed mechanism/scenario grid, so the same helper
-#' covers both that shape and others (e.g. the sample-size studies' facet by
-#' scenario only, with sample size on the x axis).
-#'
-#' @param summary output of summarise_metrics()
-#' @param metric metric stem, e.g. "bias" - expects mean_<metric>/mcse_<metric>
-#' @param y_lab axis label
-#' @param hline reference value the stick starts from (0 for bias-type
-#'   metrics, 1 for correlation-type metrics where 1 is ideal, a target
-#'   power/coverage for test/CI panels)
-#' @param x,colour aesthetics, as in point_range_plot()
-#' @param facet_rows,facet_cols character vectors of column names to facet by
-#'   (NULL to skip that dimension), passed to facet_grid() via vars()
-#' @param facet_scales passed to facet_grid
-#' @param alpha the bracket is a (1 - alpha) CI, i.e. mean +/- qnorm(1 -
-#'   alpha/2) x MCSE - see point_range_plot() for why not a raw +/- 1x MCSE
-#' @param bracket_width width of the MCSE bracket, narrow relative to the
-#'   dodge width so it reads as a cap on the stick, not a second errorbar
-lollipop_plot <- function(
-  summary,
-  metric,
-  y_lab,
-  hline = 0,
-  x = "model",
-  colour = "method",
-  facet_rows = "mechanism",
-  facet_cols = "scenario",
-  facet_scales = "free",
-  blank_x = FALSE,
-  alpha = 0.05,
-  bracket_width = 0.15
-) {
-  mean_col <- paste0("mean_", metric)
-  mcse_col <- paste0("mcse_", metric)
-  z <- qnorm(1 - alpha / 2)
-
-  summary <- summary %>%
-    mutate(
-      .mean = .data[[mean_col]],
-      .lo = .data[[mean_col]] - z * .data[[mcse_col]],
-      .hi = .data[[mean_col]] + z * .data[[mcse_col]]
-    )
-
-  p <- ggplot(summary, aes(x = .data[[x]], colour = .data[[colour]])) +
-    geom_hline(yintercept = hline, linetype = "dashed") +
-    # the stick: geom_segment() + position_dodge() dodges x but leaves xend
-    # untouched, so every group's stick converges on one undodged point -
-    # geom_linerange() has no xend, just a vertical range at one (dodged) x,
-    # so it dodges the same clean way the errorbar bracket below it does
-    geom_linerange(
-      aes(ymin = pmin(hline, .mean), ymax = pmax(hline, .mean)),
-      position = position_dodge(width = 0.5),
-      linewidth = 0.5
-    ) +
-    geom_errorbar(
-      aes(ymin = .lo, ymax = .hi),
-      position = position_dodge(width = 0.5),
-      width = bracket_width,
-      linewidth = 0.3,
-      alpha = 0.5
-    ) +
-    geom_point(
-      aes(y = .mean),
-      position = position_dodge(width = 0.5),
-      size = 2
-    ) +
-    facet_grid(
-      rows = vars(!!!rlang::syms(facet_rows)),
-      cols = vars(!!!rlang::syms(facet_cols)),
-      scales = facet_scales
-    ) +
-    drf_scale() +
-    drf_theme() +
-    labs(y = y_lab, x = x)
 
   p +
     if (blank_x) {

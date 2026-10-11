@@ -107,10 +107,9 @@ PROFILES <- list(
   full    = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = TRUE,  skip_incomplete = TRUE)
 )
 
-# The arms cate_methods() can run, in the order it runs them. `models` picks a
-# subset; the oracle and SuperLearner arms also need fmla_info / sl_lib.
-CATE_MODELS <- c("causal_forest", "dr_random_forest", "dr_oracle",
-                 "dr_semi_oracle", "dr_superlearner")
+# The arms cate_methods() can run, in the order it runs them, are CATE_MODELS
+# (R/utils.R). `models` picks a subset; the oracle and SuperLearner arms also
+# need fmla_info / sl_lib.
 
 # ---- helpers ----------------------------------------------------------------
 

@@ -13,6 +13,8 @@ require(tibble)
 require(tidyr)   # unnest_longer
 require(purrr)   # map, map_int
 
+source(here::here("R", "utils.R"))   # CATE_MODELS
+
 #' Point metrics for one set of CATE estimates against the known truth
 #'
 #' @param est estimated CATEs
@@ -184,22 +186,8 @@ hte_test_metrics <- function(model_res, sim_res = NULL, model = NULL) {
   )
 }
 
-#' Every metric for one model of one run
-#'
-#' @param model_res one model's entry in a per-run results object
-#' @param true true CATEs for that run
-#' @param scenario scenario index
-#' @param sim_res,model passed to hte_test_metrics(), for BLP_p_os
-run_model_metrics <- function(model_res, true, scenario, sim_res = NULL, model = NULL) {
-  bind_cols(
-    cate_metrics(model_res$tau, true, scenario),
-    hte_test_metrics(model_res, sim_res, model)
-  )
-}
-
-# the CATE estimators the point metrics apply to, in display order
-CATE_MODELS <- c("causal_forest", "dr_random_forest", "dr_oracle",
-                 "dr_semi_oracle", "dr_superlearner")
+# the CATE estimators the point metrics apply to, in display order, are
+# CATE_MODELS (R/utils.R)
 
 # the CI studies drop the SuperLearner arm
 CI_MODELS <- c("causal_forest", "dr_random_forest", "dr_oracle", "dr_semi_oracle")

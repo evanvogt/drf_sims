@@ -54,6 +54,14 @@ save_run <- function(results, dir, run) {
   invisible(final)
 }
 
+# ---- model names --------------------------------------------------------------
+
+# The CATE arms R/cate_models.R::cate_methods() can run, in the order it runs
+# them, and the order the metrics report them. Defined here, which both
+# R/cate_models.R and R/metrics.R source, so the two cannot disagree.
+CATE_MODELS <- c("causal_forest", "dr_random_forest", "dr_oracle",
+                 "dr_semi_oracle", "dr_superlearner")
+
 # ---- fold bookkeeping -------------------------------------------------------
 
 #' Assemble double-crossfitting predictions into an n x V matrix

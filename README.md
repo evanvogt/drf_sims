@@ -352,7 +352,7 @@ from. Until a lockfile exists, install directly:
 ```r
 install.packages(c("grf", "SuperLearner", "GenericML", "pseudo", "coin",
   "furrr", "future", "ranger", "glmnet", "gam", "earth", "mice",
-  "missForest", "VIM", "dplyr", "here"))
+  "missForest", "dplyr", "here"))
 ```
 
 **TODO:** once the package set stabilizes, run `renv::snapshot()` and commit

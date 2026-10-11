@@ -11,7 +11,6 @@
 require(dplyr)
 require(mice)
 require(missForest)
-require(VIM)
 
 source(here::here("R", "dgm_scenarios.R"))
 
@@ -242,7 +241,8 @@ handle_missingness <- function(data, method, n_imp = 50) {
       imputed <- impute_by_arm(data, function(df) {
         for (var in miss) {
           fmla <- as.formula(paste(var, "~", paste(complete, collapse = " + ")))
-          df[[var]] <- regressionImp(fmla, df)[[var]]
+          gap <- is.na(df[[var]])
+          df[[var]][gap] <- predict(lm(fmla, data = df), newdata = df[gap, , drop = FALSE])
         }
         df
       })

@@ -288,8 +288,9 @@ Per method:
   `X5_missing` appended as covariates, so every estimator sees 15 covariates
   instead of 10.
 - **`regression`:** within each arm, for each incomplete covariate,
-  `VIM::regressionImp` fits a linear model (`lm`; X1 and X3 are numeric, so
-  linear too) of that covariate on the *fully observed* columns among the
+  `lm` fits a linear model (X1 and X3 are numeric, so
+  linear too; until 2026-10-11 this went through `VIM::regressionImp`, which gives
+  identical fills) of that covariate on the *fully observed* columns among the
   arm's observed units and fills in its predictions, with no residual noise.
   Under `both` the predictors are X01–X05 and Y: the auxiliaries X01–X03
   explain part of each amputed covariate (latent R² ≈ 0.375), X04/X05
