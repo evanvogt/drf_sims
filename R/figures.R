@@ -324,8 +324,8 @@ drf_theme <- function(rotate_x = FALSE) {
 #'
 #' @param plot defaults to ggplot2::last_plot(), same as a bare ggsave() call
 #'   - fine when the plot was just built immediately before this call, but
-#'   pass it explicitly when saving several plots pulled out of a list (e.g.
-#'   poster_figs/explore_gallery.R), where "last plot" is fragile
+#'   pass it explicitly when saving several plots pulled out of a list,
+#'   where "last plot" is fragile
 save_fig <- function(
   filename,
   path,
