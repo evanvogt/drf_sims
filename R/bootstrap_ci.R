@@ -388,10 +388,11 @@ combine_mi_ci <- function(res_list, model, alpha = 0.05) {
   col_max <- apply(draws_norm, 2, max)
   S_star <- quantile(col_max, 1 - alpha)
 
-  # NOTE: sqrt(lambda_hat * S_star), not sqrt(lambda_hat) * S_star as in the
-  # other two strategies and in simultaneous_band(). Preserved as written, but
-  # it looks like a typo - it takes the square root of the critical value.
-  margin <- sqrt(lambda_hat * S_star)
+  # Same margin as the other two strategies and simultaneous_band(). Until
+  # 2026-10-11 this was sqrt(lambda_hat * S_star), which took the square root of
+  # the critical value and gave bands about half as wide; results made before
+  # then are wrong for this strategy.
+  margin <- sqrt(lambda_hat) * S_star
   res$lb_hybrid <- tau - margin
   res$ub_hybrid <- tau + margin
 

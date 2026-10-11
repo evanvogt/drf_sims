@@ -82,11 +82,12 @@ compared directly. `cts_miss_ci_results.qmd` says so on the relevant section.
 
 **The `mib` and `hybrid` critical values are now the `1 - alpha` quantile (2026-09-28), not `1 - alpha/2`.** They are quantiles of a maximum of *absolute* roots, so both tails are already in it; `1 - alpha/2` gave 97.5% bands at `alpha = 0.05`. Same fix as `simultaneous_band()`, so each imputation's own band changes too. `pooled` still uses `alpha/2` and `1 - alpha/2`, correctly — it takes quantiles of signed replicates. Results from before this date are 97.5% bands.
 
-**The hybrid margin looks like a typo.** It computes
+**The `hybrid` margin was wrong until 2026-10-11.** It computed
 `sqrt(lambda_hat * S_star)` where the other two strategies and
-`simultaneous_band()` use `sqrt(lambda_hat) * S_star` — i.e. it takes the square
-root of the critical value. Preserved as written, but flagged: if the hybrid
-intervals look oddly narrow, this is why.
+`simultaneous_band()` use `sqrt(lambda_hat) * S_star` — i.e. it took the square
+root of the critical value, giving bands about half as wide. Fixed in
+`combine_mi_ci()`. The pooled bands are saved without their draws, so results
+made before the fix cannot be patched: the study re-runs (400 rows).
 
 **The old `AUX` / `AUX-Y` mechanism spellings are gone** (2026-09-28): the names are now MAR / MNAR-Y0 / MNAR-tau and anything else is an error. This study runs MAR only. **Its covariates changed the same day:** `continuous_missing` now draws correlated covariates with X01–X03 as auxiliaries (`missing/ADEMP.md`), so every dataset here changes too.
 
