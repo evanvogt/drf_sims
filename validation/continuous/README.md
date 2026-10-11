@@ -9,12 +9,12 @@ lives in `../val_common.R`.
 | | |
 |---|---|
 | covariates | correlated, rho = 0.5 — the `continuous_corr_0.5` set (`R/dgm_scenarios.R`, CORRELATED COVARIATES), the same set `sample_size/correlated/` runs as its primary arm |
-| scenario | 2 (simple HTE, continuous X4 — see `R/dgm_scenarios.R`, `DESC_10`; scenario 3 before the 2026-09-26 renumbering) |
+| scenarios | 2, 3, 4 (`R/dgm_scenarios.R`, `DESC_10`): 2 simple HTE, `b4 * X4`; 3 complex, `b3 * X3 + b4 * X4 + b45 * X4 * X5`; 4 non-linear, `b4 * cos(X4)`. Scenario 2 was scenario 3 before the 2026-09-26 renumbering |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 — **1100 array jobs**, 20 min walltime (see Sizing the job) |
+| runs | 100 per scenario — **3300 array jobs**, 1 h walltime (see Sizing the job) |
 | folds | DR SuperLearner only: 5 for a chunk below 500 rows, else 10 |
-| results | `../results/validation/continuous/rho_0.5/scenario_2/1000/<interim_prop>/res_sim_<run>.RDS` |
+| results | `../results/validation/continuous/rho_0.5/scenario_<k>/1000/<interim_prop>/res_sim_<run>.RDS` |
 
 Each run draws one trial of `n` and splits it. Because the seed is the run alone,
 a run's chunk 1 at 0.25 is nested in its chunk 1 at 0.30, so every curve across
@@ -29,9 +29,12 @@ load-bearing rather than cosmetic: `interim_prop` is a `path_cols` entry, so its
 `seq(by = 0.05)` yields values like `0.30000000000000004` that `get_results()`
 can no longer match back to their grid row.
 
-Only rho = 0.5, scenario 2 and n = 1000 are run today; all three are still
+Only rho = 0.5, scenarios 2–4 and n = 1000 are run today; all three are
 columns of the grid (`cts_val_config.R`) so extending to rho = 0, more scenarios
-or sizes is a one-line change, not a rewrite.
+or sizes is a one-line change, not a rewrite. (The grid briefly carried rho = 0
+too, on 2026-10-09. Its `rho_0/` results are outside the grid now, so check
+and collect ignore them.) The same run number draws the same participants in
+every scenario; only the CATE changes.
 
 ## Estimators
 
@@ -68,7 +71,7 @@ each nominates its own top covariate for the interaction test below.
   indirect SHAP from Svensson et al.'s SHAP_CATE, adapted from that paper's
   `cvboost3()` with a reduced tuning grid (3 learning rates × 3 depths, 5-fold,
   ≤2000 rounds) — the paper's 24-combination search runs four times per array
-  job across 1100 jobs. Because it reads only `(X, tau)` it applies unchanged to
+  job across 3300 jobs. Because it reads only `(X, tau)` it applies unchanged to
   every estimator, unlike the TE-VIMs which need an estimator-specific refit.
 
 Both are larger-is-more-important, so `rank()` means the same thing for each.
@@ -76,7 +79,7 @@ Both are larger-is-more-important, so `rank()` means the same thing for each.
 **New dependencies**: `xgboost` and `SHAPforxgboost`, used nowhere else in this
 repo. `renv` is not wired up here (see `.claude/CLAUDE.md`), so they must be
 installed into the cluster's `sim-env` R library by hand — `cts_val_testing.R`
-check 1 is there to catch their absence before 1100 jobs go out.
+check 1 is there to catch their absence before 3300 jobs go out.
 
 ## What is compared across chunks
 
@@ -85,9 +88,16 @@ check 1 is there to catch their absence before 1100 jobs go out.
 | | |
 |---|---|
 | `subgroups` | fit a tree on chunk 1's top/bottom-10%-CATE responder groups, predict them into chunk 2, test the `W x subgroup` interaction there |
-| `variances` | `var(tau)` in each chunk, against the true `Var(tau) = 1` |
+| `variances` | `var(tau)` in each chunk, against the true `Var(tau)` (1 in scenario 2; the report computes it per scenario) |
 | `var_imps` | each measure's covariate ranking in each chunk, and the rank change |
-| `top_var_tests` | chunk 1's most important covariate, interaction-tested on the remaining participants — as a continuous `W x X_top` interaction (`p_cts`), the same adjusted for every other covariate (`p_cts_adj`), and after a median split (`p_split`) |
+| `top_var_tests` | chunk 1's most important covariate, interaction-tested on the remaining participants — as a continuous `W x X_top` interaction (`p_cts`), the same adjusted for every other covariate (`p_cts_adj`), after a median split (`p_split`), after a split learned on chunk 1 (`p_dd`, with `dd_cuts` and `dd_prop`), and as a spline projection learned on chunk 1 (`p_proj`) |
+
+Since 2026-10-11 every interaction test (the subgroup tests and all five
+top-covariate forms) is saved twice, with classical and with HC3 standard
+errors: `subgroups[[model]]` is a two-row `data.frame(se, top, bottom)` and
+`top_var_tests[[model]]` leads with an `se` column (`chunk_validations_se()`).
+`variances` and `var_imps` do not depend on the standard errors and are saved
+once.
 
 `p_cts_adj` exists because of the correlation. With rho = 0.5, E[tau | X5]
 moves with X5 because X5 is correlated with X4, so a marginal `W x X5` test
@@ -95,15 +105,44 @@ finds a real interaction even though X5 modifies nothing. A run that nominates
 a proxy of X4 then "replicates" on `p_cts`. `p_cts_adj` is the `W:X_top`
 coefficient of `Y ~ W * (all covariates)` and should not flag it.
 
+**The data-driven forms** let chunk 1 decide the shape of the test; chunk 2's
+outcomes are seen only by the test, so both stay honest.
+
+- `p_dd`: a depth-2 regression tree of chunk 1's estimated CATE on `X_top`
+  alone (`cp = 0`, leaves ≥ 10% of the chunk), its leaves grouped into above /
+  below chunk 1's mean CATE. The split can be one threshold, a binary
+  covariate's 0/1, or middle vs. tails. `dd_cuts` records the cut points,
+  `dd_prop` chunk 2's share on the high side. A flat chunk 1 CATE gives no
+  split and an NA.
+- `p_proj`: a smoothing spline (4 df) of chunk 1's estimated CATE on `X_top`,
+  evaluated at chunk 2's `X_top`, tested as a 1-df `W x g(X_top)` interaction. A
+  covariate with ≤ 4 distinct values (X1, X3) is scored as itself, which is then
+  the `p_cts` test.
+
+**Scenario 4 is symmetric in X4.** `cos` is even and X4 is centred on 0, so the
+best linear fit of tau on X4 has slope 0 and E[tau | X4 > median] = E[tau | X4 <
+median]. `p_cts`, `p_cts_adj` and `p_split` therefore have no power there even
+when X4 is correctly nominated; their rate should sit near 5%. This is kept on
+purpose and reported as a finding about those tests. `p_dd` and `p_proj` are the
+forms that can replicate it.
+
+**`p_split` on a binary covariate** (fixed 2026-10-11). The split was
+`xt > median(xt)`, which is all 0 for X3 ~ Bernoulli(0.7) (median 1), so
+`p_split` was NA whenever X3 was nominated — the likely winner in scenario 3,
+where X3 is the largest single source of heterogeneity. `median_split()` now uses a two-valued
+covariate as its own split. Nothing changes for continuous covariates, or for
+X1 (P = 0.4, median 0).
+
 The comparisons are `chunk_validations()`, and the estimation logic behind them
 (both importance measures and `interaction_pval()`), in `../val_common.R`,
 shared with the binary arm. It is specific to these studies, so it stays in
 `validation/` rather than moving into `R/`.
 
-**HC3 interaction tests.** This arm calls `chunk_validations(robust = TRUE)`,
-so every interaction test (the subgroup tests, `p_cts`, `p_cts_adj`,
-`p_split`) is a t-test on `sandwich::vcovHC(type = "HC3")` standard errors, as
-in the binary arm. The noise is homoskedastic, but `Y ~ W * v` leaves out the
+**HC3 interaction tests.** This arm calls `chunk_validations_se()`, so every
+interaction test (the subgroup tests and the five top-covariate forms) is
+saved as a t-test on classical standard errors and on
+`sandwich::vcovHC(type = "HC3")` ones, as in the binary arm. HC3 is the
+primary kind; the report compares the two. The noise is homoskedastic, but `Y ~ W * v` leaves out the
 prognostic X1 and X2 and, in the treated arm, the spread of tau within each
 level of `v`. At rho = 0.5 both of those vary with the subgroup, so the
 residual variance differs across the four `W x v` cells. The W:v estimate is a
@@ -113,7 +152,7 @@ pooled variance comes almost entirely from the large ones. HC3 is the cell-wise
 (Welch-type) variance there, slightly conservative. For `p_split`, `p_cts` and
 `p_cts_adj` the two give nearly the same answer, so the switch costs little
 there and keeps the two arms' tests the same. Classical standard errors until
-2026-10-08.
+2026-10-08, HC3 only until 2026-10-11.
 
 ## Files
 
@@ -122,34 +161,47 @@ there and keeps the two arms' tests the same. Classical standard errors until
 | `cts_val_config.R` | the parameter grid and results path — **the** definition |
 | `cts_val_dgms.R` | names this study's slice of `R/dgm_scenarios.R` |
 | `cts_val_models.R` | `run_all_cate_methods()`: `../val_common.R`'s `fit_val_methods()` with `family = gaussian()` |
-| `cts_val_analysis.R` | array entry point; splits the trial, fits both chunks, runs `chunk_validations(robust = TRUE)` |
-| `../val_common.R` | shared with `binary/`: the split, the estimators and importance measures, the interaction tests, the four comparisons |
+| `cts_val_analysis.R` | array entry point; splits the trial, fits both chunks, runs `chunk_validations_se()` |
+| `../val_common.R` | shared with `binary/`: the split, the estimators and importance measures, the interaction tests (including the data-driven ones), the four comparisons |
 | `cts_val_run.R` | runs the whole grid in one RStudio session, 8 rows at a time — the no-queue alternative to `cts_val_1.sh` |
 | `cts_val_testing.R` | pre-submission verification — dependencies, grid, and the helpers above |
 | `cts_val_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cts_val_collect.R` | gathers per-run files into `cts_val_all.RDS` |
 | `cts_val_metrics.R` | flattens `validations` into tidy `cts_val_metrics.RDS` |
-| `results_cts_val.R` | summary plots |
-| `cts_val_results.qmd` | the written-up report |
+| `results_cts_val.R` | summary plots, one scenario at a time (`Rscript results_cts_val.R <scenario>`), HC3 |
+| `cts_val_results.qmd` | the written-up report, one render per scenario (Quarto `scenario` param) |
 
 ## Running it
 
 ```bash
 Rscript validation/continuous/cts_val_testing.R full   # do this first - see below
-qsub validation/continuous/jobscripts/cts_val_1.sh     # 1-1100
+qsub validation/continuous/jobscripts/cts_val_1.sh     # 1-3300
 Rscript validation/continuous/cts_val_check.R          # writes failed_ids.txt if any are missing
 qsub validation/continuous/jobscripts/cts_val_collect.sh
 qsub validation/continuous/jobscripts/cts_val_metrics.sh
+cd validation/continuous
+quarto render cts_val_results.qmd -P scenario:2 --output cts_val_results_sc2.html   # and 3, 4
 ```
 
-`cts_val_testing.R` runs six cheap structural checks; `full` adds one real
+`cts_val_testing.R` runs eight cheap checks; `full` adds one real
 replicate end to end and reports how long it took, which is the number to read
 against the jobscript's walltime before submitting. It exits non-zero on any
 failure. Drop `full` for a quick local smoke test.
 
+**Before the 2026-10-11 run, archive the old scenario 2 results.** Files saved
+before then carry HC3 p-values only and no `p_dd`/`p_proj`, in a different
+shape. `check_failed()` would count them as done and `get_results()` would
+collect them next to the new ones. Archive the tree first (dry run, then
+`--apply`):
+
+```bash
+Rscript R/archive_old_results.R --label validation_pre_2026-10-11 \
+  --trees validation/continuous/rho_0.5/scenario_2 validation/binary/rho_0.5/scenario_2
+```
+
 ### Without the queue
 
-When the queue is slower than the work, `cts_val_run.R` runs the same 1100 rows
+When the queue is slower than the work, `cts_val_run.R` runs the same 3300 rows
 inside one interactive session instead. Request an RStudio session with 8 cores
 and 64gb, then:
 
@@ -161,7 +213,7 @@ It runs 8 rows at a time, each as its own `Rscript cts_val_analysis.R <i> 1 1`
 subprocess — the identical command `cts_val_1.sh` gives one array index, so a
 row produced here and a row produced by the array are the same calculation and
 land in the same place. A full grid took roughly 7h before the DR SuperLearner
-was added; with it, budget 1100 × (the replicate time `cts_val_testing.R full`
+was added; with it, budget 3300 × (the replicate time `cts_val_testing.R full`
 reports) / 8.
 
 Rows that already have a results file are skipped (the same missing-run logic
@@ -185,7 +237,8 @@ allocated. `cts_val_1.sh` now runs one worker with one grf thread
 (`cts_val_analysis.R <i> 1 1`) on `ncpus=1`. That is set by hand, as is the
 walltime. A row took roughly 3 min with the two forest estimators. The DR
 SuperLearner's TE-VIM refits (10 covariates × 5–10 folds of a 9-learner
-SuperLearner, per chunk) make it longer; the walltime is now 20 min.
+SuperLearner, per chunk) make it longer; the walltime was raised to 20 min,
+then to 1 h on 2026-10-09.
 `cts_val_testing.R full` passes the
 same `1 1`, so the replicate time it reports is the array job's. Check 6 also
 prints a step-by-step timing of one 250-row chunk. If a row is too slow on one
@@ -204,9 +257,30 @@ cannot drift apart. Called without them it falls back to what it did before
 
 ## Status
 
-**Needs a fresh run** — for several independent reasons. Archive the old tree
-first with `R/archive_old_results.R` (root `README.md`, Status, step 0): bug O
-changed the continuous DGM, and the scenario is now numbered 2, not 3.
+**Needs a fresh run** of all 3300 rows. Archive the existing `rho_0.5/scenario_2/`
+tree first (Running it, above).
+
+Changed 2026-10-11:
+
+- **Scenarios 2–4**, rho = 0.5 only. The grid had carried rho = 0 as well
+  since 2026-10-09; it is back to the primary arm, with scenarios 3 (complex)
+  and 4 (non-linear) added. 3300 array jobs.
+- **Classical and HC3 standard errors**, both saved
+  (`chunk_validations_se()`) — see What is compared across chunks. The
+  subgroup and top-covariate tables of a results file change shape (an `se`
+  column), and `cts_val_metrics.R` reads the new shape only.
+- **Two data-driven top-covariate tests**, `p_dd` and `p_proj` — see What is
+  compared across chunks. Scenario 4's symmetric `cos(X4)` is where they
+  matter.
+- **`p_split` on a binary covariate** — see What is compared across chunks.
+- **The report renders per scenario** (`-P scenario:<k>`), with the
+  `Var(tau)` reference line and the true-modifier set derived from the
+  scenario rather than hard-coded to scenario 2, and a classical-vs-HC3
+  section.
+
+Before that, the run needed for several independent reasons: bug O changed the
+continuous DGM, and the scenario is now numbered 2, not 3 (root `README.md`,
+Status, step 0).
 
 Changed 2026-10-08, ahead of the rerun:
 

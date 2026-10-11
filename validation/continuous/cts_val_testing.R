@@ -4,19 +4,21 @@
 # Run this before submitting validation/continuous/jobscripts/cts_val_1.sh:
 #
 #   Rscript validation/continuous/cts_val_testing.R
-#   Rscript validation/continuous/cts_val_testing.R full   # adds check 7
+#   Rscript validation/continuous/cts_val_testing.R full   # adds check 9
 #
-# Checks 1-6 are cheap and exercise the helpers directly. Check 7 runs one real
+# Checks 1-8 are cheap and exercise the helpers directly. Check 9 runs one real
 # replicate end to end and is worth the wait on the cluster, where it also tells
-# you whether the jobscript's walltime is right before 1100 jobs go out.
+# you whether the jobscript's walltime is right before 3300 jobs go out.
 #
 # Checks, in order:
 #   1. xgboost and SHAPforxgboost load. They are used nowhere else in this repo,
 #      so a missing install here is the one thing that stops the array dead.
 #      Also sandwich, for the HC3 interaction tests
-#   2. the grid is 1100 rows over 11 interim proportions, and - the reason
-#      cts_val_config.R rounds - none of those proportions stringifies to a
-#      float artefact, since as.character(interim_prop) becomes a directory name
+#   2. the grid is 3300 rows - rho 0.5 only, scenarios 2-4, 11 interim
+#      proportions - and - the reason cts_val_config.R rounds - none of those
+#      proportions stringifies to a float artefact, since
+#      as.character(interim_prop) becomes a directory name. Also that each
+#      scenario generates a trial of 1000, and its in-sample Var(tau)
 #   3. interaction_pval returns the W:v interaction, not the intercept. This is
 #      the bottom_pval bug: the old code read coefficient row 1 instead of the
 #      interaction, so the check is against both rows, not just the right one.
@@ -34,10 +36,18 @@
 #      same covariates, so the rank comparison in chunk_validations() has
 #      matching rows to line up. Also prints how long one 250-row chunk took,
 #      step by step; most of it should be the DR SuperLearner's TE-VIM refits
-#   7. (full only) one replicate end to end, with cts_val_1.sh's "1 1"
+#   7. the data-driven top-covariate tests (shared with binary/): on a planted
+#      cos(x) modifier, data_driven_split() finds a middle-vs-tails split with
+#      two cuts and p_dd / p_proj detect it where the linear p_cts does not; a
+#      binary covariate with P = 0.7 gets a real median split (it used to be all
+#      0, so p_split was NA) and is its own data-driven split; and a flat chunk
+#      1 tau gives NA for both rather than a test of nothing
+#   8. chunk_validations_se() on check 6's fit: its classical rows are
+#      chunk_validations(robust = FALSE)'s, its hc3 rows robust = TRUE's
+#   9. (full only) one replicate end to end, with cts_val_1.sh's "1 1"
 #      arguments: results land in a directory named by the un-mangled
 #      interim_prop, the one trial is split n1 / n - n1, validations carries
-#      all four comparisons,
+#      all four comparisons with both standard-error kinds,
 #      and bottom is a plausible p-value rather than the near-zero intercept
 #      p-value the old code produced
 
@@ -85,8 +95,11 @@ cat("\n=== 2. the parameter grid ===\n")
 
 props <- unique(study$grid$interim_prop)
 
-report(nrow(study$grid) == 1100,
-       sprintf("grid is 1100 rows (got %d)", nrow(study$grid)))
+report(nrow(study$grid) == 3300,
+       sprintf("grid is 3300 rows (got %d)", nrow(study$grid)))
+report(identical(sort(unique(study$grid$scenario)), 2:4) &&
+         identical(unique(study$grid$rho), 0.5),
+       "scenarios 2-4, rho = 0.5 only")
 report(length(props) == 11,
        sprintf("11 distinct interim proportions (got %d)", length(props)))
 report(isTRUE(all.equal(sort(props), seq(0.25, 0.75, by = 0.05))),
@@ -98,6 +111,18 @@ prop_strings <- as.character(sort(props))
 report(all(nchar(prop_strings) <= 4),
        sprintf("no interim proportion stringifies to a float artefact (%s)",
                paste(prop_strings, collapse = ", ")))
+
+for (sc in sort(unique(study$grid$scenario))) {
+  setup_rng_stream(1)
+  gen_sc <- tryCatch(generate_continuous_scenario_data(sc, 1000, 0.5),
+                     error = function(e) NULL)
+  report(!is.null(gen_sc) && nrow(gen_sc$dataset) == 1000,
+         sprintf("scenario %d generates a trial of 1000 at rho = 0.5", sc))
+  if (!is.null(gen_sc)) {
+    cat(sprintf("  NOTE  scenario %d: in-sample Var(tau) = %.4f\n", sc,
+                var(gen_sc$truth$tau)))
+  }
+}
 
 # =============================================================================
 cat("\n=== 3. interaction_pval reads the interaction, not the intercept ===\n")
@@ -230,7 +255,86 @@ for (model in names(fit_t)) {
 }
 
 # =============================================================================
-cat("\n=== 7. one replicate end to end ===\n")
+cat("\n=== 7. the data-driven top-covariate tests ===\n")
+
+# chunk 1 hands on cos(x) + noise; chunk 2's effect is cos(x). Symmetric in x,
+# so a linear W x x term has nothing to find - scenario 4's situation
+set.seed(105)
+n_d1 <- 500
+n_d2 <- 750
+x_d1 <- rnorm(n_d1)
+x_d2 <- rnorm(n_d2)
+tau_d1 <- cos(x_d1) + rnorm(n_d1, sd = 0.2)
+W_d2 <- rbinom(n_d2, 1, 0.5)
+Y_d2 <- 0.5 * W_d2 + W_d2 * cos(x_d2) + rnorm(n_d2)
+
+dd_t <- data_driven_split(x_d1, tau_d1, x_d2)
+g_t <- projection_score(x_d1, tau_d1, x_d2)
+report(length(dd_t$cuts) == 2 && dd_t$cuts[1] < 0 && dd_t$cuts[2] > 0,
+       sprintf("a cos(x) CATE is split middle vs tails (cuts %s)",
+               paste(signif(dd_t$cuts, 3), collapse = ", ")))
+report(interaction_pval(Y_d2, W_d2, dd_t$high2, robust = TRUE) < 1e-3,
+       "p_dd detects the cos(x) modifier")
+report(!is.null(g_t) && interaction_pval(Y_d2, W_d2, g_t, robust = TRUE) < 1e-3,
+       "p_proj detects the cos(x) modifier")
+report(interaction_pval(Y_d2, W_d2, x_d2, robust = TRUE) > 0.05,
+       "the linear p_cts does not - the scenario 4 blind spot")
+
+# a binary covariate whose median is its upper value - X3 ~ Bernoulli(0.7)
+xb_1 <- rbinom(n_d1, 1, 0.7)
+xb_2 <- rbinom(n_d2, 1, 0.7)
+report(all(as.numeric(xb_2 > median(xb_2)) == 0) &&
+         identical(median_split(xb_2), as.numeric(xb_2)),
+       "Bernoulli(0.7): the old median split is all 0, median_split() is the covariate")
+dd_b <- data_driven_split(xb_1, 2 * xb_1 + rnorm(n_d1, sd = 0.2), xb_2)
+report(identical(dd_b$high2, as.numeric(xb_2)),
+       sprintf("and it is its own data-driven split (cut %s)",
+               paste(dd_b$cuts, collapse = ", ")))
+report(identical(projection_score(xb_1, tau_d1, xb_2), xb_2),
+       "and its own projection score")
+
+# a flat chunk 1 tau: no split, no curve, so NA rather than a test of nothing
+dd_c <- data_driven_split(x_d1, rep(0.3, n_d1), x_d2)
+report(length(dd_c$cuts) == 0 &&
+         is.na(interaction_pval(Y_d2, W_d2, dd_c$high2, robust = TRUE)),
+       "a flat chunk 1 tau gives no split and an NA p_dd")
+report(is.null(projection_score(x_d1, rep(0.3, n_d1), x_d2)),
+       "and no projection score, so an NA p_proj")
+
+# =============================================================================
+cat("\n=== 8. chunk_validations_se stacks both standard-error kinds ===\n")
+
+# check 6's fit as both chunks - only the bookkeeping is under test here
+d_se <- gen_t$dataset
+v_se <- chunk_validations_se(fit_t, fit_t, d_se, d_se)
+v_cl <- chunk_validations(fit_t, fit_t, d_se, d_se, robust = FALSE)
+v_hc <- chunk_validations(fit_t, fit_t, d_se, d_se, robust = TRUE)
+drop_se <- function(d) {
+  d <- as.data.frame(d)
+  d$se <- NULL
+  rownames(d) <- NULL
+  d
+}
+for (model in names(v_se$subgroups)) {
+  sg <- v_se$subgroups[[model]]
+  tv <- v_se$top_var_tests[[model]]
+  same_sg <- all(vapply(list(list("classical", v_cl), list("hc3", v_hc)), function(k) {
+    isTRUE(all.equal(unname(unlist(sg[sg$se == k[[1]], c("top", "bottom")])),
+                     unname(k[[2]]$subgroups[[model]][c("top", "bottom")])))
+  }, logical(1)))
+  same_tv <- all(vapply(list(list("classical", v_cl), list("hc3", v_hc)), function(k) {
+    isTRUE(all.equal(drop_se(tv[tv$se == k[[1]], ]),
+                     drop_se(k[[2]]$top_var_tests[[model]])))
+  }, logical(1)))
+  report(nrow(sg) == 2 && same_sg && nrow(tv) == 4 && same_tv,
+         sprintf("%s: classical and hc3 rows are chunk_validations()'s own", model))
+}
+report(identical(v_se$var_imps, v_hc$var_imps) &&
+         identical(v_se$variances, v_cl$variances),
+       "variances and var_imps do not depend on the standard errors")
+
+# =============================================================================
+cat("\n=== 9. one replicate end to end ===\n")
 
 if (!run_full) {
   cat("  SKIP  (pass 'full' to run - fits both chunks and writes a results file)\n")
@@ -277,15 +381,19 @@ if (!run_full) {
                     c("causal_forest", "dr_random_forest", "dr_superlearner")),
            "every comparison covers all three estimators")
 
+    plausible <- function(p) all(is.na(p) | (p > 0 & p < 1))
     for (model in names(val$subgroups)) {
       sg <- val$subgroups[[model]]
+      report(is.data.frame(sg) && setequal(sg$se, c("classical", "hc3")),
+             sprintf("%s: subgroups has one row per standard-error kind", model))
       # the old code put the intercept p-value here, which was essentially
       # always ~0 - a plausible p-value is the fix's end-to-end evidence
-      report(is.na(sg[["bottom"]]) || (sg[["bottom"]] > 0 && sg[["bottom"]] < 1),
-             sprintf("%s: bottom is a plausible p-value (%.3g), not the intercept's",
-                     model, sg[["bottom"]]))
-      report(is.na(sg[["top"]]) || (sg[["top"]] > 0 && sg[["top"]] < 1),
-             sprintf("%s: top is a plausible p-value (%.3g)", model, sg[["top"]]))
+      report(plausible(sg$bottom),
+             sprintf("%s: bottom is a plausible p-value (%s), not the intercept's",
+                     model, paste(signif(sg$bottom, 3), collapse = ", ")))
+      report(plausible(sg$top),
+             sprintf("%s: top is a plausible p-value (%s)", model,
+                     paste(signif(sg$top, 3), collapse = ", ")))
 
       vi <- val$var_imps[[model]]
       report(nrow(vi) == 2 * length(covars) && "measure" %in% names(vi) &&
@@ -294,17 +402,17 @@ if (!run_full) {
                      model, 2 * length(covars), nrow(vi)))
 
       tv <- val$top_var_tests[[model]]
-      report(nrow(tv) == 2 && setequal(unique(tv$measure), c("tevim", "shap")),
-             sprintf("%s: top_var_tests has one row per measure", model))
+      report(nrow(tv) == 4 && setequal(unique(tv$measure), c("tevim", "shap")) &&
+               setequal(unique(tv$se), c("classical", "hc3")),
+             sprintf("%s: top_var_tests has one row per measure x se", model))
       report(all(tv$x_top %in% covars) && all(tv$x_top2 %in% covars),
              sprintf("%s: x_top/x_top2 name real covariates (%s)",
                      model, paste(tv$x_top, collapse = ", ")))
-      report(all(c("p_cts", "p_cts_adj", "p_split") %in% names(tv)) &&
-               all(is.na(tv$p_cts) | is.finite(tv$p_cts)) &&
-               all(is.na(tv$p_cts_adj) | is.finite(tv$p_cts_adj)) &&
-               all(is.na(tv$p_split) | is.finite(tv$p_split)),
-             sprintf("%s: p_cts, p_cts_adj and p_split are present and finite or NA",
-                     model))
+      p_cols <- c("p_cts", "p_cts_adj", "p_split", "p_dd", "p_proj")
+      report(all(c(p_cols, "dd_cuts", "dd_prop") %in% names(tv)) &&
+               plausible(unlist(tv[p_cols])),
+             sprintf("%s: %s are present and plausible or NA", model,
+                     paste(p_cols, collapse = ", ")))
     }
   }
 }

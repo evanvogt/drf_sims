@@ -15,6 +15,11 @@
 #   robust  HC3 standard errors in the interaction tests (interaction_pval,
 #           interaction_pval_adj, chunk_validations) - see interaction_pval
 #
+# Since 2026-10-11 the analysis scripts call chunk_validations_se(), which runs
+# chunk_validations() once with classical and once with HC3 standard errors and
+# stacks the two under an `se` column, and the top-covariate tests carry two
+# data-driven forms (p_dd, p_proj) alongside p_cts/p_cts_adj/p_split.
+#
 # The estimation logic here (both importance measures and the interaction
 # tests) is specific to these studies - nothing else in the repo uses it - so it
 # stays in validation/ rather than moving into R/.
@@ -350,7 +355,7 @@ get_te_vims_superlearner <- function(X, po, tau, fold_indices, sl_lib,
 #
 # Adapted from SHAP_CATE-main/FUNCTIONS/functions.R::cvboost3(), with four
 # deliberate departures, all for runtime - this runs six times per array job
-# across 1100 jobs:
+# across 3300 jobs:
 #   - 3 learning rates x 3 depths (9 combos), not 8 x 3 (24)
 #   - 5-fold CV and at most 2000 rounds, not 10-fold and 10000
 #   - the tuning grid is parallelised over the workers the analysis driver has
@@ -502,6 +507,71 @@ interaction_pval_adj <- function(Y, W, X, x_top, robust = FALSE) {
   coef_pval(lm(Y ~ W * ., data = d), paste0("W:", x_top), robust)
 }
 
+###################
+# Data-driven forms of the top-covariate test
+###################
+# p_cts and p_split assume the covariate modifies the effect monotonically.
+# Scenario 4's tau = bW + b4 * cos(X4) does not: X4 is symmetric about 0, so a
+# linear W x X4 term and a median split of X4 both have essentially no power
+# even when X4 is correctly ranked top. The two forms below let chunk 1 decide
+# the shape of the test. Both are honest: the split (or score) is built from
+# chunk 1's covariate and estimated CATE only, and chunk 2's outcomes are seen
+# only by the test.
+
+#' Median split of one covariate, or the covariate itself if it is binary
+#'
+#' `xt > median(xt)` is all 0 for a binary covariate whose median is its upper
+#' value - X3 ~ Bernoulli(0.7), scenario 3's largest modifier - and the test
+#' then returns NA. A two-valued covariate is its own split.
+median_split <- function(xt) {
+  if (length(unique(xt)) == 2) as.numeric(xt == max(xt)) else as.numeric(xt > median(xt))
+}
+
+#' Split of one covariate learned on chunk 1, applied to chunk 2
+#'
+#' A depth-2 regression tree of chunk 1's estimated CATE on x_top alone. Leaves
+#' whose mean CATE is above chunk 1's mean are "high", the rest "low", so the
+#' split can be one threshold (a monotone modifier), the 0/1 of a binary
+#' covariate, or middle-vs-tails (scenario 4's cos(X4)), which a median split
+#' cannot be. cp = 0 so every run gets a split whenever tau1 varies at all - a
+#' cp-pruned tree would return no split, and an NA, on exactly the weak-signal
+#' runs, and the NA rate would then mix into the replication rate. Leaves are
+#' at least 10% of chunk 1, matching the top/bottom-10% responder groups.
+#'
+#' @param x1,x2 x_top in chunk 1 and chunk 2
+#' @param tau1 the model's chunk 1 CATE estimates
+#' @return list(high2 = 0/1 group indicator for chunk 2, cuts = the split
+#'   points, sorted; empty if the tree did not split)
+data_driven_split <- function(x1, tau1, x2) {
+  tree <- rpart(tau ~ x, data = data.frame(tau = tau1, x = x1), method = "anova",
+                control = rpart.control(maxdepth = 2, cp = 0, xval = 0,
+                                        minbucket = ceiling(0.1 * length(x1)),
+                                        maxcompete = 0, maxsurrogate = 0))
+  high2 <- as.numeric(predict(tree, newdata = data.frame(x = x2)) > mean(tau1))
+  cuts <- if (is.null(tree$splits)) numeric() else sort(unique(tree$splits[, "index"]))
+  list(high2 = high2, cuts = cuts)
+}
+
+#' Chunk 1's CATE curve in one covariate, evaluated in chunk 2
+#'
+#' The continuous counterpart of data_driven_split(): a smoothing spline (4 df)
+#' of chunk 1's estimated CATE on x_top, predicted at chunk 2's x_top, then
+#' tested as a 1-df W x g(x_top) interaction. Unlike a split it does not throw
+#' away the shape within each side. A covariate with too few distinct values for
+#' a spline (binary X1/X3) is scored as itself, which is then the same test as
+#' p_cts.
+#'
+#' @return the chunk 2 score, or NULL if it is (numerically) constant - a flat
+#'   tau1 gives a flat spline, and a W x <near-constant> coefficient is noise,
+#'   not an NA the caller can see
+projection_score <- function(x1, tau1, x2) {
+  if (length(unique(x1)) <= 4) return(x2)
+  fit <- smooth.spline(x1, tau1, df = 4)
+  g2 <- predict(fit, x2)$y
+  if (!all(is.finite(g2)) || sd(g2) <= 1e-8 * max(1, sd(tau1))) return(NULL)
+  g2
+}
+
 
 ###################
 # The four chunk comparisons
@@ -608,24 +678,35 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE) 
   # already-binary covariates alike, no arbitrary cut point), the same adjusted
   # for every other covariate (p_cts_adj - with correlated covariates a
   # non-modifier correlated with X4 shows a real *marginal* interaction), and a
-  # median split, parallel to the top10/bottom10 tests above. x_top2 is chunk
-  # 2's own winner, kept so the report can ask how often the two chunks even
-  # agree on which covariate matters most.
+  # median split, parallel to the top10/bottom10 tests above (median_split():
+  # a binary covariate is its own split). Then the two data-driven forms, whose
+  # shape chunk 1 decides (see data_driven_split()): p_dd, a depth-2 tree split
+  # of chunk 1's tau on x_top, with its cut points (dd_cuts) and chunk 2's share
+  # on the high side (dd_prop); and p_proj, a spline projection of chunk 1's tau
+  # on x_top. x_top2 is chunk 2's own winner, kept so the report can ask how
+  # often the two chunks even agree on which covariate matters most.
   top_var_tests <- list()
   for (model in models) {
     vi <- var_imps[[model]]
+    tau1 <- results1[[model]]$tau
 
     rows <- lapply(split(vi, vi$measure), function(v) {
       x_top <- v$variables[which.max(v$vi1)]
       xt <- data2[[x_top]]
+      dd <- data_driven_split(X1[[x_top]], tau1, xt)
+      g2 <- projection_score(X1[[x_top]], tau1, xt)
 
       data.frame(measure = v$measure[1],
                  x_top = x_top,
                  x_top2 = v$variables[which.max(v$vi2)],
                  p_cts = interaction_pval(data2$Y, data2$W, xt, robust),
                  p_cts_adj = interaction_pval_adj(data2$Y, data2$W, X2, x_top, robust),
-                 p_split = interaction_pval(data2$Y, data2$W,
-                                            as.numeric(xt > median(xt)), robust),
+                 p_split = interaction_pval(data2$Y, data2$W, median_split(xt), robust),
+                 p_dd = interaction_pval(data2$Y, data2$W, dd$high2, robust),
+                 dd_cuts = paste(signif(dd$cuts, 3), collapse = ";"),
+                 dd_prop = mean(dd$high2),
+                 p_proj = if (is.null(g2)) NA_real_ else
+                   interaction_pval(data2$Y, data2$W, g2, robust),
                  stringsAsFactors = FALSE)
     })
 
@@ -639,4 +720,43 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE) 
 
   list(subgroups = subgroups, variances = variances,
        var_imps = var_imps, top_var_tests = top_var_tests)
+}
+
+#' chunk_validations() with classical and HC3 standard errors, stacked
+#'
+#' What the analysis scripts save. Only the interaction tests depend on the
+#' standard errors, so chunk_validations() runs once per kind and the two are
+#' stacked under an `se` column ("classical" / "hc3"); variances and var_imps
+#' are the same in both and taken once. The second pass costs a few lm() and
+#' rpart() fits - no estimator is refitted. chunk_validations() itself keeps its
+#' one-kind shape, which cts_val_dgm_check.R and cts_val_investigation.R read.
+#'
+#' @return list(subgroups, variances, var_imps, top_var_tests), as
+#'   chunk_validations(), except that subgroups[[model]] is a data.frame(se,
+#'   top, bottom) with one row per kind, and top_var_tests[[model]] leads with
+#'   `se` and has one row per kind x measure
+chunk_validations_se <- function(results1, results2, data1, data2) {
+  kinds <- list(classical = FALSE, hc3 = TRUE)
+  vals <- lapply(kinds, function(robust)
+    chunk_validations(results1, results2, data1, data2, robust = robust))
+
+  models <- names(vals$hc3$subgroups)
+
+  subgroups <- lapply(setNames(models, models), function(model) {
+    do.call(rbind, lapply(names(kinds), function(se) {
+      p <- vals[[se]]$subgroups[[model]]
+      data.frame(se = se, top = unname(p["top"]), bottom = unname(p["bottom"]),
+                 stringsAsFactors = FALSE)
+    }))
+  })
+
+  top_var_tests <- lapply(setNames(models, models), function(model) {
+    out <- do.call(rbind, lapply(names(kinds), function(se)
+      cbind(se = se, vals[[se]]$top_var_tests[[model]], stringsAsFactors = FALSE)))
+    rownames(out) <- NULL
+    out
+  })
+
+  list(subgroups = subgroups, variances = vals$hc3$variances,
+       var_imps = vals$hc3$var_imps, top_var_tests = top_var_tests)
 }

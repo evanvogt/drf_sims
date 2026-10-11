@@ -10,7 +10,7 @@
 # below, as in me_strategies.sh.
 #PBS -l walltime=02:00:00
 #PBS -l select=1:ncpus=10:ompthreads=10:mem=16gb
-#PBS -J 1-2%1
+#PBS -J 1-32%10
 #PBS -N me_strat_rerun
 #PBS -o logs_strat_rerun/
 #PBS -e logs_strat_rerun/

@@ -97,9 +97,18 @@ read_old_metrics <- function() {
 }
 
 #' Give both runs the same columns, and an `arm` naming the run and rho
+#'
+#' The current run keeps scenario 2 (the archived run's scenario, numbered 3
+#' then) and, where metrics carry both standard-error kinds (2026-10-11 on),
+#' only its hc3 rows - otherwise every subgroup and top-covariate row would be
+#' counted once per kind.
 harmonise <- function(metrics, version) {
   lapply(metrics, function(df) {
     df <- as.data.frame(df)
+    if (version == "now") {
+      if ("scenario" %in% names(df)) df <- df[df$scenario == 2, , drop = FALSE]
+      if ("se" %in% names(df)) df <- df[df$se == "hc3", , drop = FALSE]
+    }
     if (!"rho" %in% names(df)) df$rho <- NA
     df$interim_prop <- as.numeric(as.character(df$interim_prop))
     df$arm <- if (version == "aug") "aug (indep)" else paste0("now rho=", df$rho)
@@ -223,15 +232,19 @@ run_metrics_part <- function() {
 #'
 #' The two subgroup tests (measure NA) and, per importance measure, the three
 #' top-covariate tests. p_cts_adj is NA where a run predates it.
+#' A file saved by chunk_validations_se() (2026-10-11 on) carries both
+#' standard-error kinds; its hc3 rows are taken, the kind runs saved before then.
 extract_pvals <- function(val) {
   sg <- bind_rows(lapply(names(val$subgroups), function(model) {
     p <- val$subgroups[[model]]
+    if (is.data.frame(p)) p <- unlist(p[p$se == "hc3", c("top", "bottom")])
     tibble(model = model, measure = NA_character_, x_top = NA_character_,
            test = c("subgroup_top", "subgroup_bottom"),
            p = unname(p[c("top", "bottom")]))
   }))
   tv <- bind_rows(lapply(names(val$top_var_tests), function(model) {
     t <- as.data.frame(val$top_var_tests[[model]])
+    if ("se" %in% names(t)) t <- t[t$se == "hc3", ]
     if (!"p_cts_adj" %in% names(t)) t$p_cts_adj <- NA_real_
     t %>%
       transmute(model = model, measure, x_top, p_cts, p_cts_adj, p_split) %>%
@@ -255,11 +268,15 @@ old_pvals_long <- function(old) {
     transmute(arm, se = "classical", model, measure, test, interim_prop, run, p)
 }
 
-#' Every current per-run file, under every rho_<value>/ folder present
+#' Every current scenario 2 per-run file, under every rho_<value>/ folder present
+#'
+#' Scenario 2 only: it is the scenario the archived runs used, and the one this
+#' investigation is about. The grid runs scenarios 2-4 since 2026-10-11.
 current_run_files <- function() {
   rhos <- sub("^rho_", "", list.files(study$res_path, pattern = "^rho_"))
   if (length(rhos) == 0) stop("no rho_<value>/ folders under ", study$res_path)
-  base <- unique(study$grid[, setdiff(names(study$grid), "rho"), drop = FALSE])
+  base <- unique(study$grid[study$grid$scenario == 2,
+                            setdiff(names(study$grid), "rho"), drop = FALSE])
   grid <- tidyr::crossing(rho = rhos, base)
   grid$file <- vapply(seq_len(nrow(grid)), function(i) {
     file.path(combo_dir(study, grid[i, , drop = FALSE]),
