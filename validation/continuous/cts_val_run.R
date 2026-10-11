@@ -1,9 +1,9 @@
 ##########
 # title: run the interim-analysis validation grid inside one RStudio session
 ##########
-# The no-queue alternative to `qsub jobscripts/cts_val_1.sh`. Same 1100 rows and
+# The no-queue alternative to `qsub jobscripts/cts_val_1.sh`. Same 3300 rows and
 # the same results, but 8 at a time inside an interactive session rather than
-# 1100 short array jobs waiting to be scheduled.
+# 3300 short array jobs waiting to be scheduled.
 #
 # ---- how to run it ----------------------------------------------------------
 #   request an RStudio session with 8 cores and 64gb, then
@@ -26,7 +26,7 @@
 # again. Before the DR SuperLearner was added a row took ~3 min and a full grid
 # ~7 hours here; with its TE-VIM refits a row is unmeasured but much longer, so
 # read cts_val_testing.R full's replicate time before sizing a session -
-# 1100 x <that> / 8 is the wall time.
+# 3300 x <that> / 8 is the wall time.
 #
 # ---- what it deliberately does not do ---------------------------------------
 # It never writes jobscripts/failed_ids.txt and never edits cts_val_rerun.sh.
@@ -166,7 +166,7 @@ run_rows <- function(ids) {
     for (r in running[ready]) {
       elapsed <- as.numeric(difftime(Sys.time(), r$started, units = "secs"))
       # a worker that dies takes its future's value with it; that is a failed
-      # row, not a reason to abandon the other 1099
+      # row, not a reason to abandon the other rows
       status <- tryCatch(value(r$f), error = function(e) {
         message(sprintf("        worker error on row %d: %s", r$id,
                         conditionMessage(e)))
@@ -187,8 +187,9 @@ run_rows <- function(ids) {
         sprintf("FAILED status=%d - see %s", status, basename(r$log))
       }
 
-      cat(sprintf("[%4d/%d] row %4d (interim %.2f run %3d)  %s\n",
-                  done, total, r$id, param$interim_prop, param$run, outcome))
+      cat(sprintf("[%4d/%d] row %4d (scenario %d interim %.2f run %3d)  %s\n",
+                  done, total, r$id, as.integer(param$scenario), param$interim_prop,
+                  param$run, outcome))
       utils::setTxtProgressBar(pb, done)
 
       # mean-based, so it is an estimate rather than a promise - but every row

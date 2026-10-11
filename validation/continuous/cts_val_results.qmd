@@ -1,13 +1,22 @@
 ---
-title: "Interim-analysis validation: results"
+title: "Interim-analysis validation: results, scenario `r params$scenario`"
 author: "Ellie Van Vogt"
 date: "`r Sys.Date()`"
+params:
+  scenario: 2
 format:
   html:
     toc: true
     embed-resources: true
     code-fold: true
 ---
+
+<!--
+One report per scenario. Render each with, from validation/continuous/:
+  quarto render cts_val_results.qmd -P scenario:2 --output cts_val_results_sc2.html
+  quarto render cts_val_results.qmd -P scenario:3 --output cts_val_results_sc3.html
+  quarto render cts_val_results.qmd -P scenario:4 --output cts_val_results_sc4.html
+-->
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
@@ -25,6 +34,28 @@ library(purrr)
 library(knitr)
 source(here("R", "figures.R"))
 source(here("validation/continuous/cts_val_config.R"))
+source(here("validation", "continuous", "cts_val_dgms.R"))
+```
+
+```{r scenario-truth, include=FALSE}
+scenario <- as.integer(params$scenario)
+stopifnot(scenario %in% study$grid$scenario)
+rho <- unique(study$grid$rho)
+set_name <- corr_set("continuous", rho)
+sc_row <- resolve_set(set_name)
+sc_row <- sc_row[sc_row$scenario == scenario, ]
+
+# the true modifiers, read off the scenario's te_expr (R/dgm_scenarios.R)
+modifiers <- Filter(function(v) te_uses(sc_row, v), paste0("X", 1:5))
+mod_label <- paste(modifiers, collapse = ", ")
+
+# The reference Var(tau), from one large draw of the study's own DGM rather than
+# a hand-entered constant, so it follows R/dgm_scenarios.R. calib_n = the
+# study's n keeps bW where the study has it; bW is additive and does not enter
+# the variance either way. Monte Carlo SE on 2e5 draws is ~0.3%.
+set.seed(20261011)
+true_var_tau <- var(generate_scenario_data(
+  scenario, 2e5, set = set_name, calib_n = unique(study$grid$n))$truth$tau)
 ```
 
 ## Does an interim finding survive the rest of the trial?
@@ -39,16 +70,19 @@ important covariate still interacts with treatment — replicates on the remaini
 stage. It is a robustness check for CATE-based subgroup discovery, not an
 estimator comparison.
 
+This report covers **scenario `r scenario`**. The study runs scenarios 2–4; each
+has its own render of this file.
+
 ### Design
 
 | | |
 |---|---|
-| scenario | 2, correlated continuous set at rho = 0.5 (see below) |
+| scenario | `r scenario` of 2–4, correlated continuous set at rho = `r rho` (see below) |
 | n | 1000, one trial split into its first `n * interim_prop` participants and the rest |
 | `interim_prop` | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 — **1100 array jobs** |
+| runs | 100 per scenario — **3300 array jobs** over the three scenarios |
 | folds | DR SuperLearner only: 5 for a stage below 500 rows, else 10 |
-| interaction tests | linear models with HC3 standard errors |
+| interaction tests | linear models, each with classical and HC3 standard errors. HC3 throughout, except the section comparing the two |
 
 **Estimators**: `causal_forest`, `dr_random_forest` and `dr_superlearner`
 (`R/cate_models.R`). The question is whether one estimator's own findings
@@ -72,41 +106,79 @@ the interaction test below.
 
 ### What the truth is
 
-Scenario 2 of the continuous set is `TE_10[2]`: `tau = bW + b4 * X4`, with
-`b4 = -1` and `X4 ~ N(0, 1)`. `X3` and `X5` are generated (every scenario
-draws X1–X5) but do not modify the effect. (Before the 2026-09-26 renumbering this was scenario 3,
-and results produced then sit under `scenario_3/`.)
+```{r truth-text, results='asis'}
+truth_text <- list(
+  "2" = paste0(
+    "Scenario 2 of the continuous set is `TE_10[2]`: `tau = bW + b4 * X4`, with ",
+    "`b4 = ", sc_row$b4, "` and `X4 ~ N(0, 1)`. X4 is the only modifier. `X3` and ",
+    "`X5` are generated (every scenario draws X1–X5) but do not modify the effect. ",
+    "(Before the 2026-09-26 renumbering this was scenario 3, and results produced ",
+    "then sit under `scenario_3/`.)"),
+  "3" = paste0(
+    "Scenario 3 of the continuous set is `TE_10[3]`: ",
+    "`tau = bW + b3 * X3 + b4 * X4 + b45 * X4 * X5`, with `b3 = ", sc_row$b3,
+    "`, `b4 = ", sc_row$b4, "`, `b45 = ", sc_row$b45, "`, `X3 ~ Bernoulli(",
+    sc_row$X3_prob, ")` and `X4`, `X5 ~ N(0, 1)`. Three modifiers. X3 is the largest single ",
+    "source of the heterogeneity (`b3^2 * Var(X3)` = ",
+    signif(sc_row$b3^2 * sc_row$X3_prob * (1 - sc_row$X3_prob), 2),
+    ", of a total `Var(tau)` of about ", signif(true_var_tau, 2),
+    "), so it is the covariate a working estimator should nominate ",
+    "most often. X5 modifies the effect only through its product with X4, so its ",
+    "*linear* marginal interaction is weak even though it is a true modifier.\n\n",
+    "A nominated X3 is binary. Its median split is X3 itself (before 2026-10-11 ",
+    "the split was `X3 > median(X3)`, all 0 for a Bernoulli(0.7), and `p_split` ",
+    "was NA), and the continuous, split and both data-driven forms all test the ",
+    "same 0/1 contrast."),
+  "4" = paste0(
+    "Scenario 4 of the continuous set is `TE_10[4]`: `tau = bW + b4 * cos(X4)`, with ",
+    "`b4 = ", sc_row$b4, "` and `X4 ~ N(0, 1)`. X4 is the only modifier, but the ",
+    "effect is **symmetric** in it: `cos` is even and X4 is centred on 0, so ",
+    "E[tau | X4 > 0] = E[tau | X4 < 0] and the best linear fit of tau on X4 has ",
+    "slope 0. The linear and median-split top-covariate tests (`p_cts`, ",
+    "`p_cts_adj`, `p_split`) therefore have **no power** against it even when X4 ",
+    "is correctly nominated: their rejection rate should sit near the nominal 5%. ",
+    "That is a finding about those tests, not a failure of the estimators. The ",
+    "data-driven forms are built to see it: the tree split (`p_dd`) can cut X4 ",
+    "into middle vs. tails, and the spline projection (`p_proj`) follows the ",
+    "curve. The same symmetry holds for X4's correlated proxies, whose E[tau | X] ",
+    "is even too. The top-10% responders are the participants with X4 near 0 and ",
+    "the bottom 10% those in the tails, which the subgroup tree can learn.")
+)
+cat(truth_text[[as.character(scenario)]], "\n")
+```
 
 The covariates are correlated: X1–X5 and X01–X03 come from a Gaussian copula
-with exchangeable latent correlation 0.5 (`R/dgm_scenarios.R`, CORRELATED
+with exchangeable latent correlation `r rho` (`R/dgm_scenarios.R`, CORRELATED
 COVARIATES), X1 and X3 thresholded to binary. X04 and X05 (a three-level
-categorical) are the only covariates independent of X4.
+categorical) are the only covariates independent of the modifiers.
 
 Each run is one trial of 1000, and stage 1 is its first `n * interim_prop`
 participants, so a run's stage 1 at 0.25 is nested in its stage 1 at 0.30 and
-curves across `interim_prop` are paired within run. (Before this rerun the two
-stages were drawn as two separate trials, each with its own `bW`.)
+curves across `interim_prop` are paired within run. The same run number draws
+the same participants in every scenario; only the CATE changes.
 
 Consequences used as reference lines below:
 
-- **`Var(tau) = b4^2 * Var(X4) = 1`**, in both stages and at every
-  `interim_prop`. The copula scales X4's latent column, so its variance is
-  unchanged by the correlation.
-- **X4 is the only true HTE driver.** The other nine covariates in the
-  fitted model (X1, X2, X3, X5, X01–X05) are noise as far as the CATE
-  is concerned, and X4 should rank as the single most important one in both
-  stages, under either importance measure.
-- **The noise covariates are not exchangeable.** Those correlated with X4 carry
-  some of its signal, so they should rank consistently above X04/X05 in both
-  stages. That structure inflates the stage-to-stage rank correlation without
-  any real discovery behind it. Dropping one covariate at a time also lowers X4's TE-VIM,
-  because its correlated proxies stand in for part of it.
-- **X4 is therefore the right answer to the top-variable test.** A run that
-  nominates X4 and then finds a significant `W x X4` interaction in stage 2 has
-  done the whole job correctly. A run that nominates a proxy of X4 will still
-  often find a significant *marginal* interaction (`p_cts`), because E[tau | X]
-  moves with any covariate correlated with X4. The adjusted test (`p_cts_adj`)
-  conditions on the other covariates and should not.
+- **`Var(tau)` ≈ `r signif(true_var_tau, 3)`**, in both stages and at every
+  `interim_prop`, computed by simulating the DGM. The copula scales the
+  continuous covariates' latent columns, so their marginal distributions are
+  unchanged by the correlation, and `bW` is additive, so it does not enter.
+- **The true HTE drivers are `r mod_label`.** The other covariates in the
+  fitted model are noise as far as the CATE is concerned, and a working
+  estimator should rank a true modifier most important in both stages, under
+  either importance measure.
+- **The noise covariates are not exchangeable.** Those correlated with the
+  modifiers carry some of their signal, so they should rank consistently above
+  X04/X05 in both stages. That structure inflates the stage-to-stage rank
+  correlation without any real discovery behind it. Dropping one covariate at a
+  time also lowers a modifier's TE-VIM, because its correlated proxies stand in
+  for part of it.
+- **A true modifier is the right answer to the top-variable test.** A run that
+  nominates one and then finds a significant interaction with it in stage 2 has
+  done the whole job correctly. A run that nominates a proxy will still often
+  find a significant *marginal* interaction (`p_cts`), because E[tau | X] moves
+  with any covariate correlated with a modifier. The adjusted test
+  (`p_cts_adj`) conditions on the other covariates and should not.
 
 ```{r data}
 res_path <- study$res_path
@@ -114,13 +186,21 @@ fig_path <- here("../results/all_figures/validation")
 dir.create(fig_path, showWarnings = FALSE)
 metrics <- readRDS(file.path(res_path, "cts_val_metrics.RDS"))
 
-# every estimator is shown: causal forest, DR random forest and DR SuperLearner.
-# scenario and the covariate correlation rho take one value each, so they are
-# dropped; any_of() because older metrics files carry no rho column.
-subgroups <- metrics$subgroups %>% select(-any_of(c("scenario", "rho"))) %>% apply_labels()
-variances <- metrics$variances %>% select(-any_of(c("scenario", "rho"))) %>% apply_labels()
-var_imps  <- metrics$var_imps  %>% select(-any_of(c("scenario", "rho"))) %>% apply_labels()
-top_var   <- metrics$top_var   %>% select(-any_of(c("scenario", "rho"))) %>% apply_labels()
+# this report's scenario only; rho takes one value. Every estimator is shown:
+# causal forest, DR random forest and DR SuperLearner.
+this_scenario <- function(d) {
+  d %>% filter(scenario == !!scenario) %>%
+    select(-any_of(c("scenario", "rho"))) %>% apply_labels()
+}
+subgroups_all <- this_scenario(metrics$subgroups)
+variances     <- this_scenario(metrics$variances)
+var_imps      <- this_scenario(metrics$var_imps)
+top_var_all   <- this_scenario(metrics$top_var)
+
+# HC3 is the primary standard error; the classical rows are only read by the
+# section comparing the two
+subgroups <- subgroups_all %>% filter(se == "hc3")
+top_var   <- top_var_all   %>% filter(se == "hc3")
 
 n_models <- length(unique(subgroups$model))
 
@@ -129,15 +209,24 @@ n_models <- length(unique(subgroups$model))
 # the data rather than a literal vector - there are 11 of them now, and the
 # grid is free to change again.
 MEASURE_LABELS <- c(tevim = "TE-VIM", shap = "TreeSHAP")
+SE_LABELS <- c(classical = "Classical", hc3 = "HC3")
+FORM_LABELS <- c(p_cts = "Continuous W x X",
+                 p_cts_adj = "Continuous W x X, adjusted",
+                 p_split = "Median split",
+                 p_dd = "Data-driven split (tree)",
+                 p_proj = "Spline projection")
 
 add_interim_lab <- function(d) {
   d %>% mutate(interim_lab = factor(paste0(round(interim_prop * 100), "%"),
                                     levels = paste0(round(sort(unique(interim_prop)) * 100), "%")))
 }
 
+subgroups_all <- add_interim_lab(subgroups_all)
 subgroups <- add_interim_lab(subgroups)
 variances <- add_interim_lab(variances)
 var_imps  <- add_interim_lab(var_imps)  %>%
+  mutate(measure = label_factor(measure, MEASURE_LABELS))
+top_var_all <- add_interim_lab(top_var_all) %>%
   mutate(measure = label_factor(measure, MEASURE_LABELS))
 top_var   <- add_interim_lab(top_var)   %>%
   mutate(measure = label_factor(measure, MEASURE_LABELS))
@@ -148,6 +237,9 @@ n_covariates <- length(unique(var_imps$variables))
 # the three interim points the study ran before the grid was refined - used to
 # keep the summary tables to a readable length
 landmarks <- c(0.25, 0.5, 0.75)
+
+# figure files carry the scenario, so the three renders do not overwrite each other
+fig_name <- function(stem) paste0("cts_val_", stem, "_sc", scenario, ".png")
 ```
 
 ## Data completeness
@@ -161,23 +253,6 @@ runs_present <- subgroups %>%
 kable(runs_present,
       caption = paste0("Replicates present per cell (", n_runs_expected,
                        " expected)"))
-
-# na_counts <- bind_rows(
-#   subgroups %>% summarise(across(c(top_pval, bottom_pval), ~ sum(is.na(.x)))) %>%
-#     pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
-#     mutate(table = "subgroups"),
-#   variances %>% summarise(across(c(vt1, vt2), ~ sum(is.na(.x)))) %>%
-#     pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
-#     mutate(table = "variances"),
-#   var_imps %>% summarise(across(c(vi1, vi2), ~ sum(is.na(.x)))) %>%
-#     pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
-#     mutate(table = "var_imps"),
-#   top_var %>% summarise(across(c(p_cts, p_split), ~ sum(is.na(.x)))) %>%
-#     pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
-#     mutate(table = "top_var")
-# ) %>% select(table, column, n_missing)
-# 
-# kable(na_counts, caption = "Missing values across all rows")
 ```
 
 
@@ -189,10 +264,13 @@ there.
 
 
 ```{r subgroup-long}
-subgroups_long <- subgroups %>%
-  pivot_longer(c(top_pval, bottom_pval), names_to = "which", values_to = "pval") %>%
-  mutate(which = recode(which, top_pval = "Top 10%", bottom_pval = "Bottom 10%"),
-         which = factor(which, levels = c("Top 10%", "Bottom 10%")))
+pivot_subgroups <- function(d) {
+  d %>%
+    pivot_longer(c(top_pval, bottom_pval), names_to = "which", values_to = "pval") %>%
+    mutate(which = recode(which, top_pval = "Top 10%", bottom_pval = "Bottom 10%"),
+           which = factor(which, levels = c("Top 10%", "Bottom 10%")))
+}
+subgroups_long <- pivot_subgroups(subgroups)
 ```
 
 ```{r subgroup-ecdf, fig.width=10, fig.height=8}
@@ -205,7 +283,7 @@ ggplot(subgroups_long, aes(x = pval, colour = interim_prop, group = interim_prop
   labs(title = "Cumulative distribution of stage 2 subgroup p-values",
        x = "p-value (W x subgroup interaction)", y = "Cumulative proportion",
        colour = "Interim\nproportion")
-ggsave("cts_val_sg_cumu.png", path = fig_path, width = 20, height = 6 * n_models,
+ggsave(fig_name("sg_cumu"), path = fig_path, width = 20, height = 6 * n_models,
        units = "cm")
 ```
 
@@ -237,7 +315,7 @@ ggplot(subgroup_prop, aes(x = interim_prop, y = prop_sig, colour = threshold,
   labs(title = "Proportion of successful stage 2 interaction tests",
        x = "Stage 1 proportion", y = "Proportion with p < threshold",
        colour = "Threshold", fill = "Threshold")
-ggsave("cts_val_sg_props.png", path = fig_path, width = 20, height = 6 * n_models,
+ggsave(fig_name("sg_props"), path = fig_path, width = 20, height = 6 * n_models,
        units = "cm")
 
 ```
@@ -245,7 +323,8 @@ ggsave("cts_val_sg_props.png", path = fig_path, width = 20, height = 6 * n_model
 ## CATE variance stability
 
 Does the spread of estimated treatment effects in stage 1 (`vt1`) match the
-spread in stage 2 (`vt2`)? The dashed line is the true `Var(tau) = 1`.
+spread in stage 2 (`vt2`)? The dashed line is the true `Var(tau)`
+(≈ `r signif(true_var_tau, 3)`).
 
 ```{r variance-box, fig.height=3.5 * n_models}
 tidy_variances <- variances %>%
@@ -254,13 +333,14 @@ tidy_variances <- variances %>%
   mutate(stage = recode(stage, stage1 = "stage 1", stage2 = "stage 2"))
 
 ggplot(tidy_variances, aes(x = interim_lab, y = variance, fill = stage)) +
-  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_hline(yintercept = true_var_tau, linetype = "dashed") +
   geom_boxplot(alpha = 0.6, outlier.shape = NA, position = position_dodge(width = 0.8)) +
   facet_wrap(~model, ncol = 1) +
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
   labs(title = "CATE variance in early vs. late stage",
-       subtitle = "Dashed line: true Var(tau) = 1. stage 1 grows and stage 2 shrinks left to right.",
+       subtitle = paste0("Dashed line: true Var(tau) = ", signif(true_var_tau, 3),
+                         ". stage 1 grows and stage 2 shrinks left to right."),
        x = "Interim proportion", y = "Variance of estimated CATE", fill = "stage")
 ```
 
@@ -306,9 +386,9 @@ ggplot(var_change_summary, aes(x = interim_prop, y = mean_change, colour = model
 
 `chunk_validations()` ranks each covariate's importance within a stage via
 `rank()`: **rank 1 is the least important covariate, rank `r n_covariates`
-is the most important.** X4 is the only true HTE driver, so a working
-estimator should rank it `r n_covariates` (most important) in both stages,
-under both measures.
+is the most important.** The true HTE drivers are `r mod_label`, so a working
+estimator should rank one of them `r n_covariates` (most important) in both
+stages, under both measures.
 
 ```{r rank-agreement, fig.height=5}
 rank_corr <- var_imps %>%
@@ -357,7 +437,7 @@ ggplot(mean_vi, aes(x = interim_prop, y = mean_rank, colour = variables,
   drf_theme(rotate_x = TRUE) +
   labs(title = "Mean importance rank per covariate, by stage",
        subtitle = paste0("Rank 1 = least important, ", n_covariates,
-                         " = most important. X4 is the only true HTE driver."),
+                         " = most important. True HTE drivers: ", mod_label, "."),
        x = "Interim proportion", y = "Mean rank",
        colour = "Covariate", linetype = "stage")
 ```
@@ -377,11 +457,11 @@ ggplot(top_vars, aes(x = interim_prop, y = mean_abs_change, colour = variables))
        x = "Interim proportion", y = "Mean |rank change|", colour = "Covariate")
 ```
 
-```{r x4-top, fig.height=5}
-x4_top <- var_imps %>%
+```{r modifier-top, fig.height=5}
+modifier_top <- var_imps %>%
   group_by(model, measure, interim_prop, run) %>%
-  summarise(top1 = variables[which.max(vi1)] == "X4",
-            top2 = variables[which.max(vi2)] == "X4",
+  summarise(top1 = variables[which.max(vi1)] %in% modifiers,
+            top2 = variables[which.max(vi2)] %in% modifiers,
             .groups = "drop") %>%
   group_by(model, measure, interim_prop) %>%
   summarise(runs = n(),
@@ -390,23 +470,26 @@ x4_top <- var_imps %>%
             p_top_both = mean(top1 & top2),
             .groups = "drop")
 
-ggplot(x4_top, aes(x = interim_prop, y = p_top_both, colour = measure)) +
+ggplot(modifier_top, aes(x = interim_prop, y = p_top_both, colour = measure)) +
   geom_line() +
   geom_point(size = 1.5) +
   facet_wrap(~model) +
-  scale_x_continuous(breaks = sort(unique(x4_top$interim_prop))) +
+  scale_x_continuous(breaks = sort(unique(modifier_top$interim_prop))) +
   ylim(0, 1) +
   drf_scale() +
   drf_theme(rotate_x = TRUE) +
-  labs(title = "How often the true HTE driver (X4) is ranked most important in both stages",
+  labs(title = paste0("How often a true HTE driver (", mod_label,
+                      ") is ranked most important in both stages"),
        x = "Interim proportion", y = "Proportion of runs", colour = "Measure")
 ```
 
-```{r x4-top-table}
-kable(x4_top %>% filter(interim_prop %in% landmarks), digits = 3,
+```{r modifier-top-table}
+kable(modifier_top %>% filter(interim_prop %in% landmarks), digits = 3,
       col.names = c("Model", "Measure", "Interim point", "Runs",
-                    "X4 top in stage 1", "X4 top in stage 2", "X4 top in both"),
-      caption = "How often X4 is ranked most important, at the three landmark interim points")
+                    "Modifier top in stage 1", "Modifier top in stage 2",
+                    "Modifier top in both"),
+      caption = paste0("How often a true modifier (", mod_label,
+                       ") is ranked most important, at the three landmark interim points"))
 ```
 
 ## Does the top-ranked driver replicate?
@@ -414,17 +497,31 @@ kable(x4_top %>% filter(interim_prop %in% landmarks), digits = 3,
 The point of ranking covariates is whether the winner means anything. For each
 estimator and each importance measure, `chunk_validations()` takes stage 1's
 most important covariate and tests its treatment interaction on the remaining
-trial participants — three ways: `p_cts`, the continuous `W x X_top` interaction;
-`p_cts_adj`, the `W:X_top` coefficient of `Y ~ W * (all covariates)`, i.e. the
-same interaction holding the other covariates fixed; and `p_split`, the
-marginal test after dichotomising `X_top` at its stage-2 median.
+trial participants — five ways:
+
+- `p_cts`, the continuous `W x X_top` interaction;
+- `p_cts_adj`, the `W:X_top` coefficient of `Y ~ W * (all covariates)`, i.e. the
+  same interaction holding the other covariates fixed;
+- `p_split`, the marginal test after dichotomising `X_top` at its stage-2
+  median (a binary `X_top` is its own split);
+- `p_dd`, a **data-driven split**: a depth-2 regression tree of stage 1's
+  estimated CATE on `X_top` alone, its leaves grouped into above / below stage
+  1's mean CATE, and that split carried into stage 2. It can be one threshold,
+  a binary covariate's 0/1, or middle vs. tails;
+- `p_proj`, a **spline projection**: a smoothing spline (4 df) of stage 1's
+  estimated CATE on `X_top`, evaluated at stage 2's `X_top` and tested as a
+  1-df `W x g(X_top)` interaction.
+
+Only stage 1 decides the shape of the two data-driven tests, so each is still
+an honest test in stage 2.
 
 ```{r top-var-long}
-top_var_long <- top_var %>%
-  pivot_longer(c(p_cts, p_cts_adj, p_split), names_to = "form", values_to = "pval") %>%
-  mutate(form = recode(form, p_cts = "Continuous W x X",
-                       p_cts_adj = "Continuous W x X, adjusted",
-                       p_split = "Median split"))
+pivot_top_var <- function(d) {
+  d %>%
+    pivot_longer(all_of(names(FORM_LABELS)), names_to = "form", values_to = "pval") %>%
+    mutate(form = label_factor(form, FORM_LABELS))
+}
+top_var_long <- pivot_top_var(top_var)
 
 top_var_prop <- top_var_long %>%
   mutate(is_sig = pval < 0.05) %>%
@@ -435,7 +532,7 @@ top_var_prop <- top_var_long %>%
             .groups = "drop")
 ```
 
-```{r top-var-prop, fig.height=10}
+```{r top-var-prop, fig.height=14}
 ggplot(top_var_prop, aes(x = interim_prop, y = prop_sig, colour = model,
                          ymin = prop_sig - qnorm(0.975) * mcse,
                          ymax = prop_sig + qnorm(0.975) * mcse)) +
@@ -451,30 +548,55 @@ ggplot(top_var_prop, aes(x = interim_prop, y = prop_sig, colour = model,
   scale_fill_paletteer_d("rcartocolor::Safe") +
   drf_theme(rotate_x = TRUE) +
   labs(title = "Proportion of runs where the interim's top covariate still interacts in stage 2",
-       subtitle = "Ribbon: 95% Monte Carlo interval. Dashed line: nominal 5%. The continuous form should dominate the median split.",
+       subtitle = "Ribbon: 95% Monte Carlo interval. Dashed line: nominal 5%.",
        x = "Interim proportion", y = "Proportion with p < 0.05",
        colour = "Model", fill = "Model")
+ggsave(fig_name("topvar_props"), path = fig_path, width = 20, height = 30, units = "cm")
 ```
 
-The median split throws away information and, for the already-binary X1, X3,
-X04 and X05, is not a split at all — so the gap between the continuous and
+The median split throws away information, so the gap between the continuous and
 median-split panels is the cost of dichotomising a discovered driver rather
 than testing it as it stands. The gap between the continuous and adjusted
 panels is mostly how much of the "replication" comes from nominating a proxy
-of X4 that interacts with treatment only through its correlation with X4 —
-partly, too, the power that adjusting for correlated covariates costs when X4
-itself is nominated.
+of a modifier that interacts with treatment only through its correlation with
+it — partly, too, the power that adjusting for correlated covariates costs when
+a modifier itself is nominated. The data-driven panels show what is gained when
+the shape of the test is learned rather than assumed; where the modifier is
+monotone they should track the continuous and median-split forms.
+
+```{r dd-cuts}
+# the cuts and the high-side share do not depend on the standard errors, so the
+# HC3 rows alone carry them
+dd_summary <- top_var %>%
+  filter(interim_prop %in% landmarks) %>%
+  mutate(n_cuts = ifelse(dd_cuts == "", 0L, lengths(strsplit(dd_cuts, ";")))) %>%
+  group_by(model, measure, interim_prop) %>%
+  summarise(runs = n(),
+            nominates_modifier = mean(x_top %in% modifiers),
+            no_split = mean(n_cuts == 0),
+            one_cut = mean(n_cuts == 1),
+            two_plus_cuts = mean(n_cuts >= 2),
+            mean_high_share = mean(dd_prop),
+            .groups = "drop")
+
+kable(dd_summary, digits = 3,
+      col.names = c("Model", "Measure", "Interim point", "Runs", "Nominates a modifier",
+                    "No split", "One cut", "Two or more cuts", "Mean stage 2 share high"),
+      caption = paste("The data-driven split at the three landmark interim points.",
+                      "Two or more cuts is a middle-vs-tails or banded split;",
+                      "'share high' is the stage 2 share on the high-CATE side."))
+```
 
 ```{r top-var-agreement}
 top_var_agree <- top_var %>%
   group_by(model, measure, interim_prop) %>%
   summarise(runs = n(),
-            p_x_top_is_X4 = mean(x_top == "X4"),
+            p_x_top_is_modifier = mean(x_top %in% modifiers),
             p_stages_agree = mean(x_top == x_top2),
             .groups = "drop")
 
 ggplot(top_var_agree, aes(x = interim_prop, colour = model)) +
-  geom_line(aes(y = p_x_top_is_X4, linetype = "Nominates X4")) +
+  geom_line(aes(y = p_x_top_is_modifier, linetype = "Nominates a modifier")) +
   geom_line(aes(y = p_stages_agree, linetype = "stages agree")) +
   facet_wrap(~measure) +
   scale_x_continuous(breaks = sort(unique(top_var_agree$interim_prop))) +
@@ -482,7 +604,9 @@ ggplot(top_var_agree, aes(x = interim_prop, colour = model)) +
   drf_scale() +
   drf_theme(rotate_x = TRUE) +
   labs(title = "Does the interim nominate the right covariate?",
-       subtitle = "'Nominates X4': stage 1's top covariate is the true driver. 'stages agree': both stages pick the same one, right or wrong.",
+       subtitle = paste0("'Nominates a modifier': stage 1's top covariate is one of ",
+                         mod_label, ". 'stages agree': both stages pick the same one, ",
+                         "right or wrong."),
        x = "Interim proportion", y = "Proportion of runs",
        colour = "Model", linetype = NULL)
 ```
@@ -490,14 +614,62 @@ ggplot(top_var_agree, aes(x = interim_prop, colour = model)) +
 ```{r top-var-table}
 kable(top_var_agree %>% filter(interim_prop %in% landmarks), digits = 3,
       col.names = c("Model", "Measure", "Interim point", "Runs",
-                    "Nominates X4", "stages agree"),
+                    "Nominates a modifier", "stages agree"),
       caption = "Which covariate the interim nominates, at the three landmark interim points")
+```
+
+## Classical vs. HC3 standard errors
+
+Every interaction test above was also run with classical standard errors. The
+noise is homoskedastic, but `Y ~ W * v` leaves out the prognostic X1 and X2 and
+the spread of tau within each level of `v`, so the residual variance differs
+across the `W x v` cells — most where `v` is a small (10%) responder subgroup.
+HC3 is the cell-wise variance there; the classical pooled variance comes almost
+entirely from the large cells.
+
+```{r se-compare, fig.height=3.5 * n_models}
+se_rates <- bind_rows(
+  pivot_subgroups(subgroups_all) %>%
+    transmute(model, se, interim_prop, test = paste("Subgroup:", which), pval),
+  pivot_top_var(top_var_all) %>%
+    transmute(model, se, interim_prop,
+              test = paste0("Top covariate (", measure, "): ", form), pval)
+) %>%
+  group_by(model, se, test, interim_prop) %>%
+  summarise(prop_sig = mean(pval < 0.05, na.rm = TRUE), .groups = "drop") %>%
+  mutate(se = label_factor(se, SE_LABELS))
+
+ggplot(se_rates %>% filter(grepl("^Subgroup", test)),
+       aes(x = interim_prop, y = prop_sig, colour = se)) +
+  geom_hline(yintercept = 0.05, linetype = "dashed") +
+  geom_line() +
+  geom_point(size = 1.5) +
+  facet_grid(model ~ test) +
+  scale_x_continuous(breaks = sort(unique(se_rates$interim_prop))) +
+  coord_cartesian(ylim = c(0, 1)) +
+  drf_scale() +
+  drf_theme(rotate_x = TRUE) +
+  labs(title = "Subgroup tests: proportion with p < 0.05, classical vs. HC3",
+       x = "Interim proportion", y = "Proportion with p < 0.05", colour = "Standard errors")
+```
+
+```{r se-compare-table}
+se_table <- se_rates %>%
+  filter(interim_prop %in% landmarks) %>%
+  pivot_wider(names_from = se, values_from = prop_sig) %>%
+  mutate(difference = HC3 - Classical) %>%
+  arrange(test, model, interim_prop)
+
+kable(se_table, digits = 3,
+      col.names = c("Model", "Test", "Interim point", "Classical", "HC3", "HC3 - classical"),
+      caption = paste("Proportion with p < 0.05 under each kind of standard error,",
+                      "every test, at the three landmark interim points"))
 ```
 
 ## Headline table
 
 At the three landmark interim points, to keep it readable — every panel above
-carries all eleven.
+carries all eleven. HC3 standard errors.
 
 ```{r headline-table}
 # `runs` is counted per subgroup and the two can differ (interaction_pval
@@ -528,9 +700,12 @@ headline <- subgroup_prop %>%
                           names_prefix = "rho_"),
             by = c("model", "interim_prop")) %>%
   left_join(top_var_prop %>%
-              filter(form == "Continuous W x X") %>%
-              select(model, measure, interim_prop, prop_sig) %>%
-              pivot_wider(names_from = measure, values_from = prop_sig,
+              filter(form %in% FORM_LABELS[c("p_cts", "p_dd", "p_proj")]) %>%
+              mutate(form = recode(as.character(form),
+                                   !!!setNames(c("cts", "dd", "proj"),
+                                               FORM_LABELS[c("p_cts", "p_dd", "p_proj")]))) %>%
+              select(model, measure, form, interim_prop, prop_sig) %>%
+              pivot_wider(names_from = c(form, measure), values_from = prop_sig,
                           names_prefix = "topvar_"),
             by = c("model", "interim_prop")) %>%
   arrange(model, interim_prop)
@@ -538,6 +713,8 @@ headline <- subgroup_prop %>%
 kable(headline, digits = 3,
       caption = paste("Landmark summary. sig_* = proportion of runs where that",
                       "subgroup validates; rho_* = mean rank correlation between",
-                      "stages; topvar_* = proportion where the nominated top",
-                      "covariate still interacts (continuous form)."))
+                      "stages; topvar_(form)_(measure) = proportion where the",
+                      "nominated top covariate still interacts, by the continuous",
+                      "(cts), data-driven split (dd) and spline projection (proj)",
+                      "forms."))
 ```

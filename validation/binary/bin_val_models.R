@@ -8,8 +8,9 @@
 # continuous/cts_val_models.R:
 #   family = binomial()      the DR SuperLearner's outcome model
 #                            (method.NNloglik)
-# The interaction tests' robust = TRUE is the analysis script's to pass, not
-# this file's - see bin_val_analysis.R.
+# The interaction tests' standard errors (classical and HC3, via
+# chunk_validations_se()) are the analysis script's business, not this file's -
+# see bin_val_analysis.R.
 
 source(here::here("validation", "val_common.R"))
 

@@ -8,9 +8,10 @@
 # construction.
 #
 # The same grid as continuous/cts_val_config.R, on the binary_corr_0.5 set:
-# correlated covariates at rho = 0.5, scenario 2, one trial of 1000 split at
-# eleven interim points, 100 runs. rho is a path column with the "rho_" prefix
-# the correlated studies use, so results sit under rho_0.5/.
+# correlated covariates at rho = 0.5, scenarios 2-4, one trial of 1000 split at
+# eleven interim points, 100 runs - 3 x 11 x 100 = 3300 rows. rho is a path
+# column with the "rho_" prefix the correlated studies use, so results sit under
+# rho_0.5/. Scenario 2 only until 2026-10-11.
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -21,7 +22,7 @@ study <- study_config(
   res_path = file.path(dirname(here()), "results", "validation", "binary"),
   grid = expand.grid(
     rho = 0.5,
-    scenario = 2,
+    scenario = 2:4,
     n = 1000,
     # round() is load-bearing, not cosmetic: interim_prop is a path_cols entry,
     # so its as.character() form becomes a results directory name. Unrounded,

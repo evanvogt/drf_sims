@@ -9,7 +9,12 @@
 # Correlated covariates only, at rho = 0.5 - the correlated studies' primary arm
 # (sample_size/correlated/, R/dgm_scenarios.R's CORRELATED COVARIATES). rho is a
 # path column with the same "rho_" prefix those studies use, so results sit
-# under rho_0.5/ and a rho = 0 arm would be a one-value change to the grid.
+# under rho_0.5/ and a rho = 0 arm would be a one-value change to the grid. (It
+# briefly ran both rhos, 2026-10-09; the rho_0/ results from then are outside
+# this grid and are neither checked nor collected.)
+#
+# Scenarios 2-4 (simple, complex, non-linear - R/dgm_scenarios.R, DESC_10) since
+# 2026-10-11: 3 x 11 x 100 = 3300 rows. Row 1 is still scenario 2 at 0.25, run 1.
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -19,8 +24,8 @@ study <- study_config(
   prefix   = "cts_val",
   res_path = file.path(dirname(here()), "results", "validation", "continuous"),
   grid = expand.grid(
-    rho = c(0, 0.5),
-    scenario = 2,
+    rho = 0.5,
+    scenario = 2:4,
     n = 1000,
     # round() is load-bearing, not cosmetic: interim_prop is a path_cols entry,
     # so its as.character() form becomes a results directory name. Unrounded,

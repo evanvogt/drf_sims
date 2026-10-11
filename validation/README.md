@@ -18,9 +18,10 @@ estimator comparison — it exists nowhere else in the repo.
 | `binary/` | binary outcome, risk-difference scale |
 | `val_common.R` | what both arms share — see below |
 
-Both arms run the same design: scenario 2 on the correlated (rho = 0.5) set of
-their outcome, one trial of 1000 split at eleven interim points, 100 runs, the
-same three estimators and the same four chunk comparisons. A
+Both arms run the same design: scenarios 2–4 (simple, complex, non-linear) on
+the correlated (rho = 0.5) set of their outcome, one trial of 1000 split at
+eleven interim points, 100 runs, the same three estimators and the same four
+chunk comparisons — 3300 array jobs per arm. A
 `competing_risk/` sibling would slot in the same way: its own
 `<prefix>_val_*.R` file split, `jobscripts/` and README, sourcing
 `val_common.R`.
@@ -33,16 +34,25 @@ same three estimators and the same four chunk comparisons. A
   SuperLearner's folds per chunk
 - `fit_val_methods()` — the three estimators and both importance measures on
   one chunk
-- the TE-VIM, surrogate-TreeSHAP and interaction-test helpers
-- `chunk_validations()` — the four chunk comparisons
+- the TE-VIM, surrogate-TreeSHAP and interaction-test helpers, including the
+  two data-driven top-covariate tests (`data_driven_split()`,
+  `projection_score()`)
+- `chunk_validations()` — the four chunk comparisons, for one kind of standard
+  error
+- `chunk_validations_se()` — `chunk_validations()` with classical and with HC3
+  standard errors, stacked under an `se` column
 
 Each arm's `<prefix>_val_models.R` sources it and fixes the outcome family
 (`gaussian()` / `binomial()`). Both arms' `<prefix>_val_analysis.R` call
-`chunk_validations(robust = TRUE)`, so every interaction test uses HC3 standard
-errors — see `continuous/README.md` and `binary/README.md` for why each needs
-them. This code moved out of `continuous/` unchanged when the binary arm was
-added (2026-10-08); the continuous arm's comparisons were checked identical
-before and after, while it still used classical standard errors. It switched
-to HC3 later the same day.
+`chunk_validations_se()`, so every interaction test is saved with both
+classical and HC3 standard errors. HC3 is the primary kind — see
+`continuous/README.md` and `binary/README.md` for why each arm needs it. This
+code moved out of `continuous/` unchanged when the binary arm was added
+(2026-10-08); the continuous arm's comparisons were checked identical before
+and after, while it still used classical standard errors. It switched to HC3
+later the same day, and to both kinds on 2026-10-11.
+
+Each arm's report (`<prefix>_val_results.qmd`) renders one scenario at a time,
+through a Quarto `scenario` parameter — see each arm's README.
 
 See each arm's README for its design, file roles and status.

@@ -81,11 +81,13 @@ results2$data <- data2
 results2$truth <- chunks$truth2
 
 # The four chunk comparisons: subgroups, variances, var_imps, top_var_tests.
-# robust = TRUE: with a binary Y every interaction test is a linear probability
-# model - linear in the risk, the scale the treatment effect is on - whose
-# errors are heteroskedastic by construction, so its standard errors are HC3
-# (coef_pval(), validation/val_common.R). The continuous arm uses HC3 too.
-validations <- chunk_validations(results1, results2, data1, data2, robust = TRUE)
+# Every interaction test is run with classical and with HC3 standard errors
+# (chunk_validations_se(), validation/val_common.R), stacked under an `se`
+# column. With a binary Y each test is a linear probability model - linear in
+# the risk, the scale the treatment effect is on - whose errors are
+# heteroskedastic by construction, so HC3 is the primary kind and the classical
+# one is kept for comparison. HC3 only until 2026-10-11.
+validations <- chunk_validations_se(results1, results2, data1, data2)
 
 results <- list(results1 = results1, results2 = results2, validations = validations)
 

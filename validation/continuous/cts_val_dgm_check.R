@@ -50,6 +50,8 @@
 # `vims` also fits chunk 2 and both importance measures, and scores the
 # top-covariate tests with the study's own chunk_validations(). Expect it to
 # take more than ten times as long: run it on fewer runs, or cut CELLS down.
+# Those tests include the data-driven p_dd and p_proj since 2026-10-11; a vims
+# run cached before then has no rows for them, so clear its folder to get them.
 #
 # Usage, from the repo root or validation/continuous/:
 #   Rscript cts_val_dgm_check.R [runs] [workers] [vims] [scenario=<k>] [rho=<r>]
@@ -346,7 +348,8 @@ score_vims <- function(fits1, fits2, data1, data2, sub_pvals) {
                   .groups = "drop")
       out[[length(out) + 1]] <- tv %>%
         left_join(mod_rank, by = "measure") %>%
-        pivot_longer(c(p_cts, p_cts_adj, p_split), names_to = "p_type", values_to = "p") %>%
+        pivot_longer(c(p_cts, p_cts_adj, p_split, p_dd, p_proj),
+                     names_to = "p_type", values_to = "p") %>%
         transmute(model = model, test = paste0("topvar_", measure, "_", p_type), se = se, p,
                   x_top, x_top2, p_cov = ncol(data1) - 2, mod_vi1, mod_vi2)
     }
@@ -529,6 +532,8 @@ read_real <- function() {
   if (!is.null(now) && "scenario" %in% names(now)) {
     now <- now[as.numeric(as.character(now$scenario)) == SCENARIO, ]
   }
+  # metrics carry both standard-error kinds since 2026-10-11 (chunk_validations_se())
+  if (!is.null(now) && "se" %in% names(now)) now <- now[now$se == "hc3", ]
   if (!is.null(now) && "rho" %in% names(now)) {
     rhos <- unique(as.character(now$rho))
     now <- now[as.numeric(as.character(now$rho)) == RHO, ]

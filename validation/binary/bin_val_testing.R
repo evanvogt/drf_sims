@@ -4,30 +4,33 @@
 # Run this before submitting validation/binary/jobscripts/bin_val_1.sh:
 #
 #   Rscript validation/binary/bin_val_testing.R
-#   Rscript validation/binary/bin_val_testing.R full   # adds check 7
+#   Rscript validation/binary/bin_val_testing.R full   # adds check 8
 #
 # The helpers shared with continuous/ (TE-VIMs, TreeSHAP column order,
-# interaction_pval's name-based indexing) are checked by
-# continuous/cts_val_testing.R; this covers what is binary-specific, and what a
-# binary array needs before 1100 jobs go out.
+# interaction_pval's name-based indexing, the data-driven top-covariate tests)
+# are checked by continuous/cts_val_testing.R; this covers what is
+# binary-specific, and what a binary array needs before 3300 jobs go out.
 #
 # Checks, in order:
 #   1. the packages a row needs load, including sandwich for the HC3 tests
-#   2. the grid is 1100 rows over 11 interim proportions, none of which
-#      stringifies to a float artefact (as.character() is a directory name)
+#   2. the grid is 3300 rows - rho 0.5 only, scenarios 2-4, 11 interim
+#      proportions, none of which stringifies to a float artefact
+#      (as.character() is a directory name)
 #   3. robust = TRUE gives HC3 p-values: they match a hand-computed sandwich
 #      t-test, differ from the classical ones, are not small under a null, and
 #      still return NA for a v with no contrast
-#   4. the binary DGM: Y is 0/1, tau is a risk difference driven by X4 alone,
-#      and the true Var(tau) - the reference line in bin_val_results.qmd - is
-#      printed
+#   4. the binary DGM, for each of scenarios 2-4: a trial of 1000 generates
+#      (every risk inside [0, 1]), Y is 0/1, tau is a risk difference, and its
+#      in-sample Var(tau) is printed. Scenario 2's tau is driven by X4 alone
 #   5. split_trial(): one trial of 1000 splits n1 / 1000 - n1, and a run's chunk
 #      1 at 0.25 is the first rows of its chunk 1 at 0.30 (nested, paired)
 #   6. run_all_cate_methods on one 250-row binary chunk: all three estimators,
 #      both measures, finite crossfit tau and TE-VIMs, and a step-by-step timing
-#   7. (full only) one replicate end to end with bin_val_1.sh's "1 1"
+#   7. chunk_validations_se() on check 6's fit: one row per standard-error kind,
+#      each chunk_validations()'s own, and a binary Y's p_dd / p_proj plausible
+#   8. (full only) one replicate end to end with bin_val_1.sh's "1 1"
 #      arguments: the results path, the split, all four comparisons over all
-#      three estimators, plausible p-values
+#      three estimators and both standard-error kinds, plausible p-values
 
 library(dplyr)
 library(furrr)
@@ -71,8 +74,11 @@ for (pkg in c("xgboost", "SHAPforxgboost", "sandwich",
 cat("\n=== 2. the parameter grid ===\n")
 
 props <- unique(study$grid$interim_prop)
-report(nrow(study$grid) == 1100,
-       sprintf("grid is 1100 rows (got %d)", nrow(study$grid)))
+report(nrow(study$grid) == 3300,
+       sprintf("grid is 3300 rows (got %d)", nrow(study$grid)))
+report(identical(sort(unique(study$grid$scenario)), 2:4) &&
+         identical(unique(study$grid$rho), 0.5),
+       "scenarios 2-4, rho = 0.5 only")
 report(length(props) == 11 &&
          isTRUE(all.equal(sort(props), seq(0.25, 0.75, by = 0.05))),
        "11 interim proportions, 0.25 to 0.75 in 0.05 steps")
@@ -116,16 +122,28 @@ report(is.finite(interaction_pval_adj(Y_t, W_t, X_adj, "v", robust = TRUE)),
 # =============================================================================
 cat("\n=== 4. the binary DGM ===\n")
 
+# generate_scenario_data() stops on any risk outside [0, 1], so a trial that
+# generates at all has every risk inside
+for (sc in sort(unique(study$grid$scenario))) {
+  setup_rng_stream(1)
+  gen_sc <- tryCatch(generate_binary_scenario_data(sc, 1000, study$grid$rho[1]),
+                     error = function(e) { cat("  ", conditionMessage(e), "\n"); NULL })
+  report(!is.null(gen_sc), sprintf("scenario %d: a trial of 1000 generates", sc))
+  if (is.null(gen_sc)) next
+  tau_sc <- gen_sc$truth$tau
+  report(all(gen_sc$dataset$Y %in% c(0, 1)) && all(tau_sc > -1 & tau_sc < 1),
+         sprintf("scenario %d: Y is 0/1 and tau a risk difference (range %.3f to %.3f)",
+                 sc, min(tau_sc), max(tau_sc)))
+  cat(sprintf("  NOTE  scenario %d: in-sample Var(tau) = %.5f (SD %.4f) at n = 1000\n",
+              sc, var(tau_sc), sd(tau_sc)))
+}
+
+# scenario 2's trial is the one the split and one-chunk checks below use
 setup_rng_stream(1)
 gen_big <- generate_binary_scenario_data(2, 1000, study$grid$rho[1])
-report(all(gen_big$dataset$Y %in% c(0, 1)), "Y is 0/1")
 tau_t <- gen_big$truth$tau
-report(all(tau_t > -1 & tau_t < 1), sprintf("tau is a risk difference (range %.3f to %.3f)",
-                                            min(tau_t), max(tau_t)))
 report(isTRUE(all.equal(abs(cor(tau_t, tanh(gen_big$dataset$X4))), 1)),
-       "tau is linear in tanh(X4) alone - X4 is the only modifier")
-cat(sprintf("  NOTE  in-sample Var(tau) = %.5f (SD %.4f) at n = 1000\n",
-            var(tau_t), sd(tau_t)))
+       "scenario 2: tau is linear in tanh(X4) alone - X4 is the only modifier")
 
 # =============================================================================
 cat("\n=== 5. split_trial ===\n")
@@ -165,7 +183,27 @@ for (model in names(fit_c)) {
 }
 
 # =============================================================================
-cat("\n=== 7. one replicate end to end ===\n")
+cat("\n=== 7. chunk_validations_se on a binary chunk ===\n")
+
+# check 6's fit as both chunks - the bookkeeping, and that the new p-values are
+# plausible with a 0/1 Y
+d_se <- ch25$data1
+v_se <- chunk_validations_se(fit_c, fit_c, d_se, d_se)
+v_hc <- chunk_validations(fit_c, fit_c, d_se, d_se, robust = TRUE)
+for (model in names(v_se$subgroups)) {
+  sg <- v_se$subgroups[[model]]
+  tv <- v_se$top_var_tests[[model]]
+  report(nrow(sg) == 2 && setequal(sg$se, c("classical", "hc3")) &&
+           isTRUE(all.equal(unname(unlist(sg[sg$se == "hc3", c("top", "bottom")])),
+                            unname(v_hc$subgroups[[model]][c("top", "bottom")]))),
+         sprintf("%s: subgroups, one row per kind, hc3 = chunk_validations(robust = TRUE)", model))
+  p_new <- unlist(tv[c("p_dd", "p_proj")])
+  report(nrow(tv) == 4 && all(is.na(p_new) | (p_new > 0 & p_new < 1)),
+         sprintf("%s: top_var_tests has 4 rows and plausible p_dd / p_proj", model))
+}
+
+# =============================================================================
+cat("\n=== 8. one replicate end to end ===\n")
 
 if (!run_full) {
   cat("  SKIP  (pass 'full' to run - fits both chunks and writes a results file)\n")
@@ -201,16 +239,19 @@ if (!run_full) {
     report(setequal(names(val$subgroups), models_expected),
            "every comparison covers all three estimators")
 
+    plausible <- function(p) all(is.na(p) | (p > 0 & p < 1))
+    p_cols <- c("p_cts", "p_cts_adj", "p_split", "p_dd", "p_proj")
     for (model in names(val$subgroups)) {
       sg <- val$subgroups[[model]]
-      report(all(is.na(sg) | (sg > 0 & sg < 1)),
-             sprintf("%s: subgroup p-values are plausible (%s)", model,
-                     paste(signif(sg, 3), collapse = ", ")))
+      report(is.data.frame(sg) && setequal(sg$se, c("classical", "hc3")) &&
+               plausible(c(sg$top, sg$bottom)),
+             sprintf("%s: subgroup p-values, both kinds, are plausible (%s)", model,
+                     paste(signif(c(sg$top, sg$bottom), 3), collapse = ", ")))
       tv <- val$top_var_tests[[model]]
-      report(nrow(tv) == 2 && all(c("p_cts", "p_cts_adj", "p_split") %in% names(tv)) &&
-               all(is.na(unlist(tv[c("p_cts", "p_cts_adj", "p_split")])) |
-                     is.finite(unlist(tv[c("p_cts", "p_cts_adj", "p_split")]))),
-             sprintf("%s: top_var_tests has both measures and finite or NA p-values", model))
+      report(nrow(tv) == 4 && setequal(unique(tv$se), c("classical", "hc3")) &&
+               all(p_cols %in% names(tv)) && plausible(unlist(tv[p_cols])),
+             sprintf("%s: top_var_tests has both measures x both kinds and plausible p-values",
+                     model))
     }
   }
 }
