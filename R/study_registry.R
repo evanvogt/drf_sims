@@ -46,7 +46,8 @@ study_registry <- data.frame(
     "correlated/confidence_intervals/binary",
     "correlated/confidence_intervals/optimal_sf (cts)",
     "correlated/confidence_intervals/optimal_sf (bin)",
-    "competing_risk/single_event"
+    "competing_risk/single_event",
+    "validation/binary"
   ),
   config_path = c(
     "competing_risk/surv_config.R",
@@ -63,18 +64,20 @@ study_registry <- data.frame(
     "sample_size/correlated/confidence_intervals/binary/bin_corr_ci_config.R",
     "sample_size/correlated/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R",
     "sample_size/correlated/confidence_intervals/optimal_sf/bin_corr_ci_sf_config.R",
-    "competing_risk/single_event/se_config.R"
+    "competing_risk/single_event/se_config.R",
+    "validation/binary/bin_val_config.R"
   ),
   config_var = "study",
   category = c(
-    "crossfit_rerun",
     "dgm_rerun",
     "dgm_rerun",
+    "dgm_rerun",
     "crossfit_rerun",
     "crossfit_rerun",
     "crossfit_rerun",
     "dgm_rerun",
     "crossfit_rerun",
+    "first_run",
     "first_run",
     "first_run",
     "first_run",
@@ -84,26 +87,27 @@ study_registry <- data.frame(
     "first_run"
   ),
   reason = c(
-    "crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
+    "2026-10-10 (the committed tracker predates it): get_ipw() post-horizon drop fixed (IPW arms), X4/X5 now kept as noise covariates (10 covariates), three semi-oracle DR arms added - every earlier result is stale, so archive them first (Rscript R/archive_old_results.R --label pre_2026-10-10 --trees competing_risk) and re-run all 14,000 rows. Earlier: crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
     "own comparison arms unchanged by the crossfitting change, but bug O changed the continuous DGM it runs on, and the 2026-09-26 renumbering its scenario ids (1/4/6/9 -> 1/4/6/8); old results archived; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only",
     "pilot study, not part of the production rerun; re-run because bug O changed the continuous DGM and the 2026-09-26 renumbering its scenario ids (1/6/9 -> 1/4/8); old results archived",
     "crossfitting strategy change; also bug F (dr_superlearner); plus bug O (continuous DGM) - all 12,600 rows re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 missing-data redesign - correlated covariates (X01-X03 auxiliary) and mechanisms MAR / MNAR-Y0 / MNAR-tau (missing/ADEMP.md)",
     "crossfitting strategy change; also the DGM was wrong three ways; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run; plus bug P and the risk-difference DGM - all 12,600 rows re-run, which also makes bug N moot; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 missing-data redesign - correlated covariates (X01-X03 auxiliary) and mechanisms MAR / MNAR-Y0 / MNAR-tau (missing/ADEMP.md)",
     "crossfitting strategy change; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 correlated covariates of continuous_missing (missing/ADEMP.md); plus the 2026-10-11 hybrid-band fix in combine_mi_ci() (R/bootstrap_ci.R) - the saved bands are final, so all 400 rows re-run",
     "its 358/360 runs (the first under single crossfitting, me_models.R) predate bug O, which changed the continuous DGM, and the 2026-09-26 renumbering (1/4/6/9 -> 1/4/6/8); archived with the strategies and split trees, so the count restarts from zero; plus, since 2026-10-08, correlated covariates - continuous_corr_0.5 only (sample_size/correlated/README.md), results under results/correlated/",
-    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models",
+    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models; plus the 2026-10-11 redesign - scenarios 2-4 (was scenario 2 only), rho = 0.5 correlated covariates, data-driven top-covariate tests and HC3 interaction tests: the grid is 3,300 rows (was 1,100) and nothing earlier is comparable",
     "new 2026-10-01: continuous/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/correlated/README.md)",
     "new 2026-10-01: binary/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/correlated/README.md)",
     "new 2026-10-04: confidence_intervals/continuous/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
     "new 2026-10-04: confidence_intervals/binary/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
     "new 2026-10-04: confidence_intervals/optimal_sf (cts) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
     "new 2026-10-04: confidence_intervals/optimal_sf (bin) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/correlated/confidence_intervals/README.md)",
-    "new 2026-10-04: competing_risk/'s event 1 without event 2 - pseudo-value CF / DR / T, SuperLearner DR / T, RSF DR / T and the causal survival forest on the RMST, scenarios 1-3 (null, constant, heterogeneous), censoring on/off, 500 runs (competing_risk/single_event/README.md)"
+    "new 2026-10-04: competing_risk/'s event 1 without event 2 - pseudo-value CF / DR / T, SuperLearner DR / T, RSF DR / T and the causal survival forest on the RMST, scenarios 1-3 (null, constant, heterogeneous), censoring on/off, 500 runs (competing_risk/single_event/README.md)",
+    "new 2026-10-08: the interim-analysis validation study with a binary outcome (risk-difference scale, binary_corr_0.5), scenarios 2-4, one trial of 1000 split at eleven interim points, 100 runs (validation/binary/README.md)"
   ),
   blocked = c(
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-    FALSE
+    FALSE, FALSE
   ),
   stringsAsFactors = FALSE
 )

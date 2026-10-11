@@ -99,7 +99,7 @@ before it uses the old numbers: `../collected_metrics/`, results directories,
 figures and the `results_processing/` notebooks.
 The missing-data studies use scenarios 1–6 under the same numbers. The subset
 studies run: `crossfitting/` and `model_evaluation/` 1, 4, 6, 8;
-`crossfitting/confidence_intervals/` 1, 4, 8; `validation/continuous/` 2.
+`crossfitting/confidence_intervals/` 1, 4, 8; `validation/continuous/` and `validation/binary/` 2-4 (2 only until 2026-10-11).
 
 Both outcomes are one model, `E[Y | x, W] = m0(x) + W·τ(x)`. For a binary
 outcome the treatment effect is on the **risk-difference** scale, the scale of
@@ -235,7 +235,8 @@ cd R/jobscripts; qsub archive_old_results.sh # one .tar per study, then deletes 
 Each study's tree becomes `results/_archive/pre_2026-09-26/<path>.tar`
 (uncompressed: the result files are gzipped already), and is deleted only once
 its `.tar` lists every file; `tar -xf <that .tar>` from `results/` restores it.
-Every study below then re-runs from empty. `competing_risk/` is left alone.
+Every study below then re-runs from empty. `competing_risk/` is left alone by this step; its own 2026-10-10 archive is
+`Rscript R/archive_old_results.R --label pre_2026-10-10 --trees competing_risk` (see the `competing_risk` row below).
 
 | study | |
 |---|---|
@@ -250,7 +251,11 @@ Every study below then re-runs from empty. `competing_risk/` is left alone.
 | `competing_risk` | **first run under the new strategy** — it has now adopted the crossfitting change (it was the last production study still double-crossfitting) and runs clean end-to-end. Its pseudo-value and SuperLearner frameworks each ship in several arms, because it also crosses a second factor — whole-sample vs crossfit pseudo-values. See its README |
 | `model_evaluation` | independent estimator/nuisance code (see its README), whose 9 candidates moved onto the shared single-crossfit strategy. Its 358/360 runs on that strategy predate bug O, so they are archived with the rest and the study re-runs — main, strategies and split trees |
 
-Roughly 32,000 array jobs. Bug G costs no cluster time: it is computed from the
+The table above is the September plan (roughly 32,000 array jobs) and is no longer kept up to date. The live count is
+`check_all_studies.md`, generated from `R/study_registry.R` (16 studies, about 128,000 array jobs once
+`validation/binary` and the correlated studies are included). The 2026-10-10 competing-risks fix (IPW horizon, X4/X5
+kept, semi-oracle arms) means every earlier competing-risks result is stale, whatever `check_all_studies.md` says if it
+was generated before then. Bug G costs no cluster time: it is computed from the
 saved `*_all.RDS` files, so only the metrics scripts and the figures rerun.
 
 ### Tracking the rerun
