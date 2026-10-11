@@ -10,10 +10,12 @@ Nothing here reads per-run simulation output directly — run the study's
 |---|---|
 | `thesis_figures/` | the figures that go in the thesis, one script per chapter section |
 | `thesis_tables/` | the LaTeX tables that go in the thesis |
-| `poster_figs/` | exploration tooling for choosing the ICTMC poster figures |
-| `LSR_figures.R` | figures for the LSR presentation |
-| `ictmc_figs.R` | figures for the ICTMC poster |
-| `results_10_25.Rmd`, `results_update.Rmd`, `bin_new_metrics.Rmd` | working notebooks, snapshots of earlier analyses |
+| `ICTMC_poster_planning.md` | notes from choosing the ICTMC poster figures (the poster scripts are no longer in the repo) |
+
+Each script reads `../results/<study>/..._metrics.RDS` (for example
+`../results/competing_risk/surv_metrics.RDS`) and writes under
+`../results/thesis_figures/` or `../results/thesis_tables/`. Run a script from
+its own folder: `cd results_processing/thesis_figures && Rscript surv.R`.
 
 ## `thesis_figures/`
 
@@ -21,10 +23,8 @@ Nothing here reads per-run simulation output directly — run the study's
 |---|---|
 | `sample_size.R` | the correlated sample-size studies (the chapter): per outcome, scenarios 1–4 and 5–10 (`*_supp_*`), each at ρ = 0.5 and as the paired ρ = 0.5 − ρ = 0 difference (`*_rhodiff_*`): bias/RMSE, and HTE test rejection rates at `HTE_ALPHA` (`R/figures.R`) |
 | `ss_ci.R` | the correlated CI studies, `CI_sf` sweep: per outcome, at ρ = 0, ρ = 0.5 and the paired difference, one figure per interval metric (`{cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.png`), scenarios across, n down, `CI_sf` on x; the inbuilt causal-forest interval is a flat line with its MCSE band. Coverage on a fixed y scale, length free per panel. A study with incomplete metrics is skipped. optimal_sf figures to follow |
-| `cts_ss.R`, `bin_ss.R` | the independent-covariate sample-size studies: defunct, not in the thesis |
 | `missing.R` | the continuous missing-data study (main chapter), scenarios 1–4, DR-RandomForest only: bias difference and relative efficiency against the complete-data arm, as separate figures, handling method on x, complete vs incomplete units by colour |
-| `miss_cts.R`, `miss_bin.R` | the missing-data studies (pre-2026-09-29 metrics: all-unit bias/MSE) |
-| `cts_ci.R` | continuous confidence intervals |
+| `miss_cts.R`, `miss_bin.R` | the missing-data studies on the pre-2026-09-29 metrics (all-unit bias/MSE). `missing.R` supersedes `miss_cts.R` for the continuous study; `miss_bin.R` has no equivalent yet |
 | `miss_cts_ci.R` | MI confidence intervals |
 | `surv.R` | the competing-risks study, the production arm of each estimator family (`SURV_ARM_LABELS`, `R/figures.R`): one figure per metric (CATE bias, RMSE, Pearson) at ρ = 0.5, ρ = 0 and the paired difference (`surv_{rho05,rho0,rhodiff}_{bias,rmse,corr}.png`), censoring on x, model by colour, cause-specific vs subdistribution estimand by shape, event (incl. Combined) down, scenario across |
 
@@ -67,24 +67,12 @@ Rscript ss_tables.R
 Rscript ss_test_tables.R
 Rscript ss_ci_tables.R
 Rscript miss_tables.R
+Rscript surv_tables.R
 ```
 
 The thesis preamble needs `\usepackage{booktabs, longtable, pdflscape, array}`.
 Each script's header explains its metric choices (e.g. one bias column,
 relative ATE bias but not relative CATE bias).
-
-## `poster_figs/`
-
-Exploration tooling for the ICTMC poster (`ICTMC_poster_planning.md`): several
-panels still have an open metric/encoding choice, so rather than editing
-`ictmc_figs.R` one candidate at a time, `R/candidates.R` builds every
-candidate for a panel as a named list of plots, and both
-`explore_gallery.R` (contact-sheet PNGs via patchwork, fastest to scan) and
-`explore_options.qmd` (a full-size version per candidate, click through the
-tabs) render from that same list. Piloted on the sample-size and
-missing-data panels only, since those already have working data prep
-elsewhere; once a metric is chosen, port it into `ictmc_figs.R` and repeat the
-pattern for the remaining panels.
 
 ## Regenerate after a metrics change
 
@@ -102,6 +90,3 @@ before the rename still work.
 scripts that use them, not by `R/figures.R` — a shared module should not force
 packages on callers that do not need them. If a script fails on a missing
 plotting package, that is why.
-
-The `.Rmd` notebooks are historical. They read result files that may predate the
-current metric definitions, and are not maintained.

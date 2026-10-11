@@ -105,7 +105,7 @@ scenario 2 on top of the old scenario 2 (now 5). Then collect/metrics - no
 patch step, see `missing/README.md` Status.
 
 **Re-runs required** — for the crossfitting strategy change to
-`R/cate_models.R` (see root README Methods/Status), which moves all five
+`R/cate_models.R` (see the root README's Methods and docs/DEVLOG.md's Status), which moves all five
 estimator arms, and separately for bug F (`dr_superlearner` only). Bugs B and C
 were collection/metrics problems, so re-running `cts_miss_collect.R` and
 `cts_miss_metrics.R` over the existing per-run files recovers the mechanisms

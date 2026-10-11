@@ -100,9 +100,9 @@ fit one outcome forest per arm (`R/cate_models.R::t_learner_rf`). No
 SuperLearner arm runs here (`sl_lib = NULL`), so the library change does not
 apply.
 
-`continuous/` — unaffected by the *bug ledger*, but **needs a re-run** for
-the crossfitting strategy change to `R/cate_models.R` (see root README
-Methods/Status).
+`continuous/` — unaffected by the bug ledger (`docs/DEVLOG.md`), but **needs a re-run** for
+the crossfitting strategy change to `R/cate_models.R` (see the root README's
+Methods and docs/DEVLOG.md's Status).
 
 `binary/` — **re-runs entirely.** See `binary/README.md`.
 

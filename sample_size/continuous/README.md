@@ -94,7 +94,7 @@ grows:
 |---|---|---|---|---|---|
 | realised power | 0.78–0.81 | 0.75–0.77 | 0.69–0.71 | 0.65–0.69 | 0.61–0.63 |
 
-**Before bug O** (root README), the baseline varied by scenario: b0 ran from 0.2
+**Before bug O** (`docs/DEVLOG.md`), the baseline varied by scenario: b0 ran from 0.2
 to 1, b1 was −0.05, and b2 was 1 in scenario 4 and 2 elsewhere. The calibration
 used `sd = s_err + s2 = 1.5`, which adds SDs and ignores b1 and b2, and it set
 `bW` rather than the ATE to the planned effect. The true ATE drifted by E[g]
@@ -240,7 +240,7 @@ arg, the same pattern `crossfitting/cf_analysis.R` uses.
 `cts_1.sh` now asks for one core and 2gb for an hour, and runs
 `cts_analysis.R <i> 1 1` (one worker, one grf thread). Those figures are set by
 hand. The `syrup` profiling sweep that was meant to measure them didn't work
-for this study (see the root README's "Resource profiling (removed)"). When
+for this study (see `docs/DEVLOG.md`'s "Resource profiling (removed)"). When
 changing them, size for the `n = 1000` cell, not a middle value: the array
 spans `n ∈ {100, 250, 500, 1000}` under one `#PBS -l` line. Keep
 `workers × grf_threads` within `ncpus`, and change the trailing args and the
@@ -251,7 +251,7 @@ spans `n ∈ {100, 250, 500, 1000}` under one `#PBS -l` line. Keep
 **Archive the old results first** - `R/archive_old_results.R` (root `README.md`, Status, step 0). They predate the current DGM and use the pre-2026-09-26 scenario numbers, so running into that tree would mix old and new results.
 
 **Re-runs required** — for the crossfitting strategy change to
-`R/cate_models.R` (see root README Methods/Status), which moves all five
+`R/cate_models.R` (see the root README's Methods and docs/DEVLOG.md's Status), which moves all five
 estimator arms, and separately for bug F, now fixed permanently, which changes
 `dr_superlearner`: the second-stage SuperLearner library was pretested and
 the result discarded, so failing algorithms were never dropped. Only the

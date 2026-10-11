@@ -247,7 +247,7 @@ core, raise `ncpus`, `ompthreads` and the `workers` argument together
 folds and the TE-VIM refits all run through `future_map()`, so they spread
 across the extra workers. The `syrup`
 resource sweep meant to measure the alternatives didn't work for this study
-(see the root README's "Resource profiling (removed)"). Read the replicate time
+(see `docs/DEVLOG.md`'s "Resource profiling (removed)"). Read the replicate time
 that `cts_val_testing.R full` reports against the jobscript's walltime instead.
 
 `workers` and `grf_threads` reach `cts_val_analysis.R` as trailing arguments on

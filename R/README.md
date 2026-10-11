@@ -8,7 +8,7 @@ lived in seven files, the same DGM in four, and the same collect/check
 boilerplate in eight — `sample_size/continuous/cts_models.R` and `sample_size/binary/bin_models.R`
 differed in **two** places out of 438 lines. Consolidating removed roughly 3,000
 lines and, more usefully, removed the possibility of the copies drifting apart,
-which is where most of the bugs in the ledger below came from.
+which is where most of the bugs in the ledger (`docs/DEVLOG.md`) came from.
 
 ## Files
 

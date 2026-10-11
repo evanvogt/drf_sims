@@ -96,7 +96,7 @@ made before the fix cannot be patched: the study re-runs (400 rows).
 ## Status
 
 **Needs a re-run** — the crossfitting strategy change to `R/cate_models.R`
-(see root README Methods/Status) affects the estimators used here even
+(see the root README's Methods and docs/DEVLOG.md's Status) affects the estimators used here even
 though there's no SuperLearner arm. Bug F does not apply (no SuperLearner
 arm), but bug O does: it changed the `continuous_missing` baseline and `bW`
 this study generates from (`missing/continuous/README.md`). Archive any old

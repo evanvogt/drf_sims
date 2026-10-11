@@ -153,7 +153,7 @@ treated-risk floor and ceiling for every binary scenario at every n, and for
 `missing/binary/`. `Rscript bin_verify_hte.R` (from `sample_size/binary/`) checks the
 design end to end. See `continuous/README.md` for when to run them.
 
-**Before bug P** (root README), `bW` was calibrated for 75% power at the risk
+**Before bug P** (`docs/DEVLOG.md`), `bW` was calibrated for 75% power at the risk
 plogis(b0) = 0.401 — the risk at X1 = X2 = 0, not the population's 0.453 — and
 set to the planned log-odds ratio rather than the ATE. So `bW` was the same in
 every scenario, the true RD drifted with g, and power ran from 5% (scenario 4 at
@@ -262,7 +262,7 @@ qsub sample_size/binary/jobscripts/bin_metrics.sh
 **Archive the old results first** - `R/archive_old_results.R` (root `README.md`, Status, step 0). They predate the current DGM and use the pre-2026-09-26 scenario numbers, so running into that tree would mix old and new results.
 
 **Re-runs required** — for the crossfitting strategy change to
-`R/cate_models.R` (see root README Methods/Status), which moves all five
+`R/cate_models.R` (see the root README's Methods and docs/DEVLOG.md's Status), which moves all five
 estimator arms, and separately for bug F, which changes `dr_superlearner` as
 in `continuous/`. Only the `dr_superlearner` arm moves for bug F specifically;
 the harness can confirm the other four are unchanged there.

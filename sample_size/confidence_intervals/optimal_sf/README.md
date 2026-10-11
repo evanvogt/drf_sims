@@ -60,7 +60,7 @@ rows, so every array index was renumbered. Results are saved by
 scenario 5–10 results on disk are simply ignored.
 
 **Both variants re-run.** The crossfitting strategy change to
-`R/cate_models.R` (see root README Methods/Status) affects the point
+`R/cate_models.R` (see the root README's Methods and docs/DEVLOG.md's Status) affects the point
 estimates this calibration treats as plug-in truth, so:
 
 `cts_ci_sf_analysis.R` re-runs for that reason alone.

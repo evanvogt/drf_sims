@@ -506,7 +506,7 @@ the repo. The rendered `.html` is gitignored, as every other study's report is.
 
 `me_1.sh`'s `#PBS -l` lines and trailing `Rscript` args (`workers`/`n_cores`)
 are set by hand, never measured: the `syrup` profiling sweep meant to replace
-them didn't work for this study (see the root README's "Resource profiling
+them didn't work for this study (see `docs/DEVLOG.md`'s "Resource profiling
 (removed)"). Since 2026-10-08 they are:
 
 | jobscript | select | trailing args |
