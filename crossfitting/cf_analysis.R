@@ -84,7 +84,6 @@ results <- list(
 
 # Save results
 output_dir <- file.path(dirname(path), "results", "crossfitting", paste0("scenario_", scenario))
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
+save_run(results, output_dir, run)
 
 print("Simulation completed!")

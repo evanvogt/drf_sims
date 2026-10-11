@@ -91,7 +91,6 @@ print(t1 - t0)
 
 # save results, under the path check/collect expect (combo_dir())
 output_dir <- combo_dir(study, param)
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
+save_run(results, output_dir, run)
 
 print("Simulation completed!")

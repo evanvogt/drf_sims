@@ -205,7 +205,6 @@ results <- list(
 print(results$fits)
 
 output_dir <- combo_dir(study, param)
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, file.path(output_dir, paste0("res_sim_", param$run, ".RDS")))
+save_run(results, output_dir, param$run)
 
 print("Timing completed!")

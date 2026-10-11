@@ -109,7 +109,6 @@ results <- c(model_list, list(
 # Save results - to combo_dir(), the path me_strategies.R and me_split.R read
 # their source runs from, so the three trees follow study$res_path together
 output_dir <- combo_dir(study, param)
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
+save_run(results, output_dir, run)
 
 print("Simulation completed!")

@@ -164,7 +164,6 @@ results <- c(model_list, list(
 ))
 
 output_dir <- combo_dir(study_split, param)
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
+save_run(results, output_dir, run)
 
 print("Single-split arm completed!")

@@ -91,7 +91,6 @@ results$retained_indices <- gen$retained_indices
 
 # Save results
 out_path <- file.path(dirname(here()), "results", "missing", "ci_example", paste0("scenario_", scenario), n, type, prop, mechanism, method)
-dir.create(out_path, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, file.path(out_path, paste0("res_sim_", run, ".RDS")))
+save_run(results, out_path, run)
 
 print("Simulation completed!")

@@ -171,7 +171,6 @@ results$pi_diagnostics <- pi_diag
 results$strategies_model_seed <- model_seed
 
 output_dir <- combo_dir(study_strat, param)
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
+save_run(results, output_dir, run)
 
 print("Nuisance-arm pass completed!")

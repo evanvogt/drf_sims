@@ -26,6 +26,34 @@ setup_rng_stream <- function(trial_num, seed = 1998) {
   }
 }
 
+#' Save one run's results so a half-written file can never look finished
+#'
+#' check_failed() and get_results() decide a run is done because its
+#' res_sim_*.RDS file exists. A job killed by its walltime in the middle of
+#' saveRDS() would leave a truncated file that passes that test and then stops
+#' the collect step with "unexpected end of file". So the file is written under
+#' a name those functions ignore, in the same directory (so the rename stays on
+#' one file system), and renamed to its final name only once complete.
+#'
+#' @param results the run's results list
+#' @param dir the run's results directory (created if needed)
+#' @param run the run number
+#' @return the final path, invisibly
+save_run <- function(results, dir, run) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  final <- file.path(dir, paste0("res_sim_", run, ".RDS"))
+  tmp <- file.path(dir, paste0(".tmp_res_sim_", run, ".RDS"))
+  saveRDS(results, tmp)
+  # rename() replaces an existing file on Linux; on Windows it refuses to, so
+  # fall back to copy-over for local smoke runs
+  if (!file.rename(tmp, final)) {
+    ok <- file.copy(tmp, final, overwrite = TRUE)
+    unlink(tmp)
+    if (!ok) stop("save_run: could not write ", final, call. = FALSE)
+  }
+  invisible(final)
+}
+
 # ---- fold bookkeeping -------------------------------------------------------
 
 #' Assemble double-crossfitting predictions into an n x V matrix

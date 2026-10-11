@@ -96,8 +96,7 @@ results <- list(results1 = results1, results2 = results2, validations = validati
 # under the path check/collect expect (combo_dir()) - built by hand here it would
 # not follow path_cols, which now lead with rho
 output_dir <- combo_dir(study, param)
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-saveRDS(results, file.path(output_dir, paste0("res_sim_", run, ".RDS")))
+save_run(results, output_dir, run)
 
 print(paste0("All methods for rho ", rho, " scenario ", scenario, "_", n,
              " interim ", interim_prop, " run ", run, " completed successfully!"))
