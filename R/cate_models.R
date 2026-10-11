@@ -855,6 +855,22 @@ run_independence_test_whole <- function(X, tau) {
   })
 }
 
+#' p-value of a run_independence_test_whole() result, NA if the test failed
+#'
+#' A failed test is saved as p = 1 (run_independence_test_whole's error
+#' handler), which a rejection rate would count as "not significant" and so
+#' under-report power. Metrics read the p-value through this instead, so a
+#' failure is an NA, counted in n_na_indep_* by summarise_metrics(), as a
+#' constant tau already is. Results saved before this carry the p = 1 and the
+#' method field, so no re-run is needed.
+#' @param test a run_independence_test_whole() result, or NULL
+indep_p_value <- function(test) {
+  if (is.null(test) || identical(test$method, "independence_test_failed")) {
+    return(NA_real_)
+  }
+  as.numeric(test$p_value)
+}
+
 #' BLP and independence tests run on the true CATE and true nuisances
 #'
 #' The oracle counterpart of the per-estimator BLP_whole / independence_cate
@@ -895,7 +911,7 @@ true_cate_test_row <- function(sim_res) {
   tibble::tibble(
     BLP_p = blp_p_value(out$BLP_whole, "two"),
     BLP_p_os = blp_p_value(out$BLP_whole_hc3, "one"),
-    indep_cate = as.numeric(out$independence_cate$p_value)
+    indep_cate = indep_p_value(out$independence_cate)
   )
 }
 

@@ -147,7 +147,9 @@ cate_metrics_split <- function(est, true, scenario, miss_mask, retained,
 #'               needs sim_res and model, and is NA without them
 #'   indep_cate  NA when tau is constant: coin returns p ~ 0 for a constant
 #'               response rather than failing (is_constant()), and results
-#'               saved before that guard carry that p
+#'               saved before that guard carry that p. Also NA when the test
+#'               itself failed (method "independence_test_failed", saved as
+#'               p = 1) - see indep_p_value()
 #'   indep_po    NA for causal_forest, which shares dr_random_forest's
 #'               pseudo-outcome (nuisances_rf$po) - the value is reported once,
 #'               under dr_random_forest. NA for the T-learners too, for the
@@ -168,14 +170,10 @@ hte_test_metrics <- function(model_res, sim_res = NULL, model = NULL) {
     }
   }
 
-  indep_cate <- if (!is.null(model_res$independence_cate)) {
-    as.numeric(model_res$independence_cate$p_value)
-  } else NA_real_
+  indep_cate <- indep_p_value(model_res$independence_cate)
   if (!is.null(model_res$tau) && is_constant(model_res$tau)) indep_cate <- NA_real_
 
-  indep_po <- if (!is.null(model_res$independence_po)) {
-    as.numeric(model_res$independence_po$p_value)
-  } else NA_real_
+  indep_po <- indep_p_value(model_res$independence_po)
   if (identical(model, "causal_forest")) indep_po <- NA_real_
 
   tibble(
