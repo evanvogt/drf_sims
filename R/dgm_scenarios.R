@@ -363,19 +363,24 @@ SCENARIO_SETS$binary_missing_fixed <- transform(
 # floor went below 0, so it takes its own scale (RD_SCALE_CORR).
 CORR_RHOS <- c(0, 0.5)
 corr_set <- function(outcome, rho) paste0(outcome, "_corr_", rho)
-for (r in CORR_RHOS) {
-  SCENARIO_SETS[[corr_set("continuous", r)]] <-
-    transform(SCENARIO_SETS$continuous, rho = r)
-  SCENARIO_SETS[[corr_set("binary", r)]] <- transform(
-    SCENARIO_SETS$binary,
-    b3 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b3,
-    b4 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b4,
-    b34 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b34,
-    b45 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b45,
-    rho = r
+# built by lapply() rather than a for loop, so no loop variable is left behind in
+# whoever sourced this file (a trailing rm(r) used to delete any global `r`)
+SCENARIO_SETS <- c(SCENARIO_SETS, unlist(lapply(CORR_RHOS, function(rho) {
+  setNames(
+    list(
+      transform(SCENARIO_SETS$continuous, rho = rho),
+      transform(
+        SCENARIO_SETS$binary,
+        b3 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b3,
+        b4 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b4,
+        b34 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b34,
+        b45 = -RD_SCALE_CORR * SCENARIO_SETS$continuous$b45,
+        rho = rho
+      )
+    ),
+    c(corr_set("continuous", rho), corr_set("binary", rho))
   )
-}
-rm(r)
+}), recursive = FALSE))
 
 # which sets produce a binary outcome
 BINARY_SETS <- c("binary", "binary_missing", corr_set("binary", CORR_RHOS))
