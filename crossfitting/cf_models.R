@@ -63,37 +63,6 @@ generate_cf_replicate <- function(scenario, n, n_test = 2000) {
        bW = gen$bW)
 }
 
-# ---- helpers ----------------------------------------------------------------
-
-# AIPW / DR pseudo outcome
-dr_pseudo <- function(Y, W, Y1.hat, Y0.hat, W.hat) {
-  Y.hat <- W * Y1.hat + (1 - W) * Y0.hat
-  cate <- Y1.hat - Y0.hat
-  cate + ((Y - Y.hat) * (W - W.hat)) / (W.hat * (1 - W.hat))
-}
-
-# trim propensities away from 0/1, in every arm identically so that no arm blows
-# up on a technicality (R/cate_models.R now trims the same way, RF and SL alike).
-# W is randomised 0.5 in the DGP so this rarely binds.
-trim_ps <- function(p, lo = 0.05, hi = 0.95) pmin(pmax(p, lo), hi)
-
-# evaluate an expression, returning its value alongside elapsed seconds
-timed <- function(expr) {
-  t <- system.time(val <- expr)
-  list(value = val, time = unname(t["elapsed"]))
-}
-
-# reassemble leave-one-fold-out predictions into full length vectors
-scatter_folds <- function(reslist, fold_indices, targets) {
-  out <- lapply(targets, function(nm) {
-    v <- rep(NA_real_, length(fold_indices))
-    for (res in reslist) v[fold_indices == res$fold] <- res[[nm]]
-    v
-  })
-  names(out) <- targets
-  out
-}
-
 # ---- stage 1: nuisance estimation (random forest) ---------------------------
 
 # one train/test split's RF nuisances. The outcome model is production's per-arm
@@ -229,7 +198,7 @@ stage2_crossfit_rf <- function(X, po, X_test, fold_indices, num.threads = NULL) 
 # normal_interval. Note it treats po as a known outcome, so like the bootstrap it
 # carries no first-stage nuisance uncertainty. predict() does not consume R's RNG
 # stream, so asking for the variance leaves every point estimate unchanged.
-stage2_whole_rf <- function(X, po, X_test, num.threads = NULL) {
+cf_stage2_whole_rf <- function(X, po, X_test, num.threads = NULL) {
   forest <- regression_forest(X, po, num.threads = num.threads)
   p_oob <- predict(forest, estimate.variance = TRUE)
   list(tau_oob = p_oob$predictions,
@@ -295,7 +264,7 @@ cf_foldwise <- function(X, Y, W, X_test, Y.hat, W.hat, fold_indices, num.threads
 # whole-sample causal forest: its OOB predictions and its test-set predictions.
 # Y.hat / W.hat NULL falls back to grf's own internally cross-fit OOB nuisances.
 #
-# var_oob mirrors stage2_whole_rf's. The fitted hats are returned too, named to
+# var_oob mirrors cf_stage2_whole_rf's. The fitted hats are returned too, named to
 # the nuisance-object convention: cf_default supplies none of its own, so this is
 # the only way its half-sample bootstrap can hold nuisances fixed the way every
 # other arm's does (R/bootstrap_ci.R's cf_oob_half_boot).
@@ -395,12 +364,12 @@ run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
   arms$scf_scf <- arm("dr_rf", "scf_scf", s$value$tau, s$value$tau_test, nz_single$time, s$time,
                       s$value$tau_test_folds, truth_test)
 
-  s <- timed(stage2_whole_rf(X, nz_single$value$po, X_test, num.threads))
+  s <- timed(cf_stage2_whole_rf(X, nz_single$value$po, X_test, num.threads))
   arms$scf_oob <- arm("dr_rf", "scf_oob", s$value$tau_oob, s$value$tau_test,
                       nz_single$time, s$time, truth_test = truth_test,
                       variance = s$value$var_oob)
 
-  s <- timed(stage2_whole_rf(X, nz_oob$value$po, X_test, num.threads))
+  s <- timed(cf_stage2_whole_rf(X, nz_oob$value$po, X_test, num.threads))
   arms$oob_oob <- arm("dr_rf", "oob_oob", s$value$tau_oob, s$value$tau_test,
                       nz_oob$time, s$time, truth_test = truth_test,
                       variance = s$value$var_oob)

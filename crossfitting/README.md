@@ -156,7 +156,7 @@ The OOB arms carry a **third** interval, `grf_normal`. For a whole-sample forest
 grf returns OOB variance estimates (bootstrap of little bags) alongside the
 predictions at no extra compute, and `R/metrics.R`'s `normal_interval()` — the
 same function `sample_size/confidence_intervals/binary/` uses for its `causal_forest_inbuilt`
-method — turns those into a CI. `stage2_whole_rf`/`cf_whole` now return
+method — turns those into a CI. `cf_stage2_whole_rf`/`cf_whole` now return
 `var_oob`, and `arm()` carries it; the 4 crossfit arms have none, and downstream
 code keys off exactly that.
 
@@ -254,8 +254,8 @@ Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
 `nuisance_rf`, `sl_split_fit`, `nuisance_sl`) and, via `R/sl_library.R`,
 `pretest_superlearner`, the per-nuisance SuperLearner libraries and
 `sl_fit_predict`. `cf_testing.R` section 1 checks that `oob_oob` reproduces
-production's `dr_random_forest` bit-for-bit (production's `stage2_whole_rf` is
-masked by this folder's, so the check sources `R/cate_models.R` into an
+production's `dr_random_forest` bit-for-bit (this folder's stage-2 function is `cf_stage2_whole_rf`, renamed from
+`stage2_whole_rf` so it no longer masks production's; the check still sources `R/cate_models.R` into an
 environment of its own), and section 1b that each arm's outcome forest never
 sees the other arm's outcomes.
 

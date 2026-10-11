@@ -47,10 +47,10 @@ report <- function(ok, msg) {
 cat("\n=== 1. regression check: oob_oob against R/cate_models.R ===\n")
 # oob_oob is production's dr_random_forest: nuisance_rf (which nuisance_oob_rf
 # calls straight through) feeding a whole-sample OOB stage-2 forest. The stage-2
-# forest is this folder's own stage2_whole_rf, which masks production's (a
-# different signature) once cf_models.R is sourced - so production's is sourced
-# into an environment of its own and the two pipelines are compared from the
-# same RNG state. They should be bit-identical.
+# forest is this folder's own cf_stage2_whole_rf (renamed from stage2_whole_rf,
+# which masked production's, a different signature). Production's is still
+# sourced into an environment of its own so the two pipelines are compared from
+# the same RNG state. They should be bit-identical.
 
 prod <- new.env()
 sys.source(here("R", "cate_models.R"), envir = prod)
@@ -71,7 +71,7 @@ tau_prod <- prod$stage2_whole_rf(X, nz_prod$po, num.threads = grf_threads)$tau
 
 setup_rng_stream(7)
 nz_oob <- nuisance_oob_rf(X, Y, W, num.threads = grf_threads)
-tau_oob <- stage2_whole_rf(X, nz_oob$po, gen$X_test, num.threads = grf_threads)$tau_oob
+tau_oob <- cf_stage2_whole_rf(X, nz_oob$po, gen$X_test, num.threads = grf_threads)$tau_oob
 
 report(identical(nz_prod$po, nz_oob$po),
        "oob_oob pseudo-outcomes are production nuisance_rf's")
