@@ -77,8 +77,8 @@ each nominates its own top covariate for the interaction test below.
 Both are larger-is-more-important, so `rank()` means the same thing for each.
 
 **New dependencies**: `xgboost` and `SHAPforxgboost`, used nowhere else in this
-repo. `renv` is not wired up here (see `.claude/CLAUDE.md`), so they must be
-installed into the cluster's `sim-env` R library by hand — `cts_val_testing.R`
+repo. They are in `environment.yml`; a fresh install of `sim-env` must include them, and
+they must otherwise be installed into the cluster's `sim-env` R library by hand — `cts_val_testing.R`
 check 1 is there to catch their absence before 3300 jobs go out.
 
 ## What is compared across chunks

@@ -89,9 +89,10 @@ sibling. <!-- add the location of the deposited *_metrics.RDS files here -->
 
 ### Software
 
-The cluster ran R 4.3.2 (module `R/4.3.2-gfbf-2023a`) in a conda environment,
-`sim-env`. The package versions used are not yet pinned in this repository;
-see "Dependencies" at the end for the package list.
+The results were produced on Imperial's cluster with R 4.3.2 from the conda
+environment `sim-env`, whose exact contents are in `environment.yml`; the
+versions of the packages the code loads are in `sessionInfo_cluster.txt`. See
+"Dependencies" at the end.
 
 ## Layout
 
@@ -287,19 +288,35 @@ the baseline is an equivalence reference for the next refactor again.
 The harness fingerprints generated datasets, estimates **and** saved nuisance
 structure, and runs each study in its own subprocess. It proves the code
 reproduces the current behaviour on this machine; it is not a claim about the
-cluster's numbers (R 4.5.3 locally vs 4.3.2 there).
+cluster's numbers (R 4.5.3 and newer packages locally, R 4.3.2 there - see Dependencies).
 
 ## Dependencies
 
-renv isn't pinned yet — there's an `renv/` folder but no `.Rprofile` or
-committed `renv.lock`, so `renv::restore()` currently has nothing to restore
-from. Until a lockfile exists, install directly:
+Every result was produced inside one conda environment on the cluster,
+`sim-env`, recreated with
 
-```r
-install.packages(c("grf", "SuperLearner", "GenericML", "pseudo", "coin",
-  "furrr", "future", "ranger", "glmnet", "gam", "earth", "mice",
-  "missForest", "dplyr", "here"))
+```bash
+conda env create -f environment.yml
 ```
 
-**TODO:** once the package set stabilizes, run `renv::snapshot()` and commit
-`renv.lock`, then switch this section back to `renv::restore()`.
+`environment.yml` is `conda env export --no-builds` of it, so it pins R and
+every package, and `sessionInfo_cluster.txt` is the `sessionInfo()` of a session
+with all the study packages loaded. The packages the studies depend on, at the
+versions that ran:
+
+| | version | | version |
+|---|---|---|---|
+| R | 4.3.2 | `randomForestSRC` | 3.2.2 |
+| `grf` | 2.4.0 | `pseudo` | 1.4.3 |
+| `SuperLearner` | 2.0-29 | `mice` | 3.17.0 |
+| `GenericML` | 0.2.2 | `missForest` | 1.5 |
+| `coin` | 1.4-3 | `xgboost` | 1.7.11.1 |
+| `ranger`, `glmnet`, `gam`, `earth` | 0.17.0, 4.1-8, 1.22-5, 5.3.4 | `SHAPforxgboost` | 0.2.0 |
+| `future`, `furrr` | 1.67.0, 0.3.1 | `h2o` | 3.44.0.3 |
+
+**The local machine is not the same.** Smoke tests, `tests/run_tests.R` and
+`R/regression_check.R` were run locally on R 4.5.3 with newer packages (for
+example `grf` 2.5.0, `mice` 3.19.0, `randomForestSRC` 3.9.0, `xgboost` 3.2.1.1).
+Anything checked only locally, such as the `grf` weight-scale behaviour noted in
+`R/missingness.R`, may differ on the cluster. Use `environment.yml` to reproduce
+the cluster's numbers.

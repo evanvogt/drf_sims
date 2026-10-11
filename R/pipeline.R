@@ -21,9 +21,9 @@
 # A study now declares its grid once, in <study>/<prefix>_config.R, and every
 # script reads it from there. The array index is always a row of `grid`.
 
-require(dplyr)
-require(purrr)
-require(tibble)
+library(dplyr)
+library(purrr)
+library(tibble)
 
 #' Declare a study
 #'
@@ -456,7 +456,7 @@ get_results <- function(study, workers = 2) {
   }
 
   if (workers > 1) {
-    require(future); require(furrr)
+    library(future); library(furrr)
     future::plan(future::multisession, workers = workers)
     on.exit(future::plan(future::sequential), add = TRUE)
     all_results <- furrr::future_map(seq_len(nrow(cmb)), read_combo)

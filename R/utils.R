@@ -5,7 +5,7 @@
 # file, kept only because case_study/ relies on whatever drives it to have
 # loaded that shim first - case_study/ is outside the scope of the restructure.
 
-require(parallel)
+library(parallel)
 
 # ---- reproducibility --------------------------------------------------------
 

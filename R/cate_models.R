@@ -47,13 +47,13 @@
 #     T-learner: one SuperLearner per arm (libraries in R/sl_library.R).
 # See crossfitting/cf_models.R for the full arm comparison these three replace.
 
-require(coin)
-require(grf)
-require(SuperLearner)
-require(GenericML)
-require(future)
-require(furrr)
-require(dplyr)
+library(coin)
+library(grf)
+library(SuperLearner)
+library(GenericML)
+library(future)
+library(furrr)
+library(dplyr)
 
 source(here::here("R", "utils.R"))        # collate_predictions, setup_rng_stream
 source(here::here("R", "bootstrap_ci.R")) # cf_half_boot, rf_half_boot

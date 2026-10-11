@@ -87,7 +87,7 @@
 # sign of the modifiers. Binary scenario 10 now draws X3, which it did not
 # before.
 
-require(dplyr)
+library(dplyr)
 
 # ---- scenario tables --------------------------------------------------------
 

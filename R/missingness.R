@@ -8,9 +8,9 @@
 # and the imputation count is an argument. The mechanisms are MISS_MECHS
 # (R/dgm_scenarios.R) since 2026-09-28; the old names are rejected.
 
-require(dplyr)
-require(mice)
-require(missForest)
+library(dplyr)
+library(mice)
+library(missForest)
 
 source(here::here("R", "dgm_scenarios.R"))
 
@@ -146,7 +146,7 @@ introduce_missingness <- function(data, type, prop, mech, U = NULL) {
     weights[, length(covs)] <- 1
   }
 
-  # mice::ampute (3.19.0, ampute.continuous()) has an edge case: a pattern with
+  # mice::ampute (3.19.0 locally; the cluster ran 3.17.0, ampute.continuous()) has an edge case: a pattern with
   # exactly one candidate whose weighted sum score is 0 gets the response
   # indicator R <- 0, a scalar, which recycles over EVERY row - so that
   # pattern's variables go missing for the whole dataset, and rows turn up with
@@ -288,7 +288,8 @@ handle_missingness <- function(data, method, n_imp = 50) {
       complete_data <- data[retained_indices, ]
       # stabilised by the marginal P(complete), so the weights average about 1
       # over the complete cases. A constant rescaling, but not a no-op: grf
-      # (2.5.0) forests change with the weights' scale - constant weights of 1
+      # (2.5.0, the local version - the cluster ran 2.4.0, which this was not
+      # checked on) forests change with the weights' scale - constant weights of 1
       # reproduce the unweighted forest exactly, constant weights of 1.43
       # (= 1 / 0.7, the unstabilised scale) do not - so stabilising keeps the
       # weighted forests on the same footing as every other arm's

@@ -8,10 +8,10 @@
 # near-identical copies. The others differed only in which grouping columns they
 # carried and in guarding against absent HTE tests.
 
-require(dplyr)
-require(tibble)
-require(tidyr)   # unnest_longer
-require(purrr)   # map, map_int
+library(dplyr)
+library(tibble)
+library(tidyr)   # unnest_longer
+library(purrr)   # map, map_int
 
 source(here::here("R", "utils.R"))   # CATE_MODELS
 

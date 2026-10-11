@@ -364,7 +364,8 @@ get_te_vims_superlearner <- function(X, po, tau, fold_indices, sl_lib,
 #     is needed for SHAP and the round count comes off the evaluation log, so
 #     saving the fold models was pure memory - and it also avoids the callback
 #     having been renamed cb.cv.predict -> xgb.cb.cv.predict at xgboost 2.0,
-#     which would otherwise tie this to a version nothing in this repo pins.
+#     which would otherwise tie this to one xgboost version (the cluster ran
+#     1.7.11.1; see environment.yml).
 
 CVBOOST_ETAS <- c(0.01, 0.05, 0.1)
 CVBOOST_DEPTHS <- 2:4

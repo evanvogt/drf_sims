@@ -26,9 +26,9 @@
 # All four share an argument order and count so a single table-driven loop can
 # drive them (see crossfitting/confidence_intervals/cf_ci_analysis.R).
 
-require(grf)
-require(future)
-require(furrr)
+library(grf)
+library(future)
+library(furrr)
 
 #' Draw a fold-stratified half sample
 #'

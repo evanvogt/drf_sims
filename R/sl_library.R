@@ -48,7 +48,7 @@
 # sl_fit_predict(), which predicts through SuperLearner's own newX at fit time;
 # their predict methods stop() rather than mispredict.
 
-require(SuperLearner)
+library(SuperLearner)
 
 # ---- libraries --------------------------------------------------------------
 
