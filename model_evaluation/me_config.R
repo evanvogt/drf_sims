@@ -10,8 +10,21 @@
 #
 # Scenario set is deliberately 4, not all 10: this study's research question
 # (do cheap proxy losses rank 9 candidate models the way true PEHE would?)
-# doesn't need every CATE-structure re-litigated, the same reasoning
-# crossfitting/cf_analysis.R uses for its own scenario = c(1, 4, 6, 8).
+# doesn't need every CATE-structure re-litigated. The 4 are the main ones
+# every other study reports - 1 null, 2 simple, 3 complex, 4 non-linear (see
+# R/dgm_scenarios.R's SCENARIO NUMBERING) - since 2026-10-11. Until then the
+# grid was c(1, 4, 6, 8), crossfitting/'s subset, which predates the main
+# four and was carried through the 2026-09-26 renumbering number for number.
+#
+# WHY c(1, 4, 2, 3) AND NOT 1:4. expand.grid() varies scenario fastest, so a
+# scenario's position in this vector fixes its array indices. 1 and 4 keep the
+# positions they had in c(1, 4, 6, 8), and 2 and 3 take 6 and 8's. So every
+# array index of scenario 1 and 4 means the same (scenario, n, run) it did
+# before the swap, and the runs already made for them stay valid in all three
+# trees - which matters beyond file paths, because me_strategies.R and
+# me_split.R seed on the array index i, not on run (me_analysis.R seeds on
+# run). Only scenarios 2 and 3 need running; README.md, "Status", says how.
+# The report orders scenarios by its own labels, not by this vector.
 #
 # The data are correlated-covariate (rho = 0.5, me_dgms.R's ME_RHO) since
 # 2026-10-08, so all three trees live under results/correlated/. rho is not a
@@ -25,7 +38,7 @@ study <- study_config(
   prefix   = "me",
   res_path = file.path(dirname(here()), "results", "correlated", "model_evaluation"),
   grid = expand.grid(
-    scenario = c(1, 4, 6, 8),
+    scenario = c(1, 4, 2, 3), # order is deliberate - see the header
     n = c(250, 500, 1000),
     run = c(1:100),
     stringsAsFactors = FALSE
@@ -126,7 +139,7 @@ study_split <- study_config(
   prefix   = "me_split",
   res_path = file.path(dirname(here()), "results", "correlated", "model_evaluation_split"),
   grid = expand.grid(
-    scenario = c(1, 4, 6, 8),
+    scenario = c(1, 4, 2, 3), # same order as study's, for the same reason
     n = c(500, 1000),
     run = c(1:100),
     stringsAsFactors = FALSE

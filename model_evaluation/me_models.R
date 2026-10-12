@@ -462,7 +462,7 @@ candidate_hyperparams <- function(p) {
 
     net1 = create_net_hyperparams(alpha = 1), # lasso
     # interaction lasso (replaced ridge, alpha = 0, on 2026-10-08): the only
-    # linear-family candidate that can represent an X3*X4 effect (scenario 8)
+    # linear-family candidate that can represent a product effect (scenario 3, X4*X5)
     net2 = create_net_hyperparams(alpha = 1, interactions = TRUE),
     net3 = create_net_hyperparams(alpha = 0.5), # elastic net
 

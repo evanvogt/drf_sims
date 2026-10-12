@@ -34,12 +34,14 @@ The continuous outcome of the correlated sample-size studies,
 | scenario | description | g(x) |
 |---|---|---|
 | 1 | null | 0 |
+| 2 | simple, one continuous modifier | −X4 |
+| 3 | complex: single effects + interaction | 2·X3 + 0.5·X4 − 0.5·X4·X5 |
 | 4 | non-linear | cos(X4) |
-| 6 | two variables | 0.3·X3 − X4 |
-| 8 | single effects + interaction | 2·X3 + 0.5·X4 − 0.5·X3·X4 |
 
-This is the same scenario subset as `crossfitting/`, which runs it on
-independent covariates.
+These are the main four scenarios that the other studies report. Until
+2026-10-11 the study ran scenarios 1, 4, 6 and 8, the `crossfitting/` subset.
+The grid lists them in the order 1, 4, 2, 3, which keeps the array indices of
+scenarios 1 and 4 unchanged (`me_config.R`).
 
 ### Design
 
@@ -47,9 +49,9 @@ Full factorial, in three result trees:
 
 | tree | script | scenarios | n | runs | array jobs |
 |---|---|---|---|---|---|
-| main | `me_analysis.R` | 1, 4, 6, 8 | 250, 500, 1000 | 100 | 1200 |
+| main | `me_analysis.R` | 1–4 | 250, 500, 1000 | 100 | 1200 |
 | strategies | `me_strategies.R` | the same | the same | the same | 1200 (reads the main tree) |
-| split | `me_split.R` | 1, 4, 6, 8 | 500, 1000 | 100 | 800 |
+| split | `me_split.R` | 1–4 | 500, 1000 | 100 | 800 |
 
 - Each run index has its own L'Ecuyer-CMRG stream (`setup_rng_stream(run)`).
 - One fold assignment (V = 10) is drawn per replicate. The candidates and the

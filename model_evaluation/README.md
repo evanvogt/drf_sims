@@ -23,7 +23,7 @@ sizes, 100 runs each — **1200 array jobs** (30 before 2026-10-08).
 
 | | |
 |---|---|
-| scenarios | 1, 4, 6, 8 (see `R/dgm_scenarios.R`, `DESC_10`) |
+| scenarios | 1–4, the main four (see `R/dgm_scenarios.R`, `DESC_10`); 1, 4, 6, 8 before 2026-10-11 |
 | covariates | correlated, latent ρ = 0.5 (`me_dgms.R`'s `ME_RHO`) |
 | n | 250, 500, 1000 |
 | runs | 100 |
@@ -36,16 +36,25 @@ Since 2026-10-08 the study runs on `continuous_corr_0.5`: `continuous/`'s
 scenario table, with the covariates drawn from the copula at latent
 correlation 0.5 — the primary arm of `sample_size/correlated/`. τ(x) and m0(x)
 are unchanged; only the covariates' joint distribution moves, and with it bW,
-the ATE and SD(τ) wherever g multiplies two modifiers (scenario 8 here,
-X3·X4), and the correlation between the prognostic m0 and τ. See
+the ATE and SD(τ) wherever g multiplies two modifiers (scenario 3 here,
+X4·X5), and the correlation between the prognostic m0 and τ. See
 `sample_size/correlated/README.md` for the numbers. Only ρ = 0.5 is run, so ρ
 is a constant rather than a grid column and the grid is unchanged.
 
 **Why only 4 of the 10 scenarios, not all of them like `continuous/`.** This
 study's research question — does a cheap proxy loss rank 9 candidate models
 the way true PEHE would — doesn't need every CATE-structure re-litigated to
-answer. `crossfitting/cf_analysis.R` made the same call for the same reason
-(`scenario = c(1, 4, 6, 8)`); this study reuses its exact subset.
+answer. The four it runs are the main four every other study reports: 1 null,
+2 simple (−X4), 3 complex (2·X3 + 0.5·X4 − 0.5·X4·X5), 4 non-linear (cos X4).
+
+Until 2026-10-11 it ran 1, 4, 6, 8 instead: `crossfitting/`'s subset, chosen
+before the main four existed and carried through the 2026-09-26 renumbering
+number for number. The grid lists the scenarios as `c(1, 4, 2, 3)`, not `1:4`,
+so that scenarios 1 and 4 keep their array indices and 2 and 3 take 6 and 8's
+(`me_config.R`'s header). That matters because `me_strategies.R` and
+`me_split.R` seed on the array index: the runs already made for 1 and 4 stay
+valid and reproducible in all three trees, and only 2 and 3 need running (see
+"Status").
 
 **100 runs.** Each replicate is far more expensive than a `continuous/` one -
 9 single-crossfit candidate-model fits, *plus* two independent
@@ -143,7 +152,7 @@ to the rows the candidate is fit on (`n`, or the 80% in the split arm), so
 expanded to its 10 main effects and 45 pairwise products (`net_design()`, the
 same expansion as `R/sl_library.R`'s `SL.glmnet.int`), at `lambda.min`, in all
 three nuisances and stage 2. It is the only linear-family candidate that can
-represent scenario 8's X3·X4 effect, and it keeps the three `net*` candidates
+represent scenario 3's X4·X5 effect, and it keeps the three `net*` candidates
 apart: lasso, ridge and elastic net at `lambda.min` on 10 covariates are
 expected to give near-identical τ, and near-ties make top-1 selection a coin
 toss.
@@ -513,7 +522,7 @@ them didn't work for this study (see `docs/DEVLOG.md`'s "Resource profiling
 |---|---|---|
 | `me_1.sh` | `ncpus=10:ompthreads=10:mem=24gb` | `10 10` |
 | `me_rerun.sh` | `ncpus=11:ompthreads=11:mem=29gb` | `10 10` |
-| `me_split.sh` | `ncpus=10:ompthreads=10:mem=24gb` | `10 10` |
+| `me_split.sh`, `me_split_rerun.sh` | `ncpus=10:ompthreads=10:mem=24gb` | `10 10` |
 | `me_strategies.sh`, `me_strat_rerun.sh` | `ncpus=10:ompthreads=10:mem=16gb` | `10` |
 
 Why 10: each candidate is crossfit over 10 folds in parallel, so 10 workers
@@ -587,6 +596,82 @@ this is why"). Confirm whether this reproduces on the cluster's actual
 local `me_testing.R full` run as a sign this study is ready to submit.
 
 ## Status
+
+### Scenarios 2 and 3 owed (2026-10-11)
+
+The grid moved from scenarios 1, 4, 6, 8 to the main four, 1–4 (see "Data").
+Runs already made for 1 and 4 keep their array indices and stay valid in all
+three trees, so only 2 and 3 need running. In each tree they are the indices
+that used to be 6 and 8: 3, 4, 7, 8, 11, 12, …. That gives 600 main, 600
+strategies and 400 split runs. Do these steps on the cluster, from the repo
+root unless a step says otherwise. Every `qsub` is run from inside
+`model_evaluation/jobscripts/`, because the jobscripts `cd "${PBS_O_WORKDIR}/.."`
+and read their id file from `${PBS_O_WORKDIR}`.
+
+If a tree has not been run at all on the current design, skip its step below
+and submit its full array (`me_1.sh`, `me_strategies.sh`, `me_split.sh`). The
+grid already covers 1–4.
+
+0. **Set up.** `git pull`, then `Rscript make_log_dirs.R`, which creates
+   `logs_split_rerun/` for the new `me_split_rerun.sh`. If
+   `scenario_6/` or `scenario_8/` exist under any of
+   `../results/correlated/model_evaluation{,_strategies,_split}/`, move them
+   out of the tree. Nothing reads them now, because check, collect and metrics
+   walk the grid's combinations, but they are not part of the study.
+
+1. **Main tree.** `me_check.R` finds every scenario 2/3 row missing. It writes
+   all 600 to `failed_ids.txt` and sets `me_rerun.sh`'s `-J` to `1-600%10`.
+   Any genuinely failed 1/4 runs are included as well, and they need
+   rerunning anyway.
+
+   ```bash
+   Rscript model_evaluation/me_check.R
+   cd model_evaluation/jobscripts
+   qsub me_rerun.sh
+   ```
+
+2. **Strategies tree.** Wait until step 1 has finished: `me_strategies.R`
+   reads the main tree's runs. `me_check.R strategies` doesn't write an id
+   file (see its header), so write one from the grid:
+
+   ```bash
+   Rscript -e 'source(here::here("model_evaluation/me_config.R")); cat(grid_indices(study_strat, scenario = c(2, 3)), file = study_strat$failed_file, sep = "\n")'
+   cd model_evaluation/jobscripts
+   qsub -J 1-600%10 me_strat_rerun.sh   # -J on the command line overrides the script's
+   ```
+
+3. **Split tree.** This also waits for step 1, because `me_split.R` reads the
+   main tree's data, but it does not wait for step 2. `me_split_rerun.sh`'s
+   `-J` is already `1-400%10`:
+
+   ```bash
+   Rscript -e 'source(here::here("model_evaluation/me_config.R")); cat(grid_indices(study_split, scenario = c(2, 3)), file = study_split$failed_file, sep = "\n")'
+   cd model_evaluation/jobscripts
+   qsub me_split_rerun.sh
+   ```
+
+4. **Check and collect every tree again.** Each tree's `<prefix>_all.RDS`
+   has to be rebuilt so that it holds 1–4:
+
+   ```bash
+   Rscript model_evaluation/me_check.R
+   Rscript model_evaluation/me_check.R strategies
+   Rscript model_evaluation/me_check.R split
+   cd model_evaluation/jobscripts
+   qsub me_strategies_verify.sh
+   qsub me_collect.sh
+   qsub -v TREE=strategies me_collect.sh
+   qsub -v TREE=split me_collect.sh
+   # once each tree's collect has finished:
+   qsub me_metrics.sh
+   qsub -v TREE=strategies me_metrics.sh
+   qsub -v TREE=split me_metrics.sh
+   ```
+
+   The verify step reports
+   scenario 2/3 `automl`/`holdout` NA runs as failures until
+   `known_holdout_na` is regenerated (see below). Then render
+   `me_results.qmd`.
 
 **Re-run owed — every tree.** The runs described below predate bug O, which
 changed the continuous DGM this study generates from (`sample_size/continuous/README.md`),

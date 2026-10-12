@@ -182,7 +182,7 @@ scenario generates exactly what it did under its old number. Everything saved
 before it uses the old numbers: `../collected_metrics/`, results directories,
 figures and the `results_processing/` notebooks.
 The missing-data studies use scenarios 1–6 under the same numbers. The subset
-studies run: `crossfitting/` and `model_evaluation/` 1, 4, 6, 8;
+studies run: `crossfitting/` 1, 4, 6, 8; `model_evaluation/` 1–4 (1, 4, 6, 8 until 2026-10-11);
 `crossfitting/confidence_intervals/` 1, 4, 8; `validation/continuous/` and `validation/binary/` 2-4 (2 only until 2026-10-11).
 
 Both outcomes are one model, `E[Y | x, W] = m0(x) + W·τ(x)`. For a binary

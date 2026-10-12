@@ -53,6 +53,8 @@ cmb <- combos(study)
 # R/archive_old_results.R), which changes every dataset, so which blocks
 # degenerate will change too. Expect verify to fail on this list after the
 # re-run, and regenerate it as above - including the 69 in the stopifnot().
+# Its scenario 6 and 8 rows are not in the grid since 2026-10-11 (now 1-4,
+# me_config.R), so they can never match; they go when the list is regenerated.
 known_holdout_na <- tibble::tribble(
   ~scenario, ~n, ~run,
   6,  250,  21,  6,  250,  23,  6,  250,  26,
