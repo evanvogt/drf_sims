@@ -8,9 +8,9 @@
 # prints the indices that genuinely need resubmitting; put those in
 # failed_ids_strat.txt by hand and set -J to match - keep the %N at 10 or
 # below, as in me_strategies.sh.
-#PBS -l walltime=02:00:00
+#PBS -l walltime=01:00:00
 #PBS -l select=1:ncpus=10:ompthreads=10:mem=16gb
-#PBS -J 1-32%10
+#PBS -J 1-600%10
 #PBS -N me_strat_rerun
 #PBS -o logs_strat_rerun/
 #PBS -e logs_strat_rerun/
