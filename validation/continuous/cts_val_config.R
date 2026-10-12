@@ -13,8 +13,10 @@
 # briefly ran both rhos, 2026-10-09; the rho_0/ results from then are outside
 # this grid and are neither checked nor collected.)
 #
-# Scenarios 2-4 (simple, complex, non-linear - R/dgm_scenarios.R, DESC_10) since
-# 2026-10-11: 3 x 11 x 100 = 3300 rows. Row 1 is still scenario 2 at 0.25, run 1.
+# Scenarios 1-4 (null, simple, complex, non-linear - R/dgm_scenarios.R,
+# DESC_10): 4 x 11 x 100 = 4400 rows. Scenarios 2-4 since 2026-10-11 and the
+# null since 2026-10-12, where every significant interaction test is a type I
+# error. Adding it reordered the grid: row 1 is now scenario 1 at 0.25, run 1.
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -25,7 +27,7 @@ study <- study_config(
   res_path = file.path(dirname(here()), "results", "validation", "continuous"),
   grid = expand.grid(
     rho = 0.5,
-    scenario = 2:4,
+    scenario = 1:4,
     n = 1000,
     # round() is load-bearing, not cosmetic: interim_prop is a path_cols entry,
     # so its as.character() form becomes a results directory name. Unrounded,

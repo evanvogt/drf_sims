@@ -12,13 +12,20 @@
 # until the binary arm was added (2026-10-08) and moved here unchanged, apart
 # from two arguments that default to the continuous behaviour:
 #   family  the DR SuperLearner's outcome-model family (fit_val_methods)
-#   robust  HC3 standard errors in the interaction tests (interaction_pval,
-#           interaction_pval_adj, chunk_validations) - see interaction_pval
+#   robust  HC3 standard errors in the interaction tests (interaction_test,
+#           interaction_test_adj, chunk_validations) - see coef_test
 #
 # Since 2026-10-11 the analysis scripts call chunk_validations_se(), which runs
 # chunk_validations() once with classical and once with HC3 standard errors and
 # stacks the two under an `se` column, and the top-covariate tests carry two
 # data-driven forms (p_dd, p_proj) alongside p_cts/p_cts_adj/p_split.
+#
+# Since 2026-10-12 every interaction test saves its W:v estimate and standard
+# error next to its p-value, and two reference contrasts: ref1, the contrast
+# chunk 1's estimated tau implied, and true2, the value the chunk-2 test is
+# estimating, from chunk 2's true tau (see "Reference contrasts" below). Their
+# signs say whether a replication went the right way. The p-values are
+# unchanged, under their old names.
 #
 # The estimation logic here (both importance measures and the interaction
 # tests) is specific to these studies - nothing else in the repo uses it - so it
@@ -355,7 +362,7 @@ get_te_vims_superlearner <- function(X, po, tau, fold_indices, sl_lib,
 #
 # Adapted from SHAP_CATE-main/FUNCTIONS/functions.R::cvboost3(), with four
 # deliberate departures, all for runtime - this runs six times per array job
-# across 3300 jobs:
+# across 4400 jobs:
 #   - 3 learning rates x 3 depths (9 combos), not 8 x 3 (24)
 #   - 5-fold CV and at most 2000 rounds, not 10-fold and 10000
 #   - the tuning grid is parallelised over the workers the analysis driver has
@@ -442,7 +449,13 @@ get_shap_vims <- function(X, tau) {
 # Interaction tests
 ###################
 
-#' p-value of one coefficient of a fitted lm, classical or HC3
+NO_TEST <- c(est = NA_real_, se = NA_real_, p = NA_real_)
+
+#' Estimate, standard error and p-value of one coefficient of a fitted lm,
+#' classical or HC3
+#'
+#' The classical triple is summary.lm's own row, so the p-value is bit-identical
+#' to what coef_pval() returned before it saved the estimate too (2026-10-12).
 #'
 #' @param robust FALSE: summary.lm's t-test. TRUE: the same t-test on
 #'   sandwich::vcovHC(type = "HC3") standard errors, which both arms pass. A
@@ -451,23 +464,28 @@ get_shap_vims <- function(X, tau) {
 #'   homoskedastic noise, but the working model omits the prognostic covariates
 #'   and the within-group spread of tau, so its residual variance still differs
 #'   across the W x v cells - most where v is a small (10%) subgroup.
-#' @return the p-value, or NA_real_ if lm dropped the term (aliased) or its
-#'   robust standard error is not finite (a leverage-1 row under HC3)
-coef_pval <- function(fit, term, robust = FALSE) {
+#' @return c(est, se, p). All NA if lm dropped the term (aliased); se and p NA,
+#'   est kept, if its robust standard error is not finite (a leverage-1 row
+#'   under HC3) - the estimate does not depend on the standard error
+coef_test <- function(fit, term, robust = FALSE) {
   if (!robust) {
     co <- summary(fit)$coefficients
-    if (!term %in% rownames(co)) return(NA_real_)
-    return(unname(co[term, 4]))
+    if (!term %in% rownames(co)) return(NO_TEST)
+    return(c(est = co[term, 1], se = co[term, 2], p = co[term, 4]))
   }
   est <- coef(fit)
-  if (!term %in% names(est) || is.na(est[[term]])) return(NA_real_)
+  if (!term %in% names(est) || is.na(est[[term]])) return(NO_TEST)
   V <- sandwich::vcovHC(fit, type = "HC3")
   se <- sqrt(V[term, term])
-  if (!is.finite(se) || se <= 0) return(NA_real_)
-  unname(2 * stats::pt(-abs(est[[term]] / se), df = fit$df.residual))
+  if (!is.finite(se) || se <= 0) return(c(est = est[[term]], se = NA_real_, p = NA_real_))
+  c(est = est[[term]], se = se,
+    p = 2 * stats::pt(-abs(est[[term]] / se), df = fit$df.residual))
 }
 
-#' Interaction p-value for `Y ~ W * v` in the later chunk
+#' p-value of one coefficient of a fitted lm - coef_test()'s p alone
+coef_pval <- function(fit, term, robust = FALSE) coef_test(fit, term, robust)[["p"]]
+
+#' Interaction test for `Y ~ W * v` in the later chunk
 #'
 #' Indexes the coefficient by name, not position. The positional form is what
 #' made bottom_pval report the *intercept* p-value (`pvals_bottom[1]`) rather
@@ -478,34 +496,94 @@ coef_pval <- function(fit, term, robust = FALSE) {
 #' For a binary outcome the model is linear in the risk, which is the scale the
 #' binary DGMs put the treatment effect on (R/dgm_scenarios.R, BINARY OUTCOMES
 #' ARE ON THE RISK-DIFFERENCE SCALE), so W:v is a risk-difference interaction.
+#' W is randomised, so the W:v coefficient estimates the slope of the linear
+#' projection of tau on v - tau_slope() below.
 #'
 #' @param v subgroup indicator or covariate to interact with treatment
-#' @param robust HC3 standard errors - see coef_pval()
-#' @return the W:v p-value, or NA_real_ if `v` carries no contrast (e.g. rpart
+#' @param robust HC3 standard errors - see coef_test()
+#' @return c(est, se, p) of W:v, all NA if `v` carries no contrast (e.g. rpart
 #'   predicted no bottom10 leaf into chunk 2)
-interaction_pval <- function(Y, W, v, robust = FALSE) {
+interaction_test <- function(Y, W, v, robust = FALSE) {
   d <- data.frame(Y = Y, W = W, v = v)
-  if (length(unique(na.omit(d$v))) < 2) return(NA_real_)
-  coef_pval(lm(Y ~ W * v, data = d), "W:v", robust)
+  if (length(unique(na.omit(d$v))) < 2) return(NO_TEST)
+  coef_test(lm(Y ~ W * v, data = d), "W:v", robust)
 }
 
-#' Interaction p-value for one covariate, adjusted for every other covariate
+#' interaction_test()'s p-value alone
+interaction_pval <- function(Y, W, v, robust = FALSE) {
+  interaction_test(Y, W, v, robust)[["p"]]
+}
+
+#' Interaction test for one covariate, adjusted for every other covariate
 #'
 #' The W:x_top coefficient of `Y ~ W * (all covariates)` - does x_top modify the
 #' effect once the other covariates' main effects and interactions are held
-#' fixed? interaction_pval() above is the marginal test, and under correlated
+#' fixed? interaction_test() above is the marginal test, and under correlated
 #' covariates the two answer different questions: with rho = 0.5, E[tau | X5]
 #' moves with X5 because X5 is correlated with X4, so a marginal W x X5 test
 #' finds an interaction even though X5 modifies nothing. A wrong top covariate
 #' then "replicates" marginally; this adjusted test is the one that should not.
+#' Its estimand is x_top's coefficient in the projection of tau on every
+#' covariate - tau_slope_adj() below.
 #'
 #' @param X data frame of every covariate, x_top among its columns
 #' @param x_top name of the covariate whose interaction is tested
-#' @param robust HC3 standard errors - see coef_pval()
-#' @return the W:x_top p-value, or NA_real_ if lm dropped that term (aliased)
-interaction_pval_adj <- function(Y, W, X, x_top, robust = FALSE) {
+#' @param robust HC3 standard errors - see coef_test()
+#' @return c(est, se, p) of W:x_top, all NA if lm dropped that term (aliased)
+interaction_test_adj <- function(Y, W, X, x_top, robust = FALSE) {
   d <- data.frame(Y = Y, W = W, X)
-  coef_pval(lm(Y ~ W * ., data = d), paste0("W:", x_top), robust)
+  coef_test(lm(Y ~ W * ., data = d), paste0("W:", x_top), robust)
+}
+
+#' interaction_test_adj()'s p-value alone
+interaction_pval_adj <- function(Y, W, X, x_top, robust = FALSE) {
+  interaction_test_adj(Y, W, X, x_top, robust)[["p"]]
+}
+
+###################
+# Reference contrasts for the interaction tests
+###################
+# What an interaction test's W:v coefficient estimates, computed directly from a
+# CATE: the slope of the linear projection of tau on v (on every covariate, for
+# the adjusted test). Fed chunk 1's *estimated* tau and chunk 1's v, it is the
+# contrast chunk 1 implied (ref1); fed chunk 2's *true* tau and chunk 2's v, it
+# is the value the chunk-2 test is estimating (true2) - exactly 0 in scenario 1.
+# For a 0/1 v the slope is the difference in mean tau inside vs outside the
+# group, cts_val_dgm_check.R's contrast2.
+
+#' Slope of the projection of tau on v
+#'
+#' @return the slope, or NA_real_ if tau is NULL (a fit without its truth
+#'   attached) or v carries no contrast
+tau_slope <- function(tau, v) {
+  if (is.null(tau) || is.null(v) || length(unique(na.omit(v))) < 2) return(NA_real_)
+  co <- coef(lm(tau ~ v, data = data.frame(tau = tau, v = v)))
+  if (!"v" %in% names(co) || is.na(co[["v"]])) NA_real_ else co[["v"]]
+}
+
+#' x_top's coefficient in the projection of tau on every covariate
+tau_slope_adj <- function(tau, X, x_top) {
+  if (is.null(tau)) return(NA_real_)
+  co <- coef(lm(tau ~ ., data = data.frame(tau = tau, X)))
+  if (!x_top %in% names(co) || is.na(co[[x_top]])) NA_real_ else co[[x_top]]
+}
+
+#' The saved columns of a set of interaction tests, grouped by statistic
+#'
+#' @param tests named list (by test), each list(test = c(est, se, p), ref1,
+#'   true2)
+#' @return named numeric vector est_<test>..., se_<test>..., ref1_<test>...,
+#'   true2_<test>..., tests in the order given. The p-values are left to the
+#'   caller, which saves them under their pre-2026-10-12 names.
+stat_cols <- function(tests) {
+  per_stat <- list(
+    est   = vapply(tests, function(t) t$test[["est"]], numeric(1)),
+    se    = vapply(tests, function(t) t$test[["se"]], numeric(1)),
+    ref1  = vapply(tests, function(t) t$ref1, numeric(1)),
+    true2 = vapply(tests, function(t) t$true2, numeric(1))
+  )
+  unlist(lapply(names(per_stat), function(stat)
+    setNames(per_stat[[stat]], paste0(stat, "_", names(tests)))))
 }
 
 ###################
@@ -583,10 +661,15 @@ projection_score <- function(x1, tau1, x2) {
 #' @param results1,results2 fit_val_methods() on each chunk. Every element other
 #'   than data/truth/timings is read as a model.
 #' @param data1,data2 the chunks themselves
-#' @param robust HC3 standard errors in every interaction test - see coef_pval()
+#' @param robust HC3 standard errors in every interaction test - see coef_test()
+#' @param tau2 chunk 2's TRUE tau, for the true2_* contrasts. The analysis
+#'   scripts attach it as results2$truth; a caller without it gets NA true2_*.
 #' @return list(subgroups, variances, var_imps, top_var_tests), each a named
-#'   list by model
-chunk_validations <- function(results1, results2, data1, data2, robust = FALSE) {
+#'   list by model. Every interaction test carries its p-value under its
+#'   original name (top, bottom, p_<form>) and, since 2026-10-12, est_<test>,
+#'   se_<test>, ref1_<test> and true2_<test> - see "Reference contrasts" above
+chunk_validations <- function(results1, results2, data1, data2, robust = FALSE,
+                              tau2 = results2$truth$tau) {
 
   X1 <- data1[, -c(1, 2)]
   X2 <- data2[, -c(1, 2)]
@@ -609,6 +692,12 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE) 
   # SuperLearner fold predicting one constant) gives tied quantiles, and cut()
   # stops on non-unique breaks. Where tau1 has no ties the groups are the same
   # as cutting tau1 itself; ties are broken by row order.
+  #
+  # Each test also saves its W:v estimate and SE, ref1 (the difference in chunk
+  # 1's estimated tau between the tree's own group in chunk 1 and the rest -
+  # positive for top, negative for bottom, by construction) and true2 (the same
+  # difference in chunk 2's true tau, between the predicted group and the rest).
+  # A replication "in the right direction" has est_top > 0 and est_bottom < 0.
   subgroups <- list()
   for (model in models) {
     tau1 <- results1[[model]]$tau
@@ -621,13 +710,21 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE) 
     df_train <- data.frame(group = group, X1)
 
     tree_group <- rpart(group ~ ., data = df_train, method = "class")
+    group_fit1 <- predict(tree_group, newdata = X1, type = "class")
     group_pred <- predict(tree_group, newdata = X2, type = "class")
 
+    side_test <- function(label) {
+      v1 <- as.numeric(group_fit1 == label)
+      v2 <- as.numeric(group_pred == label)
+      list(test = interaction_test(data2$Y, data2$W, v2, robust),
+           ref1 = tau_slope(tau1, v1), true2 = tau_slope(tau2, v2))
+    }
+    sides <- list(top = side_test("top10"), bottom = side_test("bottom10"))
+
     subgroups[[model]] <- c(
-      top    = interaction_pval(data2$Y, data2$W, as.numeric(group_pred == "top10"),
-                                robust),
-      bottom = interaction_pval(data2$Y, data2$W, as.numeric(group_pred == "bottom10"),
-                                robust)
+      top    = sides$top$test[["p"]],
+      bottom = sides$bottom$test[["p"]],
+      stat_cols(sides)
     )
   }
 
@@ -686,6 +783,14 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE) 
   # on the high side (dd_prop); and p_proj, a spline projection of chunk 1's tau
   # on x_top. x_top2 is chunk 2's own winner, kept so the report can ask how
   # often the two chunks even agree on which covariate matters most.
+  #
+  # Each form also saves est_/se_/ref1_/true2_<form> (stat_cols()). ref1 builds
+  # the form's v in chunk 1 with the same helper, chunk 1's x_top standing in for
+  # the "new" data, and projects chunk 1's estimated tau on it; true2 projects
+  # chunk 2's true tau on the v the test used. p_dd's high side and p_proj's
+  # curve point the way chunk 1's tau rises, so for those two a positive est is
+  # the right direction; for p_cts, p_cts_adj and p_split compare est's sign
+  # with ref1's (chunk 1's claim) or true2's (the truth).
   top_var_tests <- list()
   for (model in models) {
     vi <- var_imps[[model]]
@@ -693,22 +798,41 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE) 
 
     rows <- lapply(split(vi, vi$measure), function(v) {
       x_top <- v$variables[which.max(v$vi1)]
+      x1 <- X1[[x_top]]
       xt <- data2[[x_top]]
-      dd <- data_driven_split(X1[[x_top]], tau1, xt)
-      g2 <- projection_score(X1[[x_top]], tau1, xt)
+      dd <- data_driven_split(x1, tau1, xt)
+      g2 <- projection_score(x1, tau1, xt)
 
-      data.frame(measure = v$measure[1],
-                 x_top = x_top,
-                 x_top2 = v$variables[which.max(v$vi2)],
-                 p_cts = interaction_pval(data2$Y, data2$W, xt, robust),
-                 p_cts_adj = interaction_pval_adj(data2$Y, data2$W, X2, x_top, robust),
-                 p_split = interaction_pval(data2$Y, data2$W, median_split(xt), robust),
-                 p_dd = interaction_pval(data2$Y, data2$W, dd$high2, robust),
-                 dd_cuts = paste(signif(dd$cuts, 3), collapse = ";"),
-                 dd_prop = mean(dd$high2),
-                 p_proj = if (is.null(g2)) NA_real_ else
-                   interaction_pval(data2$Y, data2$W, g2, robust),
-                 stringsAsFactors = FALSE)
+      marginal <- function(v1, v2) {
+        list(test = if (is.null(v2)) NO_TEST else
+               interaction_test(data2$Y, data2$W, v2, robust),
+             ref1 = tau_slope(tau1, v1), true2 = tau_slope(tau2, v2))
+      }
+      tests <- list(
+        cts = marginal(x1, xt),
+        cts_adj = list(test = interaction_test_adj(data2$Y, data2$W, X2, x_top, robust),
+                       ref1 = tau_slope_adj(tau1, X1, x_top),
+                       true2 = tau_slope_adj(tau2, X2, x_top)),
+        split = marginal(median_split(x1), median_split(xt)),
+        dd = marginal(data_driven_split(x1, tau1, x1)$high2, dd$high2),
+        proj = marginal(projection_score(x1, tau1, x1), g2)
+      )
+      p <- function(form) tests[[form]]$test[["p"]]
+
+      cbind(
+        data.frame(measure = v$measure[1],
+                   x_top = x_top,
+                   x_top2 = v$variables[which.max(v$vi2)],
+                   p_cts = p("cts"),
+                   p_cts_adj = p("cts_adj"),
+                   p_split = p("split"),
+                   p_dd = p("dd"),
+                   dd_cuts = paste(signif(dd$cuts, 3), collapse = ";"),
+                   dd_prop = mean(dd$high2),
+                   p_proj = p("proj"),
+                   stringsAsFactors = FALSE),
+        as.data.frame(as.list(stat_cols(tests)))
+      )
     })
 
     top_var_tests[[model]] <- do.call(rbind, rows)
@@ -732,23 +856,29 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE) 
 #' rpart() fits - no estimator is refitted. chunk_validations() itself keeps its
 #' one-kind shape, which cts_val_dgm_check.R and cts_val_investigation.R read.
 #'
+#' @param tau2 chunk 2's true tau - see chunk_validations()
 #' @return list(subgroups, variances, var_imps, top_var_tests), as
 #'   chunk_validations(), except that subgroups[[model]] is a data.frame(se,
-#'   top, bottom) with one row per kind, and top_var_tests[[model]] leads with
-#'   `se` and has one row per kind x measure
-chunk_validations_se <- function(results1, results2, data1, data2) {
+#'   top, bottom, est_top, est_bottom, se_top, ..., true2_bottom) with one row
+#'   per kind, and top_var_tests[[model]] leads with `se` and has one row per
+#'   kind x measure. est_*, ref1_* and true2_* are the same in both kinds' rows;
+#'   only se_* and the p-values differ.
+chunk_validations_se <- function(results1, results2, data1, data2,
+                                 tau2 = results2$truth$tau) {
   kinds <- list(classical = FALSE, hc3 = TRUE)
   vals <- lapply(kinds, function(robust)
-    chunk_validations(results1, results2, data1, data2, robust = robust))
+    chunk_validations(results1, results2, data1, data2, robust = robust,
+                      tau2 = tau2))
 
   models <- names(vals$hc3$subgroups)
 
   subgroups <- lapply(setNames(models, models), function(model) {
-    do.call(rbind, lapply(names(kinds), function(se) {
-      p <- vals[[se]]$subgroups[[model]]
-      data.frame(se = se, top = unname(p["top"]), bottom = unname(p["bottom"]),
-                 stringsAsFactors = FALSE)
+    out <- do.call(rbind, lapply(names(kinds), function(se) {
+      cbind(data.frame(se = se, stringsAsFactors = FALSE),
+            as.data.frame(as.list(vals[[se]]$subgroups[[model]])))
     }))
+    rownames(out) <- NULL
+    out
   })
 
   top_var_tests <- lapply(setNames(models, models), function(model) {

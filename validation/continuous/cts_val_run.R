@@ -1,9 +1,9 @@
 ##########
 # title: run the interim-analysis validation grid inside one RStudio session
 ##########
-# The no-queue alternative to `qsub jobscripts/cts_val_1.sh`. Same 3300 rows and
+# The no-queue alternative to `qsub jobscripts/cts_val_1.sh`. Same 4400 rows and
 # the same results, but 8 at a time inside an interactive session rather than
-# 3300 short array jobs waiting to be scheduled.
+# 4400 short array jobs waiting to be scheduled.
 #
 # ---- how to run it ----------------------------------------------------------
 #   request an RStudio session with 8 cores and 64gb, then
@@ -26,7 +26,7 @@
 # again. Before the DR SuperLearner was added a row took ~3 min and a full grid
 # ~7 hours here; with its TE-VIM refits a row is unmeasured but much longer, so
 # read cts_val_testing.R full's replicate time before sizing a session -
-# 3300 x <that> / 8 is the wall time.
+# 4400 x <that> / 8 is the wall time.
 #
 # ---- what it deliberately does not do ---------------------------------------
 # It never writes jobscripts/failed_ids.txt and never edits cts_val_rerun.sh.

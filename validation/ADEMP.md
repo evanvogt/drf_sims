@@ -58,12 +58,16 @@ and the calibration of bW).
 
 | scenario | description | modifiers | continuous g(x) | binary g(x) |
 |---|---|---|---|---|
+| 1 | null | none | 0 | 0 |
 | 2 | simple | X4 | −X4 | 0.082·t4 |
 | 3 | complex | X3, X4, X5 | 2·X3 + 0.5·X4 − 0.5·X4·X5 | −0.102·X3 − 0.0255·t4 + 0.0255·t4·t5 |
 | 4 | non-linear | X4 | cos(X4) | −0.204·cos(X4) |
 
 Features of the scenarios that the interpretation depends on:
 
+- **Scenario 1 is the null.** τ(x) = bW for everyone, so nothing chunk 1
+  finds is real. Every significant chunk-2 test there is a type I error, and
+  the replication rates are the tests' size.
 - **Proxies.** Under ρ = 0.5, X1, X2 and X01–X03 are correlated with the
   modifiers, so E[τ | X] moves with them even though they modify nothing.
 - **Scenario 3.** X3 is the largest single source of heterogeneity. X5 acts
@@ -79,13 +83,14 @@ Full factorial within each arm:
 
 | factor | levels |
 |---|---|
-| scenario | 2, 3, 4 |
+| scenario | 1, 2, 3, 4 |
 | ρ | 0.5 |
 | n | 1000 |
 | `interim_prop` | 0.25 to 0.75 by 0.05 (11 points) |
 | runs | 100 |
 
-That is 3 × 11 × 100 = 3300 array jobs per arm (`<prefix>_val_config.R`).
+That is 4 × 11 × 100 = 4400 array jobs per arm (`<prefix>_val_config.R`).
+Scenario 1 was added on 2026-10-12.
 
 - Each run draws **one** trial of 1000 (`split_trial()`). Chunk 1 is its first
   `round(1000 · interim_prop)` rows and chunk 2 the rest. Rows are iid, so
@@ -104,9 +109,9 @@ truths that each chunk-1 finding is checked against:
 - **The CATE** τ(xᵢ), and its variance `Var(τ(X))`. The reports compute
   `Var(τ)` from a draw of 2 × 10⁵ from the DGM. It is the same in both chunks
   and at every `interim_prop`.
-- **The set of true modifiers** M: {X4} in scenarios 2 and 4, {X3, X4, X5} in
-  scenario 3. A working estimator should rank a member of M most important in
-  both chunks.
+- **The set of true modifiers** M: ∅ in scenario 1, {X4} in scenarios 2 and
+  4, {X3, X4, X5} in scenario 3. A working estimator should rank a member of M
+  most important in both chunks.
 - **Chunk-2 interaction contrasts,** conditional on what chunk 1 found:
   - for a subgroup S learned on chunk 1, the difference in the average
     treatment effect between S and its complement;
@@ -114,10 +119,15 @@ truths that each chunk-1 finding is checked against:
     working model in the chunk-2 population, where v is X_top in one of five
     forms (see Methods).
 
-  These depend on the run, through chunk 1. The study does not compute their
-  true values per run. A significant test is read as a replication. Whether
-  that is power or a type I error depends on the scenario and on what chunk 1
-  nominated: the reports separate the two by whether X_top is a member of M.
+  W is randomised, so each `W:v` coefficient is the slope of the linear
+  projection of τ on v, and on all covariates for the adjusted form. These
+  contrasts depend on the run, through chunk 1. Since 2026-10-12 the study
+  computes each one per run from chunk 2's true τ (`true2`), and the same
+  contrast from chunk 1's estimated τ (`ref1`, what chunk 1 claimed). All
+  `true2` are 0 in scenario 1. A significant test is read as a replication.
+  Whether that is power or a type I error depends on the scenario and on what
+  chunk 1 nominated: the reports separate the two by whether X_top is a member
+  of M, and by the sign of `true2`.
 
 ## Methods
 
@@ -185,6 +195,15 @@ are heteroskedastic by construction. For a continuous Y the working model
 leaves out the prognostic covariates and the spread of τ within each level of
 v, so the residual variance still differs across the `W × v` cells.
 
+**Estimates and reference contrasts.** Each test saves its `W:v` estimate
+(`est_<test>`) and standard error (`se_<test>`) next to its p-value, and the
+two reference contrasts of the Estimands, `ref1_<test>` and `true2_<test>`
+(`tau_slope()`, `tau_slope_adj()`). For `ref1`, the test's v is built in
+chunk 1 with the same helper: the subgroup tree's own groups in chunk 1, chunk
+1's median split, and the tree and spline evaluated at chunk 1's X_top. By
+construction `ref1` is positive for the top-10% subgroup and the data-driven
+split, and negative for the bottom 10%.
+
 **Not compared.** A chunk-1 vs chunk-2 comparison of the HTE tests (BLP,
 independence tests) is not implemented, although every estimator carries the
 inputs.
@@ -219,8 +238,16 @@ about 0.022 at p = 0.05.
     wrong;
   - for `p_dd`, the share of runs with no split, one cut, and two or more cuts,
     and the mean share of chunk 2 on the high side.
+- **Direction:** per test and form, the proportion of runs with p < 0.05 and
+  `est` of the same sign as `ref1` (replicated chunk 1's direction), and as
+  `true2` (right in truth; not defined in scenario 1). These sit alongside the
+  plain p < 0.05 proportion, so the gap is the share of "replications" that
+  went the wrong way. Also the means of `ref1`, `est` and `true2`: `ref1` above
+  `true2` is chunk 1 overstating its finding.
 - **Classical vs HC3:** each test's rejection proportion under both kinds of
   standard error, and the difference.
+- **Scenario 1:** every rejection proportion above is a type I error rate,
+  read against the nominal 0.05.
 
 A headline table collects these at three landmark interim points: 0.25, 0.50
 and 0.75.

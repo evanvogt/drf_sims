@@ -13,10 +13,10 @@ importance measures, `p_cts_adj`, the no-queue runner and job sizing — see
 |---|---|
 | outcome | binary, treatment effect on the **risk-difference** scale |
 | covariates | correlated, rho = 0.5 — the `binary_corr_0.5` set (`R/dgm_scenarios.R`), the same set `sample_size/correlated/binary/` runs as its primary arm |
-| scenarios | 2: `tau = bW + b4 * tanh(X4)`, `b4 = 0.082`; 3: `bW + b3 * X3 + b4 * tanh(X4) + b45 * tanh(X4) * tanh(X5)`, `b3 = -0.102`, `b4 = -0.0255`, `b45 = 0.0255`; 4: `bW + b4 * cos(X4)`, `b4 = -0.204` (`R/dgm_scenarios.R`, `TE_RD`) |
+| scenarios | 1: the null, `tau = bW`; 2: `tau = bW + b4 * tanh(X4)`, `b4 = 0.082`; 3: `bW + b3 * X3 + b4 * tanh(X4) + b45 * tanh(X4) * tanh(X5)`, `b3 = -0.102`, `b4 = -0.0255`, `b45 = 0.0255`; 4: `bW + b4 * cos(X4)`, `b4 = -0.204` (`R/dgm_scenarios.R`, `TE_RD`) |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 per scenario — **3300 array jobs**, 1 h walltime (as continuous; check with `bin_val_testing.R full`) |
+| runs | 100 per scenario — **4400 array jobs**, 1 h walltime (as continuous; check with `bin_val_testing.R full`) |
 | folds | DR SuperLearner only: 5 for a chunk below 500 rows, else 10 |
 | results | `../results/validation/binary/rho_0.5/scenario_<k>/1000/<interim_prop>/res_sim_<run>.RDS` |
 
@@ -28,7 +28,7 @@ ON THE RISK-DIFFERENCE SCALE). X1 and X2 are prognostic only, through the
 control risk `m0`. X4 and X5 enter through `tanh` rather than as they are (cos
 is bounded already), each scenario's coefficients are the continuous ones
 scaled by `RD_SCALE[k]` with the sign reversed, so every treated risk stays
-inside [0.01, 0.99]. The modifiers are the continuous scenarios': X4 in 2 and 4,
+inside [0.01, 0.99]. The modifiers are the continuous scenarios': none in 1, X4 in 2 and 4,
 X3, X4 and X5 in 3.
 
 **The heterogeneity is small.** At n = 1000 the CATE's SD is ≈ 0.051 in
@@ -89,15 +89,15 @@ changed if the queue is ever slower than the work.
 
 ```bash
 Rscript validation/binary/bin_val_testing.R full   # do this first
-qsub validation/binary/jobscripts/bin_val_1.sh     # 1-3300
+qsub validation/binary/jobscripts/bin_val_1.sh     # 1-4400
 Rscript validation/binary/bin_val_check.R          # writes failed_ids.txt if any are missing
 qsub validation/binary/jobscripts/bin_val_collect.sh
 qsub validation/binary/jobscripts/bin_val_metrics.sh
 cd validation/binary
-quarto render bin_val_results.qmd -P scenario:2 --output bin_val_results_sc2.html   # and 3, 4
+quarto render bin_val_results.qmd -P scenario:1 --output bin_val_results_sc1.html   # and 2, 3, 4
 ```
 
-Archive the existing `rho_0.5/scenario_2/` results first — see
+Archive the whole existing results tree first — see
 `../continuous/README.md`, Running it; the one `archive_old_results.R` command
 there covers both arms.
 
@@ -111,9 +111,19 @@ submitting.
 
 New 2026-10-08. Scenario 2 was run with HC3 standard errors only.
 
-**Needs a fresh run** of all 3300 rows (changed 2026-10-11, as in the
-continuous arm): scenarios 2–4, classical and HC3 standard errors both saved,
-the data-driven `p_dd`/`p_proj` tests, the `p_split` fix for a binary
-covariate, and a report that renders per scenario. The walltime went from
-30 min to 1 h to match the continuous arm. Archive the old scenario 2 tree
+**Needs a fresh run** of all 4400 rows. Archive the whole old results tree
 first.
+
+Changed 2026-10-12, as in the continuous arm:
+
+- **Scenario 1, the null**, added: 4400 array jobs (was 3300), and row 1 is now
+  scenario 1. Every significant test there is a type I error.
+- **Interaction estimates.** Every test saves its `W:v` estimate and SE, and
+  the `ref1`/`true2` reference contrasts — see `../continuous/README.md`, What
+  is compared across chunks. Here `est` and `true2` are risk-difference
+  interactions. The report gains a "Direction of the replications" section.
+
+Changed 2026-10-11, as in the continuous arm: scenarios 2–4, classical and HC3
+standard errors both saved, the data-driven `p_dd`/`p_proj` tests, the
+`p_split` fix for a binary covariate, and a report that renders per scenario.
+The walltime went from 30 min to 1 h to match the continuous arm.

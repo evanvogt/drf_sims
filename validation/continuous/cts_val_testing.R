@@ -8,13 +8,13 @@
 #
 # Checks 1-8 are cheap and exercise the helpers directly. Check 9 runs one real
 # replicate end to end and is worth the wait on the cluster, where it also tells
-# you whether the jobscript's walltime is right before 3300 jobs go out.
+# you whether the jobscript's walltime is right before 4400 jobs go out.
 #
 # Checks, in order:
 #   1. xgboost and SHAPforxgboost load. They are used nowhere else in this repo,
 #      so a missing install here is the one thing that stops the array dead.
 #      Also sandwich, for the HC3 interaction tests
-#   2. the grid is 3300 rows - rho 0.5 only, scenarios 2-4, 11 interim
+#   2. the grid is 4400 rows - rho 0.5 only, scenarios 1-4, 11 interim
 #      proportions - and - the reason cts_val_config.R rounds - none of those
 #      proportions stringifies to a float artefact, since
 #      as.character(interim_prop) becomes a directory name. Also that each
@@ -42,14 +42,20 @@
 #      binary covariate with P = 0.7 gets a real median split (it used to be all
 #      0, so p_split was NA) and is its own data-driven split; and a flat chunk
 #      1 tau gives NA for both rather than a test of nothing
+#      Check 3 also covers interaction_test()'s est/se/p (summary.lm's own row)
+#      and the reference contrasts tau_slope() / tau_slope_adj()
 #   8. chunk_validations_se() on check 6's fit: its classical rows are
-#      chunk_validations(robust = FALSE)'s, its hc3 rows robust = TRUE's
+#      chunk_validations(robust = FALSE)'s, its hc3 rows robust = TRUE's. And
+#      the est_/se_/ref1_/true2_ columns: where they sit, the same est/ref1/true2
+#      under both kinds, true2 filled once the truth is attached, and the sign
+#      conventions (ref1_top >= 0, ref1_bottom <= 0, ref1_dd >= 0)
 #   9. (full only) one replicate end to end, with cts_val_1.sh's "1 1"
 #      arguments: results land in a directory named by the un-mangled
 #      interim_prop, the one trial is split n1 / n - n1, validations carries
 #      all four comparisons with both standard-error kinds,
 #      and bottom is a plausible p-value rather than the near-zero intercept
-#      p-value the old code produced
+#      p-value the old code produced. Row 1 is the null (scenario 1), so every
+#      true2_* there is 0
 
 library(dplyr)
 library(furrr)
@@ -95,11 +101,11 @@ cat("\n=== 2. the parameter grid ===\n")
 
 props <- unique(study$grid$interim_prop)
 
-report(nrow(study$grid) == 3300,
-       sprintf("grid is 3300 rows (got %d)", nrow(study$grid)))
-report(identical(sort(unique(study$grid$scenario)), 2:4) &&
+report(nrow(study$grid) == 4400,
+       sprintf("grid is 4400 rows (got %d)", nrow(study$grid)))
+report(identical(sort(unique(study$grid$scenario)), 1:4) &&
          identical(unique(study$grid$rho), 0.5),
-       "scenarios 2-4, rho = 0.5 only")
+       "scenarios 1-4, rho = 0.5 only")
 report(length(props) == 11,
        sprintf("11 distinct interim proportions (got %d)", length(props)))
 report(isTRUE(all.equal(sort(props), seq(0.25, 0.75, by = 0.05))),
@@ -179,6 +185,31 @@ report(interaction_pval_adj(Y_adj, W_t, X_adj, "Xproxy") > 0.01,
        "interaction_pval_adj does not flag the proxy once the modifier is adjusted for")
 report(interaction_pval_adj(Y_adj, W_t, X_adj, "Xmod") < 0.01,
        "interaction_pval_adj still detects the real modifier")
+
+# the estimate and SE saved alongside the p-value (2026-10-12): the classical
+# triple is summary.lm's own W:v row, and the p-value is the one above
+tr_t <- interaction_test(Y_t, W_t, v_t)
+report(identical(unname(tr_t), unname(co_t[4, c(1, 2, 4)])) &&
+         identical(names(tr_t), c("est", "se", "p")),
+       sprintf("interaction_test returns summary.lm's W:v est/se/p (est %.3f)", tr_t[["est"]]))
+report(identical(tr_t[["est"]], interaction_test(Y_t, W_t, v_t, robust = TRUE)[["est"]]),
+       "the HC3 test has the same estimate, only its SE differs")
+report(all(is.na(interaction_test(Y_t, W_t, rep(0, n_t)))),
+       "a constant v gives an all-NA est/se/p")
+
+# the reference contrasts: tau's projection slope on v, which for a 0/1 v is
+# the difference in mean tau inside vs outside
+tau_r <- 0.5 + 2 * v_t + rnorm(n_t, sd = 0.3)
+report(isTRUE(all.equal(tau_slope(tau_r, v_t),
+                        mean(tau_r[v_t == 1]) - mean(tau_r[v_t == 0]))),
+       "tau_slope on a 0/1 v is the difference in mean tau")
+report(is.na(tau_slope(NULL, v_t)) && is.na(tau_slope(tau_r, rep(1, n_t))),
+       "tau_slope is NA without a tau or without a contrast")
+tau_adj <- 0.5 - 1 * x_mod
+report(isTRUE(all.equal(tau_slope_adj(tau_adj, X_adj, "Xmod"), -1)) &&
+         abs(tau_slope_adj(tau_adj, X_adj, "Xproxy")) < 1e-8 &&
+         tau_slope(tau_adj, x_proxy) < -0.5,
+       "tau_slope_adj gives the proxy no slope once the modifier is in; tau_slope does")
 
 # =============================================================================
 cat("\n=== 4. interaction_pval's degenerate guard ===\n")
@@ -333,6 +364,39 @@ report(identical(v_se$var_imps, v_hc$var_imps) &&
          identical(v_se$variances, v_cl$variances),
        "variances and var_imps do not depend on the standard errors")
 
+# the estimates and reference contrasts (2026-10-12). The truth is attached
+# here as the analysis scripts attach it, so true2_* is filled
+fit_tt <- fit_t
+fit_tt$truth <- gen_t$truth
+v_tt <- chunk_validations_se(fit_t, fit_tt, d_se, d_se)
+forms <- c("cts", "cts_adj", "split", "dd", "proj")
+sg_new <- paste0(rep(c("est", "se", "ref1", "true2"), each = 2), "_", c("top", "bottom"))
+tv_new <- paste0(rep(c("est", "se", "ref1", "true2"), each = 5), "_", forms)
+for (model in names(v_tt$subgroups)) {
+  sg <- v_tt$subgroups[[model]]
+  tv <- v_tt$top_var_tests[[model]]
+  report(identical(names(sg), c("se", "top", "bottom", sg_new)) &&
+           identical(names(tv)[-seq_len(11)], tv_new),
+         sprintf("%s: est/se/ref1/true2 columns follow the p-values", model))
+  same_kinds <- function(d, cols) {
+    isTRUE(all.equal(d[d$se == "classical", cols], d[d$se == "hc3", cols],
+                     check.attributes = FALSE))
+  }
+  report(same_kinds(sg, grep("^(est|ref1|true2)_", names(sg), value = TRUE)) &&
+           same_kinds(tv, grep("^(est|ref1|true2)_", names(tv), value = TRUE)),
+         sprintf("%s: est, ref1 and true2 are the same under both kinds", model))
+  report(all(is.finite(unlist(sg[c("true2_top", "true2_bottom")]))) &&
+           all(is.finite(unlist(tv[paste0("true2_", c("cts", "cts_adj", "split"))]))),
+         sprintf("%s: true2 is filled once the truth is attached", model))
+  # the sign conventions: chunk 1's top group has the larger estimated effect,
+  # its bottom group the smaller, and the tree's high side is high
+  report(all(sg$ref1_top >= 0 & sg$ref1_bottom <= 0, na.rm = TRUE) &&
+           all(tv$ref1_dd >= 0, na.rm = TRUE),
+         sprintf("%s: ref1_top >= 0, ref1_bottom <= 0, ref1_dd >= 0", model))
+}
+report(all(is.na(unlist(lapply(v_se$subgroups, function(d) d[c("true2_top", "true2_bottom")])))),
+       "without the truth attached, true2 is NA")
+
 # =============================================================================
 cat("\n=== 9. one replicate end to end ===\n")
 
@@ -413,6 +477,16 @@ if (!run_full) {
                plausible(unlist(tv[p_cols])),
              sprintf("%s: %s are present and plausible or NA", model,
                      paste(p_cols, collapse = ", ")))
+
+      # row 1 is scenario 1, the null: tau is constant, so every true contrast
+      # is 0 (up to rounding) and every estimate is noise around it
+      true2 <- unlist(c(sg[grep("^true2_", names(sg))], tv[grep("^true2_", names(tv))]))
+      report(param1$scenario == 1 && length(true2) == 2 * 2 + 4 * 5 &&
+               all(is.na(true2) | abs(true2) < 1e-8),
+             sprintf("%s: scenario 1 (null) - every true2_* is 0", model))
+      est <- unlist(c(sg[grep("^est_", names(sg))], tv[grep("^est_", names(tv))]))
+      report(length(est) == 2 * 2 + 4 * 5 && all(is.na(est) | is.finite(est)),
+             sprintf("%s: est_* present, finite or NA", model))
     }
   }
 }

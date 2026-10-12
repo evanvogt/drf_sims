@@ -9,17 +9,17 @@
 # The helpers shared with continuous/ (TE-VIMs, TreeSHAP column order,
 # interaction_pval's name-based indexing, the data-driven top-covariate tests)
 # are checked by continuous/cts_val_testing.R; this covers what is
-# binary-specific, and what a binary array needs before 3300 jobs go out.
+# binary-specific, and what a binary array needs before 4400 jobs go out.
 #
 # Checks, in order:
 #   1. the packages a row needs load, including sandwich for the HC3 tests
-#   2. the grid is 3300 rows - rho 0.5 only, scenarios 2-4, 11 interim
+#   2. the grid is 4400 rows - rho 0.5 only, scenarios 1-4, 11 interim
 #      proportions, none of which stringifies to a float artefact
 #      (as.character() is a directory name)
 #   3. robust = TRUE gives HC3 p-values: they match a hand-computed sandwich
 #      t-test, differ from the classical ones, are not small under a null, and
 #      still return NA for a v with no contrast
-#   4. the binary DGM, for each of scenarios 2-4: a trial of 1000 generates
+#   4. the binary DGM, for each of scenarios 1-4: a trial of 1000 generates
 #      (every risk inside [0, 1]), Y is 0/1, tau is a risk difference, and its
 #      in-sample Var(tau) is printed. Scenario 2's tau is driven by X4 alone
 #   5. split_trial(): one trial of 1000 splits n1 / 1000 - n1, and a run's chunk
@@ -27,10 +27,13 @@
 #   6. run_all_cate_methods on one 250-row binary chunk: all three estimators,
 #      both measures, finite crossfit tau and TE-VIMs, and a step-by-step timing
 #   7. chunk_validations_se() on check 6's fit: one row per standard-error kind,
-#      each chunk_validations()'s own, and a binary Y's p_dd / p_proj plausible
+#      each chunk_validations()'s own, and a binary Y's p_dd / p_proj plausible.
+#      With the truth attached: the est_/true2_ columns, true2 a risk
+#      difference, and ref1_top >= 0 / ref1_bottom <= 0
 #   8. (full only) one replicate end to end with bin_val_1.sh's "1 1"
 #      arguments: the results path, the split, all four comparisons over all
-#      three estimators and both standard-error kinds, plausible p-values
+#      three estimators and both standard-error kinds, plausible p-values. Row 1
+#      is the null (scenario 1), so every true2_* there is 0
 
 library(dplyr)
 library(furrr)
@@ -74,11 +77,11 @@ for (pkg in c("xgboost", "SHAPforxgboost", "sandwich",
 cat("\n=== 2. the parameter grid ===\n")
 
 props <- unique(study$grid$interim_prop)
-report(nrow(study$grid) == 3300,
-       sprintf("grid is 3300 rows (got %d)", nrow(study$grid)))
-report(identical(sort(unique(study$grid$scenario)), 2:4) &&
+report(nrow(study$grid) == 4400,
+       sprintf("grid is 4400 rows (got %d)", nrow(study$grid)))
+report(identical(sort(unique(study$grid$scenario)), 1:4) &&
          identical(unique(study$grid$rho), 0.5),
-       "scenarios 2-4, rho = 0.5 only")
+       "scenarios 1-4, rho = 0.5 only")
 report(length(props) == 11 &&
          isTRUE(all.equal(sort(props), seq(0.25, 0.75, by = 0.05))),
        "11 interim proportions, 0.25 to 0.75 in 0.05 steps")
@@ -202,6 +205,25 @@ for (model in names(v_se$subgroups)) {
          sprintf("%s: top_var_tests has 4 rows and plausible p_dd / p_proj", model))
 }
 
+# the estimates and reference contrasts (2026-10-12), with the chunk's truth
+# attached as bin_val_analysis.R attaches it. On a binary Y est is a
+# risk-difference interaction and true2 a risk difference, so both are inside
+# [-1, 1]; ref1_top / ref1_bottom keep their signs
+fit_ct <- fit_c
+fit_ct$truth <- ch25$truth1
+v_tt <- chunk_validations_se(fit_c, fit_ct, d_se, d_se)
+for (model in names(v_tt$subgroups)) {
+  sg <- v_tt$subgroups[[model]]
+  tv <- v_tt$top_var_tests[[model]]
+  est <- unlist(c(sg[grep("^est_", names(sg))], tv[grep("^est_", names(tv))]))
+  true2 <- unlist(c(sg[grep("^true2_", names(sg))], tv[grep("^true2_", names(tv))]))
+  report(length(est) == 24 && length(true2) == 24 &&
+           all(is.na(true2) | abs(true2) <= 1) &&
+           all(sg$ref1_top >= 0 & sg$ref1_bottom <= 0, na.rm = TRUE),
+         sprintf("%s: est/true2 columns present, true2 a risk difference, ref1 signs hold",
+                 model))
+}
+
 # =============================================================================
 cat("\n=== 8. one replicate end to end ===\n")
 
@@ -252,6 +274,11 @@ if (!run_full) {
                all(p_cols %in% names(tv)) && plausible(unlist(tv[p_cols])),
              sprintf("%s: top_var_tests has both measures x both kinds and plausible p-values",
                      model))
+      # row 1 is scenario 1, the null: every true contrast is 0
+      true2 <- unlist(c(sg[grep("^true2_", names(sg))], tv[grep("^true2_", names(tv))]))
+      report(param1$scenario == 1 && length(true2) == 24 &&
+               all(is.na(true2) | abs(true2) < 1e-8),
+             sprintf("%s: scenario 1 (null) - every true2_* is 0", model))
     }
   }
 }

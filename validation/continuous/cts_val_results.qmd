@@ -13,6 +13,7 @@ format:
 
 <!--
 One report per scenario. Render each with, from validation/continuous/:
+  quarto render cts_val_results.qmd -P scenario:1 --output cts_val_results_sc1.html
   quarto render cts_val_results.qmd -P scenario:2 --output cts_val_results_sc2.html
   quarto render cts_val_results.qmd -P scenario:3 --output cts_val_results_sc3.html
   quarto render cts_val_results.qmd -P scenario:4 --output cts_val_results_sc4.html
@@ -47,7 +48,8 @@ sc_row <- sc_row[sc_row$scenario == scenario, ]
 
 # the true modifiers, read off the scenario's te_expr (R/dgm_scenarios.R)
 modifiers <- Filter(function(v) te_uses(sc_row, v), paste0("X", 1:5))
-mod_label <- paste(modifiers, collapse = ", ")
+# none in scenario 1, the null
+mod_label <- if (length(modifiers) > 0) paste(modifiers, collapse = ", ") else "none"
 
 # The reference Var(tau), from one large draw of the study's own DGM rather than
 # a hand-entered constant, so it follows R/dgm_scenarios.R. calib_n = the
@@ -70,17 +72,17 @@ important covariate still interacts with treatment — replicates on the remaini
 stage. It is a robustness check for CATE-based subgroup discovery, not an
 estimator comparison.
 
-This report covers **scenario `r scenario`**. The study runs scenarios 2–4; each
+This report covers **scenario `r scenario`**. The study runs scenarios 1–4; each
 has its own render of this file.
 
 ### Design
 
 | | |
 |---|---|
-| scenario | `r scenario` of 2–4, correlated continuous set at rho = `r rho` (see below) |
+| scenario | `r scenario` of 1–4, correlated continuous set at rho = `r rho` (see below) |
 | n | 1000, one trial split into its first `n * interim_prop` participants and the rest |
 | `interim_prop` | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 per scenario — **3300 array jobs** over the three scenarios |
+| runs | 100 per scenario — **4400 array jobs** over the four scenarios |
 | folds | DR SuperLearner only: 5 for a stage below 500 rows, else 10 |
 | interaction tests | linear models, each with classical and HC3 standard errors. HC3 throughout, except the section comparing the two |
 
@@ -108,6 +110,16 @@ the interaction test below.
 
 ```{r truth-text, results='asis'}
 truth_text <- list(
+  "1" = paste0(
+    "Scenario 1 of the continuous set is `TE_10[1]`, the **null**: `tau = bW` for ",
+    "everyone, so `Var(tau) = 0` and no covariate modifies the effect. X1 and X2 ",
+    "are prognostic only, and X3–X5 are drawn but unused. Nothing chunk 1 finds is ",
+    "real, so every significant chunk 2 interaction test - subgroup or top ",
+    "covariate, any form - is a **type I error**, and every replication rate below ",
+    "should sit at the nominal 5%. A rate above it is how often an interim finding ",
+    "would \"validate\" when there is nothing to find. Every `true2` contrast is 0. ",
+    "The parts of this report about true modifiers (ranked top, nominated) are 0 ",
+    "by definition here."),
   "2" = paste0(
     "Scenario 2 of the continuous set is `TE_10[2]`: `tau = bW + b4 * X4`, with ",
     "`b4 = ", sc_row$b4, "` and `X4 ~ N(0, 1)`. X4 is the only modifier. `X3` and ",
@@ -163,7 +175,7 @@ Consequences used as reference lines below:
   `interim_prop`, computed by simulating the DGM. The copula scales the
   continuous covariates' latent columns, so their marginal distributions are
   unchanged by the correlation, and `bW` is additive, so it does not enter.
-- **The true HTE drivers are `r mod_label`.** The other covariates in the
+- **The true HTE drivers are: `r mod_label`.** The other covariates in the
   fitted model are noise as far as the CATE is concerned, and a working
   estimator should rank a true modifier most important in both stages, under
   either importance measure.
@@ -386,9 +398,7 @@ ggplot(var_change_summary, aes(x = interim_prop, y = mean_change, colour = model
 
 `chunk_validations()` ranks each covariate's importance within a stage via
 `rank()`: **rank 1 is the least important covariate, rank `r n_covariates`
-is the most important.** The true HTE drivers are `r mod_label`, so a working
-estimator should rank one of them `r n_covariates` (most important) in both
-stages, under both measures.
+is the most important.** `r if (length(modifiers) > 0) paste0("The true HTE drivers are ", mod_label, ", so a working estimator should rank one of them ", n_covariates, " (most important) in both stages, under both measures.") else "Scenario 1 has no HTE drivers, so no ranking is right: these plots show how stable a ranking of noise looks, and the proportions of runs ranking a true driver top are 0 by definition."`
 
 ```{r rank-agreement, fig.height=5}
 rank_corr <- var_imps %>%
@@ -616,6 +626,155 @@ kable(top_var_agree %>% filter(interim_prop %in% landmarks), digits = 3,
       col.names = c("Model", "Measure", "Interim point", "Runs",
                     "Nominates a modifier", "stages agree"),
       caption = "Which covariate the interim nominates, at the three landmark interim points")
+```
+
+## Direction of the replications
+
+A significant chunk 2 test only counts as a replication if the effect goes the
+way chunk 1 said it would. Since 2026-10-12 every interaction test saves its
+`W:v` estimate (`est`) next to its p-value, and two reference contrasts on the
+same scale (`validation/val_common.R`, "Reference contrasts"):
+
+- `ref1`: the same contrast computed on stage 1's *estimated* CATE, i.e. the
+  direction (and size) stage 1 implied. It is positive for the top 10%,
+  negative for the bottom 10%, and positive for the data-driven split, by
+  construction.
+- `true2`: the same contrast computed on stage 2's *true* CATE, i.e. what the
+  stage 2 test is estimating. It is 0 in scenario 1.
+
+A significant test whose `est` has the sign of `ref1` replicated stage 1's
+claim. One whose `est` has the sign of `true2` also points the right way in
+truth. Where `true2` is 0 (scenario 1) the truth has no direction, and only
+the stage 1 comparison is shown. HC3 standard errors.
+
+```{r direction-long}
+# est / ref1 / true2 and the p-value of every test, one row per run x test.
+# est, ref1 and true2 are the same under both kinds of standard error, so the
+# HC3 rows alone carry them
+DIR_PATTERN <- "^(p|est|ref1|true2)_(.+)$"
+
+direction_long <- bind_rows(
+  subgroups %>%
+    rename(p_top = top_pval, p_bottom = bottom_pval) %>%
+    select(model, interim_prop, run, matches(DIR_PATTERN)) %>%
+    pivot_longer(matches(DIR_PATTERN), names_to = c(".value", "test"),
+                 names_pattern = DIR_PATTERN) %>%
+    mutate(family = "Subgroup",
+           test = recode(test, top = "Top 10%", bottom = "Bottom 10%"),
+           measure = "-"),
+  top_var %>%
+    select(model, measure, interim_prop, run, matches(DIR_PATTERN)) %>%
+    pivot_longer(matches(DIR_PATTERN), names_to = c(".value", "test"),
+                 names_pattern = DIR_PATTERN) %>%
+    mutate(family = "Top covariate",
+           test = unname(FORM_LABELS[paste0("p_", test)]),
+           measure = as.character(measure))
+) %>%
+  # a true2 within rounding of 0 has no direction (scenario 1, or a test whose
+  # v carries no true signal)
+  mutate(sig = p < 0.05,
+         with_ref1 = sign(est) == sign(ref1),
+         with_truth = ifelse(abs(true2) < 1e-8, NA, sign(est) == sign(true2)))
+
+direction <- direction_long %>%
+  filter(!is.na(p)) %>%
+  group_by(family, model, measure, test, interim_prop) %>%
+  summarise(runs = n(),
+            prop_sig = mean(sig),
+            # replication rates that also require the right direction
+            prop_sig_ref1 = mean(sig & with_ref1, na.rm = TRUE),
+            prop_sig_truth = if (all(is.na(with_truth))) NA_real_ else
+              mean(sig & with_truth, na.rm = TRUE),
+            mean_ref1 = mean(ref1, na.rm = TRUE),
+            mean_est = mean(est, na.rm = TRUE),
+            mean_true2 = mean(true2, na.rm = TRUE),
+            .groups = "drop")
+
+direction_rates_long <- direction %>%
+  select(family, model, measure, test, interim_prop,
+         prop_sig, prop_sig_ref1, prop_sig_truth) %>%
+  pivot_longer(c(prop_sig, prop_sig_ref1, prop_sig_truth),
+               names_to = "rate", values_to = "value") %>%
+  filter(!is.na(value)) %>%
+  mutate(rate = factor(rate, levels = c("prop_sig", "prop_sig_ref1", "prop_sig_truth"),
+                       labels = c("p < 0.05", "p < 0.05, stage 1's direction",
+                                  "p < 0.05, true direction")))
+
+plot_direction_rates <- function(d, facets, title) {
+  ggplot(d, aes(x = interim_prop, y = value, colour = rate)) +
+    geom_hline(yintercept = 0.05, linetype = "dashed") +
+    geom_line() +
+    geom_point(size = 1) +
+    facets +
+    scale_x_continuous(breaks = sort(unique(d$interim_prop))) +
+    coord_cartesian(ylim = c(0, 1)) +
+    drf_scale() +
+    drf_theme(rotate_x = TRUE) +
+    labs(title = title,
+         subtitle = paste("A gap between the lines is runs that 'replicated' in the",
+                          "wrong direction. Dashed line: nominal 5%."),
+         x = "Interim proportion", y = "Proportion of runs", colour = NULL) +
+    theme(legend.position = "bottom")
+}
+```
+
+```{r direction-subgroups, fig.height=3.5 * n_models}
+plot_direction_rates(direction_rates_long %>% filter(family == "Subgroup"),
+                     facet_grid(model ~ test),
+                     "Subgroup replications, and how many went the right way")
+ggsave(fig_name("sg_direction"), path = fig_path, width = 20, height = 6 * n_models,
+       units = "cm")
+```
+
+```{r direction-topvar, fig.height=14}
+for (m in sort(unique(direction$model))) {
+  print(plot_direction_rates(
+    direction_rates_long %>% filter(family == "Top covariate", model == m),
+    facet_grid(test ~ measure),
+    paste0("Top-covariate replications, and how many went the right way: ", m)))
+}
+```
+
+Stage 1's own contrast (`ref1`) against what stage 2 estimates (`est`) and the
+truth there (`true2`), averaged over runs. `ref1` well above `true2` is
+stage 1 overstating its finding (a winner's curse). `est` tracks `true2`,
+because the stage 2 test estimates it without bias.
+
+```{r direction-shrinkage, fig.height=3.5 * n_models}
+direction %>%
+  filter(family == "Subgroup") %>%
+  pivot_longer(c(mean_ref1, mean_est, mean_true2), names_to = "quantity",
+               values_to = "value") %>%
+  mutate(quantity = factor(quantity, levels = c("mean_ref1", "mean_est", "mean_true2"),
+                           labels = c("Stage 1 claim (ref1)", "Stage 2 estimate (est)",
+                                      "Stage 2 truth (true2)"))) %>%
+  ggplot(aes(x = interim_prop, y = value, colour = quantity)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_line() +
+  geom_point(size = 1) +
+  facet_grid(model ~ test) +
+  scale_x_continuous(breaks = sort(unique(direction$interim_prop))) +
+  drf_scale() +
+  drf_theme(rotate_x = TRUE) +
+  labs(title = "Subgroup contrast: stage 1's claim, stage 2's estimate and the truth",
+       subtitle = "Difference in treatment effect, subgroup minus the rest; mean over runs",
+       x = "Interim proportion", y = "Contrast", colour = NULL) +
+  theme(legend.position = "bottom")
+```
+
+```{r direction-table}
+kable(direction %>%
+        filter(interim_prop %in% landmarks) %>%
+        select(family, test, measure, model, interim_prop, runs, prop_sig,
+               prop_sig_ref1, prop_sig_truth, mean_ref1, mean_est, mean_true2) %>%
+        arrange(family, test, measure, model, interim_prop),
+      digits = 3,
+      col.names = c("Test", "Form", "Measure", "Model", "Interim point", "Runs",
+                    "p < 0.05", "... stage 1's direction", "... true direction",
+                    "Mean ref1", "Mean est", "Mean true2"),
+      caption = paste("Replication with and without the direction, at the three",
+                      "landmark interim points, HC3. 'True direction' is blank where",
+                      "the truth has none (scenario 1)."))
 ```
 
 ## Classical vs. HC3 standard errors

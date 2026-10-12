@@ -9,10 +9,10 @@ lives in `../val_common.R`.
 | | |
 |---|---|
 | covariates | correlated, rho = 0.5 — the `continuous_corr_0.5` set (`R/dgm_scenarios.R`, CORRELATED COVARIATES), the same set `sample_size/correlated/` runs as its primary arm |
-| scenarios | 2, 3, 4 (`R/dgm_scenarios.R`, `DESC_10`): 2 simple HTE, `b4 * X4`; 3 complex, `b3 * X3 + b4 * X4 + b45 * X4 * X5`; 4 non-linear, `b4 * cos(X4)`. Scenario 2 was scenario 3 before the 2026-09-26 renumbering |
+| scenarios | 1, 2, 3, 4 (`R/dgm_scenarios.R`, `DESC_10`): 1 the null, no HTE (since 2026-10-12); 2 simple HTE, `b4 * X4`; 3 complex, `b3 * X3 + b4 * X4 + b45 * X4 * X5`; 4 non-linear, `b4 * cos(X4)`. Scenario 2 was scenario 3 before the 2026-09-26 renumbering |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 per scenario — **3300 array jobs**, 1 h walltime (see Sizing the job) |
+| runs | 100 per scenario — **4400 array jobs**, 1 h walltime (see Sizing the job) |
 | folds | DR SuperLearner only: 5 for a chunk below 500 rows, else 10 |
 | results | `../results/validation/continuous/rho_0.5/scenario_<k>/1000/<interim_prop>/res_sim_<run>.RDS` |
 
@@ -29,7 +29,7 @@ load-bearing rather than cosmetic: `interim_prop` is a `path_cols` entry, so its
 `seq(by = 0.05)` yields values like `0.30000000000000004` that `get_results()`
 can no longer match back to their grid row.
 
-Only rho = 0.5, scenarios 2–4 and n = 1000 are run today; all three are
+Only rho = 0.5, scenarios 1–4 and n = 1000 are run today; all three are
 columns of the grid (`cts_val_config.R`) so extending to rho = 0, more scenarios
 or sizes is a one-line change, not a rewrite. (The grid briefly carried rho = 0
 too, on 2026-10-09. Its `rho_0/` results are outside the grid now, so check
@@ -71,7 +71,7 @@ each nominates its own top covariate for the interaction test below.
   indirect SHAP from Svensson et al.'s SHAP_CATE, adapted from that paper's
   `cvboost3()` with a reduced tuning grid (3 learning rates × 3 depths, 5-fold,
   ≤2000 rounds) — the paper's 24-combination search runs four times per array
-  job across 3300 jobs. Because it reads only `(X, tau)` it applies unchanged to
+  job across 4400 jobs. Because it reads only `(X, tau)` it applies unchanged to
   every estimator, unlike the TE-VIMs which need an estimator-specific refit.
 
 Both are larger-is-more-important, so `rank()` means the same thing for each.
@@ -79,7 +79,7 @@ Both are larger-is-more-important, so `rank()` means the same thing for each.
 **New dependencies**: `xgboost` and `SHAPforxgboost`, used nowhere else in this
 repo. They are in `environment.yml`; a fresh install of `sim-env` must include them, and
 they must otherwise be installed into the cluster's `sim-env` R library by hand — `cts_val_testing.R`
-check 1 is there to catch their absence before 3300 jobs go out.
+check 1 is there to catch their absence before 4400 jobs go out.
 
 ## What is compared across chunks
 
@@ -98,6 +98,37 @@ errors: `subgroups[[model]]` is a two-row `data.frame(se, top, bottom)` and
 `top_var_tests[[model]]` leads with an `se` column (`chunk_validations_se()`).
 `variances` and `var_imps` do not depend on the standard errors and are saved
 once.
+
+**Estimates and the direction of a replication** (since 2026-10-12). A
+p-value alone cannot say whether chunk 2 found the effect chunk 1 claimed, or
+one pointing the other way. Each test therefore saves four more numbers next to
+its p-value, named `<stat>_<test>`. The tests are `top`/`bottom` for the
+subgroups and `cts`, `cts_adj`, `split`, `dd`, `proj` for the top-covariate
+forms. They come after the existing columns, whose names and values are
+unchanged:
+
+| column | what it is |
+|---|---|
+| `est_<test>` | the chunk-2 `W:v` estimate (the same under both kinds of standard error) |
+| `se_<test>` | its standard error (classical or HC3, per row) |
+| `ref1_<test>` | the same contrast in chunk 1's *estimated* tau: what chunk 1 claimed |
+| `true2_<test>` | the same contrast in chunk 2's *true* tau: what the test estimates; 0 in scenario 1 |
+
+W is randomised, so `W:v` estimates the slope of the linear projection of tau
+on v, and `ref1`/`true2` are that projection with tau-hat or true tau as the
+response (`tau_slope()`, `tau_slope_adj()`). For a subgroup, that is the
+difference in mean tau inside vs outside. `ref1` uses the form's v built in
+chunk 1 with the same helper (the tree's own groups, chunk 1's median split,
+the tree and spline evaluated at chunk 1's `X_top`). So `ref1_top > 0`,
+`ref1_bottom < 0` and `ref1_dd > 0` by construction. A replication "in the
+right direction" has `sign(est) == sign(ref1)`, and also `== sign(true2)` if
+it is right in truth. The report's "Direction of the replications" section
+summarises both. `true2` needs `results2$truth`, which the analysis scripts
+attach; `chunk_validations()` called without it gives NA.
+
+**Scenario 1, the null** (since 2026-10-12). tau = bW for everyone, so every
+significant test is a type I error and every replication rate is a size. That
+is the reference the other scenarios' rates are read against.
 
 `p_cts_adj` exists because of the correlation. With rho = 0.5, E[tau | X5]
 moves with X5 because X5 is correlated with X4, so a marginal `W x X5` test
@@ -175,12 +206,12 @@ there and keeps the two arms' tests the same. Classical standard errors until
 
 ```bash
 Rscript validation/continuous/cts_val_testing.R full   # do this first - see below
-qsub validation/continuous/jobscripts/cts_val_1.sh     # 1-3300
+qsub validation/continuous/jobscripts/cts_val_1.sh     # 1-4400
 Rscript validation/continuous/cts_val_check.R          # writes failed_ids.txt if any are missing
 qsub validation/continuous/jobscripts/cts_val_collect.sh
 qsub validation/continuous/jobscripts/cts_val_metrics.sh
 cd validation/continuous
-quarto render cts_val_results.qmd -P scenario:2 --output cts_val_results_sc2.html   # and 3, 4
+quarto render cts_val_results.qmd -P scenario:1 --output cts_val_results_sc1.html   # and 2, 3, 4
 ```
 
 `cts_val_testing.R` runs eight cheap checks; `full` adds one real
@@ -188,20 +219,38 @@ replicate end to end and reports how long it took, which is the number to read
 against the jobscript's walltime before submitting. It exits non-zero on any
 failure. Drop `full` for a quick local smoke test.
 
-**Before the 2026-10-11 run, archive the old scenario 2 results.** Files saved
-before then carry HC3 p-values only and no `p_dd`/`p_proj`, in a different
-shape. `check_failed()` would count them as done and `get_results()` would
-collect them next to the new ones. Archive the tree first (dry run, then
-`--apply`):
+**Before the 2026-10-12 run, archive every old result, both arms.** Nothing
+saved so far was made by the current code. Files from before 2026-10-11 carry
+HC3 p-values only and no `p_dd`/`p_proj`. None carry the interaction estimates.
+And adding scenario 1 reordered the grid. `check_failed()` would count old
+files as done, and `get_results()` would collect them next to the new ones. So
+archive both arms' whole trees: every `rho_*/scenario_*/`, the old `rho_0/`,
+the collected `*_val_all.RDS` / `*_val_metrics.RDS` and `session_logs/`.
+`archive_old_results.R --trees` writes one `.tar` per tree under
+`results/_archive/<label>/`, and deletes a tree only once its tar lists exactly
+its files. From the repo root, dry run then `--apply`:
 
 ```bash
-Rscript R/archive_old_results.R --label validation_pre_2026-10-11 \
-  --trees validation/continuous/rho_0.5/scenario_2 validation/binary/rho_0.5/scenario_2
+Rscript R/archive_old_results.R --label validation_pre_2026-10-12 \
+  --trees validation/continuous validation/binary
+Rscript R/archive_old_results.R --label validation_pre_2026-10-12 \
+  --trees validation/continuous validation/binary --apply
 ```
+
+or, if the trees are big, as a job. The jobscript adds `--apply` itself, and
+`ARCHIVE_ARGS` must stay comma-free:
+
+```bash
+cd R/jobscripts
+qsub -v ARCHIVE_ARGS="--label validation_pre_2026-10-12 --trees validation/continuous validation/binary" archive_old_results.sh
+```
+
+To restore a tree, run `tar -xf _archive/validation_pre_2026-10-12/<name>.tar`
+from `results/`.
 
 ### Without the queue
 
-When the queue is slower than the work, `cts_val_run.R` runs the same 3300 rows
+When the queue is slower than the work, `cts_val_run.R` runs the same 4400 rows
 inside one interactive session instead. Request an RStudio session with 8 cores
 and 64gb, then:
 
@@ -213,7 +262,7 @@ It runs 8 rows at a time, each as its own `Rscript cts_val_analysis.R <i> 1 1`
 subprocess — the identical command `cts_val_1.sh` gives one array index, so a
 row produced here and a row produced by the array are the same calculation and
 land in the same place. A full grid took roughly 7h before the DR SuperLearner
-was added; with it, budget 3300 × (the replicate time `cts_val_testing.R full`
+was added; with it, budget 4400 × (the replicate time `cts_val_testing.R full`
 reports) / 8.
 
 Rows that already have a results file are skipped (the same missing-run logic
@@ -257,8 +306,20 @@ cannot drift apart. Called without them it falls back to what it did before
 
 ## Status
 
-**Needs a fresh run** of all 3300 rows. Archive the existing `rho_0.5/scenario_2/`
-tree first (Running it, above).
+**Needs a fresh run** of all 4400 rows. Archive both arms' whole results trees
+first (Running it, above).
+
+Changed 2026-10-12:
+
+- **Scenario 1, the null**, added to the grid: 4 x 11 x 100 = 4400 array jobs
+  (was 3300). The grid's row order changed with it, and row 1 is now scenario
+  1 at 0.25, run 1. Every significant test there is a type I error.
+- **Interaction estimates and reference contrasts**: `est_`, `se_`, `ref1_`,
+  `true2_<test>` for every subgroup and top-covariate test — see What is
+  compared across chunks. The p-values are unchanged and keep their names
+  (checked against the previous `chunk_validations()` on the same fits). The
+  report gains a "Direction of the replications" section, and handles a
+  scenario without modifiers.
 
 Changed 2026-10-11:
 

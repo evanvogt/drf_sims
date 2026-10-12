@@ -42,13 +42,14 @@ flatten_validations <- function(all_results_df, extractor) {
 }
 
 # ---- subgroup persistence: p-values for the top/bottom-10% responder groups,
-# one row per standard-error kind (se: classical / hc3 - chunk_validations_se())
+# one row per standard-error kind (se: classical / hc3 - chunk_validations_se()).
+# top/bottom become top_pval/bottom_pval; every other column is carried as it is
+# - since 2026-10-12 that includes est_/se_/ref1_/true2_<top|bottom>
 subgroups_metrics <- flatten_validations(all_results_df, function(val, key) {
   map_dfr(names(val$subgroups), function(model) {
-    sg <- val$subgroups[[model]]
-    bind_cols(key[rep(1, nrow(sg)), , drop = FALSE],
-              tibble(model = model, se = sg$se,
-                     top_pval = sg$top, bottom_pval = sg$bottom))
+    sg <- val$subgroups[[model]] %>%
+      rename(top_pval = top, bottom_pval = bottom)
+    bind_cols(key[rep(1, nrow(sg)), , drop = FALSE], tibble(model = model), sg)
   })
 })
 
@@ -75,7 +76,8 @@ var_imp_metrics <- flatten_validations(all_results_df, function(val, key) {
 
 # ---- does chunk 1's most important covariate still interact in chunk 2
 # one row per se x measure; carries p_cts, p_cts_adj, p_split and the
-# data-driven p_dd (with dd_cuts, dd_prop) and p_proj through as they are
+# data-driven p_dd (with dd_cuts, dd_prop) and p_proj through as they are, and
+# since 2026-10-12 each form's est_/se_/ref1_/true2_<form>
 top_var_metrics <- flatten_validations(all_results_df, function(val, key) {
   map_dfr(names(val$top_var_tests), function(model) {
     tv <- val$top_var_tests[[model]]
