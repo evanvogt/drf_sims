@@ -10,7 +10,8 @@ the single most important covariate still interacts with treatment —
 replicates on the remaining chunk.
 
 This is a robustness check for CATE-based subgroup discovery, not an
-estimator comparison — it exists nowhere else in the repo.
+estimator comparison — it exists nowhere else in the repo. Full design, both
+arms, in `ADEMP.md`.
 
 | folder / file | |
 |---|---|
