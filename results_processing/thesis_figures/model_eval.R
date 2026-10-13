@@ -203,9 +203,7 @@ proxy_figure <- function(metric, y_lab, hline = NULL) {
     facet_rows = "fold", facet_cols = "scenario", facet_scales = "free_y",
     palette = scale_colour_manual(values = METRIC_COLOURS),
     shape_palette = scale_shape_manual(values = PIPELINE_SHAPES),
-    hline = hline, dodge_width = 0.8, point_size = 1.5,
-    # one line per (score type, pipeline), dodged with its points
-    line = TRUE
+    hline = hline, dodge_width = 0.8, point_size = 1.5
   ) +
     labs(x = "Sample size", colour = "Metric", shape = "Machine") +
     theme(legend.position = "bottom", legend.box = "vertical",
