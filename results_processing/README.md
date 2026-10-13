@@ -58,6 +58,7 @@ appendix's full grid, one table per metric per outcome:
 | `ss_ci_tables.R` | `{cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.tex`, `{cts,bin}_corr_ci_sf.tex` | correlated CI studies: scenario / n / model × the 10 `CI_sf` values, one interval metric per table (the inbuilt causal-forest interval, which does not depend on `CI_sf`, spans the columns). optimal_sf: scenario / n / ρ (0, 0.5, paired Δ) × ratio picked, plug-in and true-τ coverage, length. A study with incomplete metrics is skipped |
 | `miss_tables.R` | `{cts,bin}_miss_<metric>.tex`, `{cts,bin}_miss_tests_<test>.tex` | mechanism / scenario / method × model, one metric (or HTE test, with a True CATE column) per table |
 | `surv_tables.R` | `surv_main_{rho05,rho0}.tex`, `surv_<family>_{rho05,rho0}.tex` | competing risks: scenario / censoring / arm × (event × CATE bias, RMSE, Pearson). Main: one production arm per family. Secondary, one per multi-arm family: the raw arms, then paired per-run differences between arms that differ by one factor (fitting or pseudo-values) |
+| `me_tables.R` | `me_{top1,rank,regret}.tex`, `me_axis.tex`, `me_fixed.tex` | model evaluation (appendix), the 24 proxies of `thesis_figures/model_eval.R`: scenario / n / score type × fold regime × machine, one measure per table (top-1 accuracy, true rank of the pick, regret), with random-pick and best-fixed-choice rows spanning the columns. Axis: scenario × n / design axis / level × the three measures, each level averaged within run. Fixed: scenario / n / candidate × true PEHE and the three measures if always deployed, the best fixed choice in bold. All portrait. Selection derivation shared with the figures via `model_evaluation/me_selection.R`. Optional `[metrics.RDS] [table dir]` arguments for a smoke run |
 
 Each cell is `mean (MCSE)`, summarised with the figures' `summarise_metrics()`;
 the layout helpers are in `R/tables.R`. Run from
@@ -69,6 +70,7 @@ Rscript ss_test_tables.R
 Rscript ss_ci_tables.R
 Rscript miss_tables.R
 Rscript surv_tables.R
+Rscript me_tables.R
 ```
 
 The thesis preamble needs `\usepackage{booktabs, longtable, pdflscape, array}`.

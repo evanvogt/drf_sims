@@ -4,8 +4,9 @@
 # The model-evaluation study (model_evaluation/), the strategies tree: 9
 # candidate CATE learners per run, each scored by proxy losses built from an
 # independent nuisance pipeline, and selected by the proxy's argmin. The
-# exploratory version of these figures is model_evaluation/me_results.qmd; the
-# selection and baseline derivations here are the same.
+# exploratory version of these figures is model_evaluation/me_results.qmd. The
+# selection and reference derivations are model_evaluation/me_selection.R's,
+# shared with the appendix tables (thesis_tables/me_tables.R).
 #
 # Proxies: the four PEHE proxies, DR risk and the influence-corrected score
 # (IF), each with the pipeline's estimated propensity or with it fixed at the
@@ -45,6 +46,7 @@
 
 library(here)
 source(here("R", "figures.R"))
+source(here("model_evaluation", "me_selection.R"))
 
 # paths
 args <- commandArgs(trailingOnly = TRUE)
@@ -62,11 +64,8 @@ fig_path <- if (length(args) >= 2) {
 }
 dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
-KEY_COLS <- c("scenario", "n", "run", "model")
-N_CANDIDATES <- 9
-
-# the score columns are <score_type>_<fold_type>_<pipeline>
-# (model_evaluation/me_metrics.R). The order of each vector is the legend order.
+# display labels for me_selection.R's score types, fold regimes and pipelines.
+# The order of each vector is the legend order.
 SCORE_LABELS <- c(dr = "DR", dr05 = "DR-π-fixed", infl = "IF",
                   infl05 = "IF-π-fixed")
 # a light and a dark shade per score family, the dark one fixed-π. All four
@@ -90,61 +89,13 @@ REF_LINETYPES <- c(`Random pick` = "solid", `Best fixed choice` = "dashed")
 
 FIG_HEIGHT <- 18
 
-# anchored on the known tokens, so cv_shared's own underscore can't misparse
-score_pattern <- paste0(
-  "^(", paste(names(SCORE_LABELS), collapse = "|"), ")_",
-  "(", paste(names(FOLD_LABELS), collapse = "|"), ")_",
-  "(", paste(names(PIPELINE_LABELS), collapse = "|"), ")$"
-)
-
 # ---- data --------------------------------------------------------------------
 
-metrics <- readRDS(metrics_file)
+metrics <- me_read_metrics(metrics_file, SS_SCENARIO_LABELS)
 
-expected_cols <- with(
-  expand.grid(s = names(SCORE_LABELS), f = names(FOLD_LABELS),
-              p = names(PIPELINE_LABELS), stringsAsFactors = FALSE),
-  paste(s, f, p, sep = "_")
-)
-absent <- setdiff(expected_cols, names(metrics))
-if (length(absent) > 0) {
-  stop(metrics_file, " has no ", paste(absent, collapse = ", "),
-       ". Is it the strategies tree (Rscript me_metrics.R strategies)?",
-       call. = FALSE)
-}
-
-metrics <- metrics %>%
-  filter(scenario %in% names(SS_SCENARIO_LABELS)) %>%
-  select(all_of(KEY_COLS), true_pehe, all_of(expected_cols)) %>%
+# one row per (scenario, n, run, proxy): hit, regret and the pick's true rank
+selection <- me_selection(metrics) %>%
   mutate(
-    scenario = label_factor(scenario, SS_SCENARIO_LABELS),
-    n = factor(n, levels = sort(unique(n)))
-  )
-
-# one row per (scenario, n, run, proxy). A candidate only enters a ranking if
-# both its score and its truth are there; regret is against the best candidate
-# present in that run, as in me_results.qmd.
-selection <- metrics %>%
-  pivot_longer(all_of(expected_cols), names_to = "proxy_id",
-               values_to = "score") %>%
-  filter(!is.na(score), !is.na(true_pehe)) %>%
-  mutate(
-    score_type = sub(score_pattern, "\\1", proxy_id),
-    fold_type = sub(score_pattern, "\\2", proxy_id),
-    pipeline = sub(score_pattern, "\\3", proxy_id)
-  ) %>%
-  group_by(scenario, n, run, score_type, fold_type, pipeline) %>%
-  filter(n() >= 2) %>%
-  summarise(
-    hit = as.numeric(model[which.min(score)] == model[which.min(true_pehe)]),
-    regret = true_pehe[which.min(score)] - min(true_pehe),
-    # the pick's true rank among the candidates present, 1 = best
-    pick_rank = rank(true_pehe, ties.method = "min")[which.min(score)],
-    .groups = "drop"
-  ) %>%
-  mutate(
-    score_family = sub("05$", "", score_type),
-    pi_regime = ifelse(grepl("05$", score_type), "fixed", "estimated"),
     metric = label_factor(score_type, SCORE_LABELS),
     fold = label_factor(fold_type, FOLD_LABELS),
     machine = label_factor(pipeline, PIPELINE_LABELS)
@@ -152,30 +103,13 @@ selection <- metrics %>%
 
 # ---- regret references -------------------------------------------------------
 
-# each candidate's regret in its run, the basis of both references
-candidate_regret <- metrics %>%
-  filter(!is.na(true_pehe)) %>%
-  group_by(scenario, n, run) %>%
-  mutate(regret = true_pehe - min(true_pehe)) %>%
-  ungroup()
-
-# a uniformly random pick's expected regret is the run's mean candidate regret
-random_ref <- candidate_regret %>%
-  group_by(scenario, n, run) %>%
-  summarise(regret = mean(regret), .groups = "drop") %>%
-  group_by(scenario, n) %>%
+refs <- me_references(metrics) %>%
+  group_by(scenario, n, ref) %>%
   summarise(value = mean(regret), .groups = "drop") %>%
-  mutate(ref = "Random pick")
-
-best_fixed_ref <- candidate_regret %>%
-  group_by(scenario, n, model) %>%
-  summarise(value = mean(regret), .groups = "drop_last") %>%
-  slice_min(value, n = 1, with_ties = FALSE) %>%
-  ungroup() %>%
-  mutate(ref = "Best fixed choice")
-
-refs <- bind_rows(random_ref, select(best_fixed_ref, -model)) %>%
-  mutate(ref = factor(ref, levels = names(REF_LINETYPES)))
+  mutate(ref = factor(c(random = "Random pick",
+                        best_fixed = "Best fixed choice")[as.character(ref)],
+                      levels = names(REF_LINETYPES))) %>%
+  arrange(ref)
 
 ref_linetype <- scale_linetype_manual(name = "Reference",
                                       values = REF_LINETYPES)
@@ -211,7 +145,7 @@ proxy_figure <- function(metric, y_lab, hline = NULL) {
 }
 
 top1_fig <- proxy_figure("hit", "Top-1 selection accuracy",
-                         hline = 1 / N_CANDIDATES)
+                         hline = 1 / ME_N_CANDIDATES)
 save_fig("me_top1.png", fig_path, height = FIG_HEIGHT, plot = top1_fig)
 
 # the references vary with n, which is on x, so each is a segment across its n
@@ -231,18 +165,8 @@ save_fig("me_regret.png", fig_path, height = FIG_HEIGHT, plot = regret_fig)
 
 n_label <- function(n) factor(paste("n =", n), levels = paste("n =", levels(n)))
 
-axis_runs <- bind_rows(Map(function(axis, spec) {
-  selection %>%
-    mutate(axis = axis, level = unname(spec$labels[.data[[spec$col]]])) %>%
-    group_by(scenario, n, run, axis, level) %>%
-    summarise(regret = mean(regret), .groups = "drop")
-}, names(AXES), AXES)) %>%
-  mutate(
-    axis = factor(axis, levels = names(AXES)),
-    level = factor(level,
-                   levels = unlist(lapply(AXES, function(a) unname(a$labels)))),
-    n = n_label(n)
-  )
+axis_runs <- me_axis_runs(selection, AXES, "regret") %>%
+  mutate(n = n_label(n))
 
 axis_summary <- summarise_metrics(
   axis_runs,

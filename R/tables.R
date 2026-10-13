@@ -412,3 +412,113 @@ surv_metrics_table <- function(summary, cols, ...) {
     ...
   )
 }
+
+#' Model-evaluation proxy table: rows scenario x n x score, columns fold regime
+#' x machine
+#'
+#' One measure per table, so the 24 proxies of a (scenario, n) fold into four
+#' rows: the score type down, the scoring nuisance's fold regime (a spanning
+#' header) and machine across. Under them, one row per reference (random pick,
+#' best fixed choice), which does not depend on the fold regime or machine and
+#' so is printed once, in a cell spanning those columns.
+#'
+#' @param summary output of summarise_metrics() grouped by scenario, n,
+#'   metric (the score type), fold and machine, all factors in display order,
+#'   with mean_<stem>/mcse_<stem>
+#' @param refs the references summarised the same way, grouped by scenario,
+#'   n and ref (a factor, the row order), with `label`, the row's text
+#' @param stem the measure
+#' @param digits decimals for every cell
+#' @param ... passed to grouped_longtable()
+me_proxy_table <- function(summary, refs, stem, digits, ...) {
+  mean_col <- paste0("mean_", stem)
+  mcse_col <- paste0("mcse_", stem)
+  summary <- droplevels(summary)
+  folds <- levels(summary$fold)
+  machines <- levels(summary$machine)
+  cell_cols <- paste(rep(folds, each = length(machines)), machines, sep = "__")
+
+  proxies <- summary %>%
+    transmute(
+      scenario, n,
+      row = as.character(metric),
+      order = as.integer(metric),
+      key = paste(fold, machine, sep = "__"),
+      cell = fmt_mcse(.data[[mean_col]], .data[[mcse_col]], digits)
+    ) %>%
+    pivot_wider(names_from = key, values_from = cell)
+  for (cc in setdiff(cell_cols, names(proxies))) proxies[[cc]] <- NA_character_
+  proxies <- proxies %>%
+    mutate(across(all_of(cell_cols), ~ coalesce(.x, "---")))
+
+  # kbl() needs every row to have all its cells, so a reference row's other
+  # cells are placeholders, removed (with their "&") from the LaTeX afterwards,
+  # as in ci_sweep_table()
+  placeholder <- "SPANNEDCELL"
+  references <- refs %>%
+    transmute(
+      scenario, n,
+      row = label,
+      order = nlevels(summary$metric) + as.integer(ref),
+      cell = fmt_mcse(.data[[mean_col]], .data[[mcse_col]], digits)
+    )
+  references[[cell_cols[1]]] <- paste0("\\multicolumn{", length(cell_cols),
+                                       "}{c}{", references$cell, "}")
+  for (cc in cell_cols[-1]) references[[cc]] <- placeholder
+  references$cell <- NULL
+
+  body <- bind_rows(proxies, references) %>%
+    arrange(scenario, n, order)
+  tab <- body %>%
+    transmute(n = as.character(n), row, across(all_of(cell_cols)))
+
+  out <- grouped_longtable(
+    tab,
+    col_names = c("$n$", "Score", rep(machines, length(folds))),
+    group = body$scenario,
+    block = body$n,
+    header_above = c(" " = 2,
+                     setNames(rep(length(machines), length(folds)), folds)),
+    ...
+  )
+  gsub(paste0(" *& *", placeholder), "", out)
+}
+
+#' Model-evaluation design-axis table: rows scenario x n x axis x level, one
+#' column per measure
+#'
+#' Each (scenario, n) is a bold header row, then each design axis (score,
+#' propensity, fold regime, machine) a block of its levels.
+#'
+#' @param summary output of summarise_metrics() grouped by scenario, n, axis
+#'   and level, all factors in display order, with mean_<stem>/mcse_<stem> for
+#'   every stem in `cols`
+#' @param cols as ss_latex_table()
+#' @param ... passed to grouped_longtable()
+me_axis_table <- function(summary, cols, ...) {
+  body <- summary %>% arrange(scenario, n, axis, level)
+
+  cells <- lapply(seq_len(nrow(cols)), function(i) {
+    fmt_mcse(body[[paste0("mean_", cols$stem[i])]],
+             body[[paste0("mcse_", cols$stem[i])]],
+             cols$digits[i])
+  })
+  names(cells) <- cols$stem
+
+  group <- paste0(body$scenario, ", $n$ = ", body$n)
+  group <- factor(group, levels = unique(group))
+
+  tab <- bind_cols(
+    tibble(axis = as.character(body$axis), level = as.character(body$level)),
+    as_tibble(cells)
+  )
+
+  grouped_longtable(
+    tab,
+    col_names = c("Axis", "Level", cols$header),
+    group = group,
+    block = body$axis,
+    header_above = col_group_headers(cols),
+    ...
+  )
+}
