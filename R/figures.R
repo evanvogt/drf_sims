@@ -361,6 +361,9 @@ save_fig <- function(
 #'   only callers that set it need ggh4x installed. y is freed in
 #'   `facet_scales` if it isn't already ("fixed" -> "free_y",
 #'   "free_x" -> "free"), as facet_grid2() requires
+#' @param facet_switch passed to the facet's `switch` - e.g. "y" puts the row
+#'   strips on the left, where with strip.placement = "outside" they stand in
+#'   for a y title per row. NULL (the default) leaves the strips where they are
 #' @param alpha error bar is a (1 - alpha) CI, i.e. mean +/- qnorm(1 -
 #'   alpha/2) x MCSE - not a raw +/- 1x MCSE, which is only a ~68% interval and
 #'   makes a genuinely unbiased estimator look biased on ~32% of points by
@@ -406,6 +409,7 @@ point_range_plot <- function(
   facet_cols = "scenario",
   facet_scales = "free",
   independent_y = FALSE,
+  facet_switch = NULL,
   blank_x = FALSE,
   alpha = 0.05,
   line = FALSE,
@@ -474,10 +478,12 @@ point_range_plot <- function(
       rows = facet_vars$rows,
       cols = facet_vars$cols,
       scales = free_y[[facet_scales]],
-      independent = "y"
+      independent = "y",
+      switch = facet_switch
     )
   } else {
-    facet_grid(rows = facet_vars$rows, cols = facet_vars$cols, scales = facet_scales)
+    facet_grid(rows = facet_vars$rows, cols = facet_vars$cols,
+               scales = facet_scales, switch = facet_switch)
   }
 
   p <- p +

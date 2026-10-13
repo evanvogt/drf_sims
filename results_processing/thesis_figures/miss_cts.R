@@ -6,7 +6,6 @@
 
 library(here)
 library(patchwork)
-library(ggh4x)
 source(here("R", "figures.R"))
 
 # paths
@@ -44,8 +43,5 @@ b_new <- bias_sum_plot + theme(axis.text.x = element_blank())
 ggsave("miss_cts_bias_mse.png", path = fig_path, width = 21, height = 15, units = "cm")
 
 # every panel on its own y scale, so the variation within a scenario shows -
-# the shared-scale rows above compress it. facet_grid2() replaces
-# point_range_plot()'s facet_grid(). Not saved.
-bias_sum_plot +
-  facet_grid2(rows = vars(mechanism), cols = vars(scenario), scales = "free",
-              independent = "y")
+# the shared-scale rows above compress it. Not saved.
+point_range_plot(metrics_summary, "bias", "Bias", independent_y = TRUE)

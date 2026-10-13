@@ -19,10 +19,11 @@
 #     unit, so every estimator has all three;
 #   - simultaneous coverage is 0/1 per run, so it gets the binomial MCSE,
 #     marginal coverage and length the general one (summarise_metrics());
-#   - every panel has its own y scale, as the scenarios differ. facet_grid()
-#     can only free y per row, so each panel is its own plot, laid out 3 x 4
-#     with patchwork, which keeps the columns aligned. Coverage panels have the
-#     nominal 0.95 dashed, which their scale always takes in;
+#   - every panel has its own y scale, as the scenarios differ
+#     (point_range_plot(independent_y = TRUE), as facet_grid() can only free
+#     y per row). The metric names are the row strips, on the left where a y
+#     title would be. Coverage panels have the nominal 0.95 dashed, which
+#     their scale always takes in;
 #   - each estimator keeps the colour it has in the other thesis figures (Safe,
 #     by its place in MODEL_LABELS, as ss_ci.R), although only four of them
 #     (CI_MODELS) have intervals.
@@ -33,7 +34,6 @@
 # Writes to ../results/thesis_figures/miss_cts_ci/miss_cts_ci_all.png
 
 library(here)
-library(patchwork)
 source(here("R", "figures.R"))
 
 # paths
@@ -86,65 +86,45 @@ model_levels <- levels(metrics_summary$model)
 safe <- as.character(paletteer_d("rcartocolor::Safe", length(MODEL_LABELS)))
 pal_values <- setNames(safe[match(model_levels, MODEL_LABELS)], model_levels)
 
-#' One panel: one metric in one scenario
-#'
-#' Up to 12 points per strategy (4 estimators x 3 sets of units), so the dodge
-#' is wide, the points bigger and the error bars fainter, as missing.R's
-#' models_figure().
-#'
-#' @param m one row of CI_METRICS
-#' @param scen a scenario label
-#' @param top TRUE for the top row, the only one with the scenario strips
-#' @param bottom TRUE for the bottom row, the only one with the x axis labels
-#'   and title
-#' @param left TRUE for the first column, the only one with the y title
-ci_panel <- function(m, scen, top = FALSE, bottom = FALSE, left = FALSE) {
-  p <- point_range_plot(
-    filter(metrics_summary, scenario == scen),
-    m$stem,
-    m$lab,
-    x = "strategy",
-    colour = "model",
-    shape = "units",
-    shape_palette = scale_shape_manual(values = UNIT_SHAPES),
-    facet_rows = NULL,
-    facet_cols = "scenario",
-    hline = if (m$coverage) NOMINAL else NULL,
-    palette = scale_colour_manual(values = pal_values, limits = model_levels),
-    dodge_width = 0.85,
-    point_size = 1.5,
-    ci_alpha = 0.5
-  ) +
-    labs(x = "Pooling strategy", colour = NULL, shape = NULL) +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+# one row per run of the figure: the metric is a facet row, its mean and MCSE
+# in mean_value / mcse_value for point_range_plot()
+metrics_rows <- metrics_summary %>%
+  pivot_longer(matches("^(mean|mcse)_"), names_to = c(".value", "stem"),
+               names_pattern = "^(mean|mcse)_(.*)$") %>%
+  rename(mean_value = mean, mcse_value = mcse) %>%
+  mutate(metric = factor(CI_METRICS$lab[match(stem, CI_METRICS$stem)],
+                         levels = CI_METRICS$lab))
 
-  if (!top) {
-    p <- p + theme(strip.text.x = element_blank(),
-                   strip.background.x = element_blank())
-  }
-  if (!bottom) {
-    p <- p + theme(axis.text.x = element_blank(), axis.title.x = element_blank())
-  }
-  if (!left) {
-    p <- p + theme(axis.title.y = element_blank())
-  }
-  p
-}
+# the nominal line, in the coverage rows only
+nominal <- tibble(
+  metric = factor(CI_METRICS$lab[CI_METRICS$coverage], levels = CI_METRICS$lab),
+  yintercept = NOMINAL
+)
 
-scenarios <- levels(droplevels(metrics_summary$scenario))
-n_rows <- nrow(CI_METRICS)
-panels <- list()
-for (i in seq_len(n_rows)) {
-  for (j in seq_along(scenarios)) {
-    panels[[length(panels) + 1]] <- ci_panel(
-      CI_METRICS[i, ], scenarios[j],
-      top = i == 1, bottom = i == n_rows, left = j == 1
-    )
-  }
-}
-
-fig <- wrap_plots(panels, ncol = length(scenarios)) +
-  plot_layout(guides = "collect", axis_titles = "collect_x") &
-  theme(legend.position = "bottom", legend.box = "vertical")
+# Up to 12 points per strategy (4 estimators x 3 sets of units), so the dodge
+# is wide, the points bigger and the error bars fainter, as missing.R's
+# models_figure(). The metric names are the row strips, switched to the left.
+fig <- point_range_plot(
+  metrics_rows,
+  "value",
+  NULL,
+  x = "strategy",
+  colour = "model",
+  shape = "units",
+  shape_palette = scale_shape_manual(values = UNIT_SHAPES),
+  facet_rows = "metric",
+  facet_scales = "free_y",
+  independent_y = TRUE,
+  facet_switch = "y",
+  hline = nominal,
+  palette = scale_colour_manual(values = pal_values, limits = model_levels),
+  dodge_width = 0.85,
+  point_size = 1.5,
+  ci_alpha = 0.5
+) +
+  labs(x = "Pooling strategy", colour = NULL, shape = NULL) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        strip.placement = "outside",
+        legend.position = "bottom", legend.box = "vertical")
 
 save_fig("miss_cts_ci_all.png", fig_path, width = 30, height = 24, plot = fig)
