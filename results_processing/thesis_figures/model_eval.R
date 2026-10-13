@@ -66,6 +66,10 @@ N_CANDIDATES <- 9
 # (model_evaluation/me_metrics.R). The order of each vector is the legend order.
 SCORE_LABELS <- c(dr = "DR", dr05 = "DR-π-fixed", infl = "IF",
                   infl05 = "IF-π-fixed")
+# a light and a dark shade per score family, the dark one fixed-π. All four
+# are rcartocolor::Safe colours, the thesis palette. Names are the labels above.
+METRIC_COLOURS <- c(DR = "#88CCEE", `DR-π-fixed` = "#332288",
+                    IF = "#CC6677", `IF-π-fixed` = "#882255")
 FOLD_LABELS <- c(cv_shared = "CV", holdout = "Holdout", whole = "Whole")
 PIPELINE_LABELS <- c(xgb = "XGBoost", automl = "AutoML")
 PIPELINE_SHAPES <- setNames(c(16, 17), PIPELINE_LABELS)
@@ -181,8 +185,8 @@ proxy_summary <- summarise_metrics(
   count_na = character()
 )
 
-#' One proxy metric: n on x, score type by colour, pipeline by shape, fold
-#' regime down, scenario across
+#' One proxy metric: n on x, score type by colour (METRIC_COLOURS), pipeline by
+#' shape, joined across n, fold regime down, scenario across
 #'
 #' @param metric "hit" or "regret"
 #' @param y_lab axis label
@@ -192,8 +196,11 @@ proxy_figure <- function(metric, y_lab, hline = NULL) {
     proxy_summary, metric, y_lab,
     x = "n", colour = "metric", shape = "machine",
     facet_rows = "fold", facet_cols = "scenario", facet_scales = "free_y",
+    palette = scale_colour_manual(values = METRIC_COLOURS),
     shape_palette = scale_shape_manual(values = PIPELINE_SHAPES),
-    hline = hline, dodge_width = 0.8, point_size = 1.5
+    hline = hline, dodge_width = 0.8, point_size = 1.5,
+    # one line per (score type, pipeline), dodged with its points
+    line = TRUE
   ) +
     labs(x = "Sample size", colour = "Metric", shape = "Machine") +
     theme(legend.position = "bottom", legend.box = "vertical",
