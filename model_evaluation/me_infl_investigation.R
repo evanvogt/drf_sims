@@ -26,6 +26,18 @@ onestep <- function(th, sur, phi) {
   mean((sur - th)^2 + 2 * (sur - th) * (phi - sur))
 }
 
+# corrected version of the infl score:
+calc_infl_score_corrected <- function(tau_hat, tau, pi, Y, W) {
+  A <- W - pi
+  C <- pi * (1 - pi)
+  B <- 2 * W * A / C
+  diff_tau <- tau - tau_hat
+  
+  pehe_infl <- (1 - B) * tau^2 + B * Y * diff_tau + 2 * A * diff_tau^2 - 2 * tau_hat^2
+  
+  mean(pehe_infl)
+}
+
 investigate_scenario <- function(scenario) {
   gen <- generate_me_scenario_data(scenario, N_BIG, seed = 1, calib_n = CALIB_N)
   Y <- gen$dataset$Y
@@ -64,6 +76,8 @@ investigate_scenario <- function(scenario) {
       dr = calc_dr_risk(th, phi),
       infl_tau = calc_infl_score(th, tau, PI_TRUE, Y, W),
       infl_phi = calc_infl_score(th, phi, PI_TRUE, Y, W),
+      infl_v2_tau = calc_infl_score_corrected(th, tau, PI_TRUE, Y, W),
+      infl_v2_phi = calc_infl_score_corrected(th, tau, PI_TRUE, Y, W),
       onestep_biased_sur = onestep(th, tau + 0.3 * X2, phi)
     )
   }))
