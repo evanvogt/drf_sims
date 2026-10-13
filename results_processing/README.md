@@ -26,6 +26,7 @@ its own folder: `cd results_processing/thesis_figures && Rscript surv.R`.
 | `missing.R` | the continuous missing-data study (main chapter), scenarios 1–4, DR-RandomForest only: bias difference and relative efficiency against the complete-data arm, as separate figures, handling method on x, complete vs incomplete units by colour |
 | `miss_cts.R`, `miss_bin.R` | the missing-data studies on the pre-2026-09-29 metrics (all-unit bias/MSE). `missing.R` supersedes `miss_cts.R` for the continuous study; `miss_bin.R` has no equivalent yet |
 | `miss_cts_ci.R` | MI confidence intervals |
+| `model_eval.R` | the model-evaluation strategies tree (`model_evaluation_strategies/me_strat_metrics.RDS`), the DR / IF proxies with estimated or fixed π: top-1 selection accuracy and regret (`me_top1.png`, `me_regret.png`), with fold regime down, scenario across, n on x, proxy by colour and pipeline by shape; and regret marginalised over each design axis (`me_axis_regret.png`). Regret is drawn against random-pick and best-fixed-choice references. Optional `[metrics.RDS] [figure dir]` arguments for a smoke run |
 | `surv.R` | the competing-risks study, the production arm of each estimator family (`SURV_ARM_LABELS`, `R/figures.R`): one figure per metric (CATE bias, RMSE, Pearson) at ρ = 0.5, ρ = 0 and the paired difference (`surv_{rho05,rho0,rhodiff}_{bias,rmse,corr}.png`), censoring on x, model by colour, cause-specific vs subdistribution estimand by shape, event (incl. Combined) down, scenario across |
 
 Shared presentation lives in `R/figures.R`: the display labels
