@@ -27,7 +27,11 @@ source(here::here("R", "dgm_scenarios.R"))
 
 ME_RHO <- 0.5
 
-generate_me_scenario_data <- function(scenario, n, return_truth = TRUE, seed = NULL) {
+# calib_n: the n bW is calibrated at (see generate_scenario_data()). The study
+# leaves it at n; me_infl_investigation.R draws a population-size sample but
+# keeps a study n here, so the true ATE is the study's. Consumes no RNG.
+generate_me_scenario_data <- function(scenario, n, return_truth = TRUE, seed = NULL,
+                                      calib_n = n) {
   generate_scenario_data(scenario, n, set = corr_set("continuous", ME_RHO),
-                         return_truth = return_truth, seed = seed)
+                         return_truth = return_truth, seed = seed, calib_n = calib_n)
 }
