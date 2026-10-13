@@ -17,8 +17,8 @@
 #   drawn as a flat line across each panel, its 95% MCSE interval shaded,
 #   from its rows at the first ratio.
 # - Coverage shares one y scale across all panels; length is free per panel,
-#   as the scenarios' CATE spread differs. facet_grid() can only free y per
-#   row, so a length figure is one plot per scenario, put side by side.
+#   as the scenarios' CATE spread differs (ggh4x::facet_grid2(independent =
+#   "y"), as facet_grid() can only free y per row).
 # - Simultaneous coverage is 0/1 per run, so its levels get the binomial MCSE,
 #   marginal coverage the general one. Differences are per run
 #   (paired_rho_diff()), MCSE sd(diff) / sqrt(pairs).
@@ -29,7 +29,7 @@
 #   {cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.png
 
 library(here)
-library(patchwork)
+library(ggh4x)
 source(here("R", "figures.R"))
 
 # paths
@@ -145,72 +145,55 @@ ci_figure <- function(summary, m, scale_lab = "", diff = FALSE) {
   mcse_col <- paste0("mcse_", m$stem)
   z <- qnorm(0.975)
 
-  panel <- function(bands, inbuilt, facet_scales) {
-    p <- point_range_plot(
-      bands,
-      m$stem,
-      y_lab,
-      x = "CI_sf",
-      colour = "model",
-      facet_rows = "n",
-      facet_cols = "scenario",
-      facet_scales = facet_scales,
-      line = TRUE,
-      ci_alpha = 0.7,
-      hline = hline,
-      palette = scale_colour_manual(values = pal_values, limits = model_levels)
-    )
-    # under the bands' points and lines
-    p$layers <- c(
-      list(
-        geom_rect(
-          data = inbuilt,
-          aes(
-            xmin = -Inf,
-            xmax = Inf,
-            ymin = .data[[mean_col]] - z * .data[[mcse_col]],
-            ymax = .data[[mean_col]] + z * .data[[mcse_col]],
-            fill = model
-          ),
-          alpha = 0.2,
-          inherit.aes = FALSE
+  fig <- point_range_plot(
+    bands,
+    m$stem,
+    y_lab,
+    x = "CI_sf",
+    colour = "model",
+    facet_rows = "n",
+    facet_cols = "scenario",
+    facet_scales = "fixed",
+    line = TRUE,
+    ci_alpha = 0.7,
+    hline = hline,
+    palette = scale_colour_manual(values = pal_values, limits = model_levels)
+  )
+  # under the bands' points and lines
+  fig$layers <- c(
+    list(
+      geom_rect(
+        data = inbuilt,
+        aes(
+          xmin = -Inf,
+          xmax = Inf,
+          ymin = .data[[mean_col]] - z * .data[[mcse_col]],
+          ymax = .data[[mean_col]] + z * .data[[mcse_col]],
+          fill = model
         ),
-        geom_hline(
-          data = inbuilt,
-          aes(yintercept = .data[[mean_col]], colour = model),
-          linewidth = 0.5
-        )
+        alpha = 0.2,
+        inherit.aes = FALSE
       ),
-      p$layers
-    )
-    p +
-      scale_fill_manual(values = pal_values, limits = model_levels, guide = "none") +
-      labs(x = "Subsampling ratio", colour = "Model")
-  }
-
-  fig <- if (m$coverage) {
-    wrap_plots(panel(bands, inbuilt, "fixed"))
-  } else {
-    scenarios <- levels(droplevels(bands$scenario))
-    plots <- lapply(seq_along(scenarios), function(i) {
-      p <- panel(
-        filter(bands, scenario == scenarios[i]),
-        filter(inbuilt, scenario == scenarios[i]),
-        "free_y"
+      geom_hline(
+        data = inbuilt,
+        aes(yintercept = .data[[mean_col]], colour = model),
+        linewidth = 0.5
       )
-      # the n strips once, on the right
-      if (i < length(scenarios)) {
-        p <- p + theme(strip.text.y = element_blank(), strip.background.y = element_blank())
-      }
-      p
-    })
-    wrap_plots(plots, nrow = 1) +
-      plot_layout(axis_titles = "collect")
+    ),
+    fig$layers
+  )
+  # length gets its own y scale in every panel; this replaces
+  # point_range_plot()'s facet_grid()
+  if (!m$coverage) {
+    fig <- fig +
+      facet_grid2(rows = vars(n), cols = vars(scenario), scales = "free_y",
+                  independent = "y")
   }
 
   fig +
-    plot_layout(guides = "collect") &
-    theme(legend.position = "bottom") &
+    scale_fill_manual(values = pal_values, limits = model_levels, guide = "none") +
+    labs(x = "Subsampling ratio", colour = "Model") +
+    theme(legend.position = "bottom") +
     guides(colour = guide_legend(nrow = 2))
 }
 

@@ -1,12 +1,12 @@
 ##########
 # title: figures for the thesis chapter - continuous outcomes, missing covariates
 ##########
-# Labels, palette, summaries and the paired bias/MSE panels come from
-# R/figures.R. This script carries only the paths and this study's filters.
+# Labels, palette and summaries come from R/figures.R. This script carries
+# only the paths and this study's filters.
 
 library(here)
 library(patchwork)
-library(purrr)
+library(ggh4x)
 source(here("R", "figures.R"))
 
 # paths
@@ -43,11 +43,9 @@ b_new <- bias_sum_plot + theme(axis.text.x = element_blank())
 (b_new / mse_sum_plot) + plot_layout(guides = "collect")
 ggsave("miss_cts_bias_mse.png", path = fig_path, width = 21, height = 15, units = "cm")
 
-# trying to get all the axes to vary so we can see the variation better?
-
-
-scens <- metrics %>% select(scenario) %>% unique() %>% pull(scenario)
-
-sum_plots <- map(scens, ~ make_bm_plots(metrics_summary, .x))
-
-(sum_plots[[1]]$b_plot + sum_plots[[2]]$b_plot + sum_plots[[3]]$b_plot + sum_plots[[4]]$b_plot) + plot_layout(guides = "collect")
+# every panel on its own y scale, so the variation within a scenario shows -
+# the shared-scale rows above compress it. facet_grid2() replaces
+# point_range_plot()'s facet_grid(). Not saved.
+bias_sum_plot +
+  facet_grid2(rows = vars(mechanism), cols = vars(scenario), scales = "free",
+              independent = "y")
