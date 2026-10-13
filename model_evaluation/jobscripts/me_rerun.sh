@@ -1,9 +1,9 @@
 #!/bin/bash
 # Reruns only the array indices listed in failed_ids.txt by me_check.R.
 # -J and the resource request are rewritten by check_failed(); do not hand-edit.
-#PBS -l walltime=00:30:00
-#PBS -l select=1:ncpus=10:ompthreads=10:mem=24gb
-#PBS -J 1-600%10
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=10:ompthreads=10:mem=29gb
+#PBS -J 1-2
 #PBS -N me_rerun
 #PBS -o logs_rerun/
 #PBS -e logs_rerun/
