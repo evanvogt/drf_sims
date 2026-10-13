@@ -54,6 +54,8 @@ ALPHA <- HTE_ALPHA
 Z <- qnorm(0.975)
 MEASURE_LABELS <- c(tevim = "TE-VIM", shap = "TreeSHAP")
 X_LAB <- "Proportion of participants in stage 1"
+INTERIM_PROPS <- sort(unique(study$grid$interim_prop))
+X_LABELLED <- c(0.25, 0.5, 0.75)
 FIG_HEIGHT <- 14
 
 # ---- data --------------------------------------------------------------------
@@ -108,27 +110,37 @@ null_ref <- function(yintercept, levels, ...) {
 #' @param d summary with interim_prop, mean, mcse and the facet columns
 #' @param colour column mapped to colour and to the ribbon's fill
 #' @param linetype optional column mapped to linetype
-#' @param ylim y range, or NULL to leave it to the data
-ribbon_lines <- function(d, colour, linetype = NULL, ylim = c(0, 1)) {
+#' @param proportion TRUE when `mean` is a proportion of runs: the ribbon is
+#'   cut at 0 and 1, so it doesn't stretch the free y axis past either
+ribbon_lines <- function(d, colour, linetype = NULL, proportion = TRUE) {
   grp <- if (is.null(linetype)) {
     aes(group = .data[[colour]])
   } else {
     aes(group = interaction(.data[[colour]], .data[[linetype]]),
         linetype = .data[[linetype]])
   }
+  d <- mutate(d, lo = mean - Z * mcse, hi = mean + Z * mcse)
+  if (proportion) d <- mutate(d, lo = pmax(lo, 0), hi = pmin(hi, 1))
   ggplot(d, aes(x = interim_prop, y = mean, colour = .data[[colour]],
-                ymin = mean - Z * mcse, ymax = mean + Z * mcse)) +
+                ymin = lo, ymax = hi)) +
     grp +
     geom_ribbon(aes(fill = .data[[colour]]), alpha = 0.15, colour = NA) +
     geom_line() +
     geom_point(size = 1.2) +
-    scale_x_continuous(breaks = seq(0.25, 0.75, by = 0.1)) +
-    # coord_cartesian, not ylim(): ylim() drops a ribbon that pokes past 0 or 1
-    coord_cartesian(ylim = ylim) +
+    # a tick at every interim point, numbered only at the ends and the middle
+    scale_x_continuous(breaks = INTERIM_PROPS,
+                       labels = ifelse(INTERIM_PROPS %in% X_LABELLED,
+                                       as.character(INTERIM_PROPS),
+                                       ""),
+                       minor_breaks = NULL,
+                       # room for 0.25 and 0.75, which otherwise run into the
+                       # next panel's labels
+                       expand = expansion(add = 0.04)) +
     drf_scale() +
     scale_fill_paletteer_d("rcartocolor::Safe") +
-    drf_theme(rotate_x = TRUE) +
-    theme(legend.position = "bottom", legend.box = "vertical")
+    drf_theme() +
+    theme(legend.position = "bottom", legend.box = "vertical",
+          panel.spacing.x = unit(0.8, "lines"))
 }
 
 # ---- subgroup validation rate ------------------------------------------------
@@ -143,7 +155,7 @@ sg_rate <- sg_long %>%
 sg_rate_fig <- ribbon_lines(sg_rate, "model") +
   geom_hline(data = null_ref(ALPHA / 2, levels(sg_rate$scenario)),
              aes(yintercept = yintercept), linetype = "dashed") +
-  facet_grid(rows = vars(test), cols = vars(scenario)) +
+  facet_grid(rows = vars(test), cols = vars(scenario), scales = "free_y") +
   labs(x = X_LAB,
        y = "Proportion of runs validated\n(p < 0.05, stage 1's direction)",
        colour = "Model", fill = "Model")
@@ -163,9 +175,9 @@ sg_shrink <- sg_long %>%
             mcse = sd(value, na.rm = TRUE) / sqrt(sum(!is.na(value))),
             .groups = "drop")
 
-sg_shrink_fig <- ribbon_lines(sg_shrink, "quantity", ylim = NULL) +
+sg_shrink_fig <- ribbon_lines(sg_shrink, "quantity", proportion = FALSE) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  facet_grid(rows = vars(test), cols = vars(scenario)) +
+  facet_grid(rows = vars(test), cols = vars(scenario), scales = "free_y") +
   labs(x = X_LAB, y = "Mean contrast (subgroup − rest)",
        colour = NULL, fill = NULL)
 save_fig("val_sg_shrinkage.png", fig_path, height = FIG_HEIGHT,
@@ -195,7 +207,7 @@ topvar_fig <- ribbon_lines(topvar_rate, "model", linetype = "measure") +
                              panel = factor(TOPVAR_PANELS[["proj"]],
                                             levels = TOPVAR_PANELS)),
              aes(yintercept = yintercept), linetype = "dashed") +
-  facet_grid(rows = vars(panel), cols = vars(scenario)) +
+  facet_grid(rows = vars(panel), cols = vars(scenario), scales = "free_y") +
   # the ribbon would otherwise paint a grey box behind each linetype key
   guides(linetype = guide_legend(override.aes = list(fill = NA))) +
   labs(x = X_LAB, y = "Proportion of runs", colour = "Model", fill = "Model",
