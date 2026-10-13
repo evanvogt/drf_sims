@@ -148,18 +148,10 @@ ribbon_lines <- function(d, colour, linetype = NULL, proportion = TRUE) {
   }
   d <- mutate(d, lo = mean - Z * mcse, hi = mean + Z * mcse)
   if (proportion) d <- mutate(d, lo = pmax(lo, 0), hi = pmin(hi, 1))
-  # the null column's proportion panels span at least 0-0.1, so they show 0
-  # under the reference line, and the all-zero "true modifier" panel gets a 0
-  # to 0.1 axis rather than -0.05 to 0.05. Every other panel's axis follows its
-  # data. No facet-row column here, so it lands in every row of the null column.
-  y_floor <- if (proportion) {
-    geom_blank(
-      data = tibble(scenario = factor(SS_SCENARIO_LABELS[["1"]],
-                                      levels = levels(d$scenario)),
-                    interim_prop = min(d$interim_prop), mean = c(0, 0.1)),
-      aes(x = interim_prop, y = mean), inherit.aes = FALSE
-    )
-  }
+  # with independent y axes, a proportion panel always starts at 0, and spans
+  # at least 0-0.1 - an all-zero panel (the null's "true modifier" row) would
+  # otherwise get a -0.05 to 0.05 axis
+  y_floor <- if (proportion) expand_limits(y = c(0, 0.1))
   ggplot(d, aes(x = interim_prop, y = mean, colour = .data[[colour]],
                 ymin = lo, ymax = hi)) +
     grp +

@@ -356,6 +356,11 @@ save_fig <- function(
 #'   Default to the mechanism/scenario grid this function
 #'   originally hardcoded, so existing callers are unaffected.
 #' @param facet_scales passed to facet_grid
+#' @param independent_y TRUE gives every panel its own y scale, not just every
+#'   row - ggh4x::facet_grid2(independent = "y") in place of facet_grid(), so
+#'   only callers that set it need ggh4x installed. y is freed in
+#'   `facet_scales` if it isn't already ("fixed" -> "free_y",
+#'   "free_x" -> "free"), as facet_grid2() requires
 #' @param alpha error bar is a (1 - alpha) CI, i.e. mean +/- qnorm(1 -
 #'   alpha/2) x MCSE - not a raw +/- 1x MCSE, which is only a ~68% interval and
 #'   makes a genuinely unbiased estimator look biased on ~32% of points by
@@ -400,6 +405,7 @@ point_range_plot <- function(
   facet_rows = "mechanism",
   facet_cols = "scenario",
   facet_scales = "free",
+  independent_y = FALSE,
   blank_x = FALSE,
   alpha = 0.05,
   line = FALSE,
@@ -455,6 +461,25 @@ point_range_plot <- function(
       )
   }
 
+  facet_vars <- list(
+    rows = vars(!!!rlang::syms(facet_rows)),
+    cols = vars(!!!rlang::syms(facet_cols))
+  )
+  facet <- if (independent_y) {
+    if (!requireNamespace("ggh4x", quietly = TRUE)) {
+      stop("independent_y = TRUE needs the ggh4x package", call. = FALSE)
+    }
+    free_y <- c(fixed = "free_y", free_x = "free", free_y = "free_y", free = "free")
+    ggh4x::facet_grid2(
+      rows = facet_vars$rows,
+      cols = facet_vars$cols,
+      scales = free_y[[facet_scales]],
+      independent = "y"
+    )
+  } else {
+    facet_grid(rows = facet_vars$rows, cols = facet_vars$cols, scales = facet_scales)
+  }
+
   p <- p +
     geom_errorbar(
       position = dodge,
@@ -463,11 +488,7 @@ point_range_plot <- function(
       alpha = ci_alpha
     ) +
     geom_point(position = dodge, size = point_size) +
-    facet_grid(
-      rows = vars(!!!rlang::syms(facet_rows)),
-      cols = vars(!!!rlang::syms(facet_cols)),
-      scales = facet_scales
-    ) +
+    facet +
     palette +
     drf_theme() +
     labs(y = y_lab, x = x_lab)
