@@ -25,10 +25,13 @@
 # Labels, palette, theme and figure sizing come from R/figures.R. This script
 # carries only the paths and this study's filters.
 #
-# Every panel has its own y axis (ggh4x::facet_grid2(independent = "y")), so
-# compare levels across panels by the axis labels, not by height.
+# Each figure is saved twice. In <stem>.png every panel has its own y axis
+# (ggh4x::facet_grid2(independent = "y")), so compare levels across panels by
+# the axis labels, not by height. In <stem>_shared_y.png the scenarios in a row
+# share one y axis, for comparing heights between scenarios.
 #
-# Writes to ../results/thesis_figures/validation/.
+# Writes to ../results/thesis_figures/validation/: val_sg_direction,
+# val_sg_shrinkage and val_topvar, each as .png and _shared_y.png.
 #
 # Optional arguments, for a smoke run on mock metrics:
 #   Rscript validation.R [metrics.RDS] [figure dir]
@@ -109,6 +112,26 @@ null_ref <- function(yintercept, levels, ...) {
          yintercept = yintercept, ...)
 }
 
+#' The scenarios across, `rows` down
+#'
+#' @param rows the column faceted down
+#' @param independent TRUE for a y axis per panel, FALSE for one per row,
+#'   shared across the scenarios
+val_facets <- function(rows, independent = TRUE) {
+  facet_grid2(rows = vars(.data[[rows]]), cols = vars(scenario),
+              scales = "free_y",
+              independent = if (independent) "y" else "none")
+}
+
+#' Save an unfaceted figure twice: <stem>.png with a y axis per panel, and
+#' <stem>_shared_y.png with one y axis per row across the scenarios
+save_both <- function(fig, stem, rows) {
+  save_fig(paste0(stem, ".png"), fig_path, height = FIG_HEIGHT,
+           plot = fig + val_facets(rows))
+  save_fig(paste0(stem, "_shared_y.png"), fig_path, height = FIG_HEIGHT,
+           plot = fig + val_facets(rows, independent = FALSE))
+}
+
 #' Mean over runs against stage 1's share, a 95% Monte Carlo ribbon around it
 #'
 #' @param d summary with interim_prop, mean, mcse and the facet columns
@@ -164,13 +187,10 @@ sg_rate <- sg_long %>%
 sg_rate_fig <- ribbon_lines(sg_rate, "model") +
   geom_hline(data = null_ref(ALPHA / 2, levels(sg_rate$scenario)),
              aes(yintercept = yintercept), linetype = "dashed") +
-  facet_grid2(rows = vars(test), cols = vars(scenario), scales = "free_y",
-              independent = "y") +
   labs(x = X_LAB,
        y = "Proportion of runs validated\n(p < 0.05, stage 1's direction)",
        colour = "Model", fill = "Model")
-save_fig("val_sg_direction.png", fig_path, height = FIG_HEIGHT,
-         plot = sg_rate_fig)
+save_both(sg_rate_fig, "val_sg_direction", "test")
 
 # ---- subgroup contrast: stage 1's claim and the truth, DR-RandomForest ---------
 
@@ -187,12 +207,9 @@ sg_shrink <- sg_long %>%
 
 sg_shrink_fig <- ribbon_lines(sg_shrink, "quantity", proportion = FALSE) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  facet_grid2(rows = vars(test), cols = vars(scenario), scales = "free_y",
-              independent = "y") +
   labs(x = X_LAB, y = "Mean contrast (subgroup − rest)",
        colour = NULL, fill = NULL)
-save_fig("val_sg_shrinkage.png", fig_path, height = FIG_HEIGHT,
-         plot = sg_shrink_fig)
+save_both(sg_shrink_fig, "val_sg_shrinkage", "test")
 
 # ---- top covariate: a true modifier, and does it replicate ---------------------
 
@@ -218,10 +235,8 @@ topvar_fig <- ribbon_lines(topvar_rate, "model", linetype = "measure") +
                              panel = factor(TOPVAR_PANELS[["proj"]],
                                             levels = TOPVAR_PANELS)),
              aes(yintercept = yintercept), linetype = "dashed") +
-  facet_grid2(rows = vars(panel), cols = vars(scenario), scales = "free_y",
-              independent = "y") +
   # the ribbon would otherwise paint a grey box behind each linetype key
   guides(linetype = guide_legend(override.aes = list(fill = NA))) +
   labs(x = X_LAB, y = "Proportion of runs", colour = "Model", fill = "Model",
        linetype = "Importance measure")
-save_fig("val_topvar.png", fig_path, height = FIG_HEIGHT, plot = topvar_fig)
+save_both(topvar_fig, "val_topvar", "panel")
