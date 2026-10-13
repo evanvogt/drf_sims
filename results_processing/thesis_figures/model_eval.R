@@ -25,6 +25,9 @@
 #     fixed rule.
 # Top-1 accuracy's reference is random-pick accuracy, 1 / 9.
 #
+# The rankings figure is the distribution of the pick's true rank (1 = best of
+# the 9) over runs, for the fixed-π proxies only, as in me_results.qmd.
+#
 # The design-axis figure marginalises regret over the other axes: each level
 # (DR vs IF, estimated vs fixed propensity, fold regime, pipeline) is averaged
 # within run first, then over runs, so its MCSE counts runs, not runs x the
@@ -35,7 +38,7 @@
 # script carries only the paths and this study's filters.
 #
 # Writes to ../results/thesis_figures/model_eval/:
-#   me_top1.png, me_regret.png, me_axis_regret.png
+#   me_top1.png, me_regret.png, me_axis_regret.png, me_rankings.png
 #
 # Optional arguments, for a smoke run on mock metrics:
 #   Rscript model_eval.R [metrics.RDS] [figure dir]
@@ -135,6 +138,8 @@ selection <- metrics %>%
   summarise(
     hit = as.numeric(model[which.min(score)] == model[which.min(true_pehe)]),
     regret = true_pehe[which.min(score)] - min(true_pehe),
+    # the pick's true rank among the candidates present, 1 = best
+    pick_rank = rank(true_pehe, ties.method = "min")[which.min(score)],
     .groups = "drop"
   ) %>%
   mutate(
@@ -264,3 +269,43 @@ axis_fig <- point_range_plot(
   theme(legend.position = "bottom", legend.box = "vertical",
         axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 save_fig("me_axis_regret.png", fig_path, height = FIG_HEIGHT, plot = axis_fig)
+
+# ---- true rank of the pick ---------------------------------------------------
+
+# fixed-π proxies only, so the propensity is left out of the bar labels. Bars
+# are grouped by score, then fold regime, then pipeline.
+rank_levels <- with(
+  expand.grid(p = PIPELINE_LABELS, f = FOLD_LABELS, s = c("DR", "IF"),
+              stringsAsFactors = FALSE),
+  paste(s, f, p, sep = " / ")
+)
+
+rank_dist <- selection %>%
+  filter(pi_regime == "fixed") %>%
+  mutate(
+    proxy = factor(
+      paste(c(dr = "DR", infl = "IF")[score_family], FOLD_LABELS[fold_type],
+            PIPELINE_LABELS[pipeline], sep = " / "),
+      levels = rank_levels
+    ),
+    n = n_label(n)
+  ) %>%
+  count(scenario, n, proxy, pick_rank, name = "runs") %>%
+  group_by(scenario, n, proxy) %>%
+  mutate(prop = runs / sum(runs)) %>%
+  ungroup()
+
+# viridis rather than the thesis palette: the rank is ordinal, and Safe would
+# give it unordered hues. Reversed, so the best ranks are the bright ones.
+rank_fig <- ggplot(rank_dist,
+                   aes(x = proxy, y = prop, fill = factor(pick_rank))) +
+  geom_col() +
+  facet_grid(rows = vars(n), cols = vars(scenario)) +
+  scale_fill_viridis_d(direction = -1) +
+  drf_theme() +
+  labs(x = "Proxy score", y = "Proportion of runs",
+       fill = "True rank of pick") +
+  guides(fill = guide_legend(nrow = 1)) +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+save_fig("me_rankings.png", fig_path, height = FIG_HEIGHT, plot = rank_fig)
