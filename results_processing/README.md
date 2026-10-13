@@ -59,6 +59,7 @@ appendix's full grid, one table per metric per outcome:
 | `miss_tables.R` | `{cts,bin}_miss_<metric>.tex`, `{cts,bin}_miss_tests_<test>.tex` | mechanism / scenario / method × model, one metric (or HTE test, with a True CATE column) per table |
 | `surv_tables.R` | `surv_main_{rho05,rho0}.tex`, `surv_<family>_{rho05,rho0}.tex` | competing risks: scenario / censoring / arm × (event × CATE bias, RMSE, Pearson). Main: one production arm per family. Secondary, one per multi-arm family: the raw arms, then paired per-run differences between arms that differ by one factor (fitting or pseudo-values) |
 | `me_tables.R` | `me_{top1,rank,regret}.tex`, `me_axis.tex`, `me_fixed.tex` | model evaluation (appendix), the 24 proxies of `thesis_figures/model_eval.R`: scenario / n / score type × fold regime × machine, one measure per table (top-1 accuracy, true rank of the pick, regret), with random-pick and best-fixed-choice rows spanning the columns. Axis: scenario × n / design axis / level × the three measures, each level averaged within run. Fixed: scenario / n / candidate × true PEHE and the three measures if always deployed, the best fixed choice in bold. All portrait. Selection derivation shared with the figures via `model_evaluation/me_selection.R`. Optional `[metrics.RDS] [table dir]` arguments for a smoke run |
+| `val_tables.R` | `val_sg_{top,bottom}.tex`, `val_sg_counts.tex`, `val_nom_{tevim,shap}.tex`, `val_sg_se.tex` | interim-analysis validation (appendix to `thesis_figures/validation.R`), HC3 unless stated. Subgroup validated in stage 1's direction: scenario / estimator × the 11 interim points, one table per subgroup, with the runs left after dropping empty stage 2 subgroups (landscape). Counts at 0.25 / 0.5 / 0.75: scenario / estimator / interim × per subgroup runs, significant same / opposite direction, true contrast in stage 1's direction. Stage 1's top covariate: scenario / estimator / interim × X4, X3+X5, X1+X2, X01–X03, X04+X05, one table per importance measure, true modifiers in bold. Classical vs HC3: scenario / subgroup / estimator × landmark × SE kind. Optional `[metrics.RDS] [table dir]` arguments for a smoke run |
 
 Each cell is `mean (MCSE)`, summarised with the figures' `summarise_metrics()`;
 the layout helpers are in `R/tables.R`. Run from
@@ -71,6 +72,7 @@ Rscript ss_ci_tables.R
 Rscript miss_tables.R
 Rscript surv_tables.R
 Rscript me_tables.R
+Rscript val_tables.R
 ```
 
 The thesis preamble needs `\usepackage{booktabs, longtable, pdflscape, array}`.

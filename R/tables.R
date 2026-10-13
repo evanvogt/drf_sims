@@ -49,10 +49,16 @@ runs_per_cell <- function(metrics, group_cols = c("scenario", "n", "model")) {
 #' @param tab the displayed columns, sorted by group then block. The first two
 #'   columns are row labels (left-aligned), the rest are cells (right-aligned)
 #' @param col_names column headers, LaTeX, not escaped
-#' @param group,block one value per row of `tab`; `group` a factor
+#' @param group,block one value per row of `tab`; `group` a factor. `block`
+#'   NULL: each row is its own block, so the first column is never blanked and
+#'   no space separates the rows of a group
 #' @param header_above optional spanning headers, as add_header_above() takes
-#'   them. Plain text only: add_header_above() strips one level of backslash
-#'   even with escape = FALSE, so e.g. "\\%" comes out as a comment character
+#'   them, or a list of such vectors for several rows, the first nearest the
+#'   column headers. Plain text only: add_header_above() strips one level of
+#'   backslash even with escape = FALSE, so e.g. "\\%" comes out as a comment
+#'   character
+#' @param align column alignments, as kbl() takes them; NULL for the default,
+#'   two left-aligned label columns then right-aligned cells
 #' @param caption,label passed to kbl(); `label` gets knitr's "tab:" prefix
 #' @param caption.short the list-of-tables entry, so the long caption (which
 #'   explains the cells) stays out of it
@@ -64,17 +70,19 @@ runs_per_cell <- function(metrics, group_cols = c("scenario", "n", "model")) {
 #' @return the LaTeX source, as a single string
 grouped_longtable <- function(tab, col_names, group, block, header_above = NULL,
                               caption, label, caption.short = "", font_size = 8,
-                              tabcolsep = "3pt", landscape = TRUE) {
-  key <- paste(group, block)
-  tab[[1]] <- ifelse(duplicated(key), "", as.character(tab[[1]]))
-
+                              tabcolsep = "3pt", landscape = TRUE, align = NULL) {
   # a line space after the last row of each block, except the group's last
   # (pack_rows puts its own space before the next group's header). Added with
   # row_spec() after pack_rows(), which drops kbl()'s `linesep`.
-  last <- length(key)
-  new_block <- c(key[-1] != key[-last], FALSE)
-  new_group <- c(group[-1] != group[-last], FALSE)
-  space_after <- which(new_block & !new_group)
+  space_after <- integer()
+  if (!is.null(block)) {
+    key <- paste(group, block)
+    tab[[1]] <- ifelse(duplicated(key), "", as.character(tab[[1]]))
+    last <- length(key)
+    new_block <- c(key[-1] != key[-last], FALSE)
+    new_group <- c(group[-1] != group[-last], FALSE)
+    space_after <- which(new_block & !new_group)
+  }
 
   out <- kbl(
     tab,
@@ -83,20 +91,24 @@ grouped_longtable <- function(tab, col_names, group, block, header_above = NULL,
     longtable = TRUE,
     escape = FALSE,
     col.names = col_names,
-    align = c("l", "l", rep("r", ncol(tab) - 2)),
+    align = if (is.null(align)) c("l", "l", rep("r", ncol(tab) - 2)) else align,
     linesep = "",
     caption = caption,
     caption.short = caption.short,
     label = label
   )
   if (!is.null(header_above)) {
-    out <- add_header_above(out, header_above, escape = FALSE)
+    if (!is.list(header_above)) header_above <- list(header_above)
+    for (h in header_above) out <- add_header_above(out, h, escape = FALSE)
+  }
+  # no indent under the group header: the bold header is enough, and the 1em
+  # goes to the columns
+  out <- pack_rows(out, index = table(droplevels(group)), escape = FALSE,
+                   indent = FALSE)
+  if (length(space_after) > 0) {
+    out <- row_spec(out, space_after, extra_latex_after = "\\addlinespace")
   }
   out <- out %>%
-    # no indent under the group header: the bold header is enough, and the
-    # 1em goes to the columns
-    pack_rows(index = table(droplevels(group)), escape = FALSE, indent = FALSE) %>%
-    row_spec(space_after, extra_latex_after = "\\addlinespace") %>%
     # later pages get "Table x: (continued)", not the whole caption again
     kable_styling(latex_options = "repeat_header", repeat_header_method = "replace",
                   font_size = font_size)
@@ -105,6 +117,9 @@ grouped_longtable <- function(tab, col_names, group, block, header_above = NULL,
   # kableExtra tags repeated rows with \vphantom{k} to tell them apart while it
   # edits them. Done editing, so drop the tags: in a cell they add a space.
   out <- gsub(" ?\\\\vphantom\\{[0-9]+\\}", "", out)
+  # where row_spec() finds the row's text verbatim it leaves the row's own \\
+  # after the inserted \addlinespace, an empty row that doubles the space
+  out <- gsub("\\\\addlinespace\\\\\\\\", "\\\\addlinespace", out)
 
   if (is.null(tabcolsep)) return(paste0(out, "\n"))
   paste0("{\\setlength{\\tabcolsep}{", tabcolsep, "}\n", out, "\n}\n")
