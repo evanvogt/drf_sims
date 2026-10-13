@@ -25,12 +25,16 @@
 # Labels, palette, theme and figure sizing come from R/figures.R. This script
 # carries only the paths and this study's filters.
 #
+# Every panel has its own y axis (ggh4x::facet_grid2(independent = "y")), so
+# compare levels across panels by the axis labels, not by height.
+#
 # Writes to ../results/thesis_figures/validation/.
 #
 # Optional arguments, for a smoke run on mock metrics:
 #   Rscript validation.R [metrics.RDS] [figure dir]
 
 library(here)
+library(ggh4x)
 source(here("R", "figures.R"))
 source(here("validation", "continuous", "cts_val_config.R"))
 source(here("validation", "continuous", "cts_val_dgms.R"))
@@ -121,9 +125,14 @@ ribbon_lines <- function(d, colour, linetype = NULL, proportion = TRUE) {
   }
   d <- mutate(d, lo = mean - Z * mcse, hi = mean + Z * mcse)
   if (proportion) d <- mutate(d, lo = pmax(lo, 0), hi = pmin(hi, 1))
+  # with independent y axes, a proportion panel always starts at 0, and spans
+  # at least 0-0.1 - an all-zero panel (the null's "true modifier" row) would
+  # otherwise get a -0.05 to 0.05 axis
+  y_floor <- if (proportion) expand_limits(y = c(0, 0.1))
   ggplot(d, aes(x = interim_prop, y = mean, colour = .data[[colour]],
                 ymin = lo, ymax = hi)) +
     grp +
+    y_floor +
     geom_ribbon(aes(fill = .data[[colour]]), alpha = 0.15, colour = NA) +
     geom_line() +
     geom_point(size = 1.2) +
@@ -155,7 +164,8 @@ sg_rate <- sg_long %>%
 sg_rate_fig <- ribbon_lines(sg_rate, "model") +
   geom_hline(data = null_ref(ALPHA / 2, levels(sg_rate$scenario)),
              aes(yintercept = yintercept), linetype = "dashed") +
-  facet_grid(rows = vars(test), cols = vars(scenario), scales = "free_y") +
+  facet_grid2(rows = vars(test), cols = vars(scenario), scales = "free_y",
+              independent = "y") +
   labs(x = X_LAB,
        y = "Proportion of runs validated\n(p < 0.05, stage 1's direction)",
        colour = "Model", fill = "Model")
@@ -177,7 +187,8 @@ sg_shrink <- sg_long %>%
 
 sg_shrink_fig <- ribbon_lines(sg_shrink, "quantity", proportion = FALSE) +
   geom_hline(yintercept = 0, linetype = "dashed") +
-  facet_grid(rows = vars(test), cols = vars(scenario), scales = "free_y") +
+  facet_grid2(rows = vars(test), cols = vars(scenario), scales = "free_y",
+              independent = "y") +
   labs(x = X_LAB, y = "Mean contrast (subgroup − rest)",
        colour = NULL, fill = NULL)
 save_fig("val_sg_shrinkage.png", fig_path, height = FIG_HEIGHT,
@@ -207,7 +218,8 @@ topvar_fig <- ribbon_lines(topvar_rate, "model", linetype = "measure") +
                              panel = factor(TOPVAR_PANELS[["proj"]],
                                             levels = TOPVAR_PANELS)),
              aes(yintercept = yintercept), linetype = "dashed") +
-  facet_grid(rows = vars(panel), cols = vars(scenario), scales = "free_y") +
+  facet_grid2(rows = vars(panel), cols = vars(scenario), scales = "free_y",
+              independent = "y") +
   # the ribbon would otherwise paint a grey box behind each linetype key
   guides(linetype = guide_legend(override.aes = list(fill = NA))) +
   labs(x = X_LAB, y = "Proportion of runs", colour = "Model", fill = "Model",
