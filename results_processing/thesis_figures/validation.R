@@ -195,6 +195,22 @@ ribbon_lines <- function(d, colour, linetype = NULL, proportion = TRUE) {
       inherit.aes = FALSE
     )
   }
+  # any other proportion panel flat within 0.1 (e.g. every run at 1) gets a
+  # 0.1-wide axis held against 0 or 1, not ggplot's +/- 0.05 around the value
+  y_span <- if (proportion) {
+    facet_cols <- setdiff(
+      names(d),
+      c("interim_prop", "mean", "mcse", "lo", "hi", "runs", colour, linetype)
+    )
+    flat <- d %>%
+      group_by(across(all_of(facet_cols))) %>%
+      summarise(lo = min(lo), hi = max(hi), .groups = "drop") %>%
+      filter(hi - lo < 0.1) %>%
+      mutate(lo = pmax(0, pmin(lo, hi - 0.1)), hi = pmax(hi, lo + 0.1)) %>%
+      pivot_longer(c(lo, hi), values_to = "mean") %>%
+      mutate(interim_prop = min(d$interim_prop))
+    geom_blank(data = flat, aes(x = interim_prop, y = mean), inherit.aes = FALSE)
+  }
   ggplot(
     d,
     aes(
@@ -207,6 +223,7 @@ ribbon_lines <- function(d, colour, linetype = NULL, proportion = TRUE) {
   ) +
     grp +
     y_floor +
+    y_span +
     geom_ribbon(aes(fill = .data[[colour]]), alpha = 0.15, colour = NA) +
     geom_line() +
     geom_point(size = 1.2) +
