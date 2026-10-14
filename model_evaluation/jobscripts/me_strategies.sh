@@ -27,9 +27,9 @@
 #
 # %N throttle: same constraint as me_1.sh - each concurrent task starts its
 # own H2O JVM cluster with a 10G heap.
-#PBS -l walltime=01:00:00
-#PBS -l select=1:ncpus=10:ompthreads=10:mem=16gb
-#PBS -J 1-1200%10
+#PBS -l walltime=02:00:00
+#PBS -l select=1:ncpus=10:ompthreads=10:mem=10gb
+#PBS -J 1-1200
 #PBS -N me_strat
 #PBS -o logs_strat/
 #PBS -e logs_strat/
