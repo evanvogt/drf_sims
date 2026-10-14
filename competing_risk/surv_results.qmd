@@ -310,248 +310,273 @@ kable(
 )
 ```
 
-```{r summary-plot-helper, include=FALSE}
-# helper: the house summary plot, points with a 95% CI (mean +/- qnorm(1 -
-# alpha/2) x MCSE) error bar, faceted by family x scenario x censoring -
-# extends crossfitting/cf_results.qmd's family x scenario facet with the
-# censoring dimension this study has and the precedents don't. facet_wrap
-# (not facet_grid) because variant is family-specific, same reasoning as
-# cf_results.qmd. See R/figures.R's point_range_plot() (its alpha doc) for why this
-# isn't a raw +/- 1x MCSE (~68% coverage, not 95%).
-summary_plot <- function(
-  df,
-  mean_col,
-  mcse_col,
-  title,
-  ylab,
-  hline = 0,
-  alpha = 0.05
-) {
+```{r forest-helpers, include=FALSE}
+# helper: forest-style summary plot - one row per arm down y, grouped into a
+# row of panels per family (strip on the left), the metric along x, a column
+# per scenario. x is free per scenario column but shared down it, so arms
+# compare within a scenario. Replaced the old family-on-x layout, which put
+# ~500 dodged marks in one figure and coloured by variant, whose meaning
+# changed from family to family. Error bars are 95% CIs (mean +/- qnorm(1 -
+# alpha/2) x MCSE) - see R/figures.R's point_range_plot() (its alpha doc) for
+# why this isn't a raw +/- 1x MCSE. Semi-oracle arms are dropped: they get
+# their own section, as paired differences against their production arms.
+# vline = NA draws no reference line.
+forest_plot <- function(df, mean_col, mcse_col, xlab, title, vline = 0,
+                        alpha = 0.05) {
   z <- qnorm(1 - alpha / 2)
-  df %>%
+  single <- variant_labels[["single"]]
+  semi <- variant_labels[["semi"]]
+  arm_levels <- c("", setdiff(levels(df$variant), c(single, semi)))
+  p <- df %>%
+    filter(variant != semi) %>%
     mutate(
       est = .data[[mean_col]],
-      lo = .data[[mean_col]] - z * .data[[mcse_col]],
-      hi = .data[[mean_col]] + z * .data[[mcse_col]]
+      lo = est - z * .data[[mcse_col]],
+      hi = est + z * .data[[mcse_col]],
+      # single-arm families: the family strip already names the arm
+      arm = if_else(variant == single, "", as.character(variant)),
+      arm = factor(arm, levels = rev(arm_levels))
     ) %>%
-    ggplot(aes(
-      x = family,
-      y = est,
-      ymin = lo,
-      ymax = hi,
-      colour = variant,
-      shape = censoring
-    )) +
-    geom_hline(yintercept = hline, linetype = "dashed") +
-    geom_point(position = position_dodge(width = 0.5), size = 2) +
-    geom_errorbar(
-      position = position_dodge(width = 0.5),
-      linewidth = 0.3,
-      width = 0.3
+    ggplot(aes(x = est, xmin = lo, xmax = hi, y = arm, colour = family))
+  if (!is.na(vline)) {
+    p <- p + geom_vline(xintercept = vline, linetype = "dashed")
+  }
+  p +
+    geom_linerange(linewidth = 0.4) +
+    geom_point(size = 1.5) +
+    facet_grid(
+      rows = vars(family),
+      cols = vars(scenario),
+      scales = "free",
+      space = "free_y",
+      switch = "y"
     ) +
-    facet_grid(rows = vars(target), cols = vars(scenario), scales = "free") +
-    scale_colour_paletteer_d("rcartocolor::Safe") +
+    scale_x_continuous(n.breaks = 3) +
+    # drop = FALSE keeps each family's colour fixed across figures that
+    # carry only some of the families (the semi-oracle section)
+    scale_colour_paletteer_d("rcartocolor::Safe", drop = FALSE,
+                             guide = "none") +
     theme_bw() +
     theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      legend.position = "bottom",
       strip.background = element_rect(fill = "white"),
-      strip.text = element_text(colour = "black")
+      strip.text = element_text(colour = "black"),
+      # family strips read as row labels, so no box around them
+      strip.background.y = element_blank(),
+      strip.text.y.left = element_text(angle = 0, hjust = 1),
+      strip.placement = "outside",
+      panel.spacing.y = unit(0.15, "lines"),
+      # room between scenario columns so edge tick labels don't collide
+      panel.spacing.x = unit(0.8, "lines")
     ) +
-    labs(
-      title = title,
-      y = ylab,
-      x = "Model",
-      colour = "Approach",
-      shape = "censoring"
-    )
+    labs(title = title, x = xlab, y = NULL)
+}
+
+# the views every metric is shown in, one tab each: target x censoring,
+# censored first (the setting the trial data will have)
+forest_views <- tibble(
+  censoring = c("Censored", "Censored", "Uncensored", "Uncensored"),
+  target = c("Event 1", "Event 2", "Event 1", "Event 2"),
+  tab = c("Event 1", "Event 2", "Event 1, uncensored", "Event 2, uncensored"),
+  slug = c("event1_censored", "event2_censored", "event1_uncensored",
+           "event2_uncensored")
+)
+
+# writes a nested Quarto tabset - call it from a results="asis" chunk. One
+# outer tab per spec (a metric), each holding a forest_plot() per
+# forest_views row. A spec is a list of: tab, mean, mcse, xlab, title, and
+# optionally vline (default 0, NA for none), data (in place of `df`, for
+# per-metric long tables like the paired differences) and save (a file stem:
+# each view is written to figdir as <save>_<slug>.png)
+metric_tabs <- function(specs, df = NULL) {
+  cat("::::: {.panel-tabset}\n\n")
+  for (s in specs) {
+    d <- if (is.null(s$data)) df else s$data
+    vline <- if (is.null(s$vline)) 0 else s$vline
+    # every cat() below leads with blank lines: knitr drops the newlines that
+    # follow a printed plot, which glues the next heading or fence onto the
+    # image line and breaks the tabset
+    cat("\n\n###", s$tab, "\n\n")
+    cat("::: {.panel-tabset}\n\n")
+    for (i in seq_len(nrow(forest_views))) {
+      v <- forest_views[i, ]
+      p <- forest_plot(
+        filter(d, censoring == v$censoring, target == v$target),
+        s$mean,
+        s$mcse,
+        s$xlab,
+        paste0(s$title, ": ", v$tab),
+        vline = vline
+      )
+      cat("\n\n####", v$tab, "\n\n")
+      print(p)
+      if (!is.null(s$save)) {
+        ggsave(paste0(s$save, "_", v$slug, ".png"), plot = p, path = figdir,
+               height = 20, width = 30, units = "cm")
+      }
+    }
+    cat("\n\n:::\n\n")
+  }
+  cat("\n\n:::::\n\n")
 }
 ```
 
 ## Bias
 
 Average bias in the estimated CATE (estimate minus truth), against each
-target's own truth column.
+target's own truth column, plus the ATE and relative versions. `rel_ate_bias`
+is the parameter-level relative bias (ATE bias divided by the true ATE);
+`rel_bias_cate` is the per-unit version, `(est - true) / true` averaged over
+units (undefined and set to `NA` wherever the true CATE is exactly 0 for a
+unit — see `R/metrics.R::cate_metrics()`).
 
-```{r bias-plot, fig.height=8}
-summary_plot(
-  metrics_summary,
-  "mean_bias",
-  "mcse_bias",
-  "Mean bias in CATE estimates",
-  "Mean bias"
-)
-ggsave("surv_bias.png", path = figdir, height = 20, width = 30, units = "cm")
-```
-
-## Relative bias
-
-`rel_ate_bias` is the parameter-level relative bias (ATE bias divided by the
-true ATE); `rel_bias_cate` is the per-unit version, `(est - true) / true`
-averaged over units (undefined and set to `NA` wherever the true CATE is
-exactly 0 for a unit — see `R/metrics.R::cate_metrics()`). Both are computed
-alongside `bias` but weren't previously surfaced in this report.
-
-```{r rel-bias-plot, fig.height=8}
-summary_plot(
-  metrics_summary,
-  "mean_ate_bias",
-  "mcse_ate_bias",
-  "Mean bias in the ATE",
-  "Mean ATE bias"
-)
-ggsave(
-  "surv_ate_bias.png",
-  path = figdir,
-  height = 20,
-  width = 30,
-  units = "cm"
-)
-
-summary_plot(
-  metrics_summary,
-  "mean_rel_ate_bias",
-  "mcse_rel_ate_bias",
-  "Mean relative bias in the ATE",
-  "Mean relative ATE bias"
-)
-ggsave(
-  "surv_rel_ate_bias.png",
-  path = figdir,
-  height = 20,
-  width = 30,
-  units = "cm"
-)
-
-summary_plot(
-  metrics_summary,
-  "mean_rel_bias_cate",
-  "mcse_rel_bias_cate",
-  "Mean relative bias in the CATE",
-  "Mean relative CATE bias"
-)
-ggsave(
-  "surv_rel_bias_cate.png",
-  path = figdir,
-  height = 20,
-  width = 30,
-  units = "cm"
+```{r bias-plots, results="asis", fig.height=8}
+metric_tabs(
+  list(
+    list(tab = "CATE bias", mean = "mean_bias", mcse = "mcse_bias",
+         xlab = "Mean bias", title = "Mean bias in CATE estimates",
+         save = "surv_bias"),
+    list(tab = "ATE bias", mean = "mean_ate_bias", mcse = "mcse_ate_bias",
+         xlab = "Mean ATE bias", title = "Mean bias in the ATE",
+         save = "surv_ate_bias"),
+    list(tab = "Relative ATE bias", mean = "mean_rel_ate_bias",
+         mcse = "mcse_rel_ate_bias", xlab = "Mean relative ATE bias",
+         title = "Mean relative bias in the ATE", save = "surv_rel_ate_bias"),
+    list(tab = "Relative CATE bias", mean = "mean_rel_bias_cate",
+         mcse = "mcse_rel_bias_cate", xlab = "Mean relative CATE bias",
+         title = "Mean relative bias in the CATE", save = "surv_rel_bias_cate")
+  ),
+  metrics_summary
 )
 ```
 
-## MSE of CATE estimates
+## Error in the CATE estimates
 
-The headline metric: mean squared error of the estimated CATE against the
-known truth.
+The headline metric is the error of the estimated CATE against the known
+truth. RMSE (`sqrt(mse)`) is shown first: it ranks arms the same way as MSE
+but on the outcome's own scale. MAE is a robustness check, less sensitive to
+outlying runs. There is no reference line at 0 here, because 0 is a floor,
+not a target, and including it would compress the differences between arms.
 
-```{r mse-plot, fig.height=10}
-summary_plot(
-  metrics_summary,
-  "mean_mse",
-  "mcse_mse",
-  "Mean MSE of CATE estimates",
-  "Mean MSE"
-)
-ggsave("surv_mse.png", path = figdir, height = 20, width = 30, units = "cm")
-```
-
-## RMSE of CATE estimates
-
-`sqrt(mse)` — the same ranking as MSE, on the outcome's own scale.
-
-```{r rmse-plot, fig.height=10}
-summary_plot(
-  metrics_summary,
-  "mean_rmse",
-  "mcse_rmse",
-  "Mean RMSE of CATE estimates",
-  "Mean RMSE"
-)
-ggsave("surv_rmse.png", path = figdir, height = 20, width = 30, units = "cm")
-```
-
-## MAE of CATE estimates
-
-Mean absolute error — a robustness check on MSE, less sensitive to outlying
-runs.
-
-```{r mae-plot, fig.height=10}
-summary_plot(
-  metrics_summary,
-  "mean_mae",
-  "mcse_mae",
-  "Mean MAE of CATE estimates",
-  "Mean MAE"
-)
-ggsave("surv_mae.png", path = figdir, height = 20, width = 30, units = "cm")
-```
-
-## Correlation with the true CATE
-
-Pearson correlation between estimated and true CATEs. Scenario 1 is
-included: its CATE varies with X1 and X2 (SD about 0.1 days), so the
-correlation is defined there, if small and noisy. `surv_metrics.R` computes
-it rather than taking `cate_metrics()`'s null-scenario 0. Also see the scenario-5 note above: the
-`ipw`/`csf_cs` Event 1 cells there are genuine `NA` (zero-variance truth),
-dropped by `na.rm = TRUE` rather than shown as 0.
-
-```{r corr-plot, fig.height=10}
-summary_plot(
-  metrics_summary,
-  "mean_corr",
-  "mcse_corr",
-  "Mean correlation with the true CATE",
-  "Mean correlation"
+```{r error-plots, results="asis", fig.height=8}
+metric_tabs(
+  list(
+    list(tab = "RMSE", mean = "mean_rmse", mcse = "mcse_rmse",
+         xlab = "Mean RMSE", title = "Mean RMSE of CATE estimates",
+         vline = NA, save = "surv_rmse"),
+    list(tab = "MSE", mean = "mean_mse", mcse = "mcse_mse",
+         xlab = "Mean MSE", title = "Mean MSE of CATE estimates",
+         vline = NA, save = "surv_mse"),
+    list(tab = "MAE", mean = "mean_mae", mcse = "mcse_mae",
+         xlab = "Mean MAE", title = "Mean MAE of CATE estimates",
+         vline = NA, save = "surv_mae")
+  ),
+  metrics_summary
 )
 ```
 
-## Spearman rank correlation with the true CATE
+## Ranking the true CATE
 
-Rank correlation alongside the Pearson correlation above — less sensitive to
-outlying CATE estimates and non-linear-but-monotone miscalibration. Scenario
-1 is included, as above.
+How well each arm orders units by their true CATE:
 
-```{r spearman-plot, fig.height=10}
-summary_plot(
-  metrics_summary,
-  "mean_spearman",
-  "mcse_spearman",
-  "Mean Spearman correlation with the true CATE",
-  "Mean Spearman correlation"
+- **C-statistic**: `(Kendall's tau_b + 1) / 2`, a rank-concordance measure
+  equivalent to Harrell's C for a continuous outcome; 0.5 (dashed) is chance.
+- **Correlation**: Pearson correlation between estimated and true CATEs.
+- **Spearman**: rank correlation, less sensitive to outlying CATE estimates
+  and non-linear-but-monotone miscalibration.
+- **Sign accuracy**: proportion of units where the estimated CATE has the
+  correct sign; 0.5 (dashed) is chance.
+
+Scenario 1 is included: its CATE varies with X1 and X2 (SD about 0.1 days),
+so these are defined there, if small and noisy. `surv_metrics.R` computes
+them rather than taking `cate_metrics()`'s null-scenario 0. Also see the
+scenario-5 note above: the `ipw`/`csf_cs` Event 1 cells there are genuine `NA`
+(zero-variance truth), dropped by `na.rm = TRUE` rather than shown as 0.
+
+```{r ranking-plots, results="asis", fig.height=8}
+metric_tabs(
+  list(
+    list(tab = "C-statistic", mean = "mean_c_stat", mcse = "mcse_c_stat",
+         xlab = "Mean C-statistic", title = "Mean C-statistic", vline = 0.5),
+    list(tab = "Correlation", mean = "mean_corr", mcse = "mcse_corr",
+         xlab = "Mean correlation",
+         title = "Mean correlation with the true CATE"),
+    list(tab = "Spearman", mean = "mean_spearman", mcse = "mcse_spearman",
+         xlab = "Mean Spearman correlation",
+         title = "Mean Spearman correlation with the true CATE"),
+    list(tab = "Sign accuracy", mean = "mean_sign_acc",
+         mcse = "mcse_sign_acc", xlab = "Mean proportion correct sign",
+         title = "Mean sign accuracy", vline = 0.5)
+  ),
+  metrics_summary
 )
 ```
 
-## Sign accuracy
+## Cost of estimating the propensity
 
-Proportion of units where the estimated CATE has the correct sign. 0.5
-(dashed line) is chance level.
+Each of the three DR families has a semi-oracle twin (`*_semi`). It uses
+the same fitted outcome models but puts the true propensity, 0.5, into the
+DR pseudo-outcome in place of the estimated one. The stage-2 regression is
+refit on that pseudo-outcome (`surv_models.R`). Comparing an arm with its
+twin on the same run isolates what estimating the propensity does, plus
+stage-2 fitting noise.
 
-```{r sign-acc-plot, fig.height=10}
-summary_plot(
-  metrics_summary,
-  "mean_sign_acc",
-  "mcse_sign_acc",
-  "Mean sign accuracy",
-  "Mean proportion correct sign",
-  hline = 0.5
+These are paired differences: per run, production minus semi-oracle, then
+averaged, with MCSE = sd(diff) / √pairs. A positive MSE difference means
+estimating the propensity costs accuracy. A positive correlation or
+C-statistic difference means it helps. Primary analysis only (ρ = 0.5).
+
+```{r semi-paired}
+# production arm -> its semi-oracle twin
+semi_pairs <- c(
+  pseudo_dr_whole_oob = "pseudo_dr_whole_oob_semi",
+  sl_dr_whole = "sl_dr_whole_semi",
+  rsf_dr_oob = "rsf_dr_oob_semi"
 )
+
+paired_semi <- metrics %>%
+  filter(framework %in% c(names(semi_pairs), semi_pairs)) %>%
+  mutate(
+    arm_type = if_else(framework %in% semi_pairs, "semi", "prod"),
+    base = if_else(
+      arm_type == "semi",
+      names(semi_pairs)[match(framework, semi_pairs)],
+      framework
+    ),
+    # label each pair by its production arm
+    variant = factor(
+      unname(variant_labels[framework_variant[base]]),
+      levels = levels(metrics$variant)
+    )
+  ) %>%
+  select(scenario, censoring, target, family, variant, arm_type, run,
+         mse, corr, c_stat) %>%
+  pivot_longer(c(mse, corr, c_stat), names_to = "metric") %>%
+  pivot_wider(names_from = arm_type, values_from = value) %>%
+  mutate(diff = prod - semi) %>%
+  group_by(metric, scenario, censoring, target, family, variant) %>%
+  summarise(
+    mean_diff = mean(diff, na.rm = TRUE),
+    mcse_diff = sd(diff, na.rm = TRUE) / sqrt(sum(!is.na(diff))),
+    pairs = sum(!is.na(diff)),
+    .groups = "drop"
+  )
 ```
 
-## C-statistic
-
-`(Kendall's tau_b + 1) / 2`, a rank-concordance measure equivalent to
-Harrell's C for a continuous outcome. Scenario 1 is included, as above; 0.5
-(dashed line) is chance level.
-
-```{r c-stat-plot, fig.height=10}
-summary_plot(
-  metrics_summary,
-  "mean_c_stat",
-  "mcse_c_stat",
-  "Mean C-statistic",
-  "Mean C-statistic",
-  hline = 0.5
-)
+```{r semi-plots, results="asis", fig.height=3.5}
+metric_tabs(list(
+  list(tab = "MSE", data = filter(paired_semi, metric == "mse"),
+       mean = "mean_diff", mcse = "mcse_diff", xlab = "MSE difference",
+       title = "Paired difference in MSE, estimated − true propensity",
+       save = "surv_semi_mse_diff"),
+  list(tab = "Correlation", data = filter(paired_semi, metric == "corr"),
+       mean = "mean_diff", mcse = "mcse_diff",
+       xlab = "Correlation difference",
+       title = "Paired difference in correlation, estimated − true propensity"),
+  list(tab = "C-statistic", data = filter(paired_semi, metric == "c_stat"),
+       mean = "mean_diff", mcse = "mcse_diff",
+       xlab = "C-statistic difference",
+       title = "Paired difference in C-statistic, estimated − true propensity")
+))
 ```
 
 ## Missing estimates
@@ -676,34 +701,19 @@ paired_rho <- metrics_all %>%
   )
 ```
 
-```{r sens-mse-plot, fig.height=10}
-summary_plot(
-  filter(paired_rho, metric == "mse"),
-  "mean_diff",
-  "mcse_diff",
-  "Paired difference in MSE, ρ = 0 − ρ = 0.5",
-  "MSE difference"
-)
-ggsave("surv_rho_mse_diff.png", path = figdir, height = 20, width = 30,
-       units = "cm")
-```
-
-```{r sens-corr-plot, fig.height=10}
-summary_plot(
-  filter(paired_rho, metric == "corr"),
-  "mean_diff",
-  "mcse_diff",
-  "Paired difference in correlation with the true CATE, ρ = 0 − ρ = 0.5",
-  "Correlation difference"
-)
-```
-
-```{r sens-cstat-plot, fig.height=10}
-summary_plot(
-  filter(paired_rho, metric == "c_stat"),
-  "mean_diff",
-  "mcse_diff",
-  "Paired difference in C-statistic, ρ = 0 − ρ = 0.5",
-  "C-statistic difference"
-)
+```{r sens-plots, results="asis", fig.height=8}
+metric_tabs(list(
+  list(tab = "MSE", data = filter(paired_rho, metric == "mse"),
+       mean = "mean_diff", mcse = "mcse_diff", xlab = "MSE difference",
+       title = "Paired difference in MSE, ρ = 0 − ρ = 0.5",
+       save = "surv_rho_mse_diff"),
+  list(tab = "Correlation", data = filter(paired_rho, metric == "corr"),
+       mean = "mean_diff", mcse = "mcse_diff",
+       xlab = "Correlation difference",
+       title = "Paired difference in correlation with the true CATE, ρ = 0 − ρ = 0.5"),
+  list(tab = "C-statistic", data = filter(paired_rho, metric == "c_stat"),
+       mean = "mean_diff", mcse = "mcse_diff",
+       xlab = "C-statistic difference",
+       title = "Paired difference in C-statistic, ρ = 0 − ρ = 0.5")
+))
 ```
