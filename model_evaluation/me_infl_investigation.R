@@ -26,15 +26,31 @@ onestep <- function(th, sur, phi) {
   mean((sur - th)^2 + 2 * (sur - th) * (phi - sur))
 }
 
+# influence score metric from the curth and van der schaar 2023 ICML paper, this is how it was written in their appendix but the code of their simulation studies shows them using the same formula as the 2019 paper
+calc_infl_score_cvds <- function(tau_hat, tau, pi, Y, W) {
+  A <- W - pi
+  C <- pi * (1 - pi)
+  B <- 2 * W / C
+  diff_tau <- tau - tau_hat
+
+  pehe_infl <- (1 - B) * tau^2 + B * Y * diff_tau - A * diff_tau^2 + tau_hat^2
+
+  mean(pehe_infl)
+}
+
 # corrected version of the infl score:
 calc_infl_score_corrected <- function(tau_hat, tau, pi, Y, W) {
   A <- W - pi
   C <- pi * (1 - pi)
   B <- 2 * W * A / C
   diff_tau <- tau - tau_hat
-  
-  pehe_infl <- (1 - B) * tau^2 + B * Y * diff_tau + 2 * A * diff_tau^2 - 2 * tau_hat^2
-  
+
+  pehe_infl <- (1 - B) *
+    tau^2 +
+    B * Y * diff_tau +
+    2 * A * diff_tau^2 -
+    2 * tau_hat^2
+
   mean(pehe_infl)
 }
 
@@ -76,8 +92,10 @@ investigate_scenario <- function(scenario) {
       dr = calc_dr_risk(th, phi),
       infl_tau = calc_infl_score(th, tau, PI_TRUE, Y, W),
       infl_phi = calc_infl_score(th, phi, PI_TRUE, Y, W),
-      infl_v2_tau = calc_infl_score_corrected(th, tau, PI_TRUE, Y, W),
-      infl_v2_phi = calc_infl_score_corrected(th, tau, PI_TRUE, Y, W),
+      #infl_v2_tau = calc_infl_score_corrected(th, tau, PI_TRUE, Y, W),
+      #infl_v2_phi = calc_infl_score_corrected(th, phi, PI_TRUE, Y, W),
+      infl_cvds_tau = calc_infl_score_cvds(th, tau, PI_TRUE, Y, W),
+      infl_cvds_phi = calc_infl_score_cvds(th, phi, PI_TRUE, Y, W),
       onestep_biased_sur = onestep(th, tau + 0.3 * X2, phi)
     )
   }))
