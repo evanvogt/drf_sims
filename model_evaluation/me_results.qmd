@@ -80,7 +80,8 @@ the `SL*` candidates use the production mean + glm propensity.
 
 ### The proxy scores
 
-A second, *independent* nuisance pipeline estimates `mu_DR` and `pi`, and is
+A second, *independent* nuisance pipeline estimates `mu_DR` (per treatment
+arm, as a T-learner) and `pi`, and is
 used only to score the candidates — never to fit them. Four axes:
 
 | axis | levels |

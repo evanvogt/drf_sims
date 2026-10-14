@@ -101,8 +101,10 @@ only on the 20%.
 A proxy is one combination of four factors. It selects the candidate with the
 lowest score.
 
-**1. Scoring-nuisance pipeline.** Each pipeline estimates `mu_DR` (one model
-on X and W, read at W = 0 and W = 1) and `pi` (a model on X):
+**1. Scoring-nuisance pipeline.** Each pipeline estimates `mu_DR` (per arm,
+as a T-learner: `mu0` on the W = 0 rows and `mu1` on the W = 1 rows, each a
+model on X, since 2026-10-14; before that one model on X and W, read at W = 0
+and W = 1) and `pi` (a model on X):
 
 - **XGBoost** (`xgb`): a 36-point grid over `eta`, `max_depth`, `subsample`
   and `colsample_bytree`, tuned by 5-fold CV with up to 100 rounds and early
@@ -112,7 +114,7 @@ on X and W, read at W = 0 and W = 1) and `pi` (a model on X):
 
 From these, `calculate_pseudos()` forms the AIPW pseudo-outcome
 `phi = mu1 − mu0 + (Y − mu_W)(W − pi) / (pi(1 − pi))`, where `mu_W` is
-`mu_DR` read at the observed W. `phi05` is the same
+the observed arm's model, `mu1` if W = 1 and `mu0` if W = 0. `phi05` is the same
 quantity with `pi` fixed at 0.5. Neither is trimmed.
 
 **2. Nuisance arm.** The arm sets which rows the scoring nuisance is fit on,

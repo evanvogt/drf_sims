@@ -81,7 +81,8 @@ on.exit(plan(metaplan), add = TRUE)
 model_list <- run_all_candidate_models(Y, W, X, fold_indices, fold_list)
 
 # nuisance-evaluation pipelines, used only to score the candidates above.
-# Only the `whole` arm here; me_strategies.R adds cv_shared and holdout.
+# Only the `whole` arm here. me_strategies.R fits all three arms (whole
+# included, since 2026-10-14), so this one is superseded there.
 # model_seed is drawn AFTER data generation, the fold draw, and
 # candidate-model fitting - keep it in this exact position, since draw order
 # from setup_rng_stream() is part of the reproducibility contract (see

@@ -1,12 +1,14 @@
 ##########
 # title: prove me_strategies.R's pass-through is inert
 ##########
-# me_strategies.R adds two nuisance arms and carries four things through
-# untouched: the 9 candidates' fits, the data, the truth, and the `whole`
-# arm. Everything downstream depends on that carry-through being exact - if it
-# is not, the three-arm comparison is not comparing three ways of scoring THE
-# SAME candidate fits, and the whole point of doing this as a second pass is
-# lost.
+# me_strategies.R fits all three nuisance arms and carries four things
+# through untouched: the 9 candidates' fits, the data, the truth, and
+# fold_info. Everything downstream depends on that carry-through being exact -
+# if it is not, the three-arm comparison is not comparing three ways of
+# scoring THE SAME candidate fits, and the whole point of doing this as a
+# second pass is lost. Since 2026-10-14 `whole` is recomputed rather than
+# carried (me_strategies.R's header), so it is checked for completeness like
+# the other two arms, not for identity with the main tree.
 #
 # WHY THIS IS NOT A me_testing.R CHECK. Proving the carry-through needs no
 # model fits, no fixtures and no recomputation - it is identical() on two
@@ -124,9 +126,8 @@ for (r in seq_len(nrow(cmb))) {
       report_fail("%s: fold_info differs", tag)
     }
 
-    for (pipeline in names(old$nuisances)) {
+    for (pipeline in c("xgb", "automl")) {
       new_p <- new$nuisances[[pipeline]]
-      old_p <- old$nuisances[[pipeline]]
 
       if (is.null(new_p)) {
         report_fail("%s: pipeline %s missing from the pass", tag, pipeline)
@@ -137,13 +138,8 @@ for (r in seq_len(nrow(cmb))) {
                     paste(names(new_p), collapse = "/"),
                     paste(NUISANCE_ARMS, collapse = "/"))
       }
-      # the carried-through arms, bit for bit
-      if (!identical(old_p$whole, new_p$whole)) {
-        report_fail("%s: %s `whole` was not carried through unchanged",
-                    tag, pipeline)
-      }
-      # the new arms must actually be new, and complete
-      for (arm in c("cv_shared", "holdout")) {
+      # every arm is fitted by the pass, so every arm must be complete
+      for (arm in NUISANCE_ARMS) {
         d <- new_p[[arm]]
         if (is.null(d)) {
           report_fail("%s: %s `%s` missing", tag, pipeline, arm)
@@ -178,5 +174,6 @@ if (length(fails)) {
   quit(save = "no", status = 1)
 }
 
-cat("\nPass-through is inert: candidates, data, truth, fold_info and `whole`\n")
-cat("are bit-identical to the source tree in every run checked.\n")
+cat("\nPass-through is inert: candidates, data, truth and fold_info are\n")
+cat("bit-identical to the source tree, and all three arms are complete, in\n")
+cat("every run checked.\n")

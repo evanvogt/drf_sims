@@ -1,9 +1,17 @@
 ##########
 # title: nuisance-arm pass over existing results - model evaluation study
 ##########
-# A SECOND PASS over me_analysis.R's replicates: this reads each one, adds the
-# two fold-based nuisance arms (`cv_shared`, `holdout`), carries `whole`
-# through untouched, and writes the result to a parallel tree.
+# A SECOND PASS over me_analysis.R's replicates: this reads each one, fits all
+# three nuisance arms (`whole`, `cv_shared`, `holdout`), and writes the result
+# to a parallel tree.
+#
+# `whole` IS RECOMPUTED HERE, NOT CARRIED THROUGH (since 2026-10-14). Until
+# then this pass copied me_analysis.R's `whole` arm and added the other two.
+# When the scoring pipelines moved to per-arm outcome models (me_nuisance.R's
+# header, DEVLOG bug R), every arm in the main tree became stale - and
+# recomputing `whole` here is what lets all three be refreshed without
+# refitting a single candidate. The main tree's own `nuisances` are therefore
+# superseded and not read: only its candidates, data, truth and fold_info are.
 #
 # WHY A SECOND PASS. Everything these arms consume is already saved in each
 # res_sim_<run>.RDS (me_analysis.R's results list): data$Y/W/X, truth,
@@ -77,8 +85,7 @@ W <- old$data$W
 X <- old$data$X
 
 stopifnot(
-  "source file has no fold_info" = !is.null(old$fold_info),
-  "source file has no nuisances" = !is.null(old$nuisances)
+  "source file has no fold_info" = !is.null(old$fold_info)
 )
 
 # ---- the arms --------------------------------------------------------------
@@ -91,6 +98,7 @@ cand_folds <- old$fold_info
 hold_folds <- holdout_blocks(cand_folds$fold_indices)
 
 arms <- list(
+  whole     = nuisance_arm_spec("whole"),
   cv_shared = nuisance_arm_spec("cv", cand_folds),
   holdout   = nuisance_arm_spec("holdout", hold_folds)
 )
@@ -98,8 +106,7 @@ arms <- list(
 # model_seed is keyed off the ARRAY INDEX, which is unique per
 # (scenario, n, run) because the grid rows are - so this pass is reproducible
 # without having to reconstruct where in me_analysis.R's stream its own
-# model_seed was drawn. It cannot affect the passed-through arms, which are
-# copied rather than recomputed.
+# model_seed was drawn.
 setup_rng_stream(i)
 model_seed <- sample.int(2^31 - 1, 1)
 
@@ -111,26 +118,17 @@ new_nuis <- run_nuisance_arms(
   model_seed = model_seed
 )
 
-# ---- merge old and new arms ------------------------------------------------
+# ---- order the arms --------------------------------------------------------
 # Ordered by NUISANCE_ARMS so the score columns me_metrics.R emits come out in
-# a stable order regardless of which arms were computed where.
-merge_arms <- function(old_pipeline, new_pipeline) {
-  merged <- list(
-    whole     = old_pipeline$whole,
-    cv_shared = new_pipeline$cv_shared,
-    holdout   = new_pipeline$holdout
-  )
+# a stable order.
+nuisances <- lapply(new_nuis, function(pipeline) {
+  ordered <- pipeline[NUISANCE_ARMS]
   stopifnot(
-    "merged arm names disagree with me_config.R's NUISANCE_ARMS" =
-      identical(names(merged), NUISANCE_ARMS)
+    "arm names disagree with me_config.R's NUISANCE_ARMS" =
+      identical(names(ordered), NUISANCE_ARMS)
   )
-  merged
-}
-
-nuisances <- lapply(names(old$nuisances), function(pipeline) {
-  merge_arms(old$nuisances[[pipeline]], new_nuis[[pipeline]])
+  ordered
 })
-names(nuisances) <- names(old$nuisances)
 
 # ---- propensity diagnostics ------------------------------------------------
 # calculate_pseudos() divides by pi * (1 - pi) with no trimming, and the

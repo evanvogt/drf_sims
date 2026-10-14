@@ -39,7 +39,7 @@ already reports:
 | score | formula | surrogate |
 |---|---|---|
 | **DR risk** (`dr`) | mean (φ − τ̂)² | – |
-| **One-step** (`onestep`) | mean [(τ̃ − τ̂)² + 2(τ̃ − τ̂)(φ − τ̃)] | plug-in τ̃ = μ̂₁ − μ̂₀ |
+| **One-step** (`onestep`) | mean [(τ̃ − τ̂)² + 2(τ̃ − τ̂)(φ − τ̃)] | plug-in τ̃ = μ̂₁ − μ̂₀ (T-learner: the scoring pipeline's per-arm outcome models) |
 | **IF, 2019, φ** (`infl`) | `me_metrics.R::calc_infl_score()` | φ, as the study scores it |
 | **IF, 2019, plug-in** (`infl_plugin`) | the same | plug-in τ̃ |
 | **IF, C&vdS, plug-in** (`cvds_plugin`) | Curth & van der Schaar (2023) appendix | plug-in τ̃ |

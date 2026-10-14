@@ -177,6 +177,20 @@ them:
 - **H2O AutoML** — up to 20 auto-tuned models per target
   (`exclude_algos = c("DeepLearning", "XGBoost")`).
 
+**Outcome models are per arm (T-learner)** since 2026-10-14, in both
+pipelines and every arm: `mu0_DR` is fit on the training set's `W = 0` rows
+and `mu1_DR` on its `W = 1` rows, each with the pipeline's own tuning (the
+same XGBoost grid, or its own AutoML run). Until then both pipelines fit one
+outcome model on `(W, X)` and read it at `W = 0` and `1` — the S-learner the
+candidates had dropped on 2026-10-08 (see "Candidate models"), for the same
+reason: with `colsample_bytree < 1` and AutoML's tree models, `W` is often
+not offered at a split, which pulls `mu1_DR − mu0_DR` toward a constant and
+leaves `phi`'s heterogeneity to its noisy residual term. The scoring pipelines
+were missed by that change (`docs/DEVLOG.md`, bug R). Every result tree
+written before 2026-10-14 is S-learner scored; see "Status". The propensity
+model is unchanged. `me_nuisance.R` refuses a per-arm fit with fewer than
+`MIN_ARM_ROWS` = 10 training rows in either treatment arm.
+
 ### The three arms
 
 What varies is **what data the evaluation nuisance sees relative to the data
@@ -190,8 +204,11 @@ reads them from the completed results rather than refitting them.
 | `cv_shared` | the candidate's own `V-1` training folds | the candidate's held-out fold | ✓ | ✗ (identical training set) |
 | `holdout` | the candidate's held-out fold **only** | that same fold | ✗ | ✓ |
 
-`whole` is fit by `me_analysis.R`; `cv_shared` and `holdout` by
-`me_strategies.R`.
+All three are fit by `me_strategies.R`. `me_analysis.R` still fits `whole`
+for the main tree, but since 2026-10-14 the strategies pass recomputes it
+rather than copying it, so the main tree's `nuisances` (and its
+`me_metrics.RDS`) are superseded: the strategies tree is the scored one, and
+the main tree supplies only the candidates, data, truth and `fold_info`.
 
 **Why `cv_indep` was removed (2026-10-08).** A fourth arm fit the nuisance
 leave-one-fold-out over a second, *independent* fold draw, justified as
@@ -237,6 +254,13 @@ refitting any candidate. The cost, stated plainly: a pooled block is only
 *half*-decoupled from any single candidate fold model, because the partner
 fold was in that model's training set. `cv_shared` stays at `V=10` at every
 `n` — it trains on 225 rows at `n=250`, so nothing forces a change there.
+
+**Per-arm fits are thin in `holdout`.** With per-arm outcome models each
+block's `mu0_DR` and `mu1_DR` see only one treatment arm's rows: about 25 at
+`n=250` (pooled blocks of 50) and `n=500` (unpooled folds of 50), 50 at
+`n=1000`. The block rule was deliberately left as it is (2026-10-14) so the
+arm keeps its definition; expect more degenerate AutoML fits, and more
+`automl`/`holdout` NA, than the S-learner runs had.
 
 ### The 80:20 arm
 
@@ -397,8 +421,8 @@ account for it.
 | `me_models.R` | the 9 candidate CATE-learner configurations and their fitting logic |
 | `me_nuisance.R` | the two independent nuisance-evaluation pipelines — see below for why this exists outside the usual 7-file shape |
 | `me_analysis.R` | array entry point; one row of the grid per index |
-| `me_strategies.R` | second pass over completed runs — adds the `cv_shared` and `holdout` arms, writes to `model_evaluation_strategies` |
-| `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `whole` through bit-identically, and tracks known automl/holdout NA exceptions (see "Propensity trimming" above) separately from genuine failures |
+| `me_strategies.R` | second pass over completed runs — fits all three arms (`whole`, `cv_shared`, `holdout`) without refitting the candidates, writes to `model_evaluation_strategies` |
+| `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `fold_info` through bit-identically and that all three arms are complete, and tracks known automl/holdout NA exceptions (see "Propensity trimming" above) separately from genuine failures |
 | `me_split.R` | the 80:20 arm — the only script that refits the candidates |
 | `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript. Takes a tree: `main` (default) / `strategies` / `split` |
 | `me_collect.R` | gathers per-run files into `<prefix>_all.RDS`. Same tree argument |
@@ -597,7 +621,45 @@ local `me_testing.R full` run as a sign this study is ready to submit.
 
 ## Status
 
+### Per-arm scoring nuisances: strategies and split trees owed in full (2026-10-14)
+
+The scoring pipelines moved to per-arm outcome models (see "Nuisance-evaluation
+pipelines"; `docs/DEVLOG.md`, bug R). Every nuisance on disk is S-learner
+scored, so every score in every tree is stale. The main tree's candidates are
+not: they were already per arm, and the strategies pass refits no candidate.
+What reruns:
+
+- **strategies**: all 1200 runs, not just scenarios 2/3 — `me_strategies.R`
+  now recomputes `whole` as well as `cv_shared` and `holdout`;
+- **split**: all 800 runs, candidates included — `me_split.R` fits its
+  candidates and its nuisance in one pass;
+- **main**: nothing beyond the scenario 2/3 runs owed below. Its `nuisances`
+  are superseded by the strategies tree, and its `me_metrics.RDS` is not used.
+
+From the repo root on the cluster, after `git pull`:
+
+1. Finish the main tree first (step 1 of the section below) if its scenario
+   2/3 runs are not done: both other trees read it.
+2. `cd model_evaluation/jobscripts`, then `qsub me_testing.sh` (`full` mode,
+   the only place the per-arm AutoML code runs before the array).
+3. `qsub me_strategies.sh` — the full `1-1200%10`. The pass now makes about
+   1.6× the model fits it did, in both pipelines (two outcome models per fit
+   instead of one, plus the `whole` arm; the per-arm fits are on half the
+   rows), so check the last strategies run's `resources_used`
+   against the 1-hour walltime before submitting.
+4. `qsub me_split.sh` — the full `1-800%10`. It does not wait for step 3.
+5. `qsub me_strategies_verify.sh`. Regenerate `known_holdout_na` from its
+   failure list (`me_strategies_verify.R`'s header): which blocks degenerate
+   will change, and with ~25 rows per treatment arm there will likely be more.
+6. Check, collect and metrics for `strategies` and `split` as in step 4 below,
+   then render `me_results.qmd`, and run
+   `Rscript model_evaluation/me_infl_investigation.R sims strategies` before
+   rendering `me_infl_investigation.qmd`.
+
 ### Scenarios 2 and 3 owed (2026-10-11)
+
+Superseded for the strategies and split trees by the section above; step 1
+(main tree) still applies.
 
 The grid moved from scenarios 1, 4, 6, 8 to the main four, 1–4 (see "Data").
 Runs already made for 1 and 4 keep their array indices and stay valid in all
@@ -694,6 +756,10 @@ archived runs:
 
 Re-run `jobscripts/me_testing.sh` on the cluster before `me_1.sh`: the
 2026-10-08 cluster run that was passing predates these candidate changes.
+
+**Changed 2026-10-14**, not comparable with anything scored before it: the
+scoring pipelines' outcome models are per arm, and `me_strategies.R`
+recomputes `whole` instead of copying it (see "Status").
 
 What follows is the state of the archived runs.
 

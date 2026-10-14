@@ -42,6 +42,17 @@
 # had from a single small block. See the comments above the two holdout
 # functions for what the removal took out and which part of it must NOT come
 # back.
+#
+# OUTCOME MODELS ARE PER ARM (T-learner), since 2026-10-14. mu0_DR is fit on
+# the W = 0 rows and mu1_DR on the W = 1 rows of each training set, in both
+# pipelines and every arm - the same change me_models.R made for the 9
+# candidates on 2026-10-08, which this file was missed by. Before it, both
+# pipelines fit ONE outcome model on (W, X) and read it at W = 0 and 1 (an
+# S-learner): with colsample_bytree < 1 and AutoML's tree models W is often
+# not offered at a split, which pulls mu1_DR - mu0_DR toward a constant and
+# leaves phi's heterogeneity to its noisy residual term. Every score in a
+# result tree written before this change is S-learner scored and not
+# comparable with one written after (README.md, "Status"; DEVLOG bug R).
 require(h2o)
 require(xgboost)
 
@@ -90,17 +101,34 @@ create_param_grid <- function(n_cores = 1) {
   )
 }
 
+# Fewest training rows either treatment arm may have before a per-arm outcome
+# fit is refused. XGBoost's inner CV is 5-fold, so below this each inner
+# fold trains on a handful of rows. The thinnest arm the study runs is a
+# 50-row holdout block (n = 250 pooled, n = 500 unpooled), ~25 rows per
+# treatment arm, so falling under 10 is a ~5-SD draw: if it happens, fail
+# the run loudly rather than score with a near-empty fit.
+MIN_ARM_ROWS <- 10L
+
+#' The training rows of one treatment arm, with the MIN_ARM_ROWS guard
+arm_rows <- function(W, filter_indices, w) {
+  rows <- filter_indices & W == w
+  if (sum(rows) < MIN_ARM_ROWS) {
+    stop(sprintf(
+      "only %d training rows with W = %d (MIN_ARM_ROWS = %d) - too few for a per-arm outcome model",
+      sum(rows), w, MIN_ARM_ROWS
+    ), call. = FALSE)
+  }
+  rows
+}
+
 prepare_xgb_matrices <- function(X, Y, W, filter_indices, training = TRUE) {
   if (training) {
+    rows0 <- arm_rows(W, filter_indices, 0)
+    rows1 <- arm_rows(W, filter_indices, 1)
     list(
-      X_Y = xgb.DMatrix(
-        data = as.matrix(X[filter_indices, ]),
-        label = Y[filter_indices]
-      ),
-      XW_Y = xgb.DMatrix(
-        data = as.matrix(cbind(W = W[filter_indices], X[filter_indices, ])),
-        label = Y[filter_indices]
-      ),
+      # per-arm outcome models - see the header
+      X_Y0 = xgb.DMatrix(data = as.matrix(X[rows0, ]), label = Y[rows0]),
+      X_Y1 = xgb.DMatrix(data = as.matrix(X[rows1, ]), label = Y[rows1]),
       X_W = xgb.DMatrix(
         data = as.matrix(X[filter_indices, ]),
         label = W[filter_indices]
@@ -109,9 +137,7 @@ prepare_xgb_matrices <- function(X, Y, W, filter_indices, training = TRUE) {
   } else {
     # For prediction matrices
     list(
-      X = xgb.DMatrix(data = as.matrix(X[filter_indices, ])),
-      X0 = xgb.DMatrix(data = as.matrix(cbind(W = 0, X[filter_indices, ]))),
-      X1 = xgb.DMatrix(data = as.matrix(cbind(W = 1, X[filter_indices, ])))
+      X = xgb.DMatrix(data = as.matrix(X[filter_indices, ]))
     )
   }
 }
@@ -205,15 +231,16 @@ train_best_xgb <- function(grid, cv_results, train_data) {
 
 fit_nuisance_xgb <- function(train_matrices, param_grids) {
   list(
-    mu_DR = fit_xgb(param_grids$continuous, train_matrices$XW_Y),
+    mu0 = fit_xgb(param_grids$continuous, train_matrices$X_Y0),
+    mu1 = fit_xgb(param_grids$continuous, train_matrices$X_Y1),
     pi = fit_xgb(param_grids$binary, train_matrices$X_W)
   )
 }
 
 predict_nuisance_xgb <- function(models, pred_matrices) {
   data.frame(
-    mu0_DR = predict(models$mu_DR, newdata = pred_matrices$X0),
-    mu1_DR = predict(models$mu_DR, newdata = pred_matrices$X1),
+    mu0_DR = predict(models$mu0, newdata = pred_matrices$X),
+    mu1_DR = predict(models$mu1, newdata = pred_matrices$X),
     pi = predict(models$pi, newdata = pred_matrices$X)
   )
 }
@@ -427,18 +454,18 @@ h2o_shutdown_check <- function() {
 prepare_h2o_data <- function(X, Y, W, filter_indices, training = TRUE) {
   # Prepare different data combinations
   if (training) {
-    YWX <- cbind(Y, W, X)
+    YX <- cbind(Y, X)
     WX <- cbind(W = as.factor(W), X)
 
     list(
-      YWX = as.h2o(YWX[filter_indices, ]),
+      # per-arm outcome models - see the header
+      YX0 = as.h2o(YX[arm_rows(W, filter_indices, 0), ]),
+      YX1 = as.h2o(YX[arm_rows(W, filter_indices, 1), ]),
       WX = as.h2o(WX[filter_indices, ])
     )
   } else {
     list(
-      X = as.h2o(X[filter_indices, ]),
-      X0 = as.h2o(cbind(W = 0, X)[filter_indices, ]),
-      X1 = as.h2o(cbind(W = 1, X)[filter_indices, ])
+      X = as.h2o(X[filter_indices, ])
     )
   }
 }
@@ -450,9 +477,17 @@ fit_automl_models <- function(
   exclude_algos = c("DeepLearning", "XGBoost")
 ) {
   list(
-    mu_DR = h2o.automl(
+    mu0 = h2o.automl(
       y = "Y",
-      training_frame = train_data$YWX,
+      training_frame = train_data$YX0,
+      nfolds = 0,
+      max_models = max_models,
+      exclude_algos = exclude_algos,
+      seed = model_seed
+    ),
+    mu1 = h2o.automl(
+      y = "Y",
+      training_frame = train_data$YX1,
       nfolds = 0,
       max_models = max_models,
       exclude_algos = exclude_algos,
@@ -473,8 +508,8 @@ predict_automl_models <- function(models, pred_data) {
   pi_pred <- h2o.predict(models$pi, newdata = pred_data$X) %>% as.data.frame()
 
   data.frame(
-    mu0_DR = h2o.predict(models$mu_DR, newdata = pred_data$X0) %>% as.vector(),
-    mu1_DR = h2o.predict(models$mu_DR, newdata = pred_data$X1) %>% as.vector(),
+    mu0_DR = h2o.predict(models$mu0, newdata = pred_data$X) %>% as.vector(),
+    mu1_DR = h2o.predict(models$mu1, newdata = pred_data$X) %>% as.vector(),
     pi = pi_pred$p1
   )
 }

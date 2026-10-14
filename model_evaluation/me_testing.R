@@ -23,14 +23,18 @@
 #      correctly sized (always); in "full" mode, both nuisance pipelines
 #      present with the expected arms and columns, plus one real call to
 #      me_per_model() on real output.
-#   5. the nuisance ARMS added by me_strategies.R - holdout_blocks()'s
-#      pooling rule, the train/test filters each arm actually uses, and
-#      single_split(). Structural, on synthetic data, no fitting.
+#   5. the nuisance ARMS fitted by me_strategies.R - holdout_blocks()'s
+#      pooling rule, the train/test filters each arm actually uses,
+#      single_split(), and that the XGBoost outcome matrices are per arm
+#      (T-learner) with no W feature. Structural, on synthetic data, no
+#      fitting.
 #   6. me_strategies.R's assembly logic against a synthetic res_sim-shaped
-#      object, XGBoost only. Local machines have no model_evaluation results
-#      to run the real round-trip against (results/ carries every other study
-#      but not this one), and H2O is the slow half - so this exercises the
-#      read/compute/merge/write contract without either.
+#      object, XGBoost only: all three arms fitted for real at n = 250, plus a
+#      printed cor(mu1_DR - mu0_DR, true tau) diagnostic. Local machines have
+#      no model_evaluation results to run the real round-trip against
+#      (results/ carries every other study but not this one), and H2O is the
+#      slow half - so this exercises the read/compute/order/write contract
+#      without either.
 #
 # WHAT DOES NOT RUN HERE. `full` mode is slow and SL2 fails on this machine
 # for a documented local package-version reason (see README.md), so it is not
@@ -559,6 +563,37 @@ report(
           100 * SPLIT_TRAIN_FRAC, 100 * length(sp_t$train) / 500)
 )
 
+# The scoring outcome models are per arm (T-learner) since 2026-10-14 -
+# me_nuisance.R's header. Asserted on the training matrices themselves: each
+# outcome matrix holds exactly one treatment arm's training rows, with their
+# own Y as the label, and W is not a feature of either.
+X_t <- data.frame(X1 = rnorm(200), X2 = rnorm(200))
+W_t <- rbinom(200, 1, 0.5)
+Y_t <- rnorm(200)
+train_t <- fi_t != 1
+mats_t <- prepare_xgb_matrices(X_t, Y_t, W_t, train_t, training = TRUE)
+for (w in 0:1) {
+  rows <- train_t & W_t == w
+  m <- mats_t[[paste0("X_Y", w)]]
+  # DMatrix stores labels as float32, hence the tolerance
+  report(
+    nrow(m) == sum(rows) &&
+      isTRUE(all.equal(xgboost::getinfo(m, "label"), Y_t[rows], tolerance = 1e-6)),
+    sprintf("xgb outcome matrix X_Y%d holds exactly the W = %d training rows and their Y", w, w)
+  )
+}
+report(
+  !any(c("W", "XW_Y") %in% c(colnames(mats_t$X_Y0), colnames(mats_t$X_Y1), names(mats_t))),
+  "xgb outcome matrices have no W feature (no S-learner matrix left)"
+)
+report(
+  inherits(tryCatch(
+    prepare_xgb_matrices(X_t, Y_t, rep(c(1, 0), c(195, 5)), rep(TRUE, 200)),
+    error = function(e) e
+  ), "error"),
+  sprintf("a training set with < MIN_ARM_ROWS (%d) rows in one arm is refused", MIN_ARM_ROWS)
+)
+
 # =============================================================================
 cat("\n=== 6. me_strategies.R assembly, on a synthetic res_sim object ===\n")
 # There are no model_evaluation results on a local machine - results/ carries
@@ -578,19 +613,16 @@ gen_asm <- generate_me_scenario_data(scenario = 6, n = n_asm)
 design_asm <- prepare_design_matrix(gen_asm$dataset)
 folds_asm <- split_folds(design_asm$Y, k = 10L)
 
-# what me_analysis.R would have written: the whole arm only
-old_asm <- list(
-  data = list(Y = design_asm$Y, W = design_asm$W, X = design_asm$X),
-  truth = gen_asm$truth,
-  fold_info = folds_asm,
-  nuisances = list(xgb = list(whole = fake_nuisance_df_n(n_asm)))
-)
-
+# me_strategies.R fits all three arms since 2026-10-14 (`whole` is no longer
+# carried through from me_analysis.R - see its header), so the fixture needs
+# only what it reads from the source run: data and fold_info.
+#
 # run_nuisance_arms() returns list(<pipeline> = list(<arm> = df)), so the arms
 # sit one level below the pipeline even when only one pipeline was asked for.
 new_asm <- run_nuisance_arms(
   design_asm$X, design_asm$Y, design_asm$W,
   arms = list(
+    whole = nuisance_arm_spec("whole"),
     cv_shared = nuisance_arm_spec("cv", folds_asm),
     holdout = nuisance_arm_spec("holdout", holdout_blocks(folds_asm$fold_indices))
   ),
@@ -599,32 +631,34 @@ new_asm <- run_nuisance_arms(
 )$xgb
 
 report(
-  setequal(names(new_asm), c("cv_shared", "holdout")),
+  setequal(names(new_asm), NUISANCE_ARMS),
   "run_nuisance_arms() returns exactly the arms it was asked for"
 )
 
-merged_asm <- list(
-  whole     = old_asm$nuisances$xgb$whole,
-  cv_shared = new_asm$cv_shared,
-  holdout   = new_asm$holdout
-)
-
+# me_strategies.R's reordering step
+ordered_asm <- new_asm[NUISANCE_ARMS]
 report(
-  identical(names(merged_asm), NUISANCE_ARMS),
-  "merged arm names match NUISANCE_ARMS in order"
+  identical(names(ordered_asm), NUISANCE_ARMS),
+  "arm names match NUISANCE_ARMS in order"
 )
 report(
-  identical(merged_asm$whole, old_asm$nuisances$xgb$whole),
-  "whole passes through bit-identically"
+  all(vapply(ordered_asm, function(d) nrow(d) == n_asm, logical(1))),
+  sprintf("all three arms cover all %d rows", n_asm)
 )
 report(
-  nrow(new_asm$cv_shared) == n_asm && nrow(new_asm$holdout) == n_asm,
-  sprintf("both new arms cover all %d rows", n_asm)
+  !any(vapply(ordered_asm, function(d) anyNA(d$phi), logical(1))),
+  "no arm produces NA in phi"
 )
-report(
-  !anyNA(new_asm$cv_shared$phi) && !anyNA(new_asm$holdout$phi),
-  "neither new arm produces NA in phi"
-)
+# Per-arm outcome models should recover heterogeneity in tau: printed, not
+# asserted - at n = 250 with a 36-point grid this is a diagnostic, not a
+# property any fixed threshold holds for
+tau_cor <- vapply(ordered_asm, function(d) {
+  cor(d$mu1_DR - d$mu0_DR, gen_asm$truth$tau)
+}, numeric(1))
+cat(sprintf(
+  "  cor(mu1_DR - mu0_DR, true tau): %s\n",
+  paste(sprintf("%s %.2f", names(tau_cor), tau_cor), collapse = ", ")
+))
 report(
   !isTRUE(all.equal(new_asm$cv_shared$phi, new_asm$holdout$phi)),
   "cv_shared and holdout differ - the fold vectors really are being used"

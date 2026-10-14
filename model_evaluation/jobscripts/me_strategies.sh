@@ -1,7 +1,12 @@
 #!/bin/bash
-# The nuisance-arm pass: adds cv_shared and holdout to every completed run of
-# the main study, writing to results/model_evaluation_strategies. See
+# The nuisance-arm pass: fits whole, cv_shared and holdout for every completed
+# run of the main study, writing to results/model_evaluation_strategies. See
 # me_strategies.R's header for why this is a second pass rather than a rerun.
+#
+# Since 2026-10-14 it fits `whole` too (no longer copied from the main tree)
+# and every outcome model is per arm, two fits where there was one - about
+# 1.6x the model fits of the run these resources were set for. Check that
+# run's resources_used against the walltime below before submitting.
 #
 # PLACEHOLDER resources, for the same reason me_1.sh's are - check the first
 # subjobs' resources_used before trusting them. The cost is not me_1.sh's: no

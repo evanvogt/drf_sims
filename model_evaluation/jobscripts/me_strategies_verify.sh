@@ -1,7 +1,7 @@
 #!/bin/bash
 # Proves me_strategies.R's pass-through was inert: the 9 candidate fits, the
-# data, the truth, fold_info and the `whole` arm must be
-# bit-identical to the source tree in every run. Pure I/O over ~716 files, no
+# data, the truth and fold_info must be bit-identical to the source tree in
+# every run, and all three nuisance arms complete. Pure I/O over ~716 files, no
 # model fitting - minutes, not hours.
 #
 # Run after me_strategies.sh finishes and before me_collect.sh.
