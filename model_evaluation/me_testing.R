@@ -101,16 +101,17 @@ true_tau_fake <- rnorm(n_fake)
 Y_fake <- rnorm(n_fake)
 W_fake <- rbinom(n_fake, 1, 0.5)
 
-# takes n so section 6 can build one at its own size; sections 1's calls keep
-# the original 50-row default
-fake_nuisance_df_n <- function(n = n_fake) {
-  data.frame(
-    pi = runif(n, 0.2, 0.8),
-    phi = rnorm(n),
-    # arm_scores() hard-fails without this rather than scoring an arm whose
-    # oracle-pi pseudo-outcome was never computed, so the fixture carries it
-    # exactly as every real nuisance data.frame does
-    phi05 = rnorm(n)
+# Shaped like a real nuisance data.frame: the predictions, then
+# calculate_pseudos()'s columns from them. arm_scores() recomputes phi from
+# mu0_DR/mu1_DR/pi and checks it against the saved phi, so the fixture's phi
+# has to be the real formula's, not noise. Two rows' pi are exactly 0 and 1,
+# the AutoML failure that bug S's trimming is for, so every check below also
+# runs through the trimming.
+fake_nuisance_df_n <- function(n = n_fake, Y = Y_fake, W = W_fake) {
+  pi <- runif(n, 0.2, 0.8)
+  pi[1:2] <- c(0, 1)
+  calculate_pseudos(
+    data.frame(mu0_DR = rnorm(n), mu1_DR = rnorm(n), pi = pi), Y, W
   )
 }
 fake_nuisance_df <- function() fake_nuisance_df_n(n_fake)
@@ -142,8 +143,12 @@ checks <- list(true_pehe = mean((tau_hat_fake - true_tau_fake)^2))
 for (p in fake_pipelines) {
   for (a in NUISANCE_ARMS) {
     d <- fake_nuis[[p]][[a]]
+    # the trimmed pseudo-outcome, longhand from the raw predictions
+    pt <- pmin(pmax(d$pi, 0.05), 0.95)
+    mu_obs <- ifelse(W_fake == 1, d$mu1_DR, d$mu0_DR)
+    d$phi <- d$mu1_DR - d$mu0_DR + (Y_fake - mu_obs) * (W_fake - pt) / (pt * (1 - pt))
     checks[[paste0("infl_", a, "_", p)]] <-
-      calc_infl_score(tau_hat_fake, d$phi, d$pi, Y_fake, W_fake)
+      calc_infl_score(tau_hat_fake, d$phi, pt, Y_fake, W_fake)
     checks[[paste0("infl05_", a, "_", p)]] <-
       calc_infl_score(tau_hat_fake, d$phi05, 0.5, Y_fake, W_fake)
     checks[[paste0("dr_", a, "_", p)]] <- calc_dr_risk(tau_hat_fake, d$phi)
@@ -171,6 +176,31 @@ report(
     me_score_types()
   ),
   "arm_scores() emits exactly me_score_types(), in order"
+)
+
+# ---- the propensity trimming (bug S) ---------------------------------------
+# A file written before the trimming carries an untrimmed phi, NaN/Inf where
+# pi is exactly 0/1. arm_scores() recomputes phi, so it must score that file
+# exactly as it scores the same predictions saved after the trimming.
+d_new <- fake_nuisance_df()
+d_old <- d_new
+d_old$pi_trim <- NULL
+d_old$phi <- with(d_old, mu1_DR - mu0_DR +
+                    (Y_fake - mu_DR) * (W_fake - pi) / (pi * (1 - pi)))
+s_old <- unlist(arm_scores(tau_hat_fake, d_old, Y_fake, W_fake))
+s_new <- unlist(arm_scores(tau_hat_fake, d_new, Y_fake, W_fake))
+report(
+  !all(is.finite(d_old$phi)) && all(is.finite(s_old)) &&
+    isTRUE(all.equal(s_old, s_new)),
+  "a pre-trimming file (pi exactly 0/1, non-finite saved phi) scores finite and as a post-trimming one"
+)
+
+# the saved-phi guard: shuffled Y no longer matches the rows the nuisance
+# predicted, so the untrimmed rows' phi cannot come back
+report(
+  inherits(try(arm_scores(tau_hat_fake, d_new, rev(Y_fake), W_fake),
+               silent = TRUE), "try-error"),
+  "arm_scores() refuses Y/W that are not the nuisance's rows"
 )
 
 n_score_types <- length(me_score_types())
@@ -459,11 +489,11 @@ if (full && models_ok) {
   arms_ok <- vapply(nuisances4, function(p) setequal(names(p), names(arms4)), logical(1))
   report(all(arms_ok), "both pipelines expose exactly the arms they were asked for")
 
-  expected_cols <- c("mu0_DR", "mu1_DR", "pi", "mu_DR", "phi", "phi05")
+  expected_cols <- c("mu0_DR", "mu1_DR", "pi", "pi_trim", "mu_DR", "phi", "phi05")
   cols_ok <- vapply(names(nuisances4), function(p) {
     all(vapply(nuisances4[[p]], function(ft_df) setequal(names(ft_df), expected_cols), logical(1)))
   }, logical(1))
-  report(all(cols_ok), "every pipeline/arm data.frame has the expected 6 columns")
+  report(all(cols_ok), "every pipeline/arm data.frame has the expected 7 columns")
 
   rows_ok <- vapply(names(nuisances4), function(p) {
     all(vapply(nuisances4[[p]], function(d) nrow(d) == n_test, logical(1)))

@@ -66,14 +66,30 @@ unlist_order <- function(reslist) {
   return(df)
 }
 
+#' The AIPW pseudo-outcomes from one arm's nuisance predictions
+#'
+#' PROPENSITY TRIMMED TO [0.05, 0.95] (trim_ps(), R/utils.R) since 2026-10-14,
+#' as the 9 candidates' own propensities always were (me_models.R) and as
+#' every other study's are. Untrimmed, AutoML's propensity hit exactly 0 or 1
+#' on some rows, mostly where it predicted rows it was fit on (about a quarter
+#' of holdout runs, 5% of whole, 0.5% of cv_shared), which made phi NaN or
+#' +-Inf and the estimated-pi scores undefined for the whole run (DEVLOG bug S). The truth is 0.5, so trimming only moves an estimate that is
+#' already wrong toward it. `pi` keeps the raw prediction (me_strategies.R's
+#' pi_diagnostics read it); `pi_trim` is what phi and the IF score use.
+#'
+#' Row-wise and idempotent on its own output: `pi` is never overwritten, so
+#' me_metrics.R recomputes phi from the saved mu0_DR/mu1_DR/pi with this same
+#' function, and results written before the trimming score as if fit after.
 calculate_pseudos <- function(df, Y, W) {
   df <- df %>%
     mutate(
+      pi_trim = trim_ps(pi),
       mu_DR = mu1_DR * W + (1 - W) * mu0_DR
     )
   df <- df %>%
     mutate(
-      phi = mu1_DR - mu0_DR + ((Y - mu_DR) * (W - pi)) / (pi * (1 - pi)),
+      phi = mu1_DR - mu0_DR +
+        ((Y - mu_DR) * (W - pi_trim)) / (pi_trim * (1 - pi_trim)),
       # phi05 fixes the propensity at 0.5 instead of using the estimated pi.
       # It is not an approximation: R/dgm_scenarios.R assigns treatment with
       # `W <- rbinom(n, 1, 0.5)`, so 0.5 IS the true propensity and phi05 is

@@ -131,13 +131,11 @@ nuisances <- lapply(new_nuis, function(pipeline) {
 })
 
 # ---- propensity diagnostics ------------------------------------------------
-# calculate_pseudos() divides by pi * (1 - pi) with no trimming, and the
-# holdout arm fits pi on 25-100 rows, so its predictions sit much closer to
-# 0/1 than the whole or cv_shared arms' do - which can make phi's AIPW correction
-# blow up and dominate the DR risk. The formula is deliberately NOT changed
-# (trimming one arm and not the others would make them non-comparable); this
-# records the exposure per arm so the decision can be made from measured
-# numbers rather than from the worry.
+# On the RAW pi, before calculate_pseudos()'s trimming to [0.05, 0.95]. The
+# holdout arm fits pi on 25-100 rows and predicts the rows it was fit on, so
+# its predictions sit much closer to 0/1 than the cv_shared arm's do;
+# n_extreme is how many rows per arm the trimming moved. Untrimmed, exact 0/1
+# predictions made phi undefined (DEVLOG bug S).
 pi_diagnostics <- function(nuis) {
   bind_rows(lapply(names(nuis), function(pipeline) {
     bind_rows(lapply(names(nuis[[pipeline]]), function(arm) {

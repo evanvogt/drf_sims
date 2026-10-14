@@ -23,63 +23,31 @@
 # Run after me_strategies.R's array finishes and before me_collect.R.
 
 library(here)
+source(here("R", "utils.R"))                      # trim_ps()
 source(here("model_evaluation/me_config.R"))
+source(here("model_evaluation", "me_nuisance.R")) # calculate_pseudos()
 
 cmb <- combos(study)
 
-# KNOWN, EXPECTED automl/holdout NA. calculate_pseudos() (me_nuisance.R)
-# divides by pi * (1 - pi) with no trimming, and `holdout` fits AutoML's
-# pi/mu_DR on nothing but a 25-100-row block (run_automl_holdout()) - see
-# README.md's "Propensity trimming" section. The README already anticipated
-# that exposure producing extreme weights; it turns out to also produce
-# literal NA for a minority of runs, most plausibly from H2O returning
-# NaN/NA predictions on some rows of a degenerate small-block fit. The
-# formula is deliberately NOT changed (trimming one arm and not the others
-# would make them non-comparable), so this is not a bug to chase - it is
-# tracked here so a run that hits it isn't treated as a new failure.
+# WHAT "COMPLETE" MEANS FOR AN ARM. The saved phi is not what gets scored:
+# me_metrics.R recomputes it from mu0_DR/mu1_DR/pi with calculate_pseudos(),
+# which trims pi to [0.05, 0.95] (DEVLOG bug S). So an arm is complete when
+# its predictions have no NA and the pseudo-outcomes recomputed from them are
+# all finite - checked here the same way the scoring computes them. A file
+# written before the trimming can hold a NaN/Inf saved phi and still pass.
 #
-# This is a HARDCODED list, unlike the 2 permanently-missing main-study runs
-# (which check_failed()'s source-file diff derives automatically): whether a
-# given block's AutoML fit degenerates to NA isn't computable from anything
-# else on disk, it can only be observed. Transcribed 2026-08-29 from a full
-# verify run's failure output (69 runs, all automl/holdout, none from xgb or
-# cv_shared). If the strategies tree is ever rerun, regenerate this by
-# re-running verify with the anyNA branch below temporarily reporting instead
-# of suppressing, and diffing the new failure list against this one. Scenario
-# ids are the post-2026-09-26 numbering (R/dgm_scenarios.R); the verify run
-# that produced this list called scenarios 6, 8 and 4 by their old numbers 4, 6
-# and 9.
-#
-# STALE UNTIL REGENERATED: the list comes from the pre-bug-O DGM. The study
-# re-runs on the current one (its old trees are archived by
-# R/archive_old_results.R), which changes every dataset, so which blocks
-# degenerate will change too. Expect verify to fail on this list after the
-# re-run, and regenerate it as above - including the 69 in the stopifnot().
-# Its scenario 6 and 8 rows are not in the grid since 2026-10-11 (now 1-4,
-# me_config.R), so they can never match; they go when the list is regenerated.
-known_holdout_na <- tibble::tribble(
-  ~scenario, ~n, ~run,
-  6,  250,  21,  6,  250,  23,  6,  250,  26,
-  8,  250,   1,  8,  250,  10,  8,  250,  12,  8,  250,  13,  8,  250,  14,  8,  250,  26,
-  4,  250,   3,  4,  250,   4,  4,  250,   6,  4,  250,  17,  4,  250,  19,  4,  250,  25,
-  1,  500,   2,  1,  500,   3,  1,  500,   9,  1,  500,  11,  1,  500,  13,  1,  500,  27,
-  6,  500,   1,  6,  500,   5,  6,  500,  12,  6,  500,  13,  6,  500,  23,  6,  500,  28,
-  8,  500,   7,  8,  500,  10,  8,  500,  15,  8,  500,  18,  8,  500,  20,  8,  500,  29,  8,  500,  30,
-  4,  500,   5,  4,  500,  10,  4,  500,  20,
-  1, 1000,   5,  1, 1000,  10,  1, 1000,  11,  1, 1000,  25,  1, 1000,  29,
-  6, 1000,   1,  6, 1000,   6,  6, 1000,   8,  6, 1000,  17,  6, 1000,  19,
-  6, 1000,  21,  6, 1000,  23,  6, 1000,  28,  6, 1000,  29,  6, 1000,  30,
-  8, 1000,   3,  8, 1000,   4,  8, 1000,  14,  8, 1000,  15,  8, 1000,  17,
-  8, 1000,  21,  8, 1000,  24,  8, 1000,  25,  8, 1000,  26,  8, 1000,  27,  8, 1000,  28,
-  4, 1000,   4,  4, 1000,   9,  4, 1000,  10,  4, 1000,  13,  4, 1000,  18,  4, 1000,  20
-)
-known_holdout_na_key <- with(known_holdout_na, paste(scenario, n, run))
-stopifnot(nrow(known_holdout_na) == 69L)
+# Propensities of exactly 0 or 1 are not failures (the trimming is what
+# handles them) but they are tallied per pipeline and arm, as the record of
+# how often the trimming is what kept a run in. Before it, AutoML did this in
+# about a quarter of holdout runs, 5% of whole and 0.5% of cv_shared, and
+# XGBoost never; that replaced a hard-coded list of excused automl/holdout
+# runs, which had gone stale with the DGM and missed the other two arms.
 
 fails <- character()
 checked <- 0L
 skipped <- 0L
-known_na <- 0L
+# runs with at least one pi of exactly 0 or 1, per pipeline/arm
+pi_boundary <- integer()
 
 report_fail <- function(...) fails <<- c(fails, sprintf(...))
 
@@ -146,13 +114,19 @@ for (r in seq_len(nrow(cmb))) {
         } else if (nrow(d) != length(new$data$Y)) {
           report_fail("%s: %s `%s` has %d rows, expected %d",
                       tag, pipeline, arm, nrow(d), length(new$data$Y))
-        } else if (anyNA(d$phi) || anyNA(d$pi)) {
-          run_key <- paste(combo$scenario, combo$n, run)
-          if (pipeline == "automl" && arm == "holdout" &&
-                run_key %in% known_holdout_na_key) {
-            known_na <- known_na + 1L
-          } else {
-            report_fail("%s: %s `%s` has NA in phi/pi", tag, pipeline, arm)
+        } else if (anyNA(d[c("mu0_DR", "mu1_DR", "pi")])) {
+          # trimming cannot repair a missing prediction
+          report_fail("%s: %s `%s` has NA in mu0_DR/mu1_DR/pi",
+                      tag, pipeline, arm)
+        } else {
+          scored <- calculate_pseudos(d, new$data$Y, new$data$W)
+          if (!all(is.finite(scored$phi))) {
+            report_fail("%s: %s `%s` has non-finite phi even with pi trimmed",
+                        tag, pipeline, arm)
+          }
+          if (any(d$pi %in% c(0, 1))) {
+            key <- paste(pipeline, arm)
+            pi_boundary[key] <- sum(pi_boundary[key], 1L, na.rm = TRUE)
           }
         }
       }
@@ -163,10 +137,14 @@ for (r in seq_len(nrow(cmb))) {
 cat(sprintf(
   "\n%d run(s) verified, %d skipped (no source run)\n", checked, skipped
 ))
-cat(sprintf(
-  "%d known automl `holdout` NA exception(s) - see the known_holdout_na table\n",
-  known_na
-))
+cat("\nruns with a propensity of exactly 0 or 1, kept in by the trimming:\n")
+if (length(pi_boundary)) {
+  for (key in sort(names(pi_boundary))) {
+    cat(sprintf("  %-20s %d\n", key, pi_boundary[[key]]))
+  }
+} else {
+  cat("  none\n")
+}
 
 if (length(fails)) {
   cat("\nFAILURES:\n")
@@ -175,5 +153,5 @@ if (length(fails)) {
 }
 
 cat("\nPass-through is inert: candidates, data, truth and fold_info are\n")
-cat("bit-identical to the source tree, and all three arms are complete, in\n")
-cat("every run checked.\n")
+cat("bit-identical to the source tree, and all three arms are complete (no NA\n")
+cat("prediction, finite trimmed phi), in every run checked.\n")

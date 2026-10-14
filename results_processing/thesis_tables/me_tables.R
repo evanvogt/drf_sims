@@ -32,10 +32,12 @@
 #
 # Run counts are read off the data, not the design. A proxy whose scoring
 # nuisance failed in a run is NA for every candidate there, and me_selection()
-# drops that (run, proxy), so a failure shows only as a short count: in
-# practice the AutoML pipeline's holdout arm (model_evaluation/README.md,
-# "Propensity trimming"). Each caption gives its own table's counts, and the
-# proxy tables name their short proxies and point to the completed-runs table.
+# drops that (run, proxy), so a failure shows only as a short count. Before
+# the scoring propensity was trimmed (DEVLOG bug S) that was AutoML's
+# estimated-pi proxies, mostly holdout; on metrics computed since, every count
+# should be full, and this is the check that it is. Each caption gives its own
+# table's counts, and the proxy tables name any short proxies and point to the
+# completed-runs table.
 #
 # All six are portrait, within the thesis's 17cm text width. Regret's
 # decimals are read off its MCSEs (mcse_digits() below): its scale changes

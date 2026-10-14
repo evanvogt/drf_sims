@@ -114,8 +114,11 @@ and W = 1) and `pi` (a model on X):
 
 From these, `calculate_pseudos()` forms the AIPW pseudo-outcome
 `phi = mu1 − mu0 + (Y − mu_W)(W − pi) / (pi(1 − pi))`, where `mu_W` is
-the observed arm's model, `mu1` if W = 1 and `mu0` if W = 0. `phi05` is the same
-quantity with `pi` fixed at 0.5. Neither is trimmed.
+the observed arm's model, `mu1` if W = 1 and `mu0` if W = 0, and `pi` is the
+estimated propensity trimmed to [0.05, 0.95] (`trim_ps()`, as for the
+candidates; since 2026-10-14, see README.md's "Propensity trimming"). `phi05`
+is the same quantity with `pi` fixed at 0.5, which needs no trimming. The IF
+score uses the same trimmed `pi`.
 
 **2. Nuisance arm.** The arm sets which rows the scoring nuisance is fit on,
 relative to the rows each candidate was trained on:

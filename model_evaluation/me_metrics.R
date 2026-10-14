@@ -47,10 +47,12 @@
 library(here)
 source(here("model_evaluation/me_config.R"))
 source(here("R", "metrics.R"))
+source(here("model_evaluation", "me_nuisance.R")) # calculate_pseudos()
 
 # ---- the propensity axis ----------------------------------------------------
 # Every score below comes in two versions: one using the nuisance pipeline's
-# ESTIMATED propensity (df$pi, df$phi) and one with the propensity FIXED at
+# ESTIMATED propensity, trimmed to [0.05, 0.95] (df$pi_trim, df$phi - see
+# arm_scores() and DEVLOG bug S), and one with the propensity FIXED at
 # 0.5 (the literal 0.5 passed to calc_infl_score, df$phi05). The fixed version
 # is not an approximation here - R/dgm_scenarios.R assigns treatment with
 # `W <- rbinom(n, 1, 0.5)`, a fair coin independent of X, in every scenario of
@@ -174,17 +176,33 @@ me_score_types <- function(k_groups = CAL_QUANTILES) {
 #' Names must match me_score_types() exactly and in order; me_testing.R checks
 #' that they do, which is what keeps the two definitions from drifting apart.
 arm_scores <- function(tau_hat, df, Y, W, k_groups = CAL_QUANTILES) {
-  # A loud failure beats scoring an arm whose phi05 was never computed and
-  # silently emitting garbage. Every arm goes through
-  # me_nuisance.R::calculate_pseudos(), which has always produced this column.
+  # The pseudo-outcomes are RECOMPUTED from the saved predictions with
+  # calculate_pseudos(), not read from the file, so every tree scores with
+  # the trimmed propensity (DEVLOG bug S) whether it was fit before the
+  # trimming or after - no refit needed.
   stopifnot(
-    "nuisance data.frame has no phi05 - see me_nuisance.R::calculate_pseudos()" =
-      "phi05" %in% names(df)
+    "nuisance data.frame lacks mu0_DR/mu1_DR/pi - see me_nuisance.R" =
+      all(c("mu0_DR", "mu1_DR", "pi") %in% names(df)),
+    "nuisance rows and Y/W differ in length" =
+      nrow(df) == length(Y) && length(W) == length(Y)
   )
+  saved_phi <- df$phi
+  df <- calculate_pseudos(df, Y, W)
+
+  # Where the trimming moved nothing, the saved phi must come back exactly: a
+  # mismatch there means Y/W are not the rows the nuisance predicted, not a
+  # trimming effect
+  if (!is.null(saved_phi)) {
+    inside <- !is.na(df$pi) & df$pi_trim == df$pi
+    stopifnot(
+      "recomputed phi disagrees with the saved phi on untrimmed rows" =
+        isTRUE(all.equal(df$phi[inside], saved_phi[inside]))
+    )
+  }
 
   c(
     list(
-      infl   = calc_infl_score(tau_hat, df$phi, df$pi, Y, W),
+      infl   = calc_infl_score(tau_hat, df$phi, df$pi_trim, Y, W),
       infl05 = calc_infl_score(tau_hat, df$phi05, 0.5, Y, W),
       dr     = calc_dr_risk(tau_hat, df$phi),
       dr05   = calc_dr_risk(tau_hat, df$phi05)

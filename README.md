@@ -267,7 +267,7 @@ history of the re-run campaign is in `docs/DEVLOG.md`.
 
 ## History
 
-`docs/DEVLOG.md` holds the record behind the code: the bug ledger (A–R), which
+`docs/DEVLOG.md` holds the record behind the code: the bug ledger (A–S), which
 studies were re-run and why, how the re-runs were tracked, and why resource
 profiling was removed. Nothing there is needed to read or run the code.
 

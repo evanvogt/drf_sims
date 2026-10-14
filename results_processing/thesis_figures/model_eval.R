@@ -29,9 +29,11 @@
 # The rankings figure is the distribution of the pick's true rank (1 = best of
 # the 9) over runs, for the fixed-π proxies only, as in me_results.qmd. Its
 # denominator is every run with a true PEHE, not just the runs the proxy
-# ranked: a run whose scoring nuisance failed (in practice AutoML's holdout
-# arm) is a grey "Not ranked" share of the bar, rather than dropping out and
-# inflating the proxy's share of good ranks.
+# ranked: a run whose proxy score was undefined is a grey "Not ranked" share
+# of the bar, rather than dropping out and inflating the proxy's share of good
+# ranks. The fixed-pi proxies never needed the estimated propensity, and since
+# its trimming (DEVLOG bug S) no proxy should be unranked, so grey means
+# something new has failed.
 #
 # The design-axis figure marginalises regret over the other axes: each level
 # (DR vs IF, estimated vs fixed propensity, fold regime, pipeline) is averaged

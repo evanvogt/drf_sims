@@ -388,31 +388,40 @@ The split tree needs no scoring variant because `me_split.R` stores `data` and
 `truth` already restricted to its 20% evaluation rows, so every vector
 `me_per_model()` touches is the same length.
 
-### Propensity trimming — an open question, deliberately left open
+### Propensity trimming — [0.05, 0.95], every arm and pipeline (2026-10-14)
 
-`calculate_pseudos()` divides by `pi * (1 - pi)` with **no** trimming, while
-the candidates trim via `trim_ps()` (`me_models.R`). The `whole` arm has always
-carried that exposure and completed 358/360 runs. `holdout` and `split` fit
-`pi` on 25–100 rows, so their predictions sit much closer to 0/1 and the
-weight `1/(pi(1-pi))` can dominate `phi`. The formula is **not** changed —
-trimming one arm and not the others would make them non-comparable — but
-`me_strategies.R` records per-arm `pi` min/max/quantiles and the max weight in
-each run's `pi_diagnostics`, so the decision can be made from measured numbers.
+`calculate_pseudos()` trims the scoring propensity to [0.05, 0.95] with
+`trim_ps()`, as the 9 candidates' propensities always were (`me_models.R`) and
+as every other study's are. It applies to every arm and both pipelines alike,
+which keeps them comparable; the earlier objection was only to trimming some
+arms and not others. The true propensity is 0.5, so trimming can only move an
+estimate that is already wrong toward the truth. What the estimated- vs
+fixed-π contrast measures is now the cost of estimating a *trimmed*
+propensity. `pi` keeps the raw prediction, `pi_trim` the trimmed one, and
+`me_strategies.R`'s per-run `pi_diagnostics` (min/max/quantiles, max weight,
+`n_extreme` = rows trimmed) are on the raw `pi`.
 
-**In practice, this exposure surfaces as literal `NA`, not just large
-weights.** 69 of the strategies tree's 358 reachable runs have `NA` in
-`phi`/`pi` in the `automl` pipeline's `holdout` arm specifically (never `xgb`,
-never `cv_shared`) — most plausibly H2O AutoML returning `NaN`/`NA`
-predictions on some rows of a degenerate fit against a 25–100-row block. The
-formula stays unchanged per the decision above, so these are treated as a
-known, expected limitation rather than a bug to chase: they're listed in
-`me_strategies_verify.R`'s `known_holdout_na` table, and the script tallies
-them separately from genuine failures instead of failing on them. Downstream,
-this is contained rather than corrupting — `me_metrics.R`'s score functions
-use bare `mean()`/`sum()`, so an affected run only goes `NA` in its 8
-`*_holdout_automl` columns (of 49), and `me_results.qmd`'s existing
-`sum(is.na(.x))` completeness audit and `na.rm = TRUE` aggregation already
-account for it.
+**Why (DEVLOG bug S).** Untrimmed, AutoML's propensity was **exactly 0 or 1**
+on some rows of 294 of 1200 `holdout` runs, 58 `whole` and 6 `cv_shared`
+(2026-10-14 cluster check; XGBoost never, and never an NA prediction). Most
+likely from H2O's forests, whose vote-fraction probabilities reach 0 or 1
+when a model predicts the rows it was fit on (`holdout`, `whole`). One such
+row made phi NaN (π = 1 where W = 1) or ±Inf (π = 1 where W = 0) and every
+estimated-π score undefined for the whole run, so some AutoML proxies'
+summaries rested on as few as 65% of runs. Where phi was +Inf, the DR score was +Inf for all 9
+candidates, and the argmin returned the first candidate as if it were a pick.
+`me_selection.R` now keeps only finite scores, so that cannot recur silently.
+
+The trimming is applied **when scoring**: `me_metrics.R`'s `arm_scores()`
+recomputes phi from each arm's saved `mu0_DR`/`mu1_DR`/`pi`, so results fit
+before 2026-10-14 need only collect and metrics re-run, no refit. It checks
+the recomputed phi against the saved one on the rows the trimming did not
+move, which catches Y/W that are not the nuisance's rows.
+`me_strategies_verify.R` checks completeness the same way (no NA prediction,
+finite trimmed phi) and tallies the runs that had a 0/1 propensity. Trimmed
+`holdout` propensities still pile up at the bounds, where the weight
+`1/(π(1−π))` is about 21 against 4 at π = 0.5, so those proxies are defined
+in every run but noisy.
 
 ## Files
 
@@ -425,7 +434,7 @@ account for it.
 | `me_nuisance.R` | the two independent nuisance-evaluation pipelines — see below for why this exists outside the usual 7-file shape |
 | `me_analysis.R` | array entry point; one row of the grid per index |
 | `me_strategies.R` | second pass over completed runs — fits all three arms (`whole`, `cv_shared`, `holdout`) without refitting the candidates, writes to `model_evaluation_strategies` |
-| `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `fold_info` through bit-identically and that all three arms are complete, and tracks known automl/holdout NA exceptions (see "Propensity trimming" above) separately from genuine failures |
+| `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `fold_info` through bit-identically and that all three arms are complete (no NA prediction, finite phi with π trimmed), and tallies the runs with a propensity of exactly 0 or 1 (see "Propensity trimming" above) |
 | `me_split.R` | the 80:20 arm — the only script that refits the candidates |
 | `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript. Takes a tree: `main` (default) / `strategies` / `split` |
 | `me_collect.R` | gathers per-run files into `<prefix>_all.RDS`. Same tree argument |
@@ -624,6 +633,16 @@ local `me_testing.R full` run as a sign this study is ready to submit.
 
 ## Status
 
+### Scoring propensity trimmed: metrics owed, no refit (2026-10-14)
+
+The scoring pseudo-outcome now uses the propensity trimmed to [0.05, 0.95]
+(see "Propensity trimming"; `docs/DEVLOG.md`, bug S). `me_metrics.R`
+recomputes phi from each run's saved predictions, so nothing is refitted:
+after the strategies (and split) passes are done, re-run collect and metrics
+for each tree, then the thesis tables and figures. Every `*_metrics.RDS`
+written before this has undefined estimated-π scores in the runs where AutoML
+predicted a propensity of exactly 0 or 1.
+
 ### Per-arm scoring nuisances: strategies and split trees owed in full (2026-10-14)
 
 The scoring pipelines moved to per-arm outcome models (see "Nuisance-evaluation
@@ -651,9 +670,9 @@ From the repo root on the cluster, after `git pull`:
    rows), so check the last strategies run's `resources_used`
    against the 1-hour walltime before submitting.
 4. `qsub me_split.sh` — the full `1-800%10`. It does not wait for step 3.
-5. `qsub me_strategies_verify.sh`. Regenerate `known_holdout_na` from its
-   failure list (`me_strategies_verify.R`'s header): which blocks degenerate
-   will change, and with ~25 rows per treatment arm there will likely be more.
+5. `qsub me_strategies_verify.sh`. It fails only on an NA prediction or a
+   phi that is non-finite even with π trimmed; propensities of exactly 0 or 1
+   are tallied per pipeline and arm, not failed (see its header).
 6. Check, collect and metrics for `strategies` and `split` as in step 4 below,
    then render `me_results.qmd`, and run
    `Rscript model_evaluation/me_infl_investigation.R sims strategies` before
@@ -733,18 +752,13 @@ grid already covers 1–4.
    qsub -v TREE=split me_metrics.sh
    ```
 
-   The verify step reports
-   scenario 2/3 `automl`/`holdout` NA runs as failures until
-   `known_holdout_na` is regenerated (see below). Then render
-   `me_results.qmd`.
+   Then render `me_results.qmd`.
 
 **Re-run owed — every tree.** The runs described below predate bug O, which
 changed the continuous DGM this study generates from (`sample_size/continuous/README.md`),
 and use the pre-2026-09-26 scenario numbers (1/4/6/9, now 1/4/6/8). The main,
 strategies and split trees are archived by `R/archive_old_results.R` (root
-`README.md`, Status, step 0), and all three re-run from empty. After the
-strategies pass, regenerate `me_strategies_verify.R`'s `known_holdout_na` - it
-lists which blocks degenerated under the old DGM.
+`README.md`, Status, step 0), and all three re-run from empty.
 
 **Changed for the rerun (2026-10-08)**, none of it comparable with the
 archived runs:
@@ -773,11 +787,9 @@ they stay excluded consistently across all three trees — see `me_check.R` for
 why that means the derived trees' completion criterion is "exactly those 2
 missing", not zero.
 
-**Of the 358 strategies-tree runs, 69 have `NA` phi/pi in the automl
-`holdout` arm** — a known, expected consequence of fitting AutoML with no
-propensity trimming on 25–100-row blocks (see "Propensity trimming" above),
-not a rerun candidate. `me_strategies_verify.R` treats these as known
-exceptions rather than failures.
+**Of the 358 strategies-tree runs, 69 had `NA` phi in the automl `holdout`
+arm**, from an untrimmed propensity of exactly 0 or 1 (see "Propensity
+trimming" above; then put down to H2O returning NA predictions).
 
 **The nuisance-arm reconfiguration does not require rerunning any of it.**
 Everything the new arms consume — `data$Y/W/X`, `truth`, `fold_info`, and each

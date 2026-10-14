@@ -67,8 +67,12 @@ me_read_metrics <- function(metrics_file, scenario_labels) {
 #' One row per (scenario, n, run, proxy): how the proxy's pick did
 #'
 #' A candidate only enters a ranking if both its score and its truth are
-#' there; regret is against the best candidate present in that run, as in
-#' me_results.qmd.
+#' finite; regret is against the best candidate present in that run, as in
+#' me_results.qmd. Finite, not just non-NA: an infinite score is the same for
+#' every candidate (it comes from the shared phi), and which.min() would then
+#' return the first candidate, an arbitrary pick counted as a real one. Since
+#' the propensity trimming (DEVLOG bug S) no score should be non-finite; this
+#' keeps a recurrence from passing silently.
 #'
 #' - hit, whether the pick is the candidate with the lowest true PEHE;
 #' - pick_rank, the pick's true rank among the candidates present, 1 = best
@@ -83,7 +87,7 @@ me_selection <- function(metrics) {
   metrics %>%
     pivot_longer(all_of(ME_SCORE_COLS), names_to = "proxy_id",
                  values_to = "score") %>%
-    filter(!is.na(score), !is.na(true_pehe)) %>%
+    filter(is.finite(score), is.finite(true_pehe)) %>%
     mutate(
       score_type = sub(ME_SCORE_PATTERN, "\\1", proxy_id),
       fold_type = sub(ME_SCORE_PATTERN, "\\2", proxy_id),
