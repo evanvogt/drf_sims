@@ -45,14 +45,16 @@
 #
 # OUTCOME MODELS ARE PER ARM (T-learner), since 2026-10-14. mu0_DR is fit on
 # the W = 0 rows and mu1_DR on the W = 1 rows of each training set, in both
-# pipelines and every arm - the same change me_models.R made for the 9
+# pipelines and every arm - the same structure me_models.R gave the 9
 # candidates on 2026-10-08, which this file was missed by. Before it, both
 # pipelines fit ONE outcome model on (W, X) and read it at W = 0 and 1 (an
-# S-learner): with colsample_bytree < 1 and AutoML's tree models W is often
-# not offered at a split, which pulls mu1_DR - mu0_DR toward a constant and
-# leaves phi's heterogeneity to its noisy residual term. Every score in a
-# result tree written before this change is S-learner scored and not
-# comparable with one written after (README.md, "Status"; DEVLOG bug R).
+# S-learner). The change is for CONSISTENCY - the candidates and the
+# nuisances that score them now share one outcome-model structure - not
+# because the S-learner was shown to be worse: on a local XGBoost check
+# (n = 500, scenarios 2-4, two seeds) cor(mu1_DR - mu0_DR, tau) was about the
+# same under both (0.73-0.96), and a little lower per arm in scenario 4.
+# Every score in a result tree written before this change is S-learner scored
+# and not comparable with one written after (README.md, "Status"; DEVLOG R).
 require(h2o)
 require(xgboost)
 

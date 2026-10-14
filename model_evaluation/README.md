@@ -182,12 +182,15 @@ pipelines and every arm: `mu0_DR` is fit on the training set's `W = 0` rows
 and `mu1_DR` on its `W = 1` rows, each with the pipeline's own tuning (the
 same XGBoost grid, or its own AutoML run). Until then both pipelines fit one
 outcome model on `(W, X)` and read it at `W = 0` and `1` — the S-learner the
-candidates had dropped on 2026-10-08 (see "Candidate models"), for the same
-reason: with `colsample_bytree < 1` and AutoML's tree models, `W` is often
-not offered at a split, which pulls `mu1_DR − mu0_DR` toward a constant and
-leaves `phi`'s heterogeneity to its noisy residual term. The scoring pipelines
-were missed by that change (`docs/DEVLOG.md`, bug R). Every result tree
-written before 2026-10-14 is S-learner scored; see "Status". The propensity
+candidates had dropped on 2026-10-08 (see "Candidate models"); the scoring
+pipelines were missed by that change (`docs/DEVLOG.md`, R). The change is for
+**consistency**, so the candidates and the nuisances that score them share
+one outcome-model structure. It is not a fix for a demonstrated accuracy
+problem: a local XGBoost check (n = 500, scenarios 2–4, two seeds each) found
+`cor(mu1_DR − mu0_DR, tau)` about the same under both (0.73–0.96), and a
+little lower per arm in scenario 4, where each arm's model has to learn the
+full baseline from ~250 rows. AutoML and n = 1000 were not checked. Every
+result tree written before 2026-10-14 is S-learner scored; see "Status". The propensity
 model is unchanged. `me_nuisance.R` refuses a per-arm fit with fewer than
 `MIN_ARM_ROWS` = 10 training rows in either treatment arm.
 
