@@ -25,15 +25,26 @@
 #   - one fixed-choice table, rows scenario / n / candidate: each candidate's
 #     true PEHE and the three measures if it were always deployed
 #     (me_candidates()), the best fixed choice in bold. Its bold rows are the
-#     proxy tables' best-fixed-choice rows.
+#     proxy tables' best-fixed-choice rows;
+#   - one completed-runs table, the proxy tables' layout with each cell the
+#     number of runs that proxy was scored in, and an "All runs" row (the runs
+#     with a true PEHE) under each n.
 #
-# All five are portrait, within the thesis's 17cm text width. Regret's
+# Run counts are read off the data, not the design. A proxy whose scoring
+# nuisance failed in a run is NA for every candidate there, and me_selection()
+# drops that (run, proxy), so a failure shows only as a short count: in
+# practice the AutoML pipeline's holdout arm (model_evaluation/README.md,
+# "Propensity trimming"). Each caption gives its own table's counts, and the
+# proxy tables name their short proxies and point to the completed-runs table.
+#
+# All six are portrait, within the thesis's 17cm text width. Regret's
 # decimals are read off its MCSEs (mcse_digits() below): its scale changes
 # with the scenario and n, and the results were not to hand when this was
 # written.
 #
 # Writes to ../results/thesis_tables/:
-#   me_top1.tex, me_rank.tex, me_regret.tex, me_axis.tex, me_fixed.tex
+#   me_top1.tex, me_rank.tex, me_regret.tex, me_axis.tex, me_fixed.tex,
+#   me_runs.tex
 # \input{} them into a document with
 #   \usepackage{booktabs, longtable, pdflscape, array}
 #
@@ -91,9 +102,68 @@ mcse_digits <- function(mcse) {
 
 metrics <- me_read_metrics(metrics_file, SS_SCENARIO_LABELS)
 selection <- me_selection(metrics)
+candidates <- me_candidates(metrics)
 
-runs <- runs_per_cell(selection,
-                      c("scenario", "n", "score_type", "fold_type", "pipeline"))
+# ---- run counts --------------------------------------------------------------
+
+#' "358", or "289--350" when the counts differ
+count_range <- function(x) {
+  r <- range(x)
+  if (r[1] == r[2]) as.character(r[1]) else paste0(r[1], "--", r[2])
+}
+
+# a failed candidate would shrink the "out of 9" the captions state, so say so
+short_runs <- candidates %>%
+  count(scenario, n, run, name = "candidates") %>%
+  filter(candidates < ME_N_CANDIDATES)
+if (nrow(short_runs) > 0) {
+  warning(nrow(short_runs), " run(s) have fewer than ", ME_N_CANDIDATES,
+          " candidates with a true PEHE; the captions' \"of ",
+          ME_N_CANDIDATES, "\" is then an upper bound", call. = FALSE)
+}
+
+# the runs with a true PEHE, per (scenario, n): every run the reference rows,
+# the axis table and the fixed-choice table can use
+total_runs <- candidates %>%
+  distinct(scenario, n, run) %>%
+  count(scenario, n, name = "total")
+
+# over the full proxy grid, so a proxy that failed in every run counts 0
+# rather than vanishing
+proxy_runs <- tidyr::expand_grid(
+  total_runs,
+  score_type = ME_SCORE_TYPES, fold_type = ME_FOLD_TYPES,
+  pipeline = ME_PIPELINES
+) %>%
+  left_join(count(selection, scenario, n, score_type, fold_type, pipeline,
+                  name = "runs"),
+            by = c("scenario", "n", "score_type", "fold_type", "pipeline")) %>%
+  mutate(runs = coalesce(runs, 0L))
+
+short_cells <- proxy_runs %>% filter(runs < total)
+short_proxies <- short_cells %>%
+  distinct(fold_type, pipeline) %>%
+  mutate(label = paste0(FOLD_LABELS[fold_type], "/",
+                        PIPELINE_LABELS[pipeline]))
+short_proxies <- paste(short_proxies$label, collapse = " and ")
+
+if (nrow(short_cells) > 0) {
+  message("proxy cells with failed runs (", nrow(short_cells), " of ",
+          nrow(proxy_runs), "):")
+  print(as.data.frame(short_cells), row.names = FALSE)
+} else {
+  message("no proxy cell has failed runs")
+}
+
+proxy_runs_text <- paste0(count_range(total_runs$total), " runs per cell")
+if (nrow(short_cells) > 0) {
+  proxy_runs_text <- paste0(
+    proxy_runs_text, ", fewer for the ", short_proxies, " proxies (",
+    count_range(short_cells$runs), "; Table~\\ref{tab:me_runs})"
+  )
+}
+
+# ---- summaries ---------------------------------------------------------------
 
 proxy_summary <- selection %>%
   mutate(
@@ -125,7 +195,8 @@ ref_summary <- bind_rows(
   mutate(label = ifelse(ref == "random", "Random pick",
                         paste0("Best fixed (", model, ")")))
 
-axis_summary <- me_axis_runs(selection, AXES, unname(MEASURE_COLS)) %>%
+axis_runs <- me_axis_runs(selection, AXES, unname(MEASURE_COLS))
+axis_summary <- axis_runs %>%
   summarise_metrics(c("scenario", "n", "axis", "level"),
                     cols = MEASURE_COLS, count_na = character())
 
@@ -176,7 +247,7 @@ caption_text <- function(m) {
   paste0(
     "Model evaluation, ", tolower(substr(m$short, 1, 1)), substring(m$short, 2),
     " of the selection proxies: ", m$text, ". Mean (Monte Carlo SE) over ",
-    runs, " runs per cell. ", proxy_key
+    proxy_runs_text, ". ", proxy_key
   )
 }
 
@@ -208,6 +279,18 @@ axis_cols <- tibble::tribble(
   "regret", "Regret",                                  regret_digits
 )
 
+# a run keeps an axis level while any proxy sharing it was scored, so a failed
+# proxy changes what the level averages over in that run, not the run count
+axis_missing <- if (nrow(short_cells) > 0) {
+  paste0(
+    " The ", short_proxies, " proxies are missing from some runs ",
+    "(Table~\\ref{tab:me_runs}); in those runs, the levels they share are ",
+    "averaged over the proxies that remain."
+  )
+} else {
+  ""
+}
+
 tex <- me_axis_table(
   axis_summary, axis_cols,
   caption.short = "Model evaluation: selection by design axis",
@@ -215,10 +298,12 @@ tex <- me_axis_table(
     "Model evaluation, selection by design axis: top-1 accuracy, true rank ",
     "of the pick (1 = best of 9) and regret, each level of an axis averaged ",
     "over the proxies that share it within each run, then over runs. Mean ",
-    "(Monte Carlo SE) over ", runs, " runs per cell; the SE counts runs. ",
+    "(Monte Carlo SE) over ",
+    runs_per_cell(axis_runs, c("scenario", "n", "axis", "level")),
+    " runs per cell; the SE counts runs. ",
     "Averaged within a run, top-1 accuracy is a proportion rather than 0/1, ",
     "so its SE is the general one. Fold regime: the rows the scoring ",
-    "nuisance is fit on, as in Table~\\ref{tab:me_top1}."
+    "nuisance is fit on, as in Table~\\ref{tab:me_top1}.", axis_missing
   ),
   label = "me_axis",
   landscape = FALSE,
@@ -241,7 +326,7 @@ best_fixed <- ref_summary %>%
 
 # the best fixed choice's name is bolded in place, so each candidate has a
 # plain and a bold level, kept next to each other in the row order
-candidate_summary <- me_candidates(metrics) %>%
+candidate_summary <- candidates %>%
   summarise_metrics(
     c("scenario", "n", "model"),
     cols = c(pehe = "true_pehe", MEASURE_COLS),
@@ -275,7 +360,8 @@ tex <- ss_latex_table(
     "Model evaluation, the candidates as fixed choices: each candidate's ",
     "true PEHE, and its top-1 accuracy (the proportion of runs in which it is ",
     "the candidate with the lowest true PEHE), true rank (1 = best of 9) and ",
-    "regret if it were always deployed. Mean (Monte Carlo SE) over ", runs,
+    "regret if it were always deployed. Mean (Monte Carlo SE) over ",
+    runs_per_cell(candidates, c("scenario", "n", "model")),
     " runs per cell. In bold, the best fixed choice: the candidate with the ",
     "lowest mean regret in that scenario and $n$, chosen with hindsight, and ",
     "the Best fixed row of Tables~\\ref{tab:me_top1}--\\ref{tab:me_regret}."
@@ -286,5 +372,43 @@ tex <- ss_latex_table(
   tabcolsep = NULL
 )
 out_file <- file.path(tab_path, "me_fixed.tex")
+writeLines(tex, out_file)
+message("wrote ", out_file)
+
+# ---- completed runs ----------------------------------------------------------
+
+# the proxy tables' layout, so each count sits where the cell it is behind
+# does. A count has no MCSE, which fmt_mcse() prints as the number alone.
+runs_summary <- proxy_runs %>%
+  mutate(
+    metric = label_factor(score_type, SCORE_LABELS),
+    fold = label_factor(fold_type, FOLD_LABELS),
+    machine = label_factor(pipeline, PIPELINE_LABELS),
+    mean_runs = runs,
+    mcse_runs = NA_real_
+  )
+runs_refs <- total_runs %>%
+  mutate(ref = factor("total"), label = "All runs", mean_runs = total,
+         mcse_runs = NA_real_)
+
+tex <- me_proxy_table(
+  runs_summary, runs_refs, "runs", 0,
+  caption.short = "Model evaluation: completed runs per proxy",
+  caption = paste0(
+    "Model evaluation, completed runs: the number of runs in which each ",
+    "selection proxy could be scored, the runs behind each cell of ",
+    "Tables~\\ref{tab:me_top1}--\\ref{tab:me_regret}. A proxy is missing from ",
+    "a run when its scoring nuisance returned missing values there, which ",
+    "leaves the proxy undefined for every candidate. All runs: the runs with ",
+    "a true PEHE for the candidates, the runs behind the Random pick and Best ",
+    "fixed rows and Tables~\\ref{tab:me_axis} and \\ref{tab:me_fixed}. Rows ",
+    "and columns as in Table~\\ref{tab:me_top1}."
+  ),
+  label = "me_runs",
+  landscape = FALSE,
+  font_size = 10,
+  tabcolsep = NULL
+)
+out_file <- file.path(tab_path, "me_runs.tex")
 writeLines(tex, out_file)
 message("wrote ", out_file)
