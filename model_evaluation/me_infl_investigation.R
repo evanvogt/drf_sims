@@ -15,10 +15,13 @@
 #
 # sims: the same scores on the completed replicates, from the collected
 # <prefix>_all.RDS - no refitting, the scores only need each candidate's saved
-# tau and each arm's saved mu0_DR/mu1_DR/pi/phi. Writes
-# <prefix>_infl_check.RDS next to it (never _metrics.RDS) and prints, per
-# score, how well it ranks the 9 candidates against true PEHE: Spearman,
-# top-1 hit rate and regret, as me_results.qmd measures them.
+# tau and each arm's saved mu0_DR/mu1_DR/pi/phi. Prints, per score, how well
+# it ranks the 9 candidates against true PEHE: Spearman, top-1 hit rate and
+# regret, as me_results.qmd measures them.
+#
+# Both save to INVESTIGATION_DIR, results/correlated/model_evaluation/
+# investigation/: population.RDS, and <prefix>_infl_check.RDS per tree
+# (me_, me_strat_, me_split_) - never into a tree's own _metrics.RDS.
 #
 # me_metrics.R is deliberately NOT sourced: when <prefix>_all.RDS exists (on
 # the cluster) sourcing it recomputes and overwrites <prefix>_metrics.RDS.
@@ -33,6 +36,16 @@ source(here("model_evaluation", "me_nuisance.R")) # calculate_pseudos()
 N_BIG <- 2e6
 CALIB_N <- 500 # the grid also has 250 and 1000
 PI_TRUE <- 0.5
+
+# every result of this script, whichever tree it scores
+INVESTIGATION_DIR <- file.path(study$res_path, "investigation")
+
+save_investigation <- function(x, file) {
+  dir.create(INVESTIGATION_DIR, recursive = TRUE, showWarnings = FALSE)
+  path <- file.path(INVESTIGATION_DIR, file)
+  saveRDS(x, path)
+  message("saved ", path)
+}
 
 # ---- scores -----------------------------------------------------------------
 
@@ -140,6 +153,7 @@ run_population <- function() {
     sort(unique(study$grid$scenario)),
     investigate_scenario
   ))
+  save_investigation(res, "population.RDS")
 
   # results
   print(mutate(res, across(where(is.double), ~ round(.x, 3))), n = Inf)
@@ -246,9 +260,10 @@ run_sims <- function(which = "main") {
     summarise(share_same_regret = mean(abs(onestep - dr) < 1e-10, na.rm = TRUE))
   message("onestep vs dr, share of runs with the same pick: ", round(same_pick$share_same_regret, 4))
 
-  out_path <- file.path(st$res_path, paste0(st$prefix, "_infl_check.RDS"))
-  saveRDS(list(scores = scores, perf = perf, summary = summary), out_path)
-  message("saved ", out_path)
+  save_investigation(
+    list(scores = scores, perf = perf, summary = summary),
+    paste0(st$prefix, "_infl_check.RDS")
+  )
 
   # averaged over everything but the score, then the full breakdown
   print(

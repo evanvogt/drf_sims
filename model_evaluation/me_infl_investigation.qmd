@@ -1,0 +1,443 @@
+---
+title: "Model evaluation: influence-function scores"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 11,
+  fig.height = 8
+)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(knitr)
+```
+
+## What this compares
+
+The influence-function (IF) PEHE score as written in Alaa & van der Schaar
+(2019) is wrong. Their appendix writes PEHE as Ψ¹ + Ψ² + Ψ³ where it should be
+Ψ¹ + Ψ² − 2Ψ³, and the three Ψ̇ it lists are not the influence functions of
+those Ψ's. Two alternatives are scored here against the scores the study
+already reports:
+
+| score | formula | surrogate |
+|---|---|---|
+| **DR risk** (`dr`) | mean (φ − τ̂)² | – |
+| **One-step** (`onestep`) | mean [(τ̃ − τ̂)² + 2(τ̃ − τ̂)(φ − τ̃)] | plug-in τ̃ = μ̂₁ − μ̂₀ |
+| **IF, 2019** (`infl`) | `me_metrics.R::calc_infl_score()` | φ, as the study scores it |
+| **IF, C&vdS, plug-in** (`cvds_plugin`) | Curth & van der Schaar (2023) appendix | plug-in τ̃ |
+| **IF, C&vdS, φ** (`cvds_phi`) | the same | φ |
+
+The one-step score is the correctly derived IF-corrected PEHE. It simplifies
+to (φ − τ̂)² − (φ − τ̃)², so **within a run it is the DR risk minus a constant
+shared by every candidate**: it picks the same candidate, with the same
+Spearman correlation and regret, and differs from DR only in level. Figure 1
+should show the two on top of each other; figure 2 is where they separate.
+
+All scores here are from the **CV (`cv_shared`) arm**: the scoring nuisance is
+fit on the candidate's own `V − 1` training folds and predicted on its held-out
+fold. The estimated-propensity version of every score is in the main
+figures; the fixed π = 0.5 version is in the appendix. Every score, and true
+PEHE, is a loss: lower is better.
+
+Produced by `me_infl_investigation.R` (`population` and `sims strategies`).
+
+```{r data}
+inv_path <- file.path(
+  dirname(here()), "results", "correlated", "model_evaluation", "investigation"
+)
+
+ARM <- "cv_shared"
+
+check <- readRDS(file.path(inv_path, "me_strat_infl_check.RDS"))
+population <- readRDS(file.path(inv_path, "population.RDS"))
+
+scenario_labels <- c(
+  `1` = "Null",
+  `2` = "Simple",
+  `3` = "Complex",
+  `4` = "Non-linear"
+)
+
+score_labels <- c(
+  dr = "DR risk",
+  onestep = "One-step",
+  infl = "IF, 2019",
+  cvds_plugin = "IF, C&vdS, plug-in",
+  cvds_phi = "IF, C&vdS, phi"
+)
+
+pipeline_labels <- c(xgb = "XGBoost", automl = "AutoML")
+
+# the score names carry the propensity regime as a trailing "05"
+# (cvds_plugin05, onestep05, ...), as me_metrics.R's do
+tidy_axes <- function(df) {
+  df %>%
+    filter(arm == ARM) %>%
+    mutate(
+      pi_regime = ifelse(grepl("05$", score), "fixed", "estimated"),
+      score = factor(
+        score_labels[sub("05$", "", score)],
+        levels = unname(score_labels)
+      ),
+      scenario = factor(
+        scenario_labels[as.character(scenario)],
+        levels = unname(scenario_labels)
+      ),
+      n = factor(n, levels = sort(unique(n))),
+      pipeline = factor(
+        pipeline_labels[pipeline],
+        levels = unname(pipeline_labels)
+      )
+    )
+}
+
+perf <- tidy_axes(check$perf)
+scores <- tidy_axes(check$scores)
+
+# mean +/- Monte Carlo SE over runs, per (scenario, n, pipeline, score, pi)
+perf_summary <- perf %>%
+  group_by(scenario, n, pipeline, score, pi_regime) %>%
+  summarise(
+    runs = n(),
+    mean_regret = mean(regret),
+    mcse_regret = sd(regret) / sqrt(runs),
+    mean_rho = mean(spearman, na.rm = TRUE),
+    mcse_rho = sd(spearman, na.rm = TRUE) / sqrt(sum(!is.na(spearman))),
+    mean_top1 = mean(top1),
+    mcse_top1 = sqrt(mean_top1 * (1 - mean_top1) / runs),
+    .groups = "drop"
+  )
+
+# expected regret of ignoring every score and picking a candidate uniformly at
+# random - the floor a useful score has to beat
+random_baseline <- scores %>%
+  distinct(scenario, n, run, model, true_pehe) %>%
+  group_by(scenario, n, run) %>%
+  summarise(random_regret = mean(true_pehe) - min(true_pehe), .groups = "drop") %>%
+  group_by(scenario, n) %>%
+  summarise(random_regret = mean(random_regret), .groups = "drop")
+```
+
+```{r plot-helpers, include=FALSE}
+house_theme <- theme_bw() +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(colour = "black")
+  )
+
+score_colours <- setNames(
+  as.character(paletteer::paletteer_d("rcartocolor::Safe", 5)),
+  unname(score_labels)
+)
+
+# One-step is drawn as an open circle in the SAME dodge slot as DR risk, so
+# where they coincide - which within a run they always should - the open
+# circle rings the filled one instead of looking like a missing series.
+score_shapes <- c(16, 1, 16, 16, 16)
+names(score_shapes) <- unname(score_labels)
+score_sizes <- c(2, 3.5, 2, 2, 2)
+names(score_sizes) <- unname(score_labels)
+
+dodge_slot <- function(score) {
+  ifelse(score == score_labels[["onestep"]], score_labels[["dr"]], as.character(score))
+}
+
+selection_plot <- function(df, mean_col, mcse_col, title, ylab,
+                           baseline = NULL, hline = NULL, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
+  df <- df %>%
+    mutate(
+      est = .data[[mean_col]],
+      lo = est - z * .data[[mcse_col]],
+      hi = est + z * .data[[mcse_col]],
+      slot = dodge_slot(score)
+    )
+  dodge <- position_dodge(width = 0.6)
+
+  p <- ggplot(df, aes(x = n, y = est, colour = score, group = slot))
+  if (!is.null(hline)) {
+    p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  }
+  if (!is.null(baseline)) {
+    p <- p + geom_point(
+      data = baseline,
+      aes(x = n, y = random_regret),
+      inherit.aes = FALSE,
+      shape = 4, size = 3, colour = "grey40"
+    )
+  }
+  p +
+    geom_errorbar(
+      aes(ymin = lo, ymax = hi),
+      position = dodge, linewidth = 0.3, width = 0.3
+    ) +
+    geom_point(aes(shape = score, size = score), position = dodge) +
+    facet_grid(rows = vars(scenario), cols = vars(pipeline), scales = "free_y") +
+    scale_colour_manual(values = score_colours) +
+    scale_shape_manual(values = score_shapes) +
+    scale_size_manual(values = score_sizes) +
+    house_theme +
+    labs(
+      title = title, y = ylab, x = "sample size",
+      colour = "Score", shape = "Score", size = "Score"
+    )
+}
+
+# signed log for the level figure: linear within +/- sigma of zero, log
+# beyond, so DR's small positive offset and C&vdS's large negative one are
+# both readable on one axis
+signed_log <- scales::pseudo_log_trans(sigma = 0.05, base = 10)
+
+level_plot <- function(df, title) {
+  ggplot(df, aes(x = score, y = value - true_pehe, colour = score)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(fill = "transparent", outlier.shape = NA) +
+    facet_grid(rows = vars(scenario), cols = vars(n)) +
+    scale_colour_manual(values = score_colours) +
+    scale_y_continuous(
+      trans = signed_log,
+      breaks = c(-100, -10, -1, -0.1, 0, 0.1, 1, 10, 100)
+    ) +
+    house_theme +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(
+      title = title,
+      y = "score - true PEHE (signed log scale)",
+      x = NULL,
+      colour = "Score"
+    )
+}
+```
+
+## Checks
+
+```{r runs}
+perf %>%
+  filter(pi_regime == "estimated") %>%
+  distinct(scenario, n, pipeline, score, run) %>%
+  count(scenario, n, pipeline, score, name = "runs") %>%
+  group_by(scenario, n, pipeline) %>%
+  summarise(min_runs = min(runs), max_runs = max(runs), .groups = "drop") %>%
+  pivot_wider(names_from = pipeline, values_from = c(min_runs, max_runs)) %>%
+  kable(caption = paste0(
+    "Runs scored per cell (100 expected), ", ARM,
+    " arm. Runs with an NA score for any candidate are dropped."
+  ))
+```
+
+```{r onestep-equals-dr}
+# One-step and DR differ by a candidate-independent term within a run, so
+# every run should pick the same candidate under both. Anything below 1 is a
+# bug in the scoring, not a finding.
+perf %>%
+  filter(score %in% score_labels[c("dr", "onestep")]) %>%
+  select(scenario, n, run, pipeline, pi_regime, score, regret) %>%
+  pivot_wider(names_from = score, values_from = regret) %>%
+  group_by(pipeline, pi_regime) %>%
+  summarise(
+    runs = n(),
+    same_pick = mean(abs(.data[[score_labels[["onestep"]]]] -
+                           .data[[score_labels[["dr"]]]]) < 1e-10),
+    .groups = "drop"
+  ) %>%
+  kable(digits = 4, caption = "Share of runs where One-step and DR risk have the same regret")
+```
+
+## 1. Does the score pick a good candidate?
+
+Regret is the true PEHE of the candidate the score picks, minus the true PEHE
+of the best of the 9. Points are means over runs with 95% Monte Carlo
+intervals; the grey cross is the expected regret of picking a candidate at
+random. One-step (open circle) should ring DR risk (filled) exactly.
+
+```{r fig-regret, fig.height=9}
+selection_plot(
+  filter(perf_summary, pi_regime == "estimated"),
+  "mean_regret", "mcse_regret",
+  title = paste0("Regret, ", ARM, " arm, estimated propensity"),
+  ylab = "mean regret (PEHE)",
+  baseline = random_baseline
+)
+```
+
+```{r fig-rho, fig.height=9}
+selection_plot(
+  filter(perf_summary, pi_regime == "estimated"),
+  "mean_rho", "mcse_rho",
+  title = paste0("Spearman correlation with true PEHE, ", ARM, " arm, estimated propensity"),
+  ylab = "mean Spearman correlation",
+  hline = 0
+)
+```
+
+```{r fig-top1, fig.height=9}
+selection_plot(
+  filter(perf_summary, pi_regime == "estimated"),
+  "mean_top1", "mcse_top1",
+  title = paste0("Top-1 hit rate, ", ARM, " arm, estimated propensity"),
+  ylab = "share of runs picking the true best candidate",
+  hline = 1 / 9
+)
+```
+
+The dashed line on the top-1 figure is 1/9, a random pick.
+
+## 2. Does the score estimate PEHE itself?
+
+Every ranking measure above is blind to a shift shared by all candidates, so
+it cannot tell One-step from DR. This can: each candidate's score minus its
+true PEHE, over runs. A score that estimates PEHE sits on zero. DR risk should
+sit above zero by roughly the variance of φ about τ; One-step should not.
+
+```{r fig-level-xgb, fig.height=9}
+level_plot(
+  filter(scores, pi_regime == "estimated", pipeline == "XGBoost"),
+  paste0("Score minus true PEHE, ", ARM, " arm, XGBoost, estimated propensity")
+)
+```
+
+```{r level-table}
+scores %>%
+  filter(pi_regime == "estimated") %>%
+  group_by(pipeline, score, n) %>%
+  summarise(bias = mean(value - true_pehe, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = n, values_from = bias, names_prefix = "n = ") %>%
+  kable(digits = 3, caption = paste0(
+    "Mean of score minus true PEHE, over scenarios, runs and candidates (",
+    ARM, " arm, estimated propensity)"
+  ))
+```
+
+## 3. Population check: is the formula right before any estimation noise?
+
+From `me_infl_investigation.R population`: N = 2·10⁶ draws per scenario,
+**oracle** nuisances (true μ₀, μ₁ and π = 0.5), five constructed candidates
+(the truth, the ATE, the truth shrunk halfway to the ATE, μ₁, and τ + X2). With
+no nuisance error a correct PEHE estimator lies on the diagonal, and a correct
+ranking is at least monotone in true PEHE. The One-step score here uses a
+deliberately biased surrogate, τ + 0.3·X2, so its gap from the diagonal is the
+second-order remainder the correction leaves behind.
+
+```{r fig-population, fig.height=7}
+pop_labels <- c(
+  dr = "DR risk",
+  onestep_biased_sur = "One-step (biased surrogate)",
+  infl_tau = "IF, 2019, true tau",
+  infl_phi = "IF, 2019, phi",
+  infl_cvds_tau = "IF, C&vdS, true tau",
+  infl_cvds_phi = "IF, C&vdS, phi"
+)
+
+population %>%
+  pivot_longer(
+    any_of(names(pop_labels)),
+    names_to = "score", values_to = "value"
+  ) %>%
+  mutate(
+    score = factor(pop_labels[score], levels = unname(pop_labels)),
+    scenario = factor(
+      scenario_labels[as.character(scenario)],
+      levels = unname(scenario_labels)
+    )
+  ) %>%
+  arrange(scenario, score, true_pehe) %>%
+  ggplot(aes(x = true_pehe, y = value, colour = score)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  geom_line() +
+  geom_point(size = 2) +
+  facet_wrap(~scenario, scales = "free") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  house_theme +
+  labs(
+    title = "Score against true PEHE, oracle nuisances",
+    x = "true PEHE", y = "score", colour = "Score"
+  )
+```
+
+## 4. Run by run: how often does each score lose to DR risk?
+
+Per run, the score's regret minus DR risk's. Below zero the score picked a
+better candidate than DR did; above, a worse one. This separates a score that
+is a little worse every run from one that is usually fine and occasionally
+picks badly. One-step is left out: it is identically zero.
+
+```{r fig-paired, fig.height=9}
+paired <- perf %>%
+  filter(pi_regime == "estimated") %>%
+  select(scenario, n, run, pipeline, score, regret) %>%
+  group_by(scenario, n, run, pipeline) %>%
+  filter(any(score == score_labels[["dr"]])) %>%
+  mutate(diff = regret - regret[score == score_labels[["dr"]]]) %>%
+  ungroup() %>%
+  filter(!score %in% score_labels[c("dr", "onestep")])
+
+ggplot(paired, aes(x = score, y = diff, colour = pipeline)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.shape = NA) +
+  facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
+  scale_colour_paletteer_d("rcartocolor::Safe") +
+  house_theme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = paste0("Regret minus DR risk's regret, per run, ", ARM, " arm, estimated propensity"),
+    y = "regret difference (PEHE)", x = NULL, colour = "Pipeline"
+  )
+```
+
+```{r paired-table}
+paired %>%
+  group_by(pipeline, score, n) %>%
+  summarise(worse = mean(diff > 1e-10), .groups = "drop") %>%
+  pivot_wider(names_from = n, values_from = worse, names_prefix = "n = ") %>%
+  kable(digits = 2, caption = "Share of runs where the score picks a worse candidate than DR risk")
+```
+
+## Appendix
+
+### Fixed propensity (π = 0.5)
+
+The DGM assigns treatment by a fair coin, so π = 0.5 is the true propensity
+and these are oracle-π versions of every score.
+
+```{r fig-regret-fixed, fig.height=9}
+selection_plot(
+  filter(perf_summary, pi_regime == "fixed"),
+  "mean_regret", "mcse_regret",
+  title = paste0("Regret, ", ARM, " arm, propensity fixed at 0.5"),
+  ylab = "mean regret (PEHE)",
+  baseline = random_baseline
+)
+```
+
+```{r fig-level-fixed, fig.height=9}
+level_plot(
+  filter(scores, pi_regime == "fixed", pipeline == "XGBoost"),
+  paste0("Score minus true PEHE, ", ARM, " arm, XGBoost, propensity fixed at 0.5")
+)
+```
+
+### AutoML pipeline, level
+
+```{r fig-level-automl, fig.height=9}
+level_plot(
+  filter(scores, pi_regime == "estimated", pipeline == "AutoML"),
+  paste0("Score minus true PEHE, ", ARM, " arm, AutoML, estimated propensity")
+)
+```
