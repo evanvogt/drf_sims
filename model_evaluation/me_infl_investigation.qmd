@@ -40,7 +40,8 @@ already reports:
 |---|---|---|
 | **DR risk** (`dr`) | mean (φ − τ̂)² | – |
 | **One-step** (`onestep`) | mean [(τ̃ − τ̂)² + 2(τ̃ − τ̂)(φ − τ̃)] | plug-in τ̃ = μ̂₁ − μ̂₀ |
-| **IF, 2019** (`infl`) | `me_metrics.R::calc_infl_score()` | φ, as the study scores it |
+| **IF, 2019, φ** (`infl`) | `me_metrics.R::calc_infl_score()` | φ, as the study scores it |
+| **IF, 2019, plug-in** (`infl_plugin`) | the same | plug-in τ̃ |
 | **IF, C&vdS, plug-in** (`cvds_plugin`) | Curth & van der Schaar (2023) appendix | plug-in τ̃ |
 | **IF, C&vdS, φ** (`cvds_phi`) | the same | φ |
 
@@ -78,7 +79,8 @@ scenario_labels <- c(
 score_labels <- c(
   dr = "DR risk",
   onestep = "One-step",
-  infl = "IF, 2019",
+  infl = "IF, 2019, phi",
+  infl_plugin = "IF, 2019, plug-in",
   cvds_plugin = "IF, C&vdS, plug-in",
   cvds_phi = "IF, C&vdS, phi"
 )
@@ -143,17 +145,16 @@ house_theme <- theme_bw() +
   )
 
 score_colours <- setNames(
-  as.character(paletteer::paletteer_d("rcartocolor::Safe", 5)),
+  as.character(paletteer::paletteer_d("rcartocolor::Safe", length(score_labels))),
   unname(score_labels)
 )
 
 # One-step is drawn as an open circle in the SAME dodge slot as DR risk, so
 # where they coincide - which within a run they always should - the open
 # circle rings the filled one instead of looking like a missing series.
-score_shapes <- c(16, 1, 16, 16, 16)
-names(score_shapes) <- unname(score_labels)
-score_sizes <- c(2, 3.5, 2, 2, 2)
-names(score_sizes) <- unname(score_labels)
+is_onestep <- unname(score_labels) == score_labels[["onestep"]]
+score_shapes <- setNames(ifelse(is_onestep, 1, 16), unname(score_labels))
+score_sizes <- setNames(ifelse(is_onestep, 3.5, 2), unname(score_labels))
 
 dodge_slot <- function(score) {
   ifelse(score == score_labels[["onestep"]], score_labels[["dr"]], as.character(score))

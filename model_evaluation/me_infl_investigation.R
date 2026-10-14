@@ -173,8 +173,8 @@ run_population <- function() {
 #' The plug-in surrogate tau_tilde is the arm's own mu1_DR - mu0_DR, the same
 #' nuisances phi is built from. With tau_tilde = phi instead, onestep() is
 #' exactly calc_dr_risk(), so the plug-in is the only surrogate worth running
-#' it with. cvds is run with both surrogates; infl with phi, as me_metrics.R
-#' does.
+#' it with. infl and cvds are run with both surrogates - infl with phi is what
+#' me_metrics.R reports.
 infl_check_per_model <- function(model_res, true_tau, model, sim_res, keys) {
   tau_hat <- model_res$tau
   Y <- sim_res$data$Y
@@ -189,6 +189,8 @@ infl_check_per_model <- function(model_res, true_tau, model, sim_res, keys) {
       scores <- c(
         infl          = calc_infl_score(tau_hat, df$phi, df$pi, Y, W),
         infl05        = calc_infl_score(tau_hat, df$phi05, 0.5, Y, W),
+        infl_plugin   = calc_infl_score(tau_hat, tau_tilde, df$pi, Y, W),
+        infl_plugin05 = calc_infl_score(tau_hat, tau_tilde, 0.5, Y, W),
         cvds_plugin   = calc_infl_score_cvds(tau_hat, tau_tilde, df$pi, Y, W),
         cvds_plugin05 = calc_infl_score_cvds(tau_hat, tau_tilde, 0.5, Y, W),
         cvds_phi      = calc_infl_score_cvds(tau_hat, df$phi, df$pi, Y, W),
