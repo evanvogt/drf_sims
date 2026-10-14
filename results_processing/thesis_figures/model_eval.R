@@ -27,7 +27,11 @@
 # Top-1 accuracy's reference is random-pick accuracy, 1 / 9.
 #
 # The rankings figure is the distribution of the pick's true rank (1 = best of
-# the 9) over runs, for the fixed-π proxies only, as in me_results.qmd.
+# the 9) over runs, for the fixed-π proxies only, as in me_results.qmd. Its
+# denominator is every run with a true PEHE, not just the runs the proxy
+# ranked: a run whose scoring nuisance failed (in practice AutoML's holdout
+# arm) is a grey "Not ranked" share of the bar, rather than dropping out and
+# inflating the proxy's share of good ranks.
 #
 # The design-axis figure marginalises regret over the other axes: each level
 # (DR vs IF, estimated vs fixed propensity, fold regime, pipeline) is averaged
@@ -202,7 +206,14 @@ rank_levels <- with(
   paste(s, f, p, sep = " / ")
 )
 
-rank_dist <- selection %>%
+NOT_RANKED <- "Not ranked"
+
+# the runs with a true PEHE, per (scenario, n): each bar's denominator
+total_runs <- me_candidates(metrics) %>%
+  distinct(scenario, n, run) %>%
+  count(scenario, n, name = "total")
+
+ranked <- selection %>%
   filter(pi_regime == "fixed") %>%
   mutate(
     proxy = factor(
@@ -210,20 +221,51 @@ rank_dist <- selection %>%
             PIPELINE_LABELS[pipeline], sep = " / "),
       levels = rank_levels
     ),
-    n = n_label(n)
+    rank = as.character(pick_rank)
   ) %>%
-  count(scenario, n, proxy, pick_rank, name = "runs") %>%
-  group_by(scenario, n, proxy) %>%
-  mutate(prop = runs / sum(runs)) %>%
-  ungroup()
+  count(scenario, n, proxy, rank, name = "runs")
+
+# over every proxy, so one that failed in every run is a whole grey bar
+not_ranked <- tidyr::expand_grid(
+  total_runs, proxy = factor(rank_levels, levels = rank_levels)
+) %>%
+  left_join(count(ranked, scenario, n, proxy, wt = runs, name = "ranked"),
+            by = c("scenario", "n", "proxy")) %>%
+  transmute(scenario, n, proxy, rank = NOT_RANKED,
+            runs = total - coalesce(ranked, 0L))
+
+# every possible rank, so a rank's colour does not depend on which ranks occur
+rank_names <- as.character(seq_len(ME_N_CANDIDATES))
+rank_dist <- bind_rows(ranked, not_ranked) %>%
+  filter(runs > 0) %>%
+  left_join(total_runs, by = c("scenario", "n")) %>%
+  mutate(
+    prop = runs / total,
+    rank = factor(rank, levels = c(rank_names, NOT_RANKED)),
+    n = n_label(n)
+  )
+
+unranked <- filter(rank_dist, rank == NOT_RANKED)
+if (nrow(unranked) > 0) {
+  message("bars with unranked runs (", nrow(unranked), "):")
+  print(as.data.frame(select(unranked, scenario, n, proxy, runs, total)),
+        row.names = FALSE)
+}
 
 # viridis rather than the thesis palette: the rank is ordinal, and Safe would
-# give it unordered hues. Reversed, so the best ranks are the bright ones.
-rank_fig <- ggplot(rank_dist,
-                   aes(x = proxy, y = prop, fill = factor(pick_rank))) +
-  geom_col() +
+# give it unordered hues. Reversed, so the best ranks are the bright ones. Not
+# ranked is the last level, so it stacks at the foot of the bar, below rank 9.
+rank_colours <- c(
+  setNames(scales::viridis_pal(direction = -1)(length(rank_names)),
+           rank_names),
+  setNames("grey75", NOT_RANKED)
+)
+
+# show.legend = TRUE, or a rank no pick took gets an empty legend key
+rank_fig <- ggplot(rank_dist, aes(x = proxy, y = prop, fill = rank)) +
+  geom_col(show.legend = TRUE) +
   facet_grid(rows = vars(n), cols = vars(scenario)) +
-  scale_fill_viridis_d(direction = -1) +
+  scale_fill_manual(values = rank_colours, drop = FALSE) +
   drf_theme() +
   labs(x = "Proxy score", y = "Proportion of runs",
        fill = "True rank of pick") +
