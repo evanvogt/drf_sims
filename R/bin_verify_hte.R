@@ -30,6 +30,10 @@
 #      the bounds except binary_corr_0.5 scenario 3's and 8's floors (0.007 and
 #      0.003 at n = 100), which only have to stay above 0 - the exceptions
 #      R/dgm_scenarios.R documents
+#   8. sample_size/correlated/binary/snr/'s binary_snr set (since 2026-10-15):
+#      binary_corr_0.5 exactly at hte_mult = 1; the clamped oracle formula vs
+#      the generator, and every risk inside [RD_EPS, 1 - RD_EPS], at each
+#      hte_mult; the share clamped and the ATE drift stay small
 #
 # Until 2026-09-26 the effect was on the logit scale, and this script measured
 # how much of var(tau) the link handed to X1 and X2 - up to 80% at n = 100.
@@ -317,6 +321,68 @@ for (rho in CORR_RHOS) {
                 } else ""))
 }
 
+# ---- 8. sample_size/correlated/binary/snr/'s binary_snr set ------------------
+# binary_corr_0.5 plus risk thresholds: the treated risk is clamped into
+# [RD_EPS, 1 - RD_EPS] once hte_mult pushes it out, and the truth is the
+# clamped risk difference. bW is calibrated at n = 500 in every cell. At
+# hte_mult = 1 it must be binary_corr_0.5 exactly; past it, the oracle formula
+# must still reproduce the generator, every risk must lie inside the
+# thresholds, and the clamp must stay a corner of the population (the share
+# clamped and the ATE drift that README.md reports).
+
+SNR_N <- 500
+SNR_MULTS <- c(1, 1.5, 2, 3)
+SNR_SCENARIOS <- 1:4
+snr_tbl <- resolve_set("binary_snr")
+corr_05 <- resolve_set(corr_set("binary", 0.5))
+check(isTRUE(all.equal(snr_tbl[, names(corr_05)], corr_05, check.attributes = FALSE)) &&
+        all(snr_tbl$risk_lo == RD_EPS) && all(snr_tbl$risk_hi == 1 - RD_EPS),
+      "binary_snr is binary_corr_0.5 plus risk thresholds [RD_EPS, 1 - RD_EPS]")
+
+same <- TRUE
+for (s in SNR_SCENARIOS) {
+  a <- generate_scenario_data(s, SNR_N, set = "binary_snr", seed = s, hte_mult = 1)
+  b <- generate_scenario_data(s, SNR_N, set = corr_set("binary", 0.5), seed = s)
+  same <- same && identical(a, b)
+}
+check(same, "binary_snr at hte_mult = 1 generates binary_corr_0.5's data and truth exactly")
+
+gap <- 0
+inside <- TRUE
+for (s in SNR_SCENARIOS) for (m in SNR_MULTS) {
+  d <- generate_scenario_data(s, 4000, set = "binary_snr", seed = s * 100 + m * 10,
+                              calib_n = SNR_N, hte_mult = m)
+  oi <- get_oracle_info(s, d$bW, "binary_snr", hte_mult = m)
+  risk <- function(w) {
+    eval(parse(text = oi$fmla), envir = c(oi$params, list(X = d$dataset, W = w)))
+  }
+  gap <- max(gap, abs(risk(1) - d$truth$p1), abs(risk(0) - d$truth$p0))
+  inside <- inside && all(c(d$truth$p0, d$truth$p1) >= RD_EPS - 1e-12 &
+                            c(d$truth$p0, d$truth$p1) <= 1 - RD_EPS + 1e-12)
+}
+check(gap < 1e-12,
+      sprintf("binary_snr: the clamped oracle formula reproduces the generator at every hte_mult (max gap %.1e)", gap))
+check(inside, "binary_snr: every risk inside [RD_EPS, 1 - RD_EPS] at every hte_mult")
+
+set.seed(2026)
+z <- correlated_covariates(N, snr_tbl[1, ])
+sr <- do.call(rbind, lapply(SNR_SCENARIOS, function(s) {
+  do.call(rbind, lapply(if (s == 1) 1 else SNR_MULTS, function(m) {
+    p <- scale_hte(snr_tbl[snr_tbl$scenario == s, ], m)
+    bW <- calibrate_bW(p, SNR_N, "prop")
+    tr <- truth_at(p, bW, TRUE, z$X1, z$X2, z$X3, z$X4, z$X5)
+    sd_noise <- sqrt(0.5 * mean(tr$p0 * (1 - tr$p0)) + 0.5 * mean(tr$p1 * (1 - tr$p1)))
+    data.frame(scenario = s, hte_mult = m, bW = bW, ate = mean(tr$tau),
+               planned = planned_rd(p, SNR_N), snr = sd(tr$tau) / sd_noise,
+               clamped = mean(tr$p1 <= RD_EPS | tr$p1 >= 1 - RD_EPS))
+  }))
+}))
+check(sr$clamped[sr$hte_mult == 1] == 0,
+      "binary_snr: nothing is clamped at hte_mult = 1")
+check(sr$clamped < 0.10 & abs(sr$ate - sr$planned) < 0.01,
+      sprintf("binary_snr: under 10%% of treated risks clamped (max %.3f) and the ATE within 0.01 of the planned RD (max drift %.4f)",
+              max(sr$clamped), max(abs(sr$ate - sr$planned))))
+
 # ---- summary ----------------------------------------------------------------
 
 cat("\nper scenario (the ATE at each n is the same in every one):\n")
@@ -350,3 +416,8 @@ smry_m <- data.frame(
 num <- vapply(smry_m, is.double, logical(1))
 smry_m[num] <- lapply(smry_m[num], round, 3)
 print(smry_m, row.names = FALSE)
+
+cat(sprintf("\nbinary_snr (rho = 0.5, bW at n = %d), population of %g:\n", SNR_N, N))
+num <- vapply(sr, is.double, logical(1))
+sr[num] <- lapply(sr[num], round, 3)
+print(sr, row.names = FALSE)

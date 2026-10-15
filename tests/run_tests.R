@@ -76,6 +76,23 @@ for (set in c("binary", "binary_corr_0", "binary_corr_0.5")) {
 }
 check("binary sets: every scenario at n = 100-1000 generates valid risks", ok_risk)
 
+# hte_mult (the SNR check's lever) and the risk clamp (binary_snr only) leave
+# every other study's DGM exactly as it was
+same <- TRUE
+for (set in c("continuous_corr_0.5", "binary_corr_0.5", "binary_missing")) {
+  for (k in 2:4) {
+    mech <- if (set == "binary_missing") "MAR" else NULL
+    same <- same && identical(
+      generate_scenario_data(k, 200, set, mech = mech, seed = k),
+      generate_scenario_data(k, 200, set, mech = mech, seed = k, hte_mult = 1)
+    ) && identical(get_oracle_info(k, 0.1, set), get_oracle_info(k, 0.1, set, hte_mult = 1))
+  }
+}
+check("hte_mult = 1 is the default DGM, data, truth and oracle alike", same)
+check("only binary_snr clamps its risks",
+      identical(names(SCENARIO_SETS)[vapply(SCENARIO_SETS, risk_clamped, logical(1))],
+                "binary_snr"))
+
 # ---- 2. every first-run jobscript range matches its grid -------------------------
 # The array index is a row of study$grid. A -J range that is too short silently
 # drops the tail of the study; too long runs jobs with no grid row.

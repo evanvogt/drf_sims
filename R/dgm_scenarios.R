@@ -382,9 +382,27 @@ SCENARIO_SETS <- c(SCENARIO_SETS, unlist(lapply(CORR_RHOS, function(rho) {
   )
 }), recursive = FALSE))
 
+# BINARY SNR SET (sample_size/correlated/binary/snr/, since 2026-10-15): the
+# binary_corr_0.5 table plus its own risk thresholds risk_lo / risk_hi. The
+# SNR check scales the effect modifiers by hte_mult (generate_scenario_data(),
+# get_oracle_info()), and past about x2.5 (x1.25 in scenario 4) the worst-case
+# treated risk leaves [RD_EPS, 1 - RD_EPS]. Rather than shrink the scale, this
+# set CLAMPS the treated risk into [risk_lo, risk_hi], and the truth is the
+# clamped risk difference (truth_at(), and the oracle formula through
+# get_oracle_info()). The control risk m0 lies in [p0_lo, p0_hi], inside the
+# thresholds, so only the treated risk is ever clamped. Where it is, tau(x) is
+# no longer exactly te_expr, and X1 / X2 modify it a little. At hte_mult = 1
+# nothing is clamped, so the set generates binary_corr_0.5's data exactly.
+# calibrate_bW() ignores the clamp, so the ATE drifts slightly in clamped
+# cells. No other set has risk_lo, and none is clamped (risk_clamped()).
+SCENARIO_SETS$binary_snr <- transform(
+  SCENARIO_SETS[[corr_set("binary", 0.5)]],
+  risk_lo = RD_EPS, risk_hi = 1 - RD_EPS
+)
+
 # which sets produce a binary outcome
 BINARY_SETS <- c("binary", "binary_missing", "binary_missing_fixed",
-                 corr_set("binary", CORR_RHOS))
+                 corr_set("binary", CORR_RHOS), "binary_snr")
 
 #' Resolve a scenario-set name to its table
 #'
@@ -405,6 +423,31 @@ resolve_set <- function(set) {
 
 is_binary_set <- function(set) {
   set %in% BINARY_SETS || (set == "binary_ci")
+}
+
+#' Scale a scenario's effect modifiers b3, b4, b34 and b45 by hte_mult
+#'
+#' The SNR check's lever (see BINARY SNR SET). bW is calibrated after this, so
+#' the ATE is held. NA coefficients stay NA; hte_mult = 1 returns params as is.
+#' Consumes no RNG.
+#'
+#' @param params one-row scenario params
+#' @param hte_mult multiplier
+scale_hte <- function(params, hte_mult = 1) {
+  if (hte_mult == 1) return(params)
+  for (b in c("b3", "b4", "b34", "b45")) params[[b]] <- params[[b]] * hte_mult
+  params
+}
+
+#' Does this scenario set clamp its risks? (risk_lo / risk_hi columns)
+risk_clamped <- function(params) {
+  !is.null(params$risk_lo) && !is.na(params$risk_lo[1])
+}
+
+#' Clamp a risk into [risk_lo, risk_hi] for a set that has them, else as is
+clamp_risk <- function(params, p) {
+  if (!risk_clamped(params)) return(p)
+  pmin(pmax(p, params$risk_lo), params$risk_hi)
 }
 
 #' Which power calculation calibrates bW for this set
@@ -776,8 +819,12 @@ calibrate_bW <- function(params, n, calibration = c("t", "prop")) {
 #'   n (missing/miss_dgm_checks.R) pass the study's own n here, so the true
 #'   ATE is the study's rather than the tiny one 80% power at the large n
 #'   would give. Consumes no RNG.
+#' @param hte_mult multiplier on the effect modifiers (scale_hte()), before bW
+#'   is calibrated; 1 (the default, every study but the SNR check) leaves the
+#'   scenario as tabled. Consumes no RNG.
 generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
-                                   mech = NULL, seed = NULL, calib_n = n) {
+                                   mech = NULL, seed = NULL, calib_n = n,
+                                   hte_mult = 1) {
 
   if (!is.null(seed)) set.seed(seed)
 
@@ -788,7 +835,7 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
     stop("scenario must be one of ", paste(params$scenario, collapse = ", "),
          " for set '", set, "'")
   }
-  params <- params[params$scenario == scenario, ]
+  params <- scale_hte(params[params$scenario == scenario, ], hte_mult)
   correlated <- is_correlated(params)
 
   if (!is.null(mech)) check_mech(mech)
@@ -847,6 +894,8 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
   m0 <- control_mean(params, X1, X2, binary)
   mu <- m0 + W * treatment_effect + U_y0
   if (binary) {
+    # binary_snr only (risk_clamped()); every other set is left as is
+    mu <- clamp_risk(params, mu)
     # rbinom() returns NA, with only a warning, for a risk outside [0, 1].
     # RD_SCALE keeps every risk inside at the studies' n; this catches any
     # other n, or a table changed without re-deriving it
@@ -932,25 +981,33 @@ truth_at <- function(params, bW, binary, X1, X2, X3 = NULL, X4 = NULL, X5 = NULL
   )
 
   p0 <- control_mean(params, X1, X2, binary)
-  p1 <- p0 + treatment_effect
+  # clamped as generate_scenario_data() clamps it (binary_snr only)
+  p1 <- clamp_risk(params, p0 + treatment_effect)
 
   data.frame(p0 = p0, p1 = p1, tau = p1 - p0)
 }
 
 #' Oracle formula and parameter values for a scenario
 #'
-#' @return list(fmla = <string>, params = <named list>) as run_dr_oracle expects
-get_oracle_info <- function(scenario, bW, set) {
+#' @param hte_mult as generate_scenario_data(): pass the same value, with the bW
+#'   it returned
+#' @return list(fmla = <string>, params = <named list>) as run_dr_oracle expects.
+#'   For a clamped set (risk_clamped()) the formula is wrapped in the same clamp
+#'   as the generator's, and risk_lo / risk_hi join the parameters.
+get_oracle_info <- function(scenario, bW, set, hte_mult = 1) {
   params <- resolve_set(set)
-  params <- params[params$scenario == scenario, ]
+  params <- scale_hte(params[params$scenario == scenario, ], hte_mult)
 
   param_list <- list(b0 = params$b0, b1 = params$b1, b2 = params$b2, bW = bW)
-  for (nm in c("b3", "b4", "b34", "b45", "p0_lo", "p0_hi")) {
+  for (nm in c("b3", "b4", "b34", "b45", "p0_lo", "p0_hi", "risk_lo", "risk_hi")) {
     v <- params[[nm]]
     if (!is.null(v) && !is.na(v)) param_list[[nm]] <- v
   }
 
-  list(fmla = params$oracle_expr, params = param_list)
+  fmla <- params$oracle_expr
+  if (risk_clamped(params)) fmla <- paste0("pmin(pmax(", fmla, ", risk_lo), risk_hi)")
+
+  list(fmla = fmla, params = param_list)
 }
 
 # ---- covariate query grid (confidence_intervals/{binary,continuous} only) --
