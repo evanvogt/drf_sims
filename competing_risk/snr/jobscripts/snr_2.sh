@@ -2,7 +2,7 @@
 # n = 1000 and 2000, hte_mult 1. Locally (R 4.5.3) n = 2000 took about 4 min
 # and peaked at 8gb, nearly all of it rfsrc (README.md, Resources).
 #PBS -l walltime=00:30:00
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=16gb
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=8gb
 #PBS -J 401-600
 #PBS -N snr_2
 #PBS -o logs_2/

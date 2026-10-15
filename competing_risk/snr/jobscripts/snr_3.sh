@@ -4,8 +4,8 @@
 # 1.3 / 2.7 / 8.0gb at n = 500 / 1000 / 2000, so expect roughly 25-30gb here;
 # 64gb and 2h are headroom, not a measurement. Submit two first
 # (qsub -J 601-602 snr_3.sh), read their .o files, then qsub -J 603-700 snr_3.sh.
-#PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=64gb
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=2:ompthreads=2:mem=16gb
 #PBS -J 601-700
 #PBS -N snr_3
 #PBS -o logs_3/
