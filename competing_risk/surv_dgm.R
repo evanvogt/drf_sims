@@ -298,3 +298,35 @@ surv_truth <- function(params, X1, X2, X3) {
       tau_RMST2_cs = RMST2_cs_1 - RMST2_cs_0
       )
 }
+
+#' surv_truth() on an X2 grid, in every X1 x X3 cell
+#'
+#' The truth depends on the covariates only through X1, X2 and X3, and X1 and
+#' X3 are binary, so over any covariate distribution it is this grid
+#' interpolated in X2 (surv_truth_at_draws()) - far cheaper than surv_truth()
+#' at each of a large population's draws. Used by surv_dgm_check.R and
+#' results_processing/dgm_population.R.
+#'
+#' @param params one row of survival_scenario_params
+#' @param X2_grid the X2 values to evaluate at
+#' @return the grid's X2, X1, X3 alongside surv_truth()'s columns
+surv_truth_grid <- function(params, X2_grid = seq(-4.5, 4.5, length.out = 41)) {
+  grid <- expand.grid(X2 = X2_grid, X1 = 0:1, X3 = 0:1)
+  bind_cols(grid, surv_truth(params, grid$X1, grid$X2, grid$X3))
+}
+
+#' A surv_truth_grid() column at each draw: interpolated in X2 within its
+#' (X1, X3) cell, held constant beyond the grid's ends
+#'
+#' @param gt output of surv_truth_grid()
+#' @param col the column to interpolate, e.g. "tau_RMTL1"
+#' @param X1,X2,X3 the draws' covariates, equal length
+surv_truth_at_draws <- function(gt, col, X1, X2, X3) {
+  out <- numeric(length(X2))
+  for (a in 0:1) for (b in 0:1) {
+    g <- gt[gt$X1 == a & gt$X3 == b, ]
+    idx <- X1 == a & X3 == b
+    out[idx] <- approx(g$X2, g[[col]], X2[idx], rule = 2)$y
+  }
+  out
+}

@@ -88,22 +88,12 @@ for (r in CORR_RHOS) {
 # ---- 2. population truths -----------------------------------------------------
 cat("=== 2. Population truths (", N_POP, " copula draws per rho) ===\n\n", sep = "")
 
-grid <- expand.grid(X2 = X2_GRID, X1 = 0:1, X3 = 0:1)
+# surv_truth_grid() and surv_truth_at_draws() are in surv_dgm.R
 grid_truth <- lapply(scenarios, function(s) {
-  params <- survival_scenario_params[survival_scenario_params$scenario == s, ]
-  bind_cols(grid, surv_truth(params, grid$X1, grid$X2, grid$X3))
+  surv_truth_grid(survival_scenario_params[survival_scenario_params$scenario == s, ],
+                  X2_GRID)
 })
-
-#' A truth column at each draw: interpolated in X2 within its (X1, X3) cell
-at_draws <- function(gt, col, X1, X2, X3) {
-  out <- numeric(length(X2))
-  for (a in 0:1) for (b in 0:1) {
-    g <- gt[gt$X1 == a & gt$X3 == b, ]
-    idx <- X1 == a & X3 == b
-    out[idx] <- approx(g$X2, g[[col]], X2[idx], rule = 2)$y
-  }
-  out
-}
+at_draws <- surv_truth_at_draws
 
 pop <- list()
 sep <- list()
