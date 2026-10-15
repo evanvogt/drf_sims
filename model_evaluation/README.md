@@ -291,12 +291,13 @@ at 0.5. `me_metrics.R` scores every candidate's `tau`
 against both pipelines under every arm, plus true PEHE (available because this
 is simulated data).
 
-**Three score families, each in two propensity regimes** — 8 score types per
+**Three score families, each in two propensity regimes** — 10 score types per
 (arm × pipeline):
 
 | family | estimated `pi` | fixed `pi = 0.5` | what it is |
 |---|---|---|---|
-| influence | `infl` | `infl05` | influence-corrected PEHE proxy (`calc_infl_score`) |
+| influence, T-learner surrogate | `inflt` | `inflt05` | influence-corrected PEHE proxy (`calc_infl_score`) with the plug-in `mu1_DR − mu0_DR` as its surrogate. The IF proxy the thesis figures and tables report (`me_selection.R`) |
+| influence, φ surrogate | `infl` | `infl05` | the same score with `phi` / `phi05` as its surrogate |
 | DR risk | `dr` | `dr05` | MSE against the AIPW pseudo-outcome (`calc_dr_risk`) |
 | calibration | `calq5`, `calq10` | `cal05q5`, `cal05q10` | DR calibration over K quantile groups (`calc_cal_score`) |
 
@@ -380,9 +381,16 @@ enumerated, which is why one `me_per_model()` serves all three result trees:
 
 | tree | arms | score columns |
 |---|---|---|
-| `model_evaluation` | `whole` | 1 + 8×1×2 = **17** |
-| `model_evaluation_strategies` | `whole`, `cv_shared`, `holdout` | 1 + 8×3×2 = **49** |
-| `model_evaluation_split` | `split` | 1 + 8×1×2 = **17** |
+| `model_evaluation` | `whole` | 2 + 10×1×2 = **22** |
+| `model_evaluation_strategies` | `whole`, `cv_shared`, `holdout` | 2 + 10×3×2 = **62** |
+| `model_evaluation_split` | `split` | 2 + 10×1×2 = **22** |
+
+The 2 are `true_pehe` and `mu1_mse`, the candidate's MSE against the true
+treated-arm mean `p1`. With `pi = 0.5` the IF score reduces, in expectation, to
+`mean((tau_hat − mu1)²)` plus a constant shared by the candidates, whichever
+surrogate it uses, so `mu1_mse` is what it selects on. It is `NA` in the split
+tree, whose truth keeps only `tau`. `inflt`, `inflt05` and `mu1_mse` were added
+on 2026-10-15; they need only `me_metrics.R` rerun, not the fits.
 
 The split tree needs no scoring variant because `me_split.R` stores `data` and
 `truth` already restricted to its 20% evaluation rows, so every vector

@@ -98,6 +98,7 @@ set.seed(42)
 n_fake <- 50
 tau_hat_fake <- rnorm(n_fake)
 true_tau_fake <- rnorm(n_fake)
+p1_fake <- rnorm(n_fake)
 Y_fake <- rnorm(n_fake)
 W_fake <- rbinom(n_fake, 1, 0.5)
 
@@ -129,6 +130,7 @@ fake_nuis <- setNames(lapply(fake_pipelines, function(p) {
 
 sim_res_fake <- list(
   data = list(Y = Y_fake, W = W_fake),
+  truth = list(tau = true_tau_fake, p1 = p1_fake),
   nuisances = fake_nuis
 )
 
@@ -139,7 +141,10 @@ scored <- me_per_model(
 # Every score type, written out longhand rather than by calling arm_scores() -
 # the point of the check is that the assembled column equals an independent
 # direct call, so reusing the assembler would make it vacuous.
-checks <- list(true_pehe = mean((tau_hat_fake - true_tau_fake)^2))
+checks <- list(
+  true_pehe = mean((tau_hat_fake - true_tau_fake)^2),
+  mu1_mse = mean((tau_hat_fake - p1_fake)^2)
+)
 for (p in fake_pipelines) {
   for (a in NUISANCE_ARMS) {
     d <- fake_nuis[[p]][[a]]
@@ -147,6 +152,10 @@ for (p in fake_pipelines) {
     pt <- pmin(pmax(d$pi, 0.05), 0.95)
     mu_obs <- ifelse(W_fake == 1, d$mu1_DR, d$mu0_DR)
     d$phi <- d$mu1_DR - d$mu0_DR + (Y_fake - mu_obs) * (W_fake - pt) / (pt * (1 - pt))
+    checks[[paste0("inflt_", a, "_", p)]] <-
+      calc_infl_score(tau_hat_fake, d$mu1_DR - d$mu0_DR, pt, Y_fake, W_fake)
+    checks[[paste0("inflt05_", a, "_", p)]] <-
+      calc_infl_score(tau_hat_fake, d$mu1_DR - d$mu0_DR, 0.5, Y_fake, W_fake)
     checks[[paste0("infl_", a, "_", p)]] <-
       calc_infl_score(tau_hat_fake, d$phi, pt, Y_fake, W_fake)
     checks[[paste0("infl05_", a, "_", p)]] <-
@@ -204,7 +213,8 @@ report(
 )
 
 n_score_types <- length(me_score_types())
-n_expected <- 1 + length(fake_pipelines) * length(NUISANCE_ARMS) * n_score_types
+# + 2 for true_pehe and mu1_mse
+n_expected <- 2 + length(fake_pipelines) * length(NUISANCE_ARMS) * n_score_types
 report(ncol(scored) == n_expected, sprintf(
   "%d score columns from %d pipelines x %d arms x %d score types (got %d)",
   n_expected, length(fake_pipelines), length(NUISANCE_ARMS), n_score_types,
@@ -225,13 +235,18 @@ sim_res_split_fake <- list(
 scored_split <- me_per_model(
   list(tau = tau_hat_fake), true_tau_fake, "test_model", sim_res_split_fake, NULL
 )
-n_split_expected <- 1 + length(fake_pipelines) * 1 * n_score_types
+n_split_expected <- 2 + length(fake_pipelines) * 1 * n_score_types
 report(
   ncol(scored_split) == n_split_expected &&
-    all(c("dr_split_xgb", "infl_split_automl", "cal05q5_split_xgb") %in%
+    all(c("dr_split_xgb", "inflt_split_automl", "cal05q5_split_xgb") %in%
           names(scored_split)),
   sprintf("the 80:20 tree scores through the same me_per_model() (got %d of %d columns)",
           ncol(scored_split), n_split_expected)
+)
+# its truth is tau alone, so mu1_mse is NA there rather than an error
+report(
+  is.na(scored_split$mu1_mse),
+  "mu1_mse is NA when the truth has no p1 (the split tree)"
 )
 
 # ---- the calibration score's own properties --------------------------------
@@ -509,12 +524,13 @@ if (full && models_ok) {
 
   scored_real <- me_per_model(
     model_list[[1]], gen4$truth$tau, names(model_list)[1],
-    list(data = list(Y = Y4, W = W4), nuisances = nuisances4), NULL
+    list(data = list(Y = Y4, W = W4), truth = gen4$truth,
+         nuisances = nuisances4), NULL
   )
   # derived from me_score_types() rather than a typed-in score-type count, so
   # adding a score family cannot leave this assertion quietly checking the old
-  # number
-  n_real <- 1 + 2 * length(arms4) * length(me_score_types())
+  # number. + 2 for true_pehe and mu1_mse
+  n_real <- 2 + 2 * length(arms4) * length(me_score_types())
   report(
     ncol(scored_real) == n_real,
     sprintf("me_per_model() produces %d score columns on real pipeline output (got %d)",

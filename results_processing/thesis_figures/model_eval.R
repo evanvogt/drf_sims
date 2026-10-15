@@ -9,8 +9,9 @@
 # shared with the appendix tables (thesis_tables/me_tables.R).
 #
 # Proxies: the four PEHE proxies, DR risk and the influence-corrected score
-# (IF), each with the pipeline's estimated propensity or with it fixed at the
-# true 0.5 (the `05` score types, model_evaluation/me_metrics.R), crossed with
+# (IF, me_metrics.R's inflt: the T-learner plug-in as its surrogate), each
+# with the pipeline's estimated propensity or with it fixed at the true 0.5
+# (the `05` score types, model_evaluation/me_metrics.R), crossed with
 # the three fold regimes (CV = cv_shared, holdout, whole) and the two nuisance
 # pipelines (XGBoost, AutoML). The calibration scores are left out.
 #
@@ -72,8 +73,8 @@ dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
 # display labels for me_selection.R's score types, fold regimes and pipelines.
 # The order of each vector is the legend order.
-SCORE_LABELS <- c(dr = "DR", dr05 = "DR-π-fixed", infl = "IF",
-                  infl05 = "IF-π-fixed")
+SCORE_LABELS <- c(dr = "DR", dr05 = "DR-π-fixed", inflt = "IF",
+                  inflt05 = "IF-π-fixed")
 # a light and a dark shade per score family, the dark one fixed-π. All four
 # are rcartocolor::Safe colours, the thesis palette. Names are the labels above.
 METRIC_COLOURS <- c(DR = "#88CCEE", `DR-π-fixed` = "#332288",
@@ -84,7 +85,7 @@ PIPELINE_SHAPES <- setNames(c(16, 17), PIPELINE_LABELS)
 
 # the design-axis figure's axes: the column each is read from and its levels
 AXES <- list(
-  Score = list(col = "score_family", labels = c(dr = "DR", infl = "IF")),
+  Score = list(col = "score_family", labels = c(dr = "DR", inflt = "IF")),
   Propensity = list(col = "pi_regime",
                     labels = c(estimated = "π estimated", fixed = "π fixed")),
   `Fold regime` = list(col = "fold_type", labels = FOLD_LABELS),
@@ -219,7 +220,7 @@ ranked <- selection %>%
   filter(pi_regime == "fixed") %>%
   mutate(
     proxy = factor(
-      paste(c(dr = "DR", infl = "IF")[score_family], FOLD_LABELS[fold_type],
+      paste(c(dr = "DR", inflt = "IF")[score_family], FOLD_LABELS[fold_type],
             PIPELINE_LABELS[pipeline], sep = " / "),
       levels = rank_levels
     ),

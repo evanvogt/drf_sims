@@ -77,13 +77,13 @@ dir.create(tab_path, showWarnings = FALSE, recursive = TRUE)
 # display labels, as thesis_figures/model_eval.R's but in LaTeX (the tables
 # are written with escape = FALSE). The order of each vector is the row or
 # column order.
-SCORE_LABELS <- c(dr = "DR", dr05 = "DR-$\\pi$-fixed", infl = "IF",
-                  infl05 = "IF-$\\pi$-fixed")
+SCORE_LABELS <- c(dr = "DR", dr05 = "DR-$\\pi$-fixed", inflt = "IF",
+                  inflt05 = "IF-$\\pi$-fixed")
 FOLD_LABELS <- c(cv_shared = "CV", holdout = "Holdout", whole = "Whole")
 PIPELINE_LABELS <- c(xgb = "XGBoost", automl = "AutoML")
 
 AXES <- list(
-  Score = list(col = "score_family", labels = c(dr = "DR", infl = "IF")),
+  Score = list(col = "score_family", labels = c(dr = "DR", inflt = "IF")),
   Propensity = list(col = "pi_regime",
                     labels = c(estimated = "Estimated", fixed = "Fixed at 0.5")),
   `Fold regime` = list(col = "fold_type", labels = FOLD_LABELS),
@@ -210,8 +210,10 @@ message("regret to ", regret_digits, " decimals")
 
 proxy_key <- paste0(
   "Rows: the proxy's score, DR risk (DR) or the influence-corrected PEHE ",
-  "(IF), with the scoring nuisance's estimated propensity or with it fixed ",
-  "at the true 0.5 ($\\pi$-fixed). Columns: the rows the scoring nuisance is ",
+  "with the scoring nuisance's T-learner $\\hat\\mu_1 - \\hat\\mu_0$ as its ",
+  "surrogate (IF), with the scoring nuisance's estimated propensity, trimmed ",
+  "to $[0.05, 0.95]$, or with it fixed at the true 0.5 ($\\pi$-fixed). ",
+  "Columns: the rows the scoring nuisance is ",
   "fit on, the candidate's training folds, predicting its held-out fold (CV), ",
   "the held-out fold alone (Holdout; at $n = 250$ adjacent pairs of folds are ",
   "pooled), or all $n$ rows (Whole); and its machine. Random pick: a ",

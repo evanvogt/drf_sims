@@ -25,12 +25,12 @@
 #
 # The score columns are DERIVED from whatever arms the nuisance list carries,
 # never enumerated here - which is what lets the same me_per_model() serve all
-# three result trees without an edit. With 8 score types (see me_score_types()
-# below) x 2 pipelines x however many arms:
+# three result trees without an edit. With true_pehe, mu1_mse and 10 score
+# types (see me_score_types() below) x 2 pipelines x however many arms:
 #
-#   main        whole                                        -> 1 + 8x1x2 = 17
-#   strategies  whole, cv_shared, holdout                    -> 1 + 8x3x2 = 49
-#   split       split                                        -> 1 + 8x1x2 = 17
+#   main        whole                                        -> 2 + 10x1x2 = 22
+#   strategies  whole, cv_shared, holdout                    -> 2 + 10x3x2 = 62
+#   split       split                                        -> 2 + 10x1x2 = 22
 #
 # The split tree works unchanged for a second reason too: me_split.R stores
 # `data` and `truth` ALREADY RESTRICTED to its 20% evaluation rows, so
@@ -71,10 +71,11 @@ source(here("model_evaluation", "me_nuisance.R")) # calculate_pseudos()
 #'   Every operation here is vectorised arithmetic, so a length-1 pi recycles
 #'   to give exactly the same answer as rep(0.5, n) - me_testing.R checks this
 #'   rather than leaving it to be assumed.
-#' @param tau the proxy target diff_tau is measured against. Called with
-#'   df$phi/df$phi05 (the DR pseudo-outcome) below, not the T-learner tau_T -
-#'   so infl and dr are anchored to the same target and their difference
-#'   isolates what the influence correction itself adds.
+#' @param tau the surrogate diff_tau is measured against. Called twice below:
+#'   with the T-learner plug-in mu1_DR - mu0_DR (inflt/inflt05), the IF score
+#'   the thesis reports, and with df$phi/df$phi05, the DR pseudo-outcome
+#'   (infl/infl05), which anchors it to the same target as dr so that their
+#'   difference isolates what the influence correction itself adds.
 calc_infl_score <- function(tau_hat, tau, pi, Y, W) {
   A <- W - pi
   C <- pi * (1 - pi)
@@ -153,7 +154,8 @@ calc_cal_score <- function(tau_hat, phi, k_groups) {
 #' The score types one (pipeline, arm) contributes, in column order
 #'
 #' The `05` in a name means the propensity was fixed at 0.5; `q<K>` is the
-#' calibration score's group count. Both are folded into this single token
+#' calibration score's group count; the `t` in inflt means the IF score's
+#' surrogate is the T-learner plug-in rather than phi. Both are folded into this single token
 #' rather than added as further underscore-separated fields, because
 #' me_results.qmd recovers the design axes from the column name as
 #' <score_type>_<arm>_<pipeline> - a fourth field would break that parse. No
@@ -164,6 +166,7 @@ calc_cal_score <- function(tau_hat, phi, k_groups) {
 #' me_per_model() builds from, instead of hardcoding a number that drifts.
 me_score_types <- function(k_groups = CAL_QUANTILES) {
   c(
+    "inflt", "inflt05",
     "infl", "infl05",
     "dr", "dr05",
     paste0("calq", k_groups),
@@ -200,12 +203,19 @@ arm_scores <- function(tau_hat, df, Y, W, k_groups = CAL_QUANTILES) {
     )
   }
 
+  # the T-learner plug-in CATE from the scoring pipeline's per-arm outcome
+  # models (per arm since 2026-10-14, see README.md), the same models phi is
+  # built from, without phi's residual correction
+  tau_t <- df$mu1_DR - df$mu0_DR
+
   c(
     list(
-      infl   = calc_infl_score(tau_hat, df$phi, df$pi_trim, Y, W),
-      infl05 = calc_infl_score(tau_hat, df$phi05, 0.5, Y, W),
-      dr     = calc_dr_risk(tau_hat, df$phi),
-      dr05   = calc_dr_risk(tau_hat, df$phi05)
+      inflt   = calc_infl_score(tau_hat, tau_t, df$pi_trim, Y, W),
+      inflt05 = calc_infl_score(tau_hat, tau_t, 0.5, Y, W),
+      infl    = calc_infl_score(tau_hat, df$phi, df$pi_trim, Y, W),
+      infl05  = calc_infl_score(tau_hat, df$phi05, 0.5, Y, W),
+      dr      = calc_dr_risk(tau_hat, df$phi),
+      dr05    = calc_dr_risk(tau_hat, df$phi05)
     ),
     setNames(
       lapply(k_groups, function(k) calc_cal_score(tau_hat, df$phi, k)),
@@ -220,14 +230,25 @@ arm_scores <- function(tau_hat, df, Y, W, k_groups = CAL_QUANTILES) {
 
 #' Every proxy score, plus true PEHE, for one candidate model of one run
 #'
+#' mu1_mse is the candidate's MSE against the true treated-arm mean p1. With
+#' pi = 0.5 the IF score's candidate-dependent terms reduce, in expectation, to
+#' mean((tau_hat - mu1)^2): the surrogate's terms cancel between the arms, and
+#' the treated rows' Y * tau_hat term tracks mu1 * tau_hat. It is what the IF
+#' score selects on, not a proxy itself. NA where the truth has no p1 (the
+#' split tree keeps only tau, see me_split.R).
+#'
 #' Matches the R/metrics.R::compute_metrics() per_model() contract:
 #' function(model_res, true_tau, model, sim_res, keys).
 me_per_model <- function(model_res, true_tau, model, sim_res, keys) {
   tau_hat <- model_res$tau
   Y <- sim_res$data$Y
   W <- sim_res$data$W
+  p1 <- sim_res$truth$p1
 
-  scores <- list(true_pehe = mean((tau_hat - true_tau)^2))
+  scores <- list(
+    true_pehe = mean((tau_hat - true_tau)^2),
+    mu1_mse = if (is.null(p1)) NA_real_ else mean((tau_hat - p1)^2)
+  )
 
   for (pipeline in names(sim_res$nuisances)) { # xgb, automl
     # whatever arms this tree carries - see the table above. Deliberately not

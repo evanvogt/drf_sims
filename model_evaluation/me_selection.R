@@ -11,7 +11,9 @@
 # Reads the strategies tree (me_metrics.R strategies): the DR and IF proxies,
 # each with the estimated propensity or with it fixed at the true 0.5 (the
 # `05` score types), crossed with the three fold regimes and the two nuisance
-# pipelines. The calibration scores are left out.
+# pipelines. The IF proxy is inflt, the IF score with the T-learner plug-in
+# mu1_DR - mu0_DR as its surrogate; infl, the same score with phi as the
+# surrogate, and the calibration scores are left out.
 #
 # Source R/figures.R first: me_read_metrics() uses its label_factor(), and it
 # loads dplyr and tidyr.
@@ -21,7 +23,7 @@ ME_N_CANDIDATES <- 9
 
 # the score columns are <score_type>_<fold_type>_<pipeline>
 # (model_evaluation/me_metrics.R)
-ME_SCORE_TYPES <- c("dr", "dr05", "infl", "infl05")
+ME_SCORE_TYPES <- c("dr", "dr05", "inflt", "inflt05")
 ME_FOLD_TYPES <- c("cv_shared", "holdout", "whole")
 ME_PIPELINES <- c("xgb", "automl")
 
@@ -51,7 +53,8 @@ me_read_metrics <- function(metrics_file, scenario_labels) {
   absent <- setdiff(ME_SCORE_COLS, names(metrics))
   if (length(absent) > 0) {
     stop(metrics_file, " has no ", paste(absent, collapse = ", "),
-         ". Is it the strategies tree (Rscript me_metrics.R strategies)?",
+         ". Is it the strategies tree (Rscript me_metrics.R strategies), ",
+         "scored since inflt was added (2026-10-15)?",
          call. = FALSE)
   }
 
@@ -81,7 +84,7 @@ me_read_metrics <- function(metrics_file, scenario_labels) {
 #'
 #' @param metrics output of me_read_metrics()
 #' @return with the proxy's axes as id columns: score_type, fold_type,
-#'   pipeline, and score_type split into score_family (dr, infl) and pi_regime
+#'   pipeline, and score_type split into score_family (dr, inflt) and pi_regime
 #'   (estimated, fixed)
 me_selection <- function(metrics) {
   metrics %>%

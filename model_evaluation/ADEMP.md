@@ -139,7 +139,8 @@ evaluation rows:
 
 | family | score | definition |
 |---|---|---|
-| influence | `infl` | the influence-corrected PEHE estimate (`calc_infl_score`) |
+| influence | `inflt` | the influence-corrected PEHE estimate (`calc_infl_score`), with the T-learner plug-in `mu1_DR − mu0_DR` as its surrogate; the reported IF proxy |
+| influence | `infl` | the same, with `phi` as its surrogate |
 | DR risk | `dr` | `mean((τ̂ − phi)²)` (`calc_dr_risk`) |
 | calibration | `calqK` | `Σ_k \|G_k\| · \|mean_{G_k}(τ̂) − mean_{G_k}(phi)\|`, over K rank groups of τ̂, for K = 5 and 10 (`calc_cal_score`) |
 
@@ -150,9 +151,10 @@ evaluation rows:
 true 0.5. The true value is used through `phi05` and `pi = 0.5`, and gives the
 `*05` columns.
 
-This makes 8 score types per (arm × pipeline): 17 score columns per
-candidate-run in the main and split trees, and 49 in the strategies tree. Each
-tree also carries `true_pehe` (`me_metrics.R`).
+This makes 10 score types per (arm × pipeline): 20 score columns per
+candidate-run in the main and split trees, and 60 in the strategies tree. Each
+tree also carries `true_pehe` and `mu1_mse`, the candidate's MSE against the
+true `p1` (`me_metrics.R`).
 
 ## Performance measures
 
