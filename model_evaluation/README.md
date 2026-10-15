@@ -682,9 +682,9 @@ From the repo root on the cluster, after `git pull`:
    phi that is non-finite even with π trimmed; propensities of exactly 0 or 1
    are tallied per pipeline and arm, not failed (see its header).
 6. Check, collect and metrics for `strategies` and `split` as in step 4 below,
-   then render `me_results.qmd`, and run
-   `Rscript model_evaluation/me_infl_investigation.R sims strategies` before
-   rendering `me_infl_investigation.qmd`.
+   then render `me_results.qmd` and `me_infl_investigation.qmd` (which reads
+   `me_strat_metrics.RDS` directly, and needs `population.RDS` from
+   `Rscript model_evaluation/me_infl_investigation.R`).
 
 ### Scenarios 2 and 3 owed (2026-10-11)
 

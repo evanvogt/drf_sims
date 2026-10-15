@@ -30,43 +30,48 @@ library(knitr)
 
 ## What this compares
 
-The influence-function (IF) PEHE score as written in Alaa & van der Schaar
-(2019) is wrong. Their appendix writes PEHE as Ψ¹ + Ψ² + Ψ³ where it should be
-Ψ¹ + Ψ² − 2Ψ³, and the three Ψ̇ it lists are not the influence functions of
-those Ψ's. Two alternatives are scored here against the scores the study
-already reports:
+The influence-function (IF) PEHE score of Alaa & van der Schaar (2019),
+`me_metrics.R::calc_infl_score()`, needs a surrogate CATE τ̃ to correct
+around. The study scores it with two, and this report asks which one picks
+the better candidate:
 
 | score | formula | surrogate |
 |---|---|---|
-| **DR risk** (`dr`) | mean (φ − τ̂)² | – |
-| **One-step** (`onestep`) | mean [(τ̃ − τ̂)² + 2(τ̃ − τ̂)(φ − τ̃)] | plug-in τ̃ = μ̂₁ − μ̂₀ (T-learner: the scoring pipeline's per-arm outcome models) |
-| **IF, 2019, φ** (`infl`) | `me_metrics.R::calc_infl_score()` | φ, as the study scores it |
-| **IF, 2019, plug-in** (`infl_plugin`) | the same | plug-in τ̃ |
-| **IF, C&vdS, plug-in** (`cvds_plugin`) | Curth & van der Schaar (2023) appendix | plug-in τ̃ |
-| **IF, C&vdS, φ** (`cvds_phi`) | the same | φ |
+| **IF, T-learner** (`inflt`) | `calc_infl_score()` | plug-in τ̃ = μ̂₁ − μ̂₀ from the scoring pipeline's per-arm outcome models. The IF score the thesis reports |
+| **IF, pseudo-outcome** (`infl`) | the same | the AIPW pseudo-outcome φ, built from the same μ̂₀, μ̂₁ and π̂ |
+| **DR risk** (`dr`) | mean (φ − τ̂)² | – (reference) |
 
-The one-step score is the correctly derived IF-corrected PEHE. It simplifies
-to (φ − τ̂)² − (φ − τ̃)², so **within a run it is the DR risk minus a constant
-shared by every candidate**: it picks the same candidate, with the same
-Spearman correlation and regret, and differs from DR only in level. Figure 1
-should show the two on top of each other; figure 2 is where they separate.
+The Curth & van der Schaar (2023) appendix version is not scored: the formula
+printed there is a typo, and their code uses the 2019 formula.
 
-All scores here are from the **CV (`cv_shared`) arm**: the scoring nuisance is
-fit on the candidate's own `V − 1` training folds and predicted on its held-out
-fold. The estimated-propensity version of every score is in the main
-figures; the fixed π = 0.5 version is in the appendix. Every score, and true
-PEHE, is a loss: lower is better.
+What to expect. The surrogate enters the candidate-dependent part of the
+score only through 2(W − π)·τ̃·τ̂. With τ̃ = φ, that term also gets φ's
+residual correction, which is mean zero only where μ̂ is right. So the
+pseudo-outcome surrogate should, on average, pick the same way as the
+T-learner, but with more noise.
 
-Produced by `me_infl_investigation.R` (`population` and `sims strategies`).
+All scores here are from the **CV (`cv_shared`) arm** of the strategies tree:
+the scoring nuisance is fit on the candidate's own `V − 1` training folds and
+predicted on its held-out fold. The main figures use the estimated (trimmed)
+propensity, and the fixed π = 0.5 versions are in the appendix. Every score,
+and true PEHE, is a loss: lower is better.
+
+The simulation results are read straight from `me_strat_metrics.RDS`
+(`me_metrics.R strategies`), the same scores `me_results.qmd` and the thesis
+tables use. The population check in section 5 is from
+`me_infl_investigation.R`.
 
 ```{r data}
+strat_path <- file.path(
+  dirname(here()), "results", "correlated", "model_evaluation_strategies"
+)
 inv_path <- file.path(
   dirname(here()), "results", "correlated", "model_evaluation", "investigation"
 )
 
 ARM <- "cv_shared"
 
-check <- readRDS(file.path(inv_path, "me_strat_infl_check.RDS"))
+metrics <- readRDS(file.path(strat_path, "me_strat_metrics.RDS"))
 population <- readRDS(file.path(inv_path, "population.RDS"))
 
 scenario_labels <- c(
@@ -77,41 +82,63 @@ scenario_labels <- c(
 )
 
 score_labels <- c(
-  dr = "DR risk",
-  onestep = "One-step",
-  infl = "IF, 2019, phi",
-  infl_plugin = "IF, 2019, plug-in",
-  cvds_plugin = "IF, C&vdS, plug-in",
-  cvds_phi = "IF, C&vdS, phi"
+  inflt = "IF, T-learner",
+  infl = "IF, pseudo-outcome",
+  dr = "DR risk"
 )
 
 pipeline_labels <- c(xgb = "XGBoost", automl = "AutoML")
 
-# the score names carry the propensity regime as a trailing "05"
-# (cvds_plugin05, onestep05, ...), as me_metrics.R's do
-tidy_axes <- function(df) {
-  df %>%
-    filter(arm == ARM) %>%
-    mutate(
-      pi_regime = ifelse(grepl("05$", score), "fixed", "estimated"),
-      score = factor(
-        score_labels[sub("05$", "", score)],
-        levels = unname(score_labels)
-      ),
-      scenario = factor(
-        scenario_labels[as.character(scenario)],
-        levels = unname(scenario_labels)
-      ),
-      n = factor(n, levels = sort(unique(n))),
-      pipeline = factor(
-        pipeline_labels[pipeline],
-        levels = unname(pipeline_labels)
-      )
-    )
-}
+# me_metrics.R names every score column <score_type>_<arm>_<pipeline>, the
+# score type carrying the propensity regime as a trailing "05" (inflt05,
+# dr05, ...)
+score_pattern <- paste0(
+  "^(", paste(names(score_labels), collapse = "|"), ")(05)?_",
+  ARM, "_(", paste(names(pipeline_labels), collapse = "|"), ")$"
+)
 
-perf <- tidy_axes(check$perf)
-scores <- tidy_axes(check$scores)
+# one row per (scenario, n, run, model, pipeline, score, pi regime)
+scores <- metrics %>%
+  select(scenario, n, run, model, true_pehe, mu1_mse, matches(score_pattern)) %>%
+  pivot_longer(
+    matches(score_pattern),
+    names_to = c("score", "pi_regime", "pipeline"),
+    names_pattern = score_pattern,
+    values_to = "value"
+  ) %>%
+  mutate(
+    pi_regime = ifelse(pi_regime == "05", "fixed", "estimated"),
+    score = factor(score_labels[score], levels = unname(score_labels)),
+    scenario = factor(
+      scenario_labels[as.character(scenario)],
+      levels = unname(scenario_labels)
+    ),
+    n = factor(n, levels = sort(unique(n))),
+    pipeline = factor(
+      pipeline_labels[pipeline],
+      levels = unname(pipeline_labels)
+    )
+  )
+
+# per run and score, as me_selection() ranks: the candidates with a finite
+# score and truth, regret against the best of them
+perf <- scores %>%
+  filter(is.finite(value), is.finite(true_pehe)) %>%
+  group_by(scenario, n, run, pipeline, score, pi_regime) %>%
+  filter(n() >= 2) %>%
+  summarise(
+    candidates = n(),
+    spearman = suppressWarnings(cor(value, true_pehe, method = "spearman")),
+    spearman_mu1 = suppressWarnings(
+      cor(value, mu1_mse, method = "spearman", use = "complete.obs")
+    ),
+    top1 = model[which.min(value)] == model[which.min(true_pehe)],
+    pick = as.character(model[which.min(value)]),
+    regret = true_pehe[which.min(value)] - min(true_pehe),
+    .groups = "drop"
+  )
+
+mcse_mean <- function(x) sd(x, na.rm = TRUE) / sqrt(sum(!is.na(x)))
 
 # mean +/- Monte Carlo SE over runs, per (scenario, n, pipeline, score, pi)
 perf_summary <- perf %>%
@@ -119,9 +146,11 @@ perf_summary <- perf %>%
   summarise(
     runs = n(),
     mean_regret = mean(regret),
-    mcse_regret = sd(regret) / sqrt(runs),
+    mcse_regret = mcse_mean(regret),
     mean_rho = mean(spearman, na.rm = TRUE),
-    mcse_rho = sd(spearman, na.rm = TRUE) / sqrt(sum(!is.na(spearman))),
+    mcse_rho = mcse_mean(spearman),
+    mean_rho_mu1 = mean(spearman_mu1, na.rm = TRUE),
+    mcse_rho_mu1 = mcse_mean(spearman_mu1),
     mean_top1 = mean(top1),
     mcse_top1 = sqrt(mean_top1 * (1 - mean_top1) / runs),
     .groups = "drop"
@@ -130,11 +159,28 @@ perf_summary <- perf %>%
 # expected regret of ignoring every score and picking a candidate uniformly at
 # random - the floor a useful score has to beat
 random_baseline <- scores %>%
+  filter(is.finite(true_pehe)) %>%
   distinct(scenario, n, run, model, true_pehe) %>%
   group_by(scenario, n, run) %>%
   summarise(random_regret = mean(true_pehe) - min(true_pehe), .groups = "drop") %>%
   group_by(scenario, n) %>%
   summarise(random_regret = mean(random_regret), .groups = "drop")
+
+# the two surrogates head to head, per run: T-learner minus pseudo-outcome
+head_to_head <- perf %>%
+  filter(score %in% score_labels[c("inflt", "infl")]) %>%
+  mutate(score = names(score_labels)[match(score, score_labels)]) %>%
+  select(scenario, n, run, pipeline, pi_regime, score, regret, spearman, pick) %>%
+  pivot_wider(
+    names_from = score,
+    values_from = c(regret, spearman, pick)
+  ) %>%
+  filter(!is.na(regret_inflt), !is.na(regret_infl)) %>%
+  mutate(
+    regret_diff = regret_inflt - regret_infl,
+    spearman_diff = spearman_inflt - spearman_infl,
+    same_pick = pick_inflt == pick_infl
+  )
 ```
 
 ```{r plot-helpers, include=FALSE}
@@ -149,17 +195,6 @@ score_colours <- setNames(
   unname(score_labels)
 )
 
-# One-step is drawn as an open circle in the SAME dodge slot as DR risk, so
-# where they coincide - which within a run they always should - the open
-# circle rings the filled one instead of looking like a missing series.
-is_onestep <- unname(score_labels) == score_labels[["onestep"]]
-score_shapes <- setNames(ifelse(is_onestep, 1, 16), unname(score_labels))
-score_sizes <- setNames(ifelse(is_onestep, 3.5, 2), unname(score_labels))
-
-dodge_slot <- function(score) {
-  ifelse(score == score_labels[["onestep"]], score_labels[["dr"]], as.character(score))
-}
-
 selection_plot <- function(df, mean_col, mcse_col, title, ylab,
                            baseline = NULL, hline = NULL, alpha = 0.05) {
   z <- qnorm(1 - alpha / 2)
@@ -167,12 +202,11 @@ selection_plot <- function(df, mean_col, mcse_col, title, ylab,
     mutate(
       est = .data[[mean_col]],
       lo = est - z * .data[[mcse_col]],
-      hi = est + z * .data[[mcse_col]],
-      slot = dodge_slot(score)
+      hi = est + z * .data[[mcse_col]]
     )
   dodge <- position_dodge(width = 0.6)
 
-  p <- ggplot(df, aes(x = n, y = est, colour = score, group = slot))
+  p <- ggplot(df, aes(x = n, y = est, colour = score))
   if (!is.null(hline)) {
     p <- p + geom_hline(yintercept = hline, linetype = "dashed")
   }
@@ -189,21 +223,50 @@ selection_plot <- function(df, mean_col, mcse_col, title, ylab,
       aes(ymin = lo, ymax = hi),
       position = dodge, linewidth = 0.3, width = 0.3
     ) +
-    geom_point(aes(shape = score, size = score), position = dodge) +
+    geom_point(position = dodge, size = 2) +
     facet_grid(rows = vars(scenario), cols = vars(pipeline), scales = "free_y") +
     scale_colour_manual(values = score_colours) +
-    scale_shape_manual(values = score_shapes) +
-    scale_size_manual(values = score_sizes) +
     house_theme +
-    labs(
-      title = title, y = ylab, x = "sample size",
-      colour = "Score", shape = "Score", size = "Score"
+    labs(title = title, y = ylab, x = "sample size", colour = "Score")
+}
+
+# per-run differences between the surrogates, one box per (n, pipeline)
+paired_plot <- function(df, col, title, ylab) {
+  ggplot(df, aes(x = n, y = .data[[col]], colour = pipeline)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_boxplot(fill = "transparent", outlier.size = 0.6) +
+    facet_wrap(~scenario, scales = "free_y") +
+    scale_colour_paletteer_d("rcartocolor::Safe") +
+    house_theme +
+    labs(title = title, y = ylab, x = "sample size", colour = "Pipeline")
+}
+
+head_to_head_table <- function(df, caption) {
+  df %>%
+    group_by(pipeline, scenario, n) %>%
+    summarise(
+      runs = n(),
+      same_pick = mean(same_pick),
+      t_better = mean(regret_diff < -1e-10),
+      phi_better = mean(regret_diff > 1e-10),
+      mean_diff = mean(regret_diff),
+      mcse_diff = mcse_mean(regret_diff),
+      .groups = "drop"
+    ) %>%
+    kable(
+      digits = c(0, 0, 0, 0, 2, 2, 2, 4, 4),
+      col.names = c(
+        "Pipeline", "Scenario", "n", "Runs", "Same pick",
+        "T-learner better", "Pseudo-outcome better",
+        "Mean regret diff.", "MCSE"
+      ),
+      caption = caption
     )
 }
 
 # signed log for the level figure: linear within +/- sigma of zero, log
-# beyond, so DR's small positive offset and C&vdS's large negative one are
-# both readable on one axis
+# beyond, so small and large offsets from true PEHE are both readable on one
+# axis
 signed_log <- scales::pseudo_log_trans(sigma = 0.05, base = 10)
 
 level_plot <- function(df, title) {
@@ -232,41 +295,36 @@ level_plot <- function(df, title) {
 ```{r runs}
 perf %>%
   filter(pi_regime == "estimated") %>%
-  distinct(scenario, n, pipeline, score, run) %>%
-  count(scenario, n, pipeline, score, name = "runs") %>%
+  group_by(scenario, n, pipeline, score) %>%
+  summarise(
+    runs = n(),
+    min_candidates = min(candidates),
+    .groups = "drop"
+  ) %>%
   group_by(scenario, n, pipeline) %>%
-  summarise(min_runs = min(runs), max_runs = max(runs), .groups = "drop") %>%
-  pivot_wider(names_from = pipeline, values_from = c(min_runs, max_runs)) %>%
+  summarise(
+    min_runs = min(runs),
+    max_runs = max(runs),
+    min_candidates = min(min_candidates),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = pipeline,
+    values_from = c(min_runs, max_runs, min_candidates)
+  ) %>%
   kable(caption = paste0(
-    "Runs scored per cell (100 expected), ", ARM,
-    " arm. Runs with an NA score for any candidate are dropped."
+    "Runs scored per cell (100 expected) and the fewest of the 9 candidates ",
+    "ranked in any run, ", ARM, " arm, estimated propensity. A candidate is ",
+    "ranked only where its score and true PEHE are both finite."
   ))
 ```
 
-```{r onestep-equals-dr}
-# One-step and DR differ by a candidate-independent term within a run, so
-# every run should pick the same candidate under both. Anything below 1 is a
-# bug in the scoring, not a finding.
-perf %>%
-  filter(score %in% score_labels[c("dr", "onestep")]) %>%
-  select(scenario, n, run, pipeline, pi_regime, score, regret) %>%
-  pivot_wider(names_from = score, values_from = regret) %>%
-  group_by(pipeline, pi_regime) %>%
-  summarise(
-    runs = n(),
-    same_pick = mean(abs(.data[[score_labels[["onestep"]]]] -
-                           .data[[score_labels[["dr"]]]]) < 1e-10),
-    .groups = "drop"
-  ) %>%
-  kable(digits = 4, caption = "Share of runs where One-step and DR risk have the same regret")
-```
-
-## 1. Does the score pick a good candidate?
+## 1. Which surrogate picks the better candidate?
 
 Regret is the true PEHE of the candidate the score picks, minus the true PEHE
-of the best of the 9. Points are means over runs with 95% Monte Carlo
-intervals; the grey cross is the expected regret of picking a candidate at
-random. One-step (open circle) should ring DR risk (filled) exactly.
+of the best candidate in the run. Points are means over runs with 95% Monte
+Carlo intervals. The grey cross is the expected regret of picking a candidate
+at random.
 
 ```{r fig-regret, fig.height=9}
 selection_plot(
@@ -300,12 +358,78 @@ selection_plot(
 
 The dashed line on the top-1 figure is 1/9, a random pick.
 
-## 2. Does the score estimate PEHE itself?
+## 2. Run by run: T-learner against pseudo-outcome
 
-Every ranking measure above is blind to a shift shared by all candidates, so
-it cannot tell One-step from DR. This can: each candidate's score minus its
-true PEHE, over runs. A score that estimates PEHE sits on zero. DR risk should
-sit above zero by roughly the variance of φ about τ; One-step should not.
+The means above can hide how often the two surrogates actually disagree. Per
+run, this is the T-learner score's regret minus the pseudo-outcome score's.
+Below zero, the T-learner picked the better candidate; above zero, the
+pseudo-outcome did; at zero, both picked the same candidate.
+
+```{r fig-paired-regret, fig.height=7}
+paired_plot(
+  filter(head_to_head, pi_regime == "estimated"),
+  "regret_diff",
+  title = paste0(
+    "Regret, IF T-learner minus IF pseudo-outcome, per run, ", ARM,
+    " arm, estimated propensity"
+  ),
+  ylab = "regret difference (PEHE)"
+)
+```
+
+```{r paired-table}
+head_to_head_table(
+  filter(head_to_head, pi_regime == "estimated"),
+  paste0(
+    "IF T-learner against IF pseudo-outcome, per run (", ARM, " arm, ",
+    "estimated propensity): share of runs where they pick the same candidate, ",
+    "where each picks the strictly better one, and the mean of T-learner ",
+    "regret minus pseudo-outcome regret"
+  )
+)
+```
+
+The same comparison on the whole ranking, not only the pick: the T-learner
+score's Spearman correlation with true PEHE minus the pseudo-outcome score's.
+Above zero, the T-learner ranks the 9 candidates more like the truth.
+
+```{r fig-paired-rho, fig.height=7}
+paired_plot(
+  filter(head_to_head, pi_regime == "estimated"),
+  "spearman_diff",
+  title = paste0(
+    "Spearman with true PEHE, IF T-learner minus IF pseudo-outcome, per run, ",
+    ARM, " arm, estimated propensity"
+  ),
+  ylab = "Spearman difference"
+)
+```
+
+## 3. What does each score select on?
+
+With π = 0.5, the candidate-dependent terms of the 2019 score reduce, in
+expectation, to the candidate's MSE against μ₁ rather than against τ (see
+`me_metrics.R::me_per_model()`, `mu1_mse`). This is each score's Spearman
+correlation, across the 9 candidates in a run, with that MSE. If one
+surrogate tracks `mu1_mse` more closely than true PEHE, it is selecting on the
+wrong target, not just noisily.
+
+```{r fig-rho-mu1, fig.height=9}
+selection_plot(
+  filter(perf_summary, pi_regime == "estimated"),
+  "mean_rho_mu1", "mcse_rho_mu1",
+  title = paste0("Spearman correlation with MSE against mu1, ", ARM, " arm, estimated propensity"),
+  ylab = "mean Spearman correlation",
+  hline = 0
+)
+```
+
+## 4. Does the score estimate PEHE itself?
+
+The ranking measures above ignore any shift that every candidate shares. This
+figure does not: it shows each candidate's score minus its true PEHE, over
+runs. A score that estimates PEHE sits on zero. DR risk should sit above zero
+by roughly the variance of φ about τ.
 
 ```{r fig-level-xgb, fig.height=9}
 level_plot(
@@ -326,24 +450,24 @@ scores %>%
   ))
 ```
 
-## 3. Population check: is the formula right before any estimation noise?
+## 5. Population check: oracle nuisances
 
-From `me_infl_investigation.R population`: N = 2·10⁶ draws per scenario,
+From `me_infl_investigation.R`: N = 2·10⁶ draws per scenario,
 **oracle** nuisances (true μ₀, μ₁ and π = 0.5), five constructed candidates
-(the truth, the ATE, the truth shrunk halfway to the ATE, μ₁, and τ + X2). With
-no nuisance error a correct PEHE estimator lies on the diagonal, and a correct
-ranking is at least monotone in true PEHE. The One-step score here uses a
-deliberately biased surrogate, τ + 0.3·X2, so its gap from the diagonal is the
-second-order remainder the correction leaves behind.
+(the truth, the ATE, the truth shrunk halfway to the ATE, μ₁, and τ + X2).
+With oracle nuisances the T-learner surrogate μ₁ − μ₀ is the true τ, so "IF,
+true tau" is the noise-free version of the T-learner score. A correct PEHE
+estimator lies on the diagonal, and a correct ranking is at least monotone in
+true PEHE. The One-step score uses a deliberately biased surrogate,
+τ + 0.3·X2, so its gap from the diagonal is the second-order remainder the
+correction leaves behind.
 
 ```{r fig-population, fig.height=7}
 pop_labels <- c(
   dr = "DR risk",
   onestep_biased_sur = "One-step (biased surrogate)",
-  infl_tau = "IF, 2019, true tau",
-  infl_phi = "IF, 2019, phi",
-  infl_cvds_tau = "IF, C&vdS, true tau",
-  infl_cvds_phi = "IF, C&vdS, phi"
+  infl_tau = "IF, true tau",
+  infl_phi = "IF, pseudo-outcome"
 )
 
 population %>%
@@ -372,50 +496,13 @@ population %>%
   )
 ```
 
-## 4. Run by run: how often does each score lose to DR risk?
-
-Per run, the score's regret minus DR risk's. Below zero the score picked a
-better candidate than DR did; above, a worse one. This separates a score that
-is a little worse every run from one that is usually fine and occasionally
-picks badly. One-step is left out: it is identically zero.
-
-```{r fig-paired, fig.height=9}
-paired <- perf %>%
-  filter(pi_regime == "estimated") %>%
-  select(scenario, n, run, pipeline, score, regret) %>%
-  group_by(scenario, n, run, pipeline) %>%
-  filter(any(score == score_labels[["dr"]])) %>%
-  mutate(diff = regret - regret[score == score_labels[["dr"]]]) %>%
-  ungroup() %>%
-  filter(!score %in% score_labels[c("dr", "onestep")])
-
-ggplot(paired, aes(x = score, y = diff, colour = pipeline)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_boxplot(fill = "transparent", outlier.shape = NA) +
-  facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y") +
-  scale_colour_paletteer_d("rcartocolor::Safe") +
-  house_theme +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(
-    title = paste0("Regret minus DR risk's regret, per run, ", ARM, " arm, estimated propensity"),
-    y = "regret difference (PEHE)", x = NULL, colour = "Pipeline"
-  )
-```
-
-```{r paired-table}
-paired %>%
-  group_by(pipeline, score, n) %>%
-  summarise(worse = mean(diff > 1e-10), .groups = "drop") %>%
-  pivot_wider(names_from = n, values_from = worse, names_prefix = "n = ") %>%
-  kable(digits = 2, caption = "Share of runs where the score picks a worse candidate than DR risk")
-```
-
 ## Appendix
 
 ### Fixed propensity (π = 0.5)
 
 The DGM assigns treatment by a fair coin, so π = 0.5 is the true propensity
-and these are oracle-π versions of every score.
+and these are oracle-π versions of every score. Thesis Table `me_if_selection`
+is the XGBoost column of this regime.
 
 ```{r fig-regret-fixed, fig.height=9}
 selection_plot(
@@ -424,6 +511,28 @@ selection_plot(
   title = paste0("Regret, ", ARM, " arm, propensity fixed at 0.5"),
   ylab = "mean regret (PEHE)",
   baseline = random_baseline
+)
+```
+
+```{r fig-paired-regret-fixed, fig.height=7}
+paired_plot(
+  filter(head_to_head, pi_regime == "fixed"),
+  "regret_diff",
+  title = paste0(
+    "Regret, IF T-learner minus IF pseudo-outcome, per run, ", ARM,
+    " arm, propensity fixed at 0.5"
+  ),
+  ylab = "regret difference (PEHE)"
+)
+```
+
+```{r paired-table-fixed}
+head_to_head_table(
+  filter(head_to_head, pi_regime == "fixed"),
+  paste0(
+    "IF T-learner against IF pseudo-outcome, per run (", ARM, " arm, ",
+    "propensity fixed at 0.5)"
+  )
 )
 ```
 
