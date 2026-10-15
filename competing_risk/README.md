@@ -487,6 +487,9 @@ queue" above), `surv_check.R`, `surv_collect.R`, `surv_metrics.R`.
 population truths, X3 separation) for each ρ.
 `single_event/` is a separate, smaller study: event 1 with event 2 removed,
 reusing this study's arms (see its README).
+`snr/` is a small signal-to-noise check: scenario 7 with the X3 effect scaled
+(`generate_surv_data(hte_mult = )`) or n raised, the pseudo-value CF against the
+production DR-learners and their semi-oracle twins (see its README).
 The diagnostic scripts are no longer in the working tree. `surv_dr_split_na_diagnose.R`
 reproduced and traced the split-DR-learner NA bug documented in "Known issues" above.
 `surv_failed_diagnose.R` found both the 225-run failure and the 19-run one: it decoded

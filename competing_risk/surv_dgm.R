@@ -166,9 +166,13 @@ truth_individual <- function(shape1, shape2, scale1_1, scale1_0, scale2_1, scale
 #' @param rho Exchangeable latent correlation of the copula (0 = independent)
 #' @param return_truth Logical, whether to calculate true treatment effects
 #' @param censoring Logical, whether to add uniform uninformative censoring
+#' @param hte_mult Multiplier on the X3 effect modifiers b3_1 and b3_2 (the ATE
+#'   terms bW_* are left alone). 1, the default, is the main study; the SNR
+#'   check (competing_risk/snr/) scales it to raise SD(tau). It changes no
+#'   draws, so a run's W, X and U are the same at every multiplier.
 #' @return List containing dataset and optionally truth
 generate_surv_data <- function(scenario, n, rho = 0, return_truth = TRUE,
-                               censoring = FALSE) {
+                               censoring = FALSE, hte_mult = 1) {
   # scenario check
   if (!scenario %in% 1:7) {
     stop("Scenario must be between 1 and 7")
@@ -176,6 +180,9 @@ generate_surv_data <- function(scenario, n, rho = 0, return_truth = TRUE,
 
   # Get parameters for this scenario
   params <- survival_scenario_params[survival_scenario_params$scenario == scenario, ]
+  # the truth below reads the same params, so it follows the multiplier
+  params$b3_1 <- params$b3_1 * hte_mult
+  params$b3_2 <- params$b3_2 * hte_mult
 
   # Generate treatment and covariates
   W <- rbinom(n, 1, 0.5)

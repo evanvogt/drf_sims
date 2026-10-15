@@ -84,7 +84,7 @@ for (i in seq_len(nrow(study_registry))) {
   reg <- study_registry[i, ]
   s <- load_study(reg$config_path, reg$config_var)
   dir <- file.path(dirname(s$failed_file))
-  scripts <- list.files(dir, pattern = paste0("^", s$prefix, "_(1|2|extra)\\.sh$"),
+  scripts <- list.files(dir, pattern = paste0("^", s$prefix, "_(\\d+|extra)\\.sh$"),
                         full.names = TRUE)
   ranges <- unlist(lapply(scripts, function(f) {
     j <- grep("^#PBS -J ", sub("\r$", "", readLines(f, warn = FALSE)), value = TRUE)
