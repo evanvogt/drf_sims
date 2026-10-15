@@ -28,7 +28,16 @@
 #     proxy tables' best-fixed-choice rows;
 #   - one completed-runs table, the proxy tables' layout with each cell the
 #     number of runs that proxy was scored in, and an "All runs" row (the runs
-#     with a true PEHE) under each n.
+#     with a true PEHE) under each n;
+#   - two on the IF score. The population check (me_if_population), from
+#     model_evaluation/me_infl_investigation.R's population.RDS: five
+#     constructed candidates scored with oracle nuisances on one very large
+#     sample, rows in order of true PEHE within each scenario and each score's
+#     rank in parentheses. And selection by its two surrogates
+#     (me_if_selection), CV arm, XGBoost, pi fixed at 0.5: regret under DR,
+#     IF with the pseudo-outcome and IF with the T-learner surrogate, a random
+#     pick's, and the T-learner IF's Spearman correlation with true PEHE and
+#     with mu1_mse, the MSE against the true mu1 that it tracks at pi = 0.5.
 #
 # Run counts are read off the data, not the design. A proxy whose scoring
 # nuisance failed in a run is NA for every candidate there, and me_selection()
@@ -39,19 +48,21 @@
 # table's counts, and the proxy tables name any short proxies and point to the
 # completed-runs table.
 #
-# All six are portrait, within the thesis's 17cm text width. Regret's
+# All eight are portrait, within the thesis's 17cm text width. Regret's
 # decimals are read off its MCSEs (mcse_digits() below): its scale changes
 # with the scenario and n, and the results were not to hand when this was
 # written.
 #
 # Writes to ../results/thesis_tables/:
 #   me_top1.tex, me_rank.tex, me_regret.tex, me_axis.tex, me_fixed.tex,
-#   me_runs.tex
+#   me_runs.tex, me_if_population.tex, me_if_selection.tex
 # \input{} them into a document with
 #   \usepackage{booktabs, longtable, pdflscape, array}
+# me_if_population.tex is skipped, with a message, when population.RDS is
+# missing (run `Rscript me_infl_investigation.R` in model_evaluation/).
 #
 # Optional arguments, for a smoke run on mock metrics:
-#   Rscript me_tables.R [metrics.RDS] [table dir]
+#   Rscript me_tables.R [metrics.RDS] [table dir] [population.RDS]
 
 library(here)
 source(here("R", "figures.R"))
@@ -73,6 +84,12 @@ tab_path <- if (length(args) >= 2) {
   file.path(dirname(path), "results", "thesis_tables")
 }
 dir.create(tab_path, showWarnings = FALSE, recursive = TRUE)
+population_file <- if (length(args) >= 3) {
+  args[3]
+} else {
+  file.path(dirname(path), "results", "correlated", "model_evaluation",
+            "investigation", "population.RDS")
+}
 
 # display labels, as thesis_figures/model_eval.R's but in LaTeX (the tables
 # are written with escape = FALSE). The order of each vector is the row or
@@ -102,7 +119,15 @@ mcse_digits <- function(mcse) {
 
 # ---- data --------------------------------------------------------------------
 
-metrics <- me_read_metrics(metrics_file, SS_SCENARIO_LABELS)
+# the IF-selection table's extra columns: the phi-surrogate IF score in its
+# arm, and the MSE against the true mu1. Every other table ignores them.
+IF_SEL_ARM <- "cv_shared_xgb"
+IF_SEL_SCORES <- c(dr = "dr05", infl = "infl05", inflt = "inflt05")
+IF_SEL_COLS <- setNames(paste0(IF_SEL_SCORES, "_", IF_SEL_ARM),
+                        names(IF_SEL_SCORES))
+
+metrics <- me_read_metrics(metrics_file, SS_SCENARIO_LABELS,
+                           extra_cols = c(IF_SEL_COLS[["infl"]], "mu1_mse"))
 selection <- me_selection(metrics)
 candidates <- me_candidates(metrics)
 
@@ -414,5 +439,233 @@ tex <- me_proxy_table(
   tabcolsep = NULL
 )
 out_file <- file.path(tab_path, "me_runs.tex")
+writeLines(tex, out_file)
+message("wrote ", out_file)
+
+# ---- the IF score: population check ------------------------------------------
+
+# the constructed candidates of me_infl_investigation.R's investigate_scenario(),
+# in the order that breaks a tie in true PEHE
+POP_CANDIDATE_LABELS <- c(
+  truth = "$\\tau$",
+  half = "$\\bar\\tau + (\\tau - \\bar\\tau)/2$",
+  ate = "$\\bar\\tau$",
+  mu1 = "$\\mu_1$",
+  tau_plus_X2 = "$\\tau + X_2$"
+)
+
+# every column a loss. With the oracle nuisances the T-learner surrogate
+# mu1 - mu0 is the true tau, so infl_tau is the IF score with the T-learner
+# surrogate.
+pop_cols <- tibble::tribble(
+  ~stem,       ~header,
+  "true_pehe", "\\shortstack[r]{True\\\\PEHE}",
+  "dr",        "DR",
+  "infl_tau",  "\\shortstack[r]{IF,\\\\true $\\tau$}",
+  "infl_phi",  "\\shortstack[r]{IF,\\\\pseudo-outcome}",
+  "mu1_mse",   "\\shortstack[r]{MSE\\\\vs $\\mu_1$}"
+)
+POP_DIGITS <- 3
+
+if (file.exists(population_file)) {
+  population <- readRDS(population_file)
+  absent <- setdiff(c("n_pop", pop_cols$stem), names(population))
+  if (length(absent) > 0) {
+    stop(population_file, " has no ", paste(absent, collapse = ", "),
+         ". Rerun `Rscript me_infl_investigation.R` in model_evaluation/.",
+         call. = FALSE)
+  }
+
+  # ranked on the printed values, so candidates that differ only past the
+  # printed decimals (tau, its mean and the half-way candidate are the same
+  # vector in the null scenario, up to rounding) share a rank, the better one
+  pop <- population %>%
+    filter(as.character(scenario) %in% names(SS_SCENARIO_LABELS)) %>%
+    mutate(
+      scenario = label_factor(scenario, SS_SCENARIO_LABELS),
+      candidate = label_factor(candidate, POP_CANDIDATE_LABELS)
+    ) %>%
+    group_by(scenario) %>%
+    mutate(across(
+      all_of(pop_cols$stem),
+      ~ rank(round(.x, POP_DIGITS), ties.method = "min"),
+      .names = "rank_{.col}"
+    )) %>%
+    ungroup() %>%
+    arrange(scenario, rank_true_pehe, candidate)
+
+  pop_cells <- lapply(pop_cols$stem, function(s) {
+    paste0(fmt_mcse(pop[[s]], NA_real_, POP_DIGITS),
+           " (", pop[[paste0("rank_", s)]], ")")
+  })
+  names(pop_cells) <- pop_cols$stem
+
+  n_pop <- unique(pop$n_pop)
+  if (length(n_pop) > 1) {
+    stop("population.RDS mixes sample sizes: ", paste(n_pop, collapse = ", "),
+         call. = FALSE)
+  }
+  n_pop_text <- paste0("$N = ",
+                       formatC(n_pop, format = "d", big.mark = "{,}"), "$")
+
+  tex <- grouped_longtable(
+    bind_cols(tibble::tibble(candidate = as.character(pop$candidate)),
+              tibble::as_tibble(pop_cells)),
+    col_names = c("Candidate", pop_cols$header),
+    group = pop$scenario,
+    block = NULL,
+    align = c("l", rep("r", nrow(pop_cols))),
+    caption.short = "Model evaluation: the IF score with oracle nuisances",
+    caption = paste0(
+      "Model evaluation, the IF score with oracle nuisances: five constructed ",
+      "CATE predictions scored on one sample of ", n_pop_text, " from each ",
+      "scenario, with the true $\\mu_0$, $\\mu_1$ and $\\pi = 0.5$ as the ",
+      "nuisances, so a score's departure from true PEHE is the score's own ",
+      "and not nuisance error. Each column is a loss; in parentheses, its ",
+      "rank among the five within the scenario (1 = lowest, ties sharing the ",
+      "better rank), the rows in order of true PEHE. DR: DR risk, the MSE ",
+      "against the pseudo-outcome. IF, true $\\tau$: the influence-corrected ",
+      "PEHE with the T-learner surrogate, which with oracle nuisances is ",
+      "$\\mu_1 - \\mu_0 = \\tau$. IF, pseudo-outcome: the same with the ",
+      "pseudo-outcome as its surrogate. MSE vs $\\mu_1$: the candidate's mean ",
+      "squared distance from the true treated-arm mean. Candidates: the true ",
+      "CATE $\\tau$; the ATE $\\bar\\tau$; half-way between them; $\\mu_1$; ",
+      "and $\\tau + X_2$. Table~\\ref{tab:me_if_selection} is the same ",
+      "comparison on the simulated runs."
+    ),
+    label = "me_if_population",
+    landscape = FALSE,
+    font_size = 10,
+    tabcolsep = NULL
+  )
+  out_file <- file.path(tab_path, "me_if_population.tex")
+  writeLines(tex, out_file)
+  message("wrote ", out_file)
+} else {
+  message("skipped me_if_population.tex: no ", population_file,
+          " (run `Rscript me_infl_investigation.R` in model_evaluation/)")
+}
+
+# ---- the IF score: selection by surrogate ------------------------------------
+
+# per run, as me_selection() ranks: candidates with a finite score and truth,
+# regret against the best of them. The correlations are across the candidates
+# within the run; one is NA where a score ties across all of them.
+if_runs <- metrics %>%
+  pivot_longer(all_of(unname(IF_SEL_COLS)), names_to = "score",
+               values_to = "value") %>%
+  mutate(score = names(IF_SEL_COLS)[match(score, IF_SEL_COLS)]) %>%
+  filter(is.finite(value), is.finite(true_pehe)) %>%
+  group_by(scenario, n, run, score) %>%
+  filter(n() >= 2) %>%
+  summarise(
+    regret = true_pehe[which.min(value)] - min(true_pehe),
+    rho_pehe = suppressWarnings(cor(value, true_pehe, method = "spearman")),
+    rho_mu1 = suppressWarnings(cor(value, mu1_mse, method = "spearman",
+                                   use = "complete.obs")),
+    .groups = "drop"
+  )
+
+# the DR and T-learner IF regrets are cells of me_regret.tex, from
+# me_selection(); a disagreement means the two derivations have drifted
+shared <- if_runs %>%
+  filter(score %in% c("dr", "inflt")) %>%
+  inner_join(
+    selection %>%
+      filter(paste0(score_type, "_", fold_type, "_", pipeline) %in%
+               IF_SEL_COLS) %>%
+      transmute(scenario, n, run, score = score_family, sel_regret = regret),
+    by = c("scenario", "n", "run", "score")
+  )
+stopifnot(
+  "me_if_selection's DR/IF regrets disagree with me_selection()'s" =
+    nrow(shared) == sum(if_runs$score %in% c("dr", "inflt")) &&
+    isTRUE(all.equal(shared$regret, shared$sel_regret))
+)
+
+if_wide <- if_runs %>%
+  pivot_wider(id_cols = c(scenario, n, run), names_from = score,
+              values_from = c(regret, rho_pehe, rho_mu1)) %>%
+  full_join(
+    ref_runs %>%
+      filter(ref == "random") %>%
+      select(scenario, n, run, regret_random = regret),
+    by = c("scenario", "n", "run")
+  )
+
+if_summary <- summarise_metrics(
+  if_wide, c("scenario", "n"),
+  cols = c(dr = "regret_dr", infl = "regret_infl", inflt = "regret_inflt",
+           random = "regret_random", rho_pehe = "rho_pehe_inflt",
+           rho_mu1 = "rho_mu1_inflt"),
+  count_na = character()
+) %>%
+  arrange(scenario, n)
+
+if_regret_digits <- mcse_digits(unlist(
+  if_summary[paste0("mcse_", c("dr", "infl", "inflt", "random"))]
+))
+
+if_cols <- tibble::tribble(
+  ~stem,      ~header,                                       ~digits,
+  "dr",       "DR",                                          if_regret_digits,
+  "infl",     "\\shortstack[r]{IF,\\\\pseudo-outcome}",      if_regret_digits,
+  "inflt",    "\\shortstack[r]{IF,\\\\T-learner}",           if_regret_digits,
+  "random",   "\\shortstack[r]{Random\\\\pick}",             if_regret_digits,
+  "rho_pehe", "\\shortstack[r]{True\\\\PEHE}",               2,
+  "rho_mu1",  "\\shortstack[r]{MSE\\\\vs $\\mu_1$}",          2
+)
+
+if_cells <- lapply(seq_len(nrow(if_cols)), function(i) {
+  fmt_mcse(if_summary[[paste0("mean_", if_cols$stem[i])]],
+           if_summary[[paste0("mcse_", if_cols$stem[i])]],
+           if_cols$digits[i])
+})
+names(if_cells) <- if_cols$stem
+
+# a correlation missing from a run (a score tied across every candidate)
+# leaves that run out of its mean only, so say how many
+rho_na <- sum(is.na(if_wide$rho_pehe_inflt) | is.na(if_wide$rho_mu1_inflt))
+rho_na_text <- if (rho_na > 0) {
+  paste0(" The correlations leave out the ", rho_na, " run(s) in which the ",
+         "score tied across every candidate.")
+} else {
+  ""
+}
+
+tex <- grouped_longtable(
+  bind_cols(tibble::tibble(n = as.character(if_summary$n)),
+            tibble::as_tibble(if_cells)),
+  col_names = c("$n$", if_cols$header),
+  group = if_summary$scenario,
+  block = NULL,
+  # short, or the spanning header widens the two columns under it; the
+  # caption says whose correlation it is
+  header_above = c(" " = 1, "Mean regret" = 4, "Spearman corr. with" = 2),
+  align = c("l", rep("r", nrow(if_cols))),
+  caption.short = "Model evaluation: the IF score's surrogate",
+  caption = paste0(
+    "Model evaluation, the IF score's surrogate, with the scoring nuisance ",
+    "fit by XGBoost in the CV fold regime and the propensity fixed at the ",
+    "true 0.5. Mean regret (the true PEHE of the pick minus the lowest among ",
+    "the 9 candidates in the run) of selecting by DR risk, by the IF score ",
+    "with the pseudo-outcome as its surrogate, by the IF score with the ",
+    "T-learner $\\hat\\mu_1 - \\hat\\mu_0$ as its surrogate, and of a ",
+    "candidate drawn uniformly at random. Then the Spearman correlation, ",
+    "across the 9 candidates within a run, of the T-learner IF score with ",
+    "the candidates' true PEHE and with their MSE against the true ",
+    "treated-arm mean $\\mu_1$. Mean (Monte Carlo SE) over ",
+    runs_per_cell(if_runs, c("scenario", "n", "score")), " runs per cell.",
+    rho_na_text, " The DR and IF, T-learner columns are the CV/XGBoost cells ",
+    "of Table~\\ref{tab:me_regret}'s DR-$\\pi$-fixed and IF-$\\pi$-fixed ",
+    "rows. Table~\\ref{tab:me_if_population} is the same comparison with ",
+    "oracle nuisances."
+  ),
+  label = "me_if_selection",
+  landscape = FALSE,
+  font_size = 8,
+  tabcolsep = "3pt"
+)
+out_file <- file.path(tab_path, "me_if_selection.tex")
 writeLines(tex, out_file)
 message("wrote ", out_file)

@@ -11,7 +11,9 @@
 # p0/p1 and pi is the true 0.5, so any gap between a score and true_pehe is
 # the score's own bias, not nuisance error. N_BIG is large enough that Monte
 # Carlo noise is negligible; bW is calibrated at CALIB_N, a study n, so the
-# true ATE is the one the study sees.
+# true ATE is the one the study sees. With the oracle nuisances, infl_tau is
+# the IF score with the T-learner surrogate (mu1 - mu0 = tau). population.RDS
+# is also thesis_tables/me_tables.R's me_if_population table.
 #
 # sims: the same scores on the completed replicates, from the collected
 # <prefix>_all.RDS - no refitting, the scores only need each candidate's saved
@@ -135,7 +137,11 @@ investigate_scenario <- function(scenario) {
     tibble::tibble(
       scenario = scenario,
       candidate = nm,
+      n_pop = N_BIG,
       true_pehe = mean((th - tau)^2),
+      # what the IF score tracks at pi = 0.5, up to a constant (me_metrics.R's
+      # me_per_model(), mu1_mse)
+      mu1_mse = mean((th - gen$truth$p1)^2),
       dr = calc_dr_risk(th, phi),
       infl_tau = calc_infl_score(th, tau, PI_TRUE, Y, W),
       infl_phi = calc_infl_score(th, phi, PI_TRUE, Y, W),

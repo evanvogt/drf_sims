@@ -45,12 +45,16 @@ ME_SCORE_PATTERN <- paste0(
 #' @param metrics_file path to me_strat_metrics.RDS
 #' @param scenario_labels named by scenario number, in display order; other
 #'   scenarios are dropped
-#' @return one row per (scenario, n, run, model): true_pehe and the
-#'   ME_SCORE_COLS, with scenario and n as factors in display order
-me_read_metrics <- function(metrics_file, scenario_labels) {
+#' @param extra_cols further metrics columns to keep, e.g. infl05_* or mu1_mse.
+#'   me_selection() leaves them out of the ranking
+#' @return one row per (scenario, n, run, model): true_pehe, the
+#'   ME_SCORE_COLS and extra_cols, with scenario and n as factors in display
+#'   order
+me_read_metrics <- function(metrics_file, scenario_labels,
+                            extra_cols = character()) {
   metrics <- readRDS(metrics_file)
 
-  absent <- setdiff(ME_SCORE_COLS, names(metrics))
+  absent <- setdiff(c(ME_SCORE_COLS, extra_cols), names(metrics))
   if (length(absent) > 0) {
     stop(metrics_file, " has no ", paste(absent, collapse = ", "),
          ". Is it the strategies tree (Rscript me_metrics.R strategies), ",
@@ -60,7 +64,8 @@ me_read_metrics <- function(metrics_file, scenario_labels) {
 
   metrics %>%
     filter(scenario %in% names(scenario_labels)) %>%
-    select(all_of(ME_KEY_COLS), true_pehe, all_of(ME_SCORE_COLS)) %>%
+    select(all_of(ME_KEY_COLS), true_pehe, all_of(ME_SCORE_COLS),
+           all_of(extra_cols)) %>%
     mutate(
       scenario = label_factor(scenario, scenario_labels),
       n = factor(n, levels = sort(unique(n)))
