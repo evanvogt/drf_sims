@@ -36,6 +36,12 @@
 # its trimming (DEVLOG bug S) no proxy should be unranked, so grey means
 # something new has failed.
 #
+# The candidate-ranks figure (appendix) is the same distribution for each of
+# the 9 candidates' own true rank, on the same colours: its rank-1 share is how
+# often that candidate is the true best, and the rest of the bar is where it
+# sits otherwise. Same denominator, so grey is a run without that candidate's
+# true PEHE.
+#
 # The design-axis figure marginalises regret over the other axes: each level
 # (DR vs IF, estimated vs fixed propensity, fold regime, pipeline) is averaged
 # within run first, then over runs, so its MCSE counts runs, not runs x the
@@ -46,7 +52,8 @@
 # script carries only the paths and this study's filters.
 #
 # Writes to ../results/thesis_figures/model_eval/:
-#   me_top1.png, me_regret.png, me_axis_regret.png, me_rankings.png
+#   me_top1.png, me_regret.png, me_axis_regret.png, me_rankings.png,
+#   me_candidate_ranks.png
 #
 # Optional arguments, for a smoke run on mock metrics:
 #   Rscript model_eval.R [metrics.RDS] [figure dir]
@@ -276,3 +283,45 @@ rank_fig <- ggplot(rank_dist, aes(x = proxy, y = prop, fill = rank)) +
   theme(legend.position = "bottom",
         axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 save_fig("me_rankings.png", fig_path, height = FIG_HEIGHT, plot = rank_fig)
+
+# ---- true rank of each candidate ---------------------------------------------
+
+# me_config.R's CANDIDATE_MODELS, in display order. Not sourced from there:
+# me_config.R sets up the study run.
+CANDIDATE_LEVELS <- c("rf1", "rf2", "rf3", "net1", "net2", "net3",
+                      "SL1", "SL2", "SL3")
+
+cand_ranked <- me_candidates(metrics) %>%
+  mutate(model = factor(model, levels = CANDIDATE_LEVELS),
+         rank = as.character(pick_rank)) %>%
+  count(scenario, n, model, rank, name = "runs")
+
+# over every candidate, as not_ranked above, with the same total_runs
+cand_not_ranked <- tidyr::expand_grid(
+  total_runs, model = factor(CANDIDATE_LEVELS, levels = CANDIDATE_LEVELS)
+) %>%
+  left_join(count(cand_ranked, scenario, n, model, wt = runs, name = "ranked"),
+            by = c("scenario", "n", "model")) %>%
+  transmute(scenario, n, model, rank = NOT_RANKED,
+            runs = total - coalesce(ranked, 0L))
+
+cand_dist <- bind_rows(cand_ranked, cand_not_ranked) %>%
+  filter(runs > 0) %>%
+  left_join(total_runs, by = c("scenario", "n")) %>%
+  mutate(
+    prop = runs / total,
+    rank = factor(rank, levels = c(rank_names, NOT_RANKED)),
+    n = n_label(n)
+  )
+
+cand_fig <- ggplot(cand_dist, aes(x = model, y = prop, fill = rank)) +
+  geom_col(show.legend = TRUE) +
+  facet_grid(rows = vars(n), cols = vars(scenario)) +
+  scale_fill_manual(values = rank_colours, drop = FALSE) +
+  drf_theme() +
+  labs(x = "Candidate", y = "Proportion of runs", fill = "True rank") +
+  guides(fill = guide_legend(nrow = 1)) +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+save_fig("me_candidate_ranks.png", fig_path, height = FIG_HEIGHT,
+         plot = cand_fig)
