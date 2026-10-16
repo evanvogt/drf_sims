@@ -16,7 +16,7 @@ format:
 <!--
 Reads one run's res_sim_<run>.RDS from each scenario x n cell (bin_corr_analysis.R
 output), not bin_corr_all.RDS, plus bin_corr_metrics.RDS if it is there. From
-sample_size/correlated/binary/:
+sample_size/binary/:
   quarto render bin_corr_pointwise.qmd
 Another run, rho or results folder:
   quarto render bin_corr_pointwise.qmd -P run:7 -P rho:0 -P res_path:<dir>
@@ -34,7 +34,7 @@ library(purrr)
 library(ggplot2)
 library(here)
 library(knitr)
-source(here("sample_size", "correlated", "binary", "bin_corr_config.R"))
+source(here("sample_size", "binary", "bin_corr_config.R"))
 source(here("R", "metrics.R"))
 source(here("R", "figures.R"))
 ```

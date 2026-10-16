@@ -5,6 +5,6 @@
 # points jobscripts/bin_snr_rerun.sh at it.
 
 library(here)
-source(here("sample_size", "correlated", "binary", "snr", "bin_snr_config.R"))
+source(here("sample_size", "snr", "bin_snr_config.R"))
 
 check_failed(study)

@@ -1,7 +1,7 @@
 ##########
 # title: metrics - correlated binary SNR check
 ##########
-# As ../bin_corr_metrics.R (cate_metrics() + hte_test_metrics(), with the
+# As ../binary/bin_corr_metrics.R (cate_metrics() + hte_test_metrics(), with the
 # T-learner derived from dr_random_forest's stage 1), for the arms in
 # SNR_MODELS. Then the comparison the study exists for, as
 # competing_risk/snr/snr_metrics.R: each run's RMSE of every other arm divided
@@ -27,7 +27,7 @@
 #   Rscript bin_snr_metrics.R [results dir]   # default: study$res_path
 
 library(here)
-source(here("sample_size", "correlated", "binary", "snr", "bin_snr_config.R"))
+source(here("sample_size", "snr", "bin_snr_config.R"))
 source(here("R", "dgm_scenarios.R"))
 source(here("R", "metrics.R"))
 source(here("R", "cate_models.R"))

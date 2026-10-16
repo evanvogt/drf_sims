@@ -6,7 +6,7 @@
 # row number of `grid`, so `grid` must never be filtered or reordered.
 #
 # confidence_intervals/optimal_sf/'s design (scenarios 1-4, n in {500, 1000},
-# 100 runs, no CI_sf axis - that is what each run picks) on correlated/'s
+# 100 runs, no CI_sf axis - that is what each run picks) on the correlated-covariate
 # copula, at every rho in CORR_RHOS. rho varies slowest: rows 1-800 are
 # rho = 0, rows 801-1600 rho = 0.5, and the same run at the two rhos is a
 # paired dataset (sample_size/README.md).
@@ -30,6 +30,6 @@ study <- study_config(
   path_cols   = c("rho", "scenario", "n"),
   path_prefix = c(rho = "rho_", scenario = "scenario_"),
   n_sims      = 100,
-  failed_file = here("sample_size", "correlated", "confidence_intervals",
+  failed_file = here("sample_size", "confidence_intervals",
                      "optimal_sf", "jobscripts", "failed_cts_ids.txt")
 )

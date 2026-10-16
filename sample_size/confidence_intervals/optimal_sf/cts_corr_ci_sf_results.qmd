@@ -26,7 +26,7 @@ library(knitr)
 
 ## Does the data-driven `CI_sf` still deliver its nominal coverage under correlation?
 
-`confidence_intervals/optimal_sf/`'s calibration, run on `correlated/continuous/`'s
+`confidence_intervals/optimal_sf/`'s calibration, run on `sample_size/continuous/`'s
 scenarios 1–4. For each run, `find_optimal_sf()` (`R/bootstrap_ci.R`) refits
 `dr_random_forest` on pseudo-outcomes resampled around the run's own estimate τ̂.
 At each candidate `CI_sf` it records how often the half-sample bootstrap band covers

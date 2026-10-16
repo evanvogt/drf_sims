@@ -6,6 +6,6 @@
 # Writes array indices of the missing runs to jobscripts/failed_ids.txt.
 
 library(here)
-source(here("sample_size/correlated/binary/bin_corr_config.R"))
+source(here("sample_size/binary/bin_corr_config.R"))
 
 check_failed(study)

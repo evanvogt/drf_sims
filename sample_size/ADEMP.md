@@ -4,15 +4,15 @@ Five studies on one data-generating mechanism: ten treatment-effect scenarios
 (1–4 in the main text, 5–10 in the appendix), with the covariates drawn from a
 Gaussian copula at latent correlation ρ ∈ {0, 0.5}. ρ = 0.5 is the primary
 setting; ρ = 0 is the independent-covariate comparison, paired run for run.
-The SNR check in `correlated/binary/snr/` has its own README.
+The SNR check in `snr/` has its own README.
 
 | study | folder | prefix | question |
 |---|---|---|---|
-| continuous | `correlated/continuous/` | `cts_corr_*` | CATE estimation and HTE tests, continuous outcome |
-| binary | `correlated/binary/` | `bin_corr_*` | the same, binary outcome (risk-difference scale) |
-| CI, continuous | `correlated/confidence_intervals/continuous/` | `cts_corr_ci_*` | bootstrap simultaneous bands for the CATE across `CI_sf` |
-| CI, binary | `correlated/confidence_intervals/binary/` | `bin_corr_ci_*` | the same, binary outcome |
-| optimal_sf | `correlated/confidence_intervals/optimal_sf/` | `cts_corr_ci_sf_*` | data-driven choice of `CI_sf`, scored against the true CATE; continuous only |
+| continuous | `continuous/` | `cts_corr_*` | CATE estimation and HTE tests, continuous outcome |
+| binary | `binary/` | `bin_corr_*` | the same, binary outcome (risk-difference scale) |
+| CI, continuous | `confidence_intervals/continuous/` | `cts_corr_ci_*` | bootstrap simultaneous bands for the CATE across `CI_sf` |
+| CI, binary | `confidence_intervals/binary/` | `bin_corr_ci_*` | the same, binary outcome |
+| optimal_sf | `confidence_intervals/optimal_sf/` | `cts_corr_ci_sf_*` | data-driven choice of `CI_sf`, scored against the true CATE; continuous only |
 
 Folders are relative to `sample_size/`.
 
@@ -253,9 +253,9 @@ The jobscripts split at the PBS array cap (1–10000, 10001–16000), not at the
 
 ## Methods
 
-The cts / bin analysis scripts source `correlated/continuous/cts_corr_models.R`
-and `correlated/binary/bin_corr_models.R`, and the CI and optimal_sf scripts
-source `correlated/confidence_intervals/{continuous,binary}/*_corr_ci_models.R`.
+The cts / bin analysis scripts source `continuous/cts_corr_models.R`
+and `binary/bin_corr_models.R`, and the CI and optimal_sf scripts
+source `confidence_intervals/{continuous,binary}/*_corr_ci_models.R`.
 Model code is in `R/cate_models.R` (`cate_methods()`), and SuperLearner set-up
 is in `R/sl_library.R`.
 
@@ -545,7 +545,7 @@ calibration misses, and whether that gap grows at ρ = 0.5.
 
 | report | contents |
 |---|---|
-| `correlated/corr_results.qmd` | both outcomes: levels by ρ, paired differences, HTE-test rejection rates, ATE bias relative to `dr_oracle` |
-| `correlated/{continuous,binary}/*_corr_results.qmd` | one outcome each: every metric by ρ, paired differences, the true-CATE tests, NA tables, and a headline table |
-| `correlated/confidence_intervals/<outcome>/*_corr_ci_results.qmd` | coverage and length by ρ across `CI_sf`, paired ρ differences, interval types, the best `CI_sf` by ρ, the optimal_sf pick and its true-τ coverage (continuous), and a headline table |
-| `correlated/confidence_intervals/optimal_sf/cts_corr_ci_sf_results.qmd` | the optimal_sf study on its own: calibration curves, the pick by ρ, plug-in against true-τ coverage |
+| `corr_results.qmd` | both outcomes: levels by ρ, paired differences, HTE-test rejection rates, ATE bias relative to `dr_oracle` |
+| `{continuous,binary}/*_corr_results.qmd` | one outcome each: every metric by ρ, paired differences, the true-CATE tests, NA tables, and a headline table |
+| `confidence_intervals/<outcome>/*_corr_ci_results.qmd` | coverage and length by ρ across `CI_sf`, paired ρ differences, interval types, the best `CI_sf` by ρ, the optimal_sf pick and its true-τ coverage (continuous), and a headline table |
+| `confidence_intervals/optimal_sf/cts_corr_ci_sf_results.qmd` | the optimal_sf study on its own: calibration curves, the pick by ρ, plug-in against true-τ coverage |

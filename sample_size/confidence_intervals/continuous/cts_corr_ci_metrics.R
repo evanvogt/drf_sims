@@ -6,7 +6,7 @@
 # bias-eliminated grid reference is averaged within each rho too.
 
 library(here)
-source(here("sample_size/correlated/confidence_intervals/continuous/cts_corr_ci_config.R"))
+source(here("sample_size/confidence_intervals/continuous/cts_corr_ci_config.R"))
 source(here("R", "metrics.R"))
 
 all_results_df <- readRDS(file.path(study$res_path, "cts_corr_ci_all.RDS"))

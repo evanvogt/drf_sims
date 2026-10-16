@@ -13,7 +13,7 @@
 # None of these depend on n: bW only shifts tau. The true ATE, bW and power at
 # each n are R/calibration_report.R's.
 #
-# Needs no simulation output. Writes nothing. Run from sample_size/correlated/:
+# Needs no simulation output. Writes nothing. Run from sample_size/:
 #   Rscript corr_truth_summary.R
 
 suppressPackageStartupMessages(library(here))

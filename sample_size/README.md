@@ -13,12 +13,12 @@ comparison, paired run for run with ρ = 0.5. The full design is in
 
 | study | folder | prefix | question | grid |
 |---|---|---|---|---|
-| continuous | `correlated/continuous/` | `cts_corr` | CATE estimation and HTE tests | scenarios 1–10 × n 100, 250, 500, 1000 × ρ; 500 runs for scenarios 1–4, 100 for 5–10 (20,800 rows) |
-| binary | `correlated/binary/` | `bin_corr` | the same, binary outcome (risk-difference scale) | the same |
-| CI, continuous | `correlated/confidence_intervals/continuous/` | `cts_corr_ci` | coverage of half-sample bootstrap bands across `CI_sf` | scenarios 1–4 × n 500, 1000 × ρ × 10 `CI_sf`; 100 runs (16,000 rows) |
-| CI, binary | `correlated/confidence_intervals/binary/` | `bin_corr_ci` | the same, binary outcome | the same |
-| optimal_sf | `correlated/confidence_intervals/optimal_sf/` | `cts_corr_ci_sf` | a data-driven choice of `CI_sf`, continuous outcome only | scenarios 1–4 × n 500, 1000 × ρ; 100 runs (1,600 rows) |
-| SNR check | `correlated/binary/snr/` | `bin_snr` | does the DR-learner catch the causal forest with more signal? | see its README |
+| continuous | `continuous/` | `cts_corr` | CATE estimation and HTE tests | scenarios 1–10 × n 100, 250, 500, 1000 × ρ; 500 runs for scenarios 1–4, 100 for 5–10 (20,800 rows) |
+| binary | `binary/` | `bin_corr` | the same, binary outcome (risk-difference scale) | the same |
+| CI, continuous | `confidence_intervals/continuous/` | `cts_corr_ci` | coverage of half-sample bootstrap bands across `CI_sf` | scenarios 1–4 × n 500, 1000 × ρ × 10 `CI_sf`; 100 runs (16,000 rows) |
+| CI, binary | `confidence_intervals/binary/` | `bin_corr_ci` | the same, binary outcome | the same |
+| optimal_sf | `confidence_intervals/optimal_sf/` | `cts_corr_ci_sf` | a data-driven choice of `CI_sf`, continuous outcome only | scenarios 1–4 × n 500, 1000 × ρ; 100 runs (1,600 rows) |
+| SNR check | `snr/` | `bin_snr` | does the DR-learner catch the causal forest with more signal? | see its README |
 
 Scenarios 1–4 (null, simple, complex, non-linear) are the main text's; 5–10 are
 the appendix's. Results are written beside the repository, under
@@ -283,7 +283,7 @@ continuous and binary studies' `*_dgms.R`, and optimal_sf the CI studies'
 | `<prefix>_collect.R`, `<prefix>_metrics.R` | write `<prefix>_all.RDS` and `<prefix>_metrics.RDS` (and, for continuous and binary, `<prefix>_true_cate_tests.RDS`), all with a `rho` column |
 | `*_results.qmd` | the per-study report |
 
-In `correlated/`:
+In `sample_size/` itself:
 
 | file | |
 |---|---|
@@ -299,7 +299,7 @@ submit from the study's `jobscripts/` folder, because the scripts
 `cd "${PBS_O_WORKDIR}/.."`:
 
 ```bash
-cd sample_size/correlated/continuous/jobscripts
+cd sample_size/continuous/jobscripts
 qsub cts_corr_1.sh            # rows 1-10000 (rho = 0 is 1-8000)
 qsub cts_corr_2.sh            # rows 10001-16000, all rho = 0.5
 qsub cts_corr_extra.sh        # rows 16001-20800, scenarios 5-10

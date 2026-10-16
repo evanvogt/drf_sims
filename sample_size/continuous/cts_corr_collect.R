@@ -6,7 +6,7 @@
 # the metrics script unnests.
 
 library(here)
-source(here("sample_size/correlated/continuous/cts_corr_config.R"))
+source(here("sample_size/continuous/cts_corr_config.R"))
 
 workers <- 2
 

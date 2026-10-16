@@ -13,10 +13,10 @@ library(SuperLearner)
 library(here)
 
 # functions
-source(here("sample_size", "correlated", "binary", "bin_corr_dgms.R"))
-source(here("sample_size", "correlated", "binary", "bin_corr_models.R"))
+source(here("sample_size", "binary", "bin_corr_dgms.R"))
+source(here("sample_size", "binary", "bin_corr_models.R"))
 source(here("R", "utils.R"))
-source(here("sample_size", "correlated", "binary", "bin_corr_config.R"))
+source(here("sample_size", "binary", "bin_corr_config.R"))
 
 # simulation parameters
 args <- as.numeric(commandArgs(trailingOnly = T))

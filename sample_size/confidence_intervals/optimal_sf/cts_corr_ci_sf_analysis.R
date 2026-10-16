@@ -15,11 +15,11 @@ path <- here()
 
 # functions
 source(here("R", "utils.R"))
-source(here("sample_size", "correlated", "continuous", "cts_corr_dgms.R"))
-source(here("sample_size", "correlated", "confidence_intervals", "continuous",
+source(here("sample_size", "continuous", "cts_corr_dgms.R"))
+source(here("sample_size", "confidence_intervals", "continuous",
             "cts_corr_ci_models.R"))
 source(here("R", "bootstrap_ci.R"))
-source(here("sample_size", "correlated", "confidence_intervals", "optimal_sf",
+source(here("sample_size", "confidence_intervals", "optimal_sf",
             "cts_corr_ci_sf_config.R"))
 
 # simulation parameters

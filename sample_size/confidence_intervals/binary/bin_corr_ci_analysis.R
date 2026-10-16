@@ -15,10 +15,10 @@ path <- here()
 
 # functions
 source(here("R", "utils.R"))
-source(here("sample_size", "correlated", "binary", "bin_corr_dgms.R"))
-source(here("sample_size", "correlated", "confidence_intervals", "binary",
+source(here("sample_size", "binary", "bin_corr_dgms.R"))
+source(here("sample_size", "confidence_intervals", "binary",
             "bin_corr_ci_models.R"))
-source(here("sample_size", "correlated", "confidence_intervals", "binary",
+source(here("sample_size", "confidence_intervals", "binary",
             "bin_corr_ci_config.R"))
 
 # simulation parameters

@@ -12,7 +12,7 @@
 # grid_be_reference() run unchanged.
 
 library(here)
-source(here("sample_size/correlated/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R"))
+source(here("sample_size/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R"))
 source(here("R", "metrics.R"))
 
 SF_MODEL <- "dr_random_forest"

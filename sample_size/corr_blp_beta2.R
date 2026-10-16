@@ -21,7 +21,7 @@
 # every correlated run is later than that.
 #
 # Writes <res_path>/<prefix>_blp_beta2.RDS for each outcome. Run from
-# sample_size/correlated/:
+# sample_size/:
 #   Rscript corr_blp_beta2.R                 # both outcomes
 #   Rscript corr_blp_beta2.R continuous      # or just one
 
@@ -57,7 +57,7 @@ beta2_row <- function(blp) {
 }
 
 for (outcome in outcomes) {
-  source(here("sample_size", "correlated", config_file[[outcome]]))  # -> study
+  source(here("sample_size", config_file[[outcome]]))  # -> study
 
   all_results_df <- readRDS(file.path(study$res_path,
                                       paste0(study$prefix, "_all.RDS")))

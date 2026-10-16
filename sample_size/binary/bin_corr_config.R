@@ -46,6 +46,6 @@ study <- study_config(
   path_cols   = c("rho", "scenario", "n"),
   path_prefix = c(rho = "rho_", scenario = "scenario_"),
   n_sims      = 500,
-  failed_file = here("sample_size", "correlated", "binary", "jobscripts",
+  failed_file = here("sample_size", "binary", "jobscripts",
                      "failed_ids.txt")
 )

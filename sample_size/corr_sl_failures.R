@@ -37,7 +37,7 @@
 #   learners   per (rho, scenario, n, model, learner): fits dropped, runs affected
 #   reasons    per (model, learner, reason): fits, runs, and where it happened
 # and prints the cells, learners and reasons tables. Run from
-# sample_size/correlated/:
+# sample_size/:
 #   Rscript corr_sl_failures.R                 # both outcomes
 #   Rscript corr_sl_failures.R binary          # or just one
 
@@ -190,7 +190,7 @@ summarise_sl <- function(study, all_results_df) {
 options(width = 200, dplyr.summarise.inform = FALSE)
 
 for (outcome in outcomes) {
-  source(here("sample_size", "correlated", config_file[[outcome]]))  # -> study
+  source(here("sample_size", config_file[[outcome]]))  # -> study
 
   collected <- file.path(study$res_path, paste0(study$prefix, "_all.RDS"))
   all_results_df <- if (file.exists(collected)) {

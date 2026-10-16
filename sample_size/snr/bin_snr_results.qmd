@@ -14,7 +14,7 @@ format:
 
 <!--
 Reads bin_snr_population.RDS, bin_snr_metrics.RDS and bin_snr_ratios.RDS
-(bin_snr_metrics.R). From sample_size/correlated/binary/snr/:
+(bin_snr_metrics.R). From sample_size/snr/:
   quarto render bin_snr_results.qmd
 The params point it at another results / figure folder, e.g. for a mock run:
   quarto render bin_snr_results.qmd -P res_path:<dir> -P fig_dir:<dir>
@@ -38,7 +38,7 @@ source(here("R", "figures.R"))
 
 ## Does the DR-learner close the gap on the causal forest with more signal?
 
-In the main correlated binary study (`../`, ρ = 0.5) the DR-learners lose to
+In the main correlated binary study (`../binary/`, ρ = 0.5) the DR-learners lose to
 the causal forest, and SD(τ)/SD(noise) is at most 0.2 in scenarios 1–4
 (`results_processing/thesis_figures/rel_eff_snr.R`). The Bernoulli noise is
 about 0.46 whatever the DGM, so SNR can only rise through SD(τ). This check

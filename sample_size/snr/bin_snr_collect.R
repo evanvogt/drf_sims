@@ -5,7 +5,7 @@
 # the shape bin_snr_metrics.R unnests.
 
 library(here)
-source(here("sample_size", "correlated", "binary", "snr", "bin_snr_config.R"))
+source(here("sample_size", "snr", "bin_snr_config.R"))
 
 workers <- 2
 

@@ -6,7 +6,7 @@
 # the metrics script unnests.
 
 library(here)
-source(here("sample_size/correlated/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R"))
+source(here("sample_size/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R"))
 
 workers <- 2
 

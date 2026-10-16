@@ -27,7 +27,7 @@ library(knitr)
 ## Do the bootstrap bands still cover when the covariates are correlated?
 
 `confidence_intervals/continuous/`'s design, with the half-sample bootstrap's
-`CI_sf` sweep and the same estimators, run on `correlated/continuous/`'s
+`CI_sf` sweep and the same estimators, run on `sample_size/continuous/`'s
 scenarios 1–4. X1–X5 and X01–X03 are drawn from a Gaussian copula with
 exchangeable latent correlation ρ. τ(x) and m0(x) are the parent studies'
 functions, so only the covariates' joint distribution changes. Full design in

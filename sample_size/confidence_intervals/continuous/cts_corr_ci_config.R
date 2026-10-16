@@ -7,7 +7,7 @@
 # construction.
 #
 # confidence_intervals/continuous/'s design (the full CI_sf sweep, n in
-# {500, 1000}, 100 runs) on correlated/'s scenarios 1-4, at every rho in
+# {500, 1000}, 100 runs) on the correlated-covariate scenarios 1-4, at every rho in
 # CORR_RHOS (R/dgm_scenarios.R). rho varies slowest, so rows 1-8000 are rho = 0
 # and rows 8001-16000 rho = 0.5. The PBS array cap is 10,000, so the jobscripts
 # split at 10000/10001 instead (cts_corr_ci_1.sh, cts_corr_ci_2.sh). A run is
@@ -34,6 +34,6 @@ study <- study_config(
   path_cols   = c("rho", "scenario", "n", "CI_sf"),
   path_prefix = c(rho = "rho_", scenario = "scenario_"),
   n_sims      = 100,
-  failed_file = here("sample_size", "correlated", "confidence_intervals",
+  failed_file = here("sample_size", "confidence_intervals",
                      "continuous", "jobscripts", "failed_ids.txt")
 )

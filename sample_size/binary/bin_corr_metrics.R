@@ -5,7 +5,7 @@
 # metrics row carries it as a key column alongside scenario and n.
 
 library(here)
-source(here("sample_size/correlated/binary/bin_corr_config.R"))
+source(here("sample_size/binary/bin_corr_config.R"))
 source(here("R", "metrics.R"))
 source(here("R", "cate_models.R"))
 

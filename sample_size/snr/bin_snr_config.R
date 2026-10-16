@@ -52,6 +52,6 @@ study <- study_config(
   path_cols   = c("scenario", "n", "hte_mult"),
   path_prefix = c(scenario = "scenario_", hte_mult = "hte_"),
   n_sims      = length(SNR_RUNS),
-  failed_file = here("sample_size", "correlated", "binary", "snr", "jobscripts",
+  failed_file = here("sample_size", "snr", "jobscripts",
                      "failed_ids.txt")
 )

@@ -14,9 +14,9 @@ library(here)
 
 # functions
 source(here("R", "utils.R"))
-source(here("sample_size", "correlated", "continuous", "cts_corr_dgms.R"))
-source(here("sample_size", "correlated", "continuous", "cts_corr_models.R"))
-source(here("sample_size", "correlated", "continuous", "cts_corr_config.R"))
+source(here("sample_size", "continuous", "cts_corr_dgms.R"))
+source(here("sample_size", "continuous", "cts_corr_models.R"))
+source(here("sample_size", "continuous", "cts_corr_config.R"))
 
 
 # simulation parameters

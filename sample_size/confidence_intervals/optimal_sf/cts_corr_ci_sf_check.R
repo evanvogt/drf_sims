@@ -6,6 +6,6 @@
 # Writes array indices of the missing runs to jobscripts/failed_cts_ids.txt.
 
 library(here)
-source(here("sample_size/correlated/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R"))
+source(here("sample_size/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R"))
 
 check_failed(study)

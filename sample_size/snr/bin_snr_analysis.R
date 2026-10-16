@@ -1,7 +1,7 @@
 ###############
 # correlated binary SNR check - DR-learners vs causal forest
 ###############
-# ../bin_corr_analysis.R on the binary_snr set (rho = 0.5), with the effect
+# ../binary/bin_corr_analysis.R on the binary_snr set (rho = 0.5), with the effect
 # modifiers scaled by hte_mult, bW calibrated at SNR_CALIB_N and only the arms
 # in SNR_MODELS (bin_snr_config.R).
 #   Rscript bin_snr_analysis.R <i> [grf_threads]
@@ -16,7 +16,7 @@ library(here)
 source(here("R", "dgm_scenarios.R"))
 source(here("R", "cate_models.R"))
 source(here("R", "utils.R"))
-source(here("sample_size", "correlated", "binary", "snr", "bin_snr_config.R"))
+source(here("sample_size", "snr", "bin_snr_config.R"))
 
 # simulation parameters
 args <- as.numeric(commandArgs(trailingOnly = T))

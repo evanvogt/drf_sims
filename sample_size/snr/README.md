@@ -3,7 +3,7 @@
 Does the DR-learner close the gap on the causal forest when there is more
 signal? `results_processing/thesis_figures/rel_eff_snr.R` plots the binary
 DR-learners against the causal forest by SD(τ)/SD(noise). In the main study
-(`../`, ρ = 0.5) that ratio is at most 0.2 in scenarios 1–4. The binary noise
+(`../binary/`, ρ = 0.5) that ratio is at most 0.2 in scenarios 1–4. The binary noise
 is Bernoulli, about 0.46 whatever the DGM, so SNR can only rise through
 SD(τ). This check moves away from the main study in two directions, one at a
 time, as `competing_risk/snr/` does: a larger HTE (higher SNR) and a larger n
@@ -11,7 +11,7 @@ time, as `competing_risk/snr/` does: a larger HTE (higher SNR) and a larger n
 
 | | |
 |---|---|
-| scenarios | 1–4 (null, simple, complex, non-linear), from `../` |
+| scenarios | 1–4 (null, simple, complex, non-linear), from `../binary/` |
 | set | `binary_snr`: `binary_corr_0.5` plus its own risk thresholds (below) |
 | ρ | 0.5 (the main study's primary) |
 | bW | calibrated at n = 500 in every cell, so the ATE is −0.118 throughout |
@@ -71,7 +71,7 @@ scenario's ×1 SNR. Read them against n.
   uniforms. The n cells are not paired.
 - **The baseline equals the main study.** The SuperLearner arm runs last in
   `cate_methods()`, so leaving it out does not move the RNG stream of the arms
-  before it. Index 101 reproduces `../bin_corr_analysis.R 8010` (scenario 2,
+  before it. Index 101 reproduces `../binary/bin_corr_analysis.R 8010` (scenario 2,
   n = 500, run 1, ρ = 0.5) bit for bit: the data, the truth,
   `nuisances_rf` and all four arms' τ. This was checked locally on
   2026-10-15.
@@ -97,7 +97,7 @@ against SNR comes as a by-product.
 
 ## Running it
 
-On the cluster, from `sample_size/correlated/binary/snr/jobscripts/` (run
+On the cluster, from `sample_size/snr/jobscripts/` (run
 `Rscript make_log_dirs.R` from the repo root first):
 
 ```bash
@@ -109,7 +109,7 @@ qsub bin_snr_collect.sh
 qsub bin_snr_metrics.sh
 ```
 
-Local smoke test, from `sample_size/correlated/binary/snr/`:
+Local smoke test, from `sample_size/snr/`:
 `Rscript bin_snr_analysis.R 101` (scenario 2 ×1, the main DGM) or
 `Rscript bin_snr_analysis.R 1201` (scenario 4 ×3, the most clamping). The
 arguments are `<i> [grf_threads]`. There is no `workers` argument, because
