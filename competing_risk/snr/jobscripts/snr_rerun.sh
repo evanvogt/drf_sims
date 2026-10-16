@@ -2,8 +2,8 @@
 # Sized for the largest cell (n = 4000, as snr_3.sh), since a rerun list can
 # mix every n. snr_check.R rewrites -J to match failed_ids.txt.
 #PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=64gb
-#PBS -J 1-1
+#PBS -l select=1:ncpus=3:ompthreads=2:mem=64gb
+#PBS -J 1-208%100
 #PBS -N snr_rerun
 #PBS -o logs_rerun/
 #PBS -j oe
