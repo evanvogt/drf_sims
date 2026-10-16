@@ -1,0 +1,519 @@
+---
+title: "Correlated continuous optimal_sf study: results"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 8)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(paletteer)
+library(here)
+library(purrr)
+library(knitr)
+```
+
+## Does the data-driven `CI_sf` still deliver its nominal coverage under correlation?
+
+`confidence_intervals/optimal_sf/`'s calibration, run on `correlated/continuous/`'s
+scenarios 1–4. For each run, `find_optimal_sf()` (`R/bootstrap_ci.R`) refits
+`dr_random_forest` on pseudo-outcomes resampled around the run's own estimate τ̂.
+At each candidate `CI_sf` it records how often the half-sample bootstrap band covers
+τ̂, picks the ratio closest to 90%, then builds the final band at that ratio. Design
+in `../README.md`, grid in `cts_corr_ci_sf_config.R`.
+
+| | |
+|---|---|
+| scenarios | 1–4 |
+| ρ | 0, 0.5 |
+| n | 500, 1000 |
+| candidate `CI_sf` | 0.05 to 0.50 in steps of 0.05 |
+| calibration | 50 resamples × `CI_boot = 100` per candidate |
+| final band | `CI_boot = 200`, α = 0.10 |
+| runs | 100 |
+| array | **1,600 jobs** |
+
+| Scenario | CATE structure |
+|---|---|
+| 1: No HTE | $b_0 + b_1 X_1 + b_2 X_2 + W b_W$ |
+| 2: Continuous HTE | $b_0 + b_1 X_1 + b_2 X_2 + W (b_W + b_4 X_4)$ |
+| 3: Two vars + cts x cts | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_3 X_3 + b_4 X_4 + b_{45} X_4 X_5)$ |
+| 4: Cosine HTE | $b_0 + b_1 X_1 + b_2 X_2 + W(b_W + b_4 \cos(X_4))$ |
+
+Three things to keep in mind:
+
+- **Nominal is 0.90** (α = 0.10), not the CI sweep's 0.95. The dashed lines are at
+  0.90.
+- **The calibration targets the *marginal* coverage of τ̂**: the mean over units of
+  whether each unit's band covers the estimate. It does not target the true τ or
+  simultaneous coverage. It cannot see τ̂'s bias, and at ρ = 0.5 the prognostic
+  function tracks τ, which is where bias would grow. The gap between the
+  calibration's own coverage at the pick (`plugin_coverage`) and the true-τ marginal
+  coverage is the thing to watch.
+- **Pairing.** A run is seeded by its run index alone, so run *r* at ρ = 0 and at
+  ρ = 0.5 shares W, the raw latent normals, the noise and the categorical covariates
+  (`../../README.md`, "Pairing"). Every ρ = 0.5 − ρ = 0 comparison is a per-run
+  difference with MCSE sd(diff)/√pairs. The level plots show each ρ's own unpaired
+  MCSE.
+
+```{r data}
+# paths
+path <- here()
+res_root <- file.path(dirname(path), "results", "correlated", "confidence_intervals",
+                      "continuous")
+res_path <- file.path(res_root, "sf_calibration")
+
+SF_GRID <- seq(0.05, 0.5, 0.05)  # the analysis script's sf_grid
+NOMINAL <- 0.90
+
+# the CI reports' labels, so the reports read side by side
+scenario_labels <- c(
+  `1` = "1: No HTE",
+  `2` = "2: Continuous HTE",
+  `3` = "3: Two vars + cts x cts",
+  `4` = "4: Cosine HTE"
+)
+
+interval_labels <- c(
+  half_boot      = "Per-unit band",
+  half_boot_grid = "Query-grid band"
+)
+
+#' Label the cell columns: scenario and n as factors, rho kept numeric (the paired
+#' differences pivot on it) plus rho_lab for facets and legends
+label_cells <- function(df) {
+  df %>%
+    filter(scenario %in% c(1:4)) %>%
+    mutate(
+      scenario = factor(scenario, levels = names(scenario_labels) %>% as.integer(),
+                        labels = unname(scenario_labels)),
+      n = factor(n, levels = c(500, 1000)),
+      rho_lab = factor(paste("ρ =", rho))
+    ) %>%
+    droplevels()
+}
+
+#' The metrics script writes the grid band as extra "<model>_grid" rows; split that
+#' into an interval column. There is one estimator (dr_random_forest), so model goes.
+tidy_sf <- function(df) {
+  df %>%
+    mutate(interval = if_else(grepl("_grid$", model), "half_boot_grid", "half_boot"),
+           interval = factor(recode(interval, !!!interval_labels),
+                             levels = unname(interval_labels))) %>%
+    select(-model) %>%
+    label_cells()
+}
+
+#' Mean and MCSE of the three interval metrics per cell, as in the CI reports
+#'
+#' MCSE denominators are the non-NA counts. Simultaneous coverage is a per-run 0/1
+#' indicator, so it gets the binomial MCSE.
+summarise_ci <- function(df, by) {
+  df %>%
+    group_by(across(all_of(by))) %>%
+    summarise(
+      mean_marg_cov = mean(marginal_coverage, na.rm = T),
+      mcse_marg_cov = sd(marginal_coverage, na.rm = T) / sqrt(sum(!is.na(marginal_coverage))),
+      mean_simul_cov = mean(simultaneous_coverage, na.rm = T),
+      mcse_simul_cov = sqrt(mean_simul_cov * (1 - mean_simul_cov) /
+                              sum(!is.na(simultaneous_coverage))),
+      mean_ci_len = mean(mean_ci_length, na.rm = T),
+      mcse_ci_len = sd(mean_ci_length, na.rm = T) / sqrt(sum(!is.na(mean_ci_length))),
+      runs = n(),
+      .groups = "drop"
+    )
+}
+
+sf <- readRDS(file.path(res_path, "cts_corr_ci_sf_metrics.RDS")) %>% tidy_sf()
+
+# the pick and the plug-in coverage are per run, so take them from the per-unit rows
+sf_unit <- filter(sf, interval == interval_labels[["half_boot"]])
+sf_grid <- filter(sf, interval == interval_labels[["half_boot_grid"]])
+
+CELL <- c("rho", "rho_lab", "scenario", "n", "interval")
+sf_summary <- summarise_ci(sf, CELL)
+
+# the paired rho differences need both arms on disk
+has_pairs <- all(c(0, 0.5) %in% sf$rho)
+has_grid <- nrow(sf_grid) > 0
+
+curve_file <- file.path(res_path, "cts_corr_ci_sf_all.RDS")
+has_curves <- file.exists(curve_file)
+
+sweep_file <- file.path(res_root, "cts_corr_ci_metrics.RDS")
+has_sweep <- file.exists(sweep_file)
+```
+
+```{r plot-helpers, include=FALSE}
+ci_theme <- function() {
+  list(scale_colour_paletteer_d("rcartocolor::Safe"),
+       scale_fill_paletteer_d("rcartocolor::Safe"),
+       theme_bw(),
+       theme(strip.background = element_rect(fill = "white"),
+             strip.text = element_text(colour = "black"),
+             legend.position = "bottom",
+             legend.box = "vertical"))
+}
+
+n_lab <- labeller(n = function(x) paste("n =", x))
+
+with_ci <- function(df, mean_col, mcse_col, alpha = 0.05) {
+  z <- qnorm(1 - alpha / 2)
+  mutate(df, est = .data[[mean_col]],
+         lo = .data[[mean_col]] - z * .data[[mcse_col]],
+         hi = .data[[mean_col]] + z * .data[[mcse_col]])
+}
+
+# one point per (n, rho) with a 95% MCSE bar; scenario rows, band columns
+level_plot <- function(df, mean_col, mcse_col, title, ylab, hline = NULL) {
+  p <- ggplot(with_ci(df, mean_col, mcse_col),
+              aes(x = n, y = est, colour = rho_lab, ymin = lo, ymax = hi))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_point(position = position_dodge(width = 0.4), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.4), linewidth = 0.3, width = 0.2) +
+    facet_grid(rows = vars(scenario), cols = vars(interval), scales = "free_y") +
+    ci_theme() +
+    labs(title = title, y = ylab, x = "Sample size", colour = "ρ")
+}
+
+#' Paired rho = 0.5 - rho = 0 difference in a per-run column, by cell
+#'
+#' Runs are matched on (by, run). The MCSE is sd(diff) / sqrt(pairs). A run with
+#' the column NA at either rho drops out of its cell.
+paired_diff <- function(df, col, by) {
+  df %>%
+    select(all_of(c(by, "run", "rho")), value = all_of(col)) %>%
+    pivot_wider(names_from = rho, values_from = value, names_prefix = "rho_") %>%
+    mutate(diff = rho_0.5 - rho_0) %>%
+    group_by(across(all_of(by))) %>%
+    summarise(mean_diff = mean(diff, na.rm = TRUE),
+              mcse_diff = sd(diff, na.rm = TRUE) / sqrt(sum(!is.na(diff))),
+              pairs = sum(!is.na(diff)), .groups = "drop")
+}
+
+#' A mean difference with its 95% MCSE bar against a dashed zero line
+diff_plot <- function(df, title, ylab, colour, colour_lab,
+                      facet = facet_grid(rows = vars(scenario), scales = "free_y"),
+                      x = "n", xlab = "Sample size") {
+  ggplot(with_ci(df, "mean_diff", "mcse_diff"),
+         aes(x = .data[[x]], y = est, colour = .data[[colour]], ymin = lo, ymax = hi)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(position = position_dodge(width = 0.4), size = 2) +
+    geom_errorbar(position = position_dodge(width = 0.4), linewidth = 0.3, width = 0.2) +
+    facet +
+    ci_theme() +
+    labs(title = title, y = ylab, x = xlab, colour = colour_lab)
+}
+```
+
+## The calibration curve
+
+```{r curve-data, eval=has_curves}
+# each run's coverage_curve: the calibration's mean coverage of tau.hat and mean
+# band width at every candidate CI_sf. Only the _all file carries it.
+curves <- readRDS(curve_file) %>%
+  mutate(curve = map(results, function(runs) {
+    map_dfr(runs, function(r) mutate(as_tibble(r$result$coverage_curve), run = r$run))
+  })) %>%
+  select(rho, scenario, n, curve) %>%
+  unnest(curve) %>%
+  label_cells()
+
+curve_summary <- curves %>%
+  group_by(rho_lab, scenario, n, sf) %>%
+  summarise(across(c(mean_coverage, mean_ci_width),
+                   list(mean = mean,
+                        q10 = ~ quantile(.x, 0.1),
+                        q90 = ~ quantile(.x, 0.9))),
+            runs = n(), .groups = "drop")
+
+curve_plot <- function(stem, title, ylab, hline = NULL) {
+  p <- ggplot(curve_summary, aes(x = sf, colour = rho_lab, fill = rho_lab))
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, linetype = "dashed")
+  p +
+    geom_ribbon(aes(ymin = .data[[paste0(stem, "_q10")]],
+                    ymax = .data[[paste0(stem, "_q90")]]),
+                alpha = 0.2, colour = NA) +
+    geom_line(aes(y = .data[[paste0(stem, "_mean")]]), linewidth = 0.5) +
+    geom_point(aes(y = .data[[paste0(stem, "_mean")]]), size = 1.5) +
+    scale_x_continuous(breaks = SF_GRID) +
+    facet_grid(rows = vars(scenario), cols = vars(n), scales = "free_y", labeller = n_lab) +
+    ci_theme() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = title, subtitle = "Mean over runs; ribbon is the runs' 10th–90th percentile",
+         y = ylab, x = "Candidate subsampling ratio", colour = "ρ", fill = "ρ")
+}
+```
+
+`r if (!has_curves) "**Skipped: the collected runs (\x60sf_calibration/cts_corr_ci_sf_all.RDS\x60) are not on disk.**"`
+
+What the calibration saw: the coverage of τ̂ by the resampled bands at each
+candidate ratio. The pick is where a run's curve crosses 0.90 (dashed). A flat
+curve near 0.90 means a small change in coverage moves the pick a long way, so
+the picks scatter.
+
+```{r curve-coverage-plot, eval=has_curves, fig.height=9}
+curve_plot("mean_coverage", "Calibration: coverage of τ̂ by candidate CI_sf",
+           "Plug-in marginal coverage", hline = NOMINAL)
+```
+
+```{r curve-width-plot, eval=has_curves, fig.height=9}
+curve_plot("mean_ci_width", "Calibration: band width by candidate CI_sf",
+           "Mean band width")
+```
+
+## The pick
+
+```{r pick-plot, fig.height=8}
+sf_unit %>%
+  mutate(pick = factor(optimal_sf, levels = SF_GRID)) %>%
+  ggplot(aes(x = pick, fill = rho_lab)) +
+  geom_bar(position = position_dodge(preserve = "single")) +
+  scale_x_discrete(drop = FALSE) +
+  facet_grid(rows = vars(scenario), cols = vars(n), labeller = n_lab) +
+  ci_theme() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Calibrated CI_sf per run", x = "Chosen subsampling ratio",
+       y = "Runs", fill = "ρ")
+```
+
+`r if (!has_pairs) "**Paired ρ differences skipped throughout: only one ρ is on disk.**"`
+
+```{r pick-diff, eval=has_pairs, fig.height=4}
+diff_plot(paired_diff(sf_unit, "optimal_sf", by = c("scenario", "n")),
+          "Paired change in the calibrated CI_sf", "Δ CI_sf (ρ = 0.5 − ρ = 0)",
+          x = "n", colour = "scenario", colour_lab = "Scenario", facet = facet_null())
+```
+
+## Coverage of the true τ at the pick
+
+The final band, built at each run's own pick, scored against the true CATE: per
+unit and over the fixed query grid. The query grid crosses X4 and X5 over
+[−2, 2] with everything else at 0. At ρ = 0.5 its corners sit far out in the joint
+distribution, so the forest is extrapolating there and a fall in grid coverage can
+be that rather than a calibration failure. **The per-unit band is the primary
+comparison.**
+
+```{r marg-cov-plot, fig.height=8}
+level_plot(sf_summary, "mean_marg_cov", "mcse_marg_cov",
+           "Marginal coverage of the true CATE at the calibrated CI_sf",
+           "Marginal coverage", hline = NOMINAL)
+```
+
+```{r simul-cov-plot, fig.height=8}
+level_plot(sf_summary, "mean_simul_cov", "mcse_simul_cov",
+           "Simultaneous coverage of the true CATE at the calibrated CI_sf",
+           "Simultaneous coverage", hline = NOMINAL)
+```
+
+```{r ci-len-plot, fig.height=8}
+level_plot(sf_summary, "mean_ci_len", "mcse_ci_len",
+           "Mean CI length at the calibrated CI_sf", "Mean CI length")
+```
+
+The paired ρ effect on each, both bands.
+
+```{r coverage-diff, eval=has_pairs, fig.height=7}
+by_band <- c("scenario", "n", "interval")
+diff_plot(paired_diff(sf, "marginal_coverage", by_band),
+          "Paired change in marginal coverage", "Δ marginal coverage (ρ = 0.5 − ρ = 0)",
+          colour = "interval", colour_lab = "Band")
+diff_plot(paired_diff(sf, "simultaneous_coverage", by_band),
+          "Paired change in simultaneous coverage",
+          "Δ simultaneous coverage (ρ = 0.5 − ρ = 0)",
+          colour = "interval", colour_lab = "Band")
+diff_plot(paired_diff(sf, "mean_ci_length", by_band),
+          "Paired change in CI length", "Δ mean CI length (ρ = 0.5 − ρ = 0)",
+          colour = "interval", colour_lab = "Band")
+```
+
+## What the calibration cannot see
+
+Each run's coverage of τ̂ at the pick (`plugin_coverage`, the calibration's own
+view) against the per-unit band's coverage of the true τ. Both are marginal
+coverages of the same run, so a run on the y = x line lost nothing to bias. A run
+below it covers the truth less often than the calibration believed.
+
+```{r plugin-scatter, fig.height=9}
+sf_unit %>%
+  ggplot(aes(x = plugin_coverage, y = marginal_coverage, colour = rho_lab)) +
+  geom_abline(slope = 1, intercept = 0, colour = "grey40") +
+  geom_hline(yintercept = NOMINAL, linetype = "dashed") +
+  geom_vline(xintercept = NOMINAL, linetype = "dashed") +
+  geom_point(alpha = 0.6, size = 1.5) +
+  facet_grid(rows = vars(scenario), cols = vars(n), labeller = n_lab) +
+  ci_theme() +
+  labs(title = "Plug-in vs true-τ marginal coverage, per run (per-unit band)",
+       x = "Plug-in coverage of τ̂ at the pick (calibration)",
+       y = "Marginal coverage of the true τ", colour = "ρ")
+```
+
+The mean per-run gap, plug-in minus true-τ coverage, with MCSE sd(gap)/√runs.
+A gap clear of zero is coverage the calibration promised and the band did not
+deliver. If the gap grows with ρ, the correlation is feeding bias the calibration
+is blind to.
+
+```{r plugin-gap, fig.height=6}
+plugin_gap <- sf_unit %>%
+  mutate(gap = plugin_coverage - marginal_coverage) %>%
+  group_by(rho, rho_lab, scenario, n) %>%
+  summarise(mean_diff = mean(gap, na.rm = TRUE),
+            mcse_diff = sd(gap, na.rm = TRUE) / sqrt(sum(!is.na(gap))),
+            .groups = "drop")
+
+diff_plot(plugin_gap, "Plug-in minus true-τ marginal coverage",
+          "Δ marginal coverage (plug-in − true τ)", colour = "rho_lab", colour_lab = "ρ")
+```
+
+```{r plugin-gap-diff, eval=has_pairs, fig.height=4}
+diff_plot(paired_diff(mutate(sf_unit, gap = plugin_coverage - marginal_coverage), "gap",
+                      by = c("scenario", "n")),
+          "Paired change in the plug-in gap", "Δ gap (ρ = 0.5 − ρ = 0)",
+          colour = "scenario", colour_lab = "Scenario", facet = facet_null())
+```
+
+## Bias-eliminated coverage on the query grid
+
+`r if (!has_grid) "**Skipped: no query-grid rows in the metrics.**"`
+
+Bias-eliminated (BE) coverage scores the grid band against the across-run mean
+estimate at each grid point instead of the true τ. Its gap to the ordinary grid
+coverage is the part of any undercoverage that comes from the point estimate's
+bias, which is where extrapolation at ρ = 0.5 shows up. The MCSEs treat the
+across-run mean as fixed. The BE reference is an average over runs, so with few
+runs on disk it is close to each run's own estimate and BE coverage is near 1.
+
+```{r be-plot, eval=has_grid, fig.height=8}
+binom_mcse <- function(x) {
+  p <- mean(x, na.rm = TRUE)
+  sqrt(p * (1 - p) / sum(!is.na(x)))
+}
+
+be_summary <- sf_grid %>%
+  group_by(rho, rho_lab, scenario, n) %>%
+  summarise(
+    across(c(marginal_coverage, be_marginal_coverage),
+           list(mean = ~ mean(.x, na.rm = TRUE),
+                mcse = ~ sd(.x, na.rm = TRUE) / sqrt(sum(!is.na(.x))))),
+    across(c(simultaneous_coverage, be_simultaneous_coverage),
+           list(mean = ~ mean(.x, na.rm = TRUE), mcse = binom_mcse)),
+    .groups = "drop") %>%
+  pivot_longer(matches("_coverage_(mean|mcse)$"),
+               names_to = c("reference", "measure", ".value"),
+               names_pattern = "^(be_)?(marginal|simultaneous)_coverage_(mean|mcse)$") %>%
+  mutate(reference = factor(if_else(coalesce(reference, "") == "", "True τ",
+                                    "Across-run mean (BE)"),
+                            levels = c("True τ", "Across-run mean (BE)")),
+         measure = factor(paste(tools::toTitleCase(measure), "coverage"),
+                          levels = c("Marginal coverage", "Simultaneous coverage")))
+
+ggplot(with_ci(be_summary, "mean", "mcse"),
+       aes(x = n, y = est, colour = reference, shape = rho_lab, ymin = lo, ymax = hi)) +
+  geom_hline(yintercept = NOMINAL, linetype = "dashed") +
+  geom_point(position = position_dodge(width = 0.5), size = 2) +
+  geom_errorbar(position = position_dodge(width = 0.5), linewidth = 0.3, width = 0.2) +
+  facet_grid(rows = vars(scenario), cols = vars(measure), scales = "free_y") +
+  ci_theme() +
+  labs(title = "Query-grid band: coverage of the true τ vs the across-run mean",
+       y = "Coverage", x = "Sample size", colour = "Coverage of", shape = "ρ")
+```
+
+The per-run gap, BE minus true-τ coverage. Both come from the same band in the
+same run, so the MCSE is sd(gap)/√runs.
+
+```{r be-gap, eval=has_grid, fig.height=7}
+be_gap <- bind_rows(
+  mutate(sf_grid, measure = "Marginal coverage",
+         gap = be_marginal_coverage - marginal_coverage),
+  mutate(sf_grid, measure = "Simultaneous coverage",
+         gap = be_simultaneous_coverage - simultaneous_coverage)
+) %>%
+  group_by(rho_lab, scenario, n, measure) %>%
+  summarise(mean_diff = mean(gap, na.rm = TRUE),
+            mcse_diff = sd(gap, na.rm = TRUE) / sqrt(sum(!is.na(gap))),
+            .groups = "drop")
+
+diff_plot(be_gap, "Query-grid band: BE minus true-τ coverage",
+          "Δ coverage (BE − true τ)", colour = "rho_lab", colour_lab = "ρ",
+          facet = facet_grid(rows = vars(scenario), cols = vars(measure), scales = "free_y"))
+```
+
+## Against the `CI_sf` sweep
+
+`r if (!has_sweep) "**Skipped: the sweep's metrics (\x60continuous/cts_corr_ci_metrics.RDS\x60) are not on disk.**"`
+
+The pick next to the sweep's best ratio for `dr_random_forest` (per-unit band):
+the `CI_sf` whose mean simultaneous coverage is closest to 0.95. The sweep's
+bands are 95% (α = 0.05) and the pick is for a 90% band of τ̂, so the two need not
+agree. What matters is whether they move the same way with ρ and n.
+
+```{r sf-vs-sweep, eval=has_sweep}
+pick_summary <- sf_unit %>%
+  group_by(rho, scenario, n) %>%
+  summarise(mean_pick = mean(optimal_sf),
+            median_pick = median(optimal_sf),
+            modal_pick = as.numeric(names(which.max(table(optimal_sf)))),
+            .groups = "drop")
+
+# the sweep's per-unit DR-RF rows only: its other models and the "_inbuilt" /
+# "_grid" interval rows are not what the calibration is choosing for
+sweep_best <- readRDS(sweep_file) %>%
+  filter(model == "dr_random_forest") %>%
+  label_cells() %>%
+  group_by(rho, scenario, n, CI_sf) %>%
+  summarise(mean_simul_cov = mean(simultaneous_coverage, na.rm = TRUE),
+            mean_marg_cov = mean(marginal_coverage, na.rm = TRUE),
+            .groups = "drop") %>%
+  mutate(dist = abs(mean_simul_cov - 0.95)) %>%
+  group_by(rho, scenario, n) %>%
+  slice_min(dist, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  select(rho, scenario, n, best_sweep_sf = CI_sf, sweep_simul_cov = mean_simul_cov,
+         sweep_marg_cov = mean_marg_cov)
+
+kable(left_join(pick_summary, sweep_best, by = c("rho", "scenario", "n")) %>%
+        select(scenario, n, rho, everything()) %>%
+        arrange(scenario, n, rho),
+      digits = 3,
+      col.names = c("Scenario", "n", "ρ", "Mean pick", "Median pick", "Modal pick",
+                    "Sweep's best CI_sf", "Sweep simul. coverage there",
+                    "Sweep marg. coverage there"))
+```
+
+## Headline table
+
+Every cell, both bands. Plug-in coverage and the pick are per run, so they are
+the same on the two bands' rows.
+
+```{r headline-table}
+headline <- sf_summary %>%
+  left_join(sf %>%
+              group_by(rho, scenario, n, interval) %>%
+              summarise(mean_pick = mean(optimal_sf),
+                        mean_plugin_cov = mean(plugin_coverage, na.rm = TRUE),
+                        mean_be_simul_cov = mean(be_simultaneous_coverage, na.rm = TRUE),
+                        .groups = "drop"),
+            by = c("rho", "scenario", "n", "interval")) %>%
+  select(scenario, n, rho, interval, runs, mean_pick, mean_plugin_cov,
+         mean_marg_cov, mcse_marg_cov, mean_simul_cov, mcse_simul_cov,
+         mean_be_simul_cov, mean_ci_len, mcse_ci_len) %>%
+  arrange(scenario, n, interval, rho)
+
+kable(headline, digits = 3,
+      col.names = c("Scenario", "n", "ρ", "Band", "Runs", "Mean CI_sf picked",
+                    "Plug-in coverage", "Marginal coverage", "MCSE (marg.)",
+                    "Simultaneous coverage", "MCSE (simul.)", "BE simultaneous coverage",
+                    "Mean CI length", "MCSE (length)"))
+```

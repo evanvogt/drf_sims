@@ -82,6 +82,7 @@ changed.
 | `*_analysis.R` | the parent's analysis script. DGM from `../<outcome>/*_corr_dgms.R`, models from the parent's `*_ci_models.R`, `set = corr_set(outcome, rho)` for the query grid, writes to `combo_dir()` |
 | `*_check.R`, `*_collect.R`, `*_metrics.R` | as the parent's, outputs carry a `rho` column. optimal_sf's two studies share `optimal_sf/jobscripts/`, so their todo lists are `failed_cts_ids.txt` / `failed_bin_ids.txt` |
 | `continuous/cts_corr_ci_results.qmd`, `binary/bin_corr_ci_results.qmd` | per outcome: coverage and length by ρ across the sweep, paired ρ differences, interval kinds (with the grid caveat), the best `CI_sf` by ρ, the optimal_sf pick and its true-τ coverage, a ρ = 0 sanity check against the parent CI study, and a headline table. The optimal_sf and sanity sections are skipped if their inputs are not on disk |
+| `optimal_sf/cts_corr_ci_sf_results.qmd` | the continuous optimal_sf study on its own: the calibration curves (from `_all.RDS`), the pick by ρ, true-τ coverage and length at the pick for both bands, plug-in vs true-τ coverage, BE grid coverage, the pick against the sweep's best `CI_sf`, and a headline table. The curve and sweep sections are skipped if their inputs are not on disk |
 
 ## Running it
 
