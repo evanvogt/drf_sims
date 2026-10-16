@@ -97,7 +97,7 @@ cd validation/binary
 quarto render bin_val_results.qmd -P scenario:1 --output bin_val_results_sc1.html   # and 2, 3, 4
 ```
 
-Archive the whole existing results tree first — see
+If old results become incomparable, archive the tree first — see
 `../continuous/README.md`, Running it; the one `archive_old_results.R` command
 there covers both arms.
 
@@ -106,24 +106,3 @@ continuous arm does. Its 1 h walltime is copied from `cts_val_1.sh`, not
 measured for a binary row: the binomial SuperLearner fits may run slower.
 Read the replicate time `bin_val_testing.R full` reports against it before
 submitting.
-
-## Status
-
-New 2026-10-08. Scenario 2 was run with HC3 standard errors only.
-
-**Needs a fresh run** of all 4400 rows. Archive the whole old results tree
-first.
-
-Changed 2026-10-12, as in the continuous arm:
-
-- **Scenario 1, the null**, added: 4400 array jobs (was 3300), and row 1 is now
-  scenario 1. Every significant test there is a type I error.
-- **Interaction estimates.** Every test saves its `W:v` estimate and SE, and
-  the `ref1`/`true2` reference contrasts — see `../continuous/README.md`, What
-  is compared across chunks. Here `est` and `true2` are risk-difference
-  interactions. The report gains a "Direction of the replications" section.
-
-Changed 2026-10-11, as in the continuous arm: scenarios 2–4, classical and HC3
-standard errors both saved, the data-driven `p_dd`/`p_proj` tests, the
-`p_split` fix for a binary covariate, and a report that renders per scenario.
-The walltime went from 30 min to 1 h to match the continuous arm.

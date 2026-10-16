@@ -73,8 +73,7 @@ scenario's ×1 SNR. Read them against n.
   `cate_methods()`, so leaving it out does not move the RNG stream of the arms
   before it. Index 101 reproduces `../binary/bin_corr_analysis.R 8010` (scenario 2,
   n = 500, run 1, ρ = 0.5) bit for bit: the data, the truth,
-  `nuisances_rf` and all four arms' τ. This was checked locally on
-  2026-10-15.
+  `nuisances_rf` and all four arms' τ (checked locally).
 
 ## Arms
 

@@ -6,7 +6,7 @@ each imputation be combined?**
 
 | | |
 |---|---|
-| scenarios | 1–4, the main scenarios (of the missing-data set, which uses the main study's numbers; 1 and 3–6 until 2026-10-01) |
+| scenarios | 1–4, the main scenarios |
 | n | 500, MAR, `prop = 0.3`, `type = both` |
 | method | `multiple_imputation` only |
 | runs | 100 |
@@ -14,9 +14,8 @@ each imputation be combined?**
 | results | `../results/missing/ci_example/scenario_<k>/500/both/0.3/MAR/multiple_imputation/` |
 | figures | `cts_miss_ci_results.R` / `.qmd` — every metric, to `results/all_figures/`; the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts_ci.R`. Both show all four scenarios. |
 
-The grid is ordered by `(scenario, run)` rather than left in `expand.grid` order.
-That was already true and is preserved — the array index is a row number, so
-reordering renumbers every job.
+The grid is ordered by `(scenario, run)` rather than left in `expand.grid`
+order. The array index is a row number, so reordering renumbers every job.
 
 ## The three pooling strategies
 
@@ -29,10 +28,9 @@ in `R/bootstrap_ci.R` then pools them three ways so they can be compared:
 | `mib` | Rubin's rules — within + between variance, critical value averaged over the per-imputation maxima |
 | `hybrid` | one variance and one critical value from the stacked draws |
 
-**Imputation within arm, with the outcome (since 2026-09-29).** The 50
-imputations are drawn separately in each treatment arm with Y as a predictor
-(`impute_by_arm()`, `R/missingness.R`), as in the main design - see
-`missing/ADEMP.md`. Before, Y and W were left out of the imputation model.
+**Imputation within arm, with the outcome.** The 50 imputations are drawn
+separately in each treatment arm with Y as a predictor (`impute_by_arm()`,
+`R/missingness.R`), as in the main design - see `missing/ADEMP.md`.
 
 **Coverage on complete and incomplete units.** The truth is τ at the
 unamputed covariates, which an incomplete unit's interval cannot pin down from
@@ -44,14 +42,14 @@ missingness mask for this.
 ## To add: grid-based simultaneous coverage
 
 `simultaneous_coverage` here is **per-unit** — it asks whether the band covers
-every unit of the sample the model was fitted on. `confidence_intervals/` now
+every unit of the sample the model was fitted on. `sample_size/confidence_intervals/`
 also evaluates coverage over a fixed covariate grid, which is the more
 meaningful target for a band and does not move with the realised sample. The
 machinery already exists in `R/dgm_scenarios.R`; this study just does not thread
 it through.
 
 Three call sites are needed, copying
-`sample_size/confidence_intervals/continuous/cts_ci_analysis.R` (retired; now `sample_size/confidence_intervals/continuous/cts_corr_ci_analysis.R`):
+`sample_size/confidence_intervals/continuous/cts_corr_ci_analysis.R`:
 
 1. `cts_miss_ci_analysis.R` — build the query points and their truth:
    ```r
@@ -63,7 +61,7 @@ Three call sites are needed, copying
 2. Pass `Z_query` into the model fits, so each returns `grid_lb` / `grid_ub`
    alongside its per-unit interval.
 3. `cts_miss_ci_metrics.R` — emit the grid interval as its own row, labelled
-   `"<model>_grid"`, the pattern `cts_ci_metrics.R` already uses:
+   `"<model>_grid"`, the pattern `cts_corr_ci_metrics.R` already uses:
    ```r
    if (!is.null(model_res$grid_lb)) {
      bind_cols(tibble(model = paste0(model, "_grid")),
@@ -73,35 +71,22 @@ Three call sites are needed, copying
    ```
 
 Until that lands, the simultaneous-coverage numbers here and in
-`confidence_intervals/` are measuring different things and should not be
-compared directly. `cts_miss_ci_results.qmd` says so on the relevant section.
+`sample_size/confidence_intervals/` are measuring different things and should
+not be compared directly. `cts_miss_ci_results.qmd` says so on the relevant
+section.
 
 ## Gotchas
 
-**`alpha` used to be a free variable in `combine_mi()`; it is now an explicit argument.**
+**The `mib` and `hybrid` critical values are the `1 - alpha` quantile, not
+`1 - alpha/2`.** They are quantiles of a maximum of *absolute* roots, so both
+tails are already in it, as in `simultaneous_band()`. `pooled` uses `alpha/2`
+and `1 - alpha/2`, correctly — it takes quantiles of signed replicates.
 
-**The `mib` and `hybrid` critical values are now the `1 - alpha` quantile (2026-09-28), not `1 - alpha/2`.** They are quantiles of a maximum of *absolute* roots, so both tails are already in it; `1 - alpha/2` gave 97.5% bands at `alpha = 0.05`. Same fix as `simultaneous_band()`, so each imputation's own band changes too. `pooled` still uses `alpha/2` and `1 - alpha/2`, correctly — it takes quantiles of signed replicates. Results from before this date are 97.5% bands.
+**The `hybrid` margin is `sqrt(lambda_hat) * S_star`**, as in the other two
+strategies and `simultaneous_band()`. `sqrt(lambda_hat * S_star)` takes the
+square root of the critical value and gives bands about half as wide. The
+pooled bands are saved without their draws, so a wrong band cannot be patched
+after the fact: it needs a re-run.
 
-**The `hybrid` margin was wrong until 2026-10-11.** It computed
-`sqrt(lambda_hat * S_star)` where the other two strategies and
-`simultaneous_band()` use `sqrt(lambda_hat) * S_star` — i.e. it took the square
-root of the critical value, giving bands about half as wide. Fixed in
-`combine_mi_ci()`. The pooled bands are saved without their draws, so results
-made before the fix cannot be patched: the study re-runs (400 rows).
-
-**The old `AUX` / `AUX-Y` mechanism spellings are gone** (2026-09-28): the names are now MAR / MNAR-Y0 / MNAR-tau and anything else is an error. This study runs MAR only. **Its covariates changed the same day:** `continuous_missing` now draws correlated covariates with X01–X03 as auxiliaries (`missing/ADEMP.md`), so every dataset here changes too.
-
-**The header claimed imputations were reduced "from 50 to 20" to keep generation tractable; the code actually uses 50 and always has.**
-
-## Status
-
-**Needs a re-run** — the crossfitting strategy change to `R/cate_models.R`
-(see the root README's Methods and docs/DEVLOG.md's Status) affects the estimators used here even
-though there's no SuperLearner arm. Bug F does not apply (no SuperLearner
-arm), but bug O does: it changed the `continuous_missing` baseline and `bW`
-this study generates from (`missing/continuous/README.md`). Archive any old
-tree first with `R/archive_old_results.R` (root `README.md`, Status, step 0) -
-it would use the pre-2026-09-26 scenario numbers (1-5, now 1 and 3-6).
-The 2026-09-28 correlated covariates are a further reason: every dataset
-changes. So is the 2026-09-29 review: imputation within arm with Y, and the
-saved missingness mask (`cts_miss_ci_metrics.R` refuses runs without it).
+**`alpha` is an explicit argument of `combine_mi()`**, not read from the
+global environment.

@@ -9,7 +9,7 @@ lives in `../val_common.R`.
 | | |
 |---|---|
 | covariates | correlated, rho = 0.5 — the `continuous_corr_0.5` set (`R/dgm_scenarios.R`, CORRELATED COVARIATES), the same set `sample_size/` runs as its primary arm |
-| scenarios | 1, 2, 3, 4 (`R/dgm_scenarios.R`, `DESC_10`): 1 the null, no HTE (since 2026-10-12); 2 simple HTE, `b4 * X4`; 3 complex, `b3 * X3 + b4 * X4 + b45 * X4 * X5`; 4 non-linear, `b4 * cos(X4)`. Scenario 2 was scenario 3 before the 2026-09-26 renumbering |
+| scenarios | 1, 2, 3, 4 (`R/dgm_scenarios.R`, `DESC_10`): 1 the null, no HTE; 2 simple HTE, `b4 * X4`; 3 complex, `b3 * X3 + b4 * X4 + b45 * X4 * X5`; 4 non-linear, `b4 * cos(X4)` |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
 | runs | 100 per scenario — **4400 array jobs**, 1 h walltime (see Sizing the job) |
@@ -18,10 +18,9 @@ lives in `../val_common.R`.
 
 Each run draws one trial of `n` and splits it. Because the seed is the run alone,
 a run's chunk 1 at 0.25 is nested in its chunk 1 at 0.30, so every curve across
-`interim_prop` is paired within run. Before the 2026-10-08 changes the two chunks
-were two separate draws, and since `generate_scenario_data()` calibrates `bW`
-to 80% power at the `n` it is given, each chunk was its own trial with its own
-ATE.
+`interim_prop` is paired within run. Two separate draws would not do: since
+`generate_scenario_data()` calibrates `bW` to 80% power at the `n` it is given,
+each chunk would be its own trial with its own ATE.
 
 `cts_val_config.R` rounds the `interim_prop` sequence to 2 dp, which is
 load-bearing rather than cosmetic: `interim_prop` is a `path_cols` entry, so its
@@ -29,12 +28,10 @@ load-bearing rather than cosmetic: `interim_prop` is a `path_cols` entry, so its
 `seq(by = 0.05)` yields values like `0.30000000000000004` that `get_results()`
 can no longer match back to their grid row.
 
-Only rho = 0.5, scenarios 1–4 and n = 1000 are run today; all three are
-columns of the grid (`cts_val_config.R`) so extending to rho = 0, more scenarios
-or sizes is a one-line change, not a rewrite. (The grid briefly carried rho = 0
-too, on 2026-10-09. Its `rho_0/` results are outside the grid now, so check
-and collect ignore them.) The same run number draws the same participants in
-every scenario; only the CATE changes.
+Only rho = 0.5, scenarios 1–4 and n = 1000 are run; all three are columns of
+the grid (`cts_val_config.R`), so extending to rho = 0, more scenarios or sizes
+is a one-line change. The same run number draws the same participants in every
+scenario; only the CATE changes.
 
 ## Estimators
 
@@ -76,10 +73,9 @@ each nominates its own top covariate for the interaction test below.
 
 Both are larger-is-more-important, so `rank()` means the same thing for each.
 
-**New dependencies**: `xgboost` and `SHAPforxgboost`, used nowhere else in this
-repo. They are in `environment.yml`; a fresh install of `sim-env` must include them, and
-they must otherwise be installed into the cluster's `sim-env` R library by hand — `cts_val_testing.R`
-check 1 is there to catch their absence before 4400 jobs go out.
+`xgboost` and `SHAPforxgboost` are used only by these studies. They are in
+`environment.yml`; `cts_val_testing.R` check 1 catches their absence before
+4400 jobs go out.
 
 ## What is compared across chunks
 
@@ -92,20 +88,18 @@ check 1 is there to catch their absence before 4400 jobs go out.
 | `var_imps` | each measure's covariate ranking in each chunk, and the rank change |
 | `top_var_tests` | chunk 1's most important covariate, interaction-tested on the remaining participants — as a continuous `W x X_top` interaction (`p_cts`), the same adjusted for every other covariate (`p_cts_adj`), after a median split (`p_split`), after a split learned on chunk 1 (`p_dd`, with `dd_cuts` and `dd_prop`), and as a spline projection learned on chunk 1 (`p_proj`) |
 
-Since 2026-10-11 every interaction test (the subgroup tests and all five
+Every interaction test (the subgroup tests and all five
 top-covariate forms) is saved twice, with classical and with HC3 standard
 errors: `subgroups[[model]]` is a two-row `data.frame(se, top, bottom)` and
 `top_var_tests[[model]]` leads with an `se` column (`chunk_validations_se()`).
 `variances` and `var_imps` do not depend on the standard errors and are saved
 once.
 
-**Estimates and the direction of a replication** (since 2026-10-12). A
-p-value alone cannot say whether chunk 2 found the effect chunk 1 claimed, or
-one pointing the other way. Each test therefore saves four more numbers next to
-its p-value, named `<stat>_<test>`. The tests are `top`/`bottom` for the
-subgroups and `cts`, `cts_adj`, `split`, `dd`, `proj` for the top-covariate
-forms. They come after the existing columns, whose names and values are
-unchanged:
+**Estimates and the direction of a replication.** A p-value alone cannot say
+whether chunk 2 found the effect chunk 1 claimed, or one pointing the other
+way. Each test therefore saves four more numbers next to its p-value, named
+`<stat>_<test>`. The tests are `top`/`bottom` for the subgroups and `cts`,
+`cts_adj`, `split`, `dd`, `proj` for the top-covariate forms:
 
 | column | what it is |
 |---|---|
@@ -126,7 +120,7 @@ it is right in truth. The report's "Direction of the replications" section
 summarises both. `true2` needs `results2$truth`, which the analysis scripts
 attach; `chunk_validations()` called without it gives NA.
 
-**Scenario 1, the null** (since 2026-10-12). tau = bW for everyone, so every
+**Scenario 1, the null.** tau = bW for everyone, so every
 significant test is a type I error and every replication rate is a size. That
 is the reference the other scenarios' rates are read against.
 
@@ -157,17 +151,13 @@ when X4 is correctly nominated; their rate should sit near 5%. This is kept on
 purpose and reported as a finding about those tests. `p_dd` and `p_proj` are the
 forms that can replicate it.
 
-**`p_split` on a binary covariate** (fixed 2026-10-11). The split was
-`xt > median(xt)`, which is all 0 for X3 ~ Bernoulli(0.7) (median 1), so
-`p_split` was NA whenever X3 was nominated — the likely winner in scenario 3,
-where X3 is the largest single source of heterogeneity. `median_split()` now uses a two-valued
-covariate as its own split. Nothing changes for continuous covariates, or for
-X1 (P = 0.4, median 0).
+**`p_split` on a binary covariate.** `median_split()` uses a two-valued
+covariate as its own split: `xt > median(xt)` is all 0 for X3 ~ Bernoulli(0.7)
+(median 1), and X3 is the likely nominee in scenario 3.
 
 The comparisons are `chunk_validations()`, and the estimation logic behind them
 (both importance measures and `interaction_pval()`), in `../val_common.R`,
-shared with the binary arm. It is specific to these studies, so it stays in
-`validation/` rather than moving into `R/`.
+shared with the binary arm.
 
 **HC3 interaction tests.** This arm calls `chunk_validations_se()`, so every
 interaction test (the subgroup tests and the five top-covariate forms) is
@@ -182,8 +172,7 @@ contrast of the four cell means, its variance is dominated by the small cells
 pooled variance comes almost entirely from the large ones. HC3 is the cell-wise
 (Welch-type) variance there, slightly conservative. For `p_split`, `p_cts` and
 `p_cts_adj` the two give nearly the same answer, so the switch costs little
-there and keeps the two arms' tests the same. Classical standard errors until
-2026-10-08, HC3 only until 2026-10-11.
+there and keeps the two arms' tests the same.
 
 ## Files
 
@@ -219,34 +208,10 @@ replicate end to end and reports how long it took, which is the number to read
 against the jobscript's walltime before submitting. It exits non-zero on any
 failure. Drop `full` for a quick local smoke test.
 
-**Before the 2026-10-12 run, archive every old result, both arms.** Nothing
-saved so far was made by the current code. Files from before 2026-10-11 carry
-HC3 p-values only and no `p_dd`/`p_proj`. None carry the interaction estimates.
-And adding scenario 1 reordered the grid. `check_failed()` would count old
-files as done, and `get_results()` would collect them next to the new ones. So
-archive both arms' whole trees: every `rho_*/scenario_*/`, the old `rho_0/`,
-the collected `*_val_all.RDS` / `*_val_metrics.RDS` and `session_logs/`.
-`archive_old_results.R --trees` writes one `.tar` per tree under
-`results/_archive/<label>/`, and deletes a tree only once its tar lists exactly
-its files. From the repo root, dry run then `--apply`:
-
-```bash
-Rscript R/archive_old_results.R --label validation_pre_2026-10-12 \
-  --trees validation/continuous validation/binary
-Rscript R/archive_old_results.R --label validation_pre_2026-10-12 \
-  --trees validation/continuous validation/binary --apply
-```
-
-or, if the trees are big, as a job. The jobscript adds `--apply` itself, and
-`ARCHIVE_ARGS` must stay comma-free:
-
-```bash
-cd R/jobscripts
-qsub -v ARCHIVE_ARGS="--label validation_pre_2026-10-12 --trees validation/continuous validation/binary" archive_old_results.sh
-```
-
-To restore a tree, run `tar -xf _archive/validation_pre_2026-10-12/<name>.tar`
-from `results/`.
+`check_failed()` counts any results file on the grid's paths as done, so if
+the code changes in a way that makes old results incomparable, archive the
+trees first with `R/archive_old_results.R --label <label> --trees
+validation/continuous validation/binary` (dry run, then `--apply`).
 
 ### Without the queue
 
@@ -261,9 +226,8 @@ source(here::here("validation", "continuous", "cts_val_run.R"))
 It runs 8 rows at a time, each as its own `Rscript cts_val_analysis.R <i> 1 1`
 subprocess — the identical command `cts_val_1.sh` gives one array index, so a
 row produced here and a row produced by the array are the same calculation and
-land in the same place. A full grid took roughly 7h before the DR SuperLearner
-was added; with it, budget 4400 × (the replicate time `cts_val_testing.R full`
-reports) / 8.
+land in the same place. Budget 4400 × (the replicate time
+`cts_val_testing.R full` reports) / 8.
 
 Rows that already have a results file are skipped (the same missing-run logic
 `cts_val_check.R` uses), so an interrupted session — or one that hits its
@@ -279,146 +243,31 @@ metrics run exactly as they would after an array run.
 
 ### Sizing the job
 
-`cts_val_1.sh`'s `ncpus=5` only ever mirrored a hardcoded `workers <- 5`; it was
-never measured, and until recently no `num.threads` reached grf at all, so each
-of those five workers spawned forests on every visible core whatever PBS had
-allocated. `cts_val_1.sh` now runs one worker with one grf thread
-(`cts_val_analysis.R <i> 1 1`) on `ncpus=1`. That is set by hand, as is the
-walltime. A row took roughly 3 min with the two forest estimators. The DR
-SuperLearner's TE-VIM refits (10 covariates × 5–10 folds of a 9-learner
-SuperLearner, per chunk) make it longer; the walltime was raised to 20 min,
-then to 1 h on 2026-10-09.
+`cts_val_1.sh` runs one worker with one grf thread
+(`cts_val_analysis.R <i> 1 1`) on `ncpus=1`, with a 1 h walltime, both set by
+hand. The DR SuperLearner's TE-VIM refits (10 covariates × 5–10 folds of a
+9-learner SuperLearner, per chunk) dominate a row's time.
 `cts_val_testing.R full` passes the
 same `1 1`, so the replicate time it reports is the array job's. Check 6 also
 prints a step-by-step timing of one 250-row chunk. If a row is too slow on one
 core, raise `ncpus`, `ompthreads` and the `workers` argument together
 (`cts_val_analysis.R <i> k 1` on `ncpus=k:ompthreads=k`). The SuperLearner
 folds and the TE-VIM refits all run through `future_map()`, so they spread
-across the extra workers. The `syrup`
-resource sweep meant to measure the alternatives didn't work for this study
-(see `docs/DEVLOG.md`'s "Resource profiling (removed)"). Read the replicate time
-that `cts_val_testing.R full` reports against the jobscript's walltime instead.
+across the extra workers.
 
 `workers` and `grf_threads` reach `cts_val_analysis.R` as trailing arguments on
 the `Rscript` line, so the PBS resource request and the R-level parallelism
-cannot drift apart. Called without them it falls back to what it did before
-(`workers = 5`, grf unthrottled).
+cannot drift apart. Called without them it uses `workers = 5`, grf
+unthrottled.
 
-## Status
+## Notes
 
-**Needs a fresh run** of all 4400 rows. Archive both arms' whole results trees
-first (Running it, above).
-
-Changed 2026-10-12:
-
-- **Scenario 1, the null**, added to the grid: 4 x 11 x 100 = 4400 array jobs
-  (was 3300). The grid's row order changed with it, and row 1 is now scenario
-  1 at 0.25, run 1. Every significant test there is a type I error.
-- **Interaction estimates and reference contrasts**: `est_`, `se_`, `ref1_`,
-  `true2_<test>` for every subgroup and top-covariate test — see What is
-  compared across chunks. The p-values are unchanged and keep their names
-  (checked against the previous `chunk_validations()` on the same fits). The
-  report gains a "Direction of the replications" section, and handles a
-  scenario without modifiers.
-
-Changed 2026-10-11:
-
-- **Scenarios 2–4**, rho = 0.5 only. The grid had carried rho = 0 as well
-  since 2026-10-09; it is back to the primary arm, with scenarios 3 (complex)
-  and 4 (non-linear) added. 3300 array jobs.
-- **Classical and HC3 standard errors**, both saved
-  (`chunk_validations_se()`) — see What is compared across chunks. The
-  subgroup and top-covariate tables of a results file change shape (an `se`
-  column), and `cts_val_metrics.R` reads the new shape only.
-- **Two data-driven top-covariate tests**, `p_dd` and `p_proj` — see What is
-  compared across chunks. Scenario 4's symmetric `cos(X4)` is where they
-  matter.
-- **`p_split` on a binary covariate** — see What is compared across chunks.
-- **The report renders per scenario** (`-P scenario:<k>`), with the
-  `Var(tau)` reference line and the true-modifier set derived from the
-  scenario rather than hard-coded to scenario 2, and a classical-vs-HC3
-  section.
-
-Before that, the run needed for several independent reasons: bug O changed the
-continuous DGM, and the scenario is now numbered 2, not 3 (root `README.md`,
-Status, step 0).
-
-Changed 2026-10-08, ahead of the rerun:
-
-- **Correlated covariates, rho = 0.5 only.** The study now draws from
-  `continuous_corr_0.5` rather than the independent `continuous` set. `rho` is
-  a grid and path column (`rho_0.5/`), and `cts_val_analysis.R` writes through
-  `combo_dir()` rather than a hand-built path.
-- **One trial, split.** See Design. The chunks used to be two separate draws,
-  each with `bW` calibrated to its own size.
-- **`p_cts_adj`** in `top_var_tests` — see What is compared across chunks.
-- **DR SuperLearner added** as a third estimator, with crossfit TE-VIMs — see
-  Estimators and Variable importance. The TE-VIM scoring shared by all three
-  is now one helper, `te_vim_scores()`; the two forest TE-VIMs compute exactly
-  what they did before.
-- **Shared code moved to `../val_common.R`** when the binary arm was added:
-  the split, `fit_val_methods()`, the helpers and `chunk_validations()` (the
-  four comparisons, formerly inline in `cts_val_analysis.R`). The comparisons
-  were checked identical to the inline code at four interim points.
-- **HC3 interaction tests** (`robust = TRUE`), after the move above — see What
-  is compared across chunks. Every p-value in `subgroups` and `top_var_tests`
-  changes; the other two comparisons do not.
-- **`cts_val_rerun.sh` reset** to what `check_failed()` computes from
-  `cts_val_1.sh`. It still asked for `ncpus=6:ompthreads=5:mem=12gb` from the
-  old 5-worker setup, and `check_failed()` only ever raises a rerun's resources.
-
-Before that:
-
-- **`bottom_pval` was never a subgroup test.** The analysis script pulled the
-  interaction p-value correctly for the top-10% group (`pvals_top[4]`) but read
-  `pvals_bottom[1]` — the *intercept* — for the bottom-10% one. Every
-  `bottom_pval` in results generated before this fix is meaningless, and the
-  report excluded the column entirely. `interaction_pval()` now indexes the
-  `W:v` coefficient by name and returns `NA` when the subgroup carries no
-  contrast, so both arms are real tests and neither can silently read the wrong
-  row again.
-- **The interim grid is finer.** `interim_prop` was three points
-  (0.25/0.5/0.75); it is now eleven, 0.25 to 0.75 in 0.05 steps, so replication
-  rates read as a curve in interim size. 300 array jobs became 1100.
-- **A second importance measure.** Surrogate TreeSHAP now runs alongside the
-  TE-VIMs (see Variable importance above), and every var-imp row carries a
-  `measure` column that older results do not have.
-- **A fourth chunk comparison.** `top_var_tests` — see What is compared across
-  chunks.
-
-Before that, the crossfitting strategy change to `R/cate_models.R` (see root
-README Methods/Status) affected both estimators used here, and this folder was
-rebuilt from a pre-restructure fork (standalone copies of the DGM and the CATE
-estimators, grid/index arithmetic done by hand in `validation.sh`, hardcoded
-absolute cluster paths) onto the shared `R/` pattern every other study now
-uses. Three things changed on purpose, not by accident, as part of that
-rebuild:
-
-- **Causal-forest nuisance.** The old code built the causal forest's outcome
-  nuisance from a regression of `Y` on `(W, X)` with the observed `W` plugged
-  back in. `R/cate_models.R::run_causal_forest()` instead uses `Y.hat.cf`, a
-  separate `X`-only regression — the input `causal_forest()` actually expects.
-  This is very likely a bug fix, but it changes the causal-forest arm's
-  numbers (and its TE-VIMs, which reuse the same nuisances). Any results from
-  before this refactor are not comparable and should not be reused.
-- **Results location.** Results now write to `../results/cts_val/...`
-  (outside the repo, alongside every other study), not the old
-  `live/results/validation/...` cluster path. There is no migration step —
-  see the point above.
-- **The collect/metrics handoff was broken and is now just fixed.**
-  `collect_validation.R` wrote `validation_all_tidy.RDS`; `metrics_validation.R`
-  read `validation_all.RDS` with an incompatible nested-list structure, and
-  also carried a stale, wider scenario/size grid than anything actually run.
-  `cts_val_collect.R` and `cts_val_metrics.R` now share one grid
-  (`cts_val_config.R`) and one file (`cts_val_all.RDS`).
-
-**Not implemented.** The "compare HTE tests between chunks" comparison was
-stubbed in the original code and still is. All three estimators' per-run objects
-now carry `BLP_whole`/`independence_cate`/`independence_po` in the same shape
-`R/metrics.R::hte_test_metrics()` consumes, which is what a fifth chunk
-comparison (alongside subgroups/variance/var-imps/top-var) would build on.
-
-**Not in scope for this refactor.** `R/regression_check.R`'s old-vs-new
-harness compares a behaviour-*preserving* refactor against a baseline; the
-causal-forest nuisance change above means there is no valid "before" to check
-against here. Worth adding once a fresh baseline exists.
+- **Causal-forest nuisance.** `R/cate_models.R::run_causal_forest()` uses
+  `Y.hat.cf`, a separate `X`-only regression — the input `causal_forest()`
+  expects — not a regression of `Y` on `(W, X)` with the observed `W` plugged
+  back in. The causal forest's TE-VIMs reuse the same nuisances.
+- **Not implemented: comparing HTE tests between chunks.** All three
+  estimators' per-run objects carry `BLP_whole`/`independence_cate`/
+  `independence_po` in the shape `R/metrics.R::hte_test_metrics()` consumes,
+  which is what a fifth chunk comparison would build on.
+- **No `R/regression_check.R` entry yet.** Worth adding once a baseline exists.

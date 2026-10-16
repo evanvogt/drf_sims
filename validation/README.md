@@ -50,21 +50,16 @@ Each arm's `<prefix>_val_models.R` sources it and fixes the outcome family
 (`gaussian()` / `binomial()`). Both arms' `<prefix>_val_analysis.R` call
 `chunk_validations_se()`, so every interaction test is saved with both
 classical and HC3 standard errors. HC3 is the primary kind — see
-`continuous/README.md` and `binary/README.md` for why each arm needs it. This
-code moved out of `continuous/` unchanged when the binary arm was added
-(2026-10-08); the continuous arm's comparisons were checked identical before
-and after, while it still used classical standard errors. It switched to HC3
-later the same day, and to both kinds on 2026-10-11.
+`continuous/README.md` and `binary/README.md` for why each arm needs it.
 
-Since 2026-10-12 every interaction test also saves its `W:v` estimate and
+Every interaction test also saves its `W:v` estimate and
 standard error (`est_<test>`, `se_<test>`), and two reference contrasts:
 `ref1_<test>`, the same contrast in chunk 1's estimated CATE (what chunk 1
 claimed), and `true2_<test>`, the same contrast in chunk 2's true CATE (what
 the test estimates). The signs say whether a replication went the right way.
-The p-values keep their names and values. See `ADEMP.md`, Methods, and either
-arm's README.
+See `ADEMP.md`, Methods, and either arm's README.
 
 Each arm's report (`<prefix>_val_results.qmd`) renders one scenario at a time,
 through a Quarto `scenario` parameter — see each arm's README.
 
-See each arm's README for its design, file roles and status.
+See each arm's README for its design and file roles.

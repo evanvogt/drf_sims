@@ -6,7 +6,7 @@
 #
 # NOTE: this study's DGM carried three further defects (continuous coefficients,
 # continuous power calibration, log-odds truth), all fixed together.
-# See missing/binary/README.md.
+# See docs/DEVLOG.md.
 #
 # Mechanisms MAR / MNAR-Y0 / MNAR-tau since 2026-09-28, in the old MAR / MNAR /
 # MNAR-Y slots - see missing/continuous/cts_miss_config.R.

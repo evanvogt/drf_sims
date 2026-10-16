@@ -22,7 +22,7 @@
 # chunk replicate on the next, not which estimator is best, so the oracle and
 # semi-oracle arms are not run. The three estimators come from R/cate_models.R,
 # so the causal forest uses the shared Y.hat.cf nuisance (Y on X alone) - a
-# deliberate choice, see continuous/README.md's Status section.
+# deliberate choice, see continuous/README.md's Notes.
 #
 # The two forest estimators (and their TE-VIM refits below) are whole-sample
 # OOB, not fold-crossfit - see R/cate_models.R's crossfitting-strategy note.
@@ -662,7 +662,7 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE,
   # Fit a tree on chunk 1's top/bottom-10%-CATE groups, predict them into chunk
   # 2, and test the W x subgroup interaction there. interaction_pval indexes the
   # W:v coefficient by name, not position (a positional lookup once read the
-  # intercept - continuous/README.md).
+  # intercept - docs/DEVLOG.md).
   #
   # The groups are cut on rank(tau1), not tau1: a tau1 with tied values (a DR
   # SuperLearner fold predicting one constant) gives tied quantiles, and cut()
@@ -815,7 +815,7 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE,
   }
 
   # TODO: a chunk-vs-chunk comparison of the saved BLP/independence HTE tests
-  # (continuous/README.md, Status).
+  # (continuous/README.md, Notes).
 
   list(subgroups = subgroups, variances = variances,
        var_imps = var_imps, top_var_tests = top_var_tests)

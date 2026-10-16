@@ -6,12 +6,14 @@ bugs were found along the way, and how the campaign was tracked on the cluster.
 The README is the starting point; this file is the record behind it.
 
 Contents: the bug ledger (A–S), the status of each study's re-run (as planned
-in September–October 2026), how re-runs are tracked on the cluster, and why
-resource profiling was removed.
+in September–October 2026), how re-runs are tracked on the cluster, why
+resource profiling was removed, the 2026-09-26 scenario renumbering, why `R/`
+exists, and the per-study history that used to sit in each README's Status
+section.
 
 Other READMEs cite this file for "the bug ledger" and "Resource profiling
-(removed)". The sections below are unchanged from the root README they were
-moved out of (2026-10-11).
+(removed)". The ledger, Status and profiling sections are as moved out of the
+root README on 2026-10-11.
 
 ## Bug ledger
 
@@ -166,3 +168,128 @@ history:
 git log --diff-filter=D --name-only -- '*_profile*' '*cf_diagnose*'   # find the deleting commit
 git checkout <commit>^ -- crossfitting/cf_profile.R                  # restore a file from its parent
 ```
+
+## Scenario renumbering (2026-09-26)
+
+The binary and continuous studies share ten scenarios. On 2026-09-26 they were
+renumbered so the four the chapters report come first. No data changed: each
+scenario generates exactly what it did under its old number. Everything saved
+before then uses the old numbers: `../collected_metrics/`, results
+directories, figures and the `results_processing/` notebooks.
+
+| now | treatment effect | before 2026-09-26 |
+|---|---|---|
+| 1 | none (null) | 1 |
+| 2 | simple — continuous X4 | 3 |
+| 3 | complex — X3 + X4 + X4·X5 | 8 |
+| 4 | non-linear — cos(X4) | 9 |
+| 5 | binary X3 | 2 |
+| 6 | X3 + X4 | 4 |
+| 7 | X3·X4 | 5 |
+| 8 | X3 + X4 + X3·X4 | 6 |
+| 9 | X4·X5 | 7 |
+| 10 | exponential in X4 | 10 |
+
+`missing/` had its own numbering before then:
+
+| now | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| `missing/` before 2026-09-26 | 1 | 6 | 4 | 5 | 2 | 3 |
+
+Subsets: `model_evaluation/` ran 1, 4, 6, 8 (`crossfitting/`'s subset) until
+2026-10-11, then 1–4; `validation/` ran scenario 2 only until 2026-10-11, then
+2–4, and 1–4 from 2026-10-12; `missing/ci_example/` ran 1 and 3–6 until
+2026-10-01, then 1–4.
+
+## Why `R/` exists
+
+The repo grew by copy-paste: each new study started as a duplicate of
+`sample_size/continuous/`. By the time that stopped, the same CATE estimation
+code lived in seven files, the same DGM in four, and the same collect/check
+boilerplate in eight; `cts_models.R` and `bin_models.R` differed in two places
+out of 438 lines. Consolidating into `R/` removed about 3,000 lines and, more
+usefully, the possibility of the copies drifting apart, which is where most of
+the bugs in the ledger came from. `crossfitting/` was the model: it already
+sourced shared code rather than forking it. The figures went the same way into
+`R/figures.R` (`cts_ss.R`/`bin_ss.R` differed in 18 of 280 lines,
+`miss_cts.R`/`miss_bin.R` in 64 of 140).
+
+## Study history moved out of the READMEs (2026-10-16)
+
+Each study README used to carry a Status section and dated "since/until"
+notes. They are summarised here; the full text is in git at `9f7b43e`, e.g.
+`git show 9f7b43e:model_evaluation/README.md`.
+
+**`model_evaluation/`.** Ported from a single-commit prototype that never
+completed a run and used the external `benchtm` package for data; the port
+fixed nonexistent `here("src", ...)` paths, an undefined variable, a `future`
+plan leak, a `NUL` typo, missing `on.exit()` parens, a dead `fix_automl()`
+check, a duplicate `collate_predictions()`, a missing `n_cores` argument and
+`rf2`/`rf3`'s `mtry` (calibrated to `benchtm`'s wider covariate set). The
+candidates moved from double to single crossfitting after the port. 2026-10-08:
+correlated covariates (ρ = 0.5), 30 → 100 runs, per-arm (T-learner) outcome
+models in all 9 candidates (the S-learner made `net*`'s `Y1.hat − Y0.hat`
+constant), mean + glm propensity for `SL*`, `SL1` = the production
+`dr_superlearner`, `net2` ridge → interaction lasso, and the `cv_indep` arm
+(a second, independent fold draw) removed. 2026-10-11: scenarios 1, 4, 6, 8 →
+1–4, listed as `c(1, 4, 2, 3)` so 1 and 4 kept their array indices.
+2026-10-14: per-arm scoring nuisances (bug R) and trimmed scoring propensity
+(bug S); untrimmed, AutoML's propensity was exactly 0 or 1 on some rows of
+294/1200 `holdout`, 58 `whole` and 6 `cv_shared` runs. 2026-10-15: `inflt`,
+`inflt05` and `mu1_mse` added (metrics only). The pre-bug-O tree had 358/360
+main runs, 69 of 358 strategies runs with NA automl `holdout` phi.
+
+**`competing_risk/`.** Double crossfitting replaced by the shared strategy;
+outcome models S-learner → T-learner on 2026-09-27; trimmed propensities and
+pretested SuperLearner libraries came with it. 2026-10-01: event 1 baseline
+scale 15 → 25 and log-HR-matched effects (the old values ran the scenarios
+together on the RMTL scale); correlated covariates, ρ ∈ {0, 0.5}; the RSF
+DR-learner arms. 2026-10-06: ρ = 0.5 primary, ρ = 0 sensitivity (the reverse
+before). 2026-10-10: the copula's X4/X5 kept as noise covariates (previously
+drawn and dropped); `get_ipw()` stopped dropping units censored or with the
+competing event after the horizon (`ipw` was badly biased, event 2 worst);
+semi-oracle DR arms. On the pre-2026-10-01 DGM a full rerun left 19
+deterministic failures: 15 from whole-sample pseudo-values NA when nobody was
+observed past the horizon, 4 from `pretest_superlearner()`'s SL.mean fallback
+on a constant treated-arm RMTL2 cell; an intermediate 398 were probably
+walltime (the jobscript had been cut to 1 h). The PBS logs for that rerun were
+deleted before anyone read them; the jobscripts have used `#PBS -j oe` since.
+
+**`validation/`.** Rebuilt from a pre-restructure fork (standalone DGM and
+estimator copies, hand-written grid arithmetic in `validation.sh`, hardcoded
+cluster paths, a broken collect/metrics handoff) onto `R/`; the causal-forest
+nuisance changed to `Y.hat.cf`. `bottom_pval` read `pvals_bottom[1]`, the
+intercept, so it was never a subgroup test; `interaction_pval()` now indexes
+`W:v` by name. Interim grid 3 → 11 points; TreeSHAP and `top_var_tests` added.
+2026-10-08: correlated covariates, one trial split rather than two draws,
+`p_cts_adj`, the DR SuperLearner, the code moved to `val_common.R` for the new
+binary arm, HC3 interaction tests. 2026-10-09: ρ = 0 briefly in the grid.
+2026-10-11: scenarios 2–4, classical and HC3 SEs both saved, `p_dd`/`p_proj`,
+`median_split()` fixed for a binary covariate (it was NA whenever X3 was
+nominated), per-scenario reports. 2026-10-12: null scenario 1 (4,400 jobs,
+grid reordered), interaction estimates and `ref1`/`true2` contrasts.
+
+**`missing/`.** Bugs B, C, D, M and N (ledger above) were found here.
+`missing/binary` was a half-converted fork of the continuous study. 2026-09-27:
+the MI arm's per-imputation tests saved (earlier MI runs had none, and no
+nuisances to recover them). 2026-09-28: correlated covariates with X01–X03 as
+auxiliaries; mechanisms MAR / MNAR / MNAR-Y (and `ci_example`'s `AUX`/`AUX-Y`)
+replaced by MAR / MNAR-Y0 / MNAR-tau — the old "MNAR" had `U` in neither X nor
+Y, so was MCAR in effect, and the old "MNAR-Y" is MNAR-tau; `ci_example`'s
+`mib`/`hybrid` critical value `1 - alpha/2` → `1 - alpha` (97.5% bands
+before). 2026-09-29: `U` drawn under MAR (paired mechanisms), missingness mask
+saved, split `_cu`/`_iu` scoring, `missforest`/`multiple_imputation` within arm
+with Y; binary `bU` 0.08 → 0.12, `sU` 1 → 2 and its own `RD_SCALE_MISS`
+(scenario 4 0.204 → 0.179). 2026-09-30: `IPW` model `+ W * Y` with stabilised
+weights, `regression` within arm with Y, MI keeps `tau_mi` and the variance
+components, `blp_se_hc3`/`blp_p_os` in `mi_tests`. 2026-10-11: `ci_example`'s
+`hybrid` margin was `sqrt(lambda_hat * S_star)`, about half the correct width.
+`dr_random_forest` once carried no HTE tests under `profile = "missing"`
+(copy-paste drift); the archived results were back-filled by a one-off patch,
+removed after commit `e7b1d59`.
+
+**`crossfitting/`.** Its conclusions were first drawn on the pre-bug-O DGM.
+2026-09-27: arms rebuilt around per-arm outcome models; the S-vs-T arms
+`scf_oob_t`, `oob_oob_s` and `oob_oob_manual` removed. The CI pilot replaced a
+`run_crossfit_structured_arms()` orchestrator that trimmed nuisance fits and so
+drew different `dcf`/`cf_dcf` values from the production study.

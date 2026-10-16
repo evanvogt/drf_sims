@@ -10,7 +10,7 @@
 # Bug M lived here: this file passed oracle_link = "identity" after the binary
 # missing-data table lost its plogis(...)-wrapped oracle strings (6b06db3), so
 # dr_oracle was handed log-odds as outcome predictions for a 0/1 outcome. No
-# finished result was affected - see missing/binary/README.md. Since the
+# finished result was affected - see docs/DEVLOG.md. Since the
 # risk-difference DGM there is no oracle_link argument left to get wrong.
 
 source(here::here("R", "cate_models.R"))

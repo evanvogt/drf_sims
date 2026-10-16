@@ -65,7 +65,7 @@ CANDIDATE_MODELS <- c("rf1", "rf2", "rf3", "net1", "net2", "net3", "SL1", "SL2",
 #
 # There is no second-fold-draw arm (cv_indep): row-level honesty holds with the
 # shared draw, and a second draw cost a full nuisance pipeline per replicate.
-# See README.md, "Why cv_indep was removed".
+# See README.md, "Why there is no cv_indep arm".
 NUISANCE_ARMS <- c("whole", "cv_shared", "holdout")
 
 # ---- the calibration score's group counts -----------------------------------

@@ -136,58 +136,40 @@ Each study folder has the same shape:
 | `<s>_metrics.R` | computes metrics |
 | `jobscripts/` | PBS submission scripts |
 
-Results are written **outside the repo**, to `../results/<study>/...`.
-
-Every folder has its own README with that study's design, gotchas and status.
-
-## Why `R/` exists
-
-The repo grew by copy-paste: each new study started as a duplicate of
-`sample_size/continuous/`. By the time that stopped, `sample_size/continuous/cts_models.R` and
-`sample_size/binary/bin_models.R` differed in **two** places out of 438 lines, the same DGM
-existed in four files, and the same collect/check boilerplate in eight.
-
-Consolidating removed about 3,000 lines. The more useful outcome is that the
-copies can no longer drift — which is where most of the bugs in the ledger (`docs/DEVLOG.md`) came from.
-`crossfitting/` was the model: it already sourced shared code rather than
-forking it.
-
-See `R/README.md` for the axes of `cate_methods()`, the orchestration
-profiles, and the grid contract.
+Every folder has its own README with that study's design and how to run it.
+`R/README.md` covers the axes of `cate_methods()`, the orchestration profiles
+and the grid contract.
 
 ## Scenarios
 
 The binary and continuous studies share one set of ten treatment-effect
 scenarios (`R/dgm_scenarios.R`). The four the chapters report come first:
 
-| scenario | treatment effect | before 2026-09-26 |
-|---|---|---|
-| 1 | none (null) | 1 |
-| 2 | simple — continuous X4 | 3 |
-| 3 | complex — X3 + X4 + X4·X5 | 8 |
-| 4 | non-linear — cos(X4) | 9 |
-| 5 | binary X3 | 2 |
-| 6 | X3 + X4 | 4 |
-| 7 | X3·X4 | 5 |
-| 8 | X3 + X4 + X3·X4 | 6 |
-| 9 | X4·X5 | 7 |
-| 10 | exponential in X4 | 10 |
+| scenario | treatment effect |
+|---|---|
+| 1 | none (null) |
+| 2 | simple — continuous X4 |
+| 3 | complex — X3 + X4 + X4·X5 |
+| 4 | non-linear — cos(X4) |
+| 5 | binary X3 |
+| 6 | X3 + X4 |
+| 7 | X3·X4 |
+| 8 | X3 + X4 + X3·X4 |
+| 9 | X4·X5 |
+| 10 | exponential in X4 |
 
-The last column is the old number. The renumbering changed no data: each
-scenario generates exactly what it did under its old number. Everything saved
-before it uses the old numbers: `../collected_metrics/`, results directories,
-figures and the `results_processing/` notebooks.
-The missing-data studies use scenarios 1–6 under the same numbers. The subset
-studies run: `crossfitting/` 1, 4, 6, 8; `model_evaluation/` 1–4 (1, 4, 6, 8 until 2026-10-11);
-`crossfitting/confidence_intervals/` 1, 4, 8; `validation/continuous/` and `validation/binary/` 2-4 (2 only until 2026-10-11).
+Results saved before 2026-09-26 use older scenario numbers; the map is in
+`docs/DEVLOG.md`. The missing-data studies use scenarios 1–6. The subset
+studies run: `crossfitting/` 1, 4, 6, 8; `model_evaluation/` 1–4;
+`crossfitting/confidence_intervals/` 1, 4, 8; `validation/continuous/` and
+`validation/binary/` 2–4.
 
 Both outcomes are one model, `E[Y | x, W] = m0(x) + W·τ(x)`. For a binary
 outcome the treatment effect is on the **risk-difference** scale, the scale of
 the estimand, with the control risk bounded in [0.34, 0.70] (a 40% event rate).
 The binary modifiers are the continuous ones with X4 and X5 through `tanh`,
 signs reversed, and scaled per scenario to the largest effect the risk bounds
-allow. Until 2026-09-26 the binary effect was on the logit scale, which made X1
-and X2 effect modifiers of the risk difference too. See `sample_size/README.md`.
+allow. See `sample_size/README.md`.
 
 ## Methods
 
@@ -206,13 +188,12 @@ causal survival forests, and pseudo-value approaches — see
 `crossfitting/` compared double crossfitting (fitting nuisances over all
 `C(V,2)` fold pairs, 45 fits at `V = 10` rather than 10) against cheaper
 alternatives for DR-RF, DR-SL and causal forest. Based on that comparison,
-`R/cate_models.R` now uses, per method:
+`R/cate_models.R` uses, per method:
 
 - **DR-RF, DR-Oracle, DR-Semi-Oracle** — whole-sample, out-of-bag: outcome
   forests fit separately in each arm (a T-learner, `t_learner_rf`; each unit's
   own-arm prediction OOB), no sample splitting, and an OOB stage-2 regression
-  forest (`nuisance_rf` / `stage2_whole_rf`). Until 2026-09-27 the outcome
-  forest was an S-learner on `cbind(W, X)` (crossfitting's `oob_oob_s`).
+  forest (`nuisance_rf` / `stage2_whole_rf`).
 - **Causal Forest** — `grf`'s own internal cross-fitting (a plain
   `causal_forest(X, Y, W)` with no externally-supplied nuisances).
 - **DR-SL** — a single leave-one-fold-out crossfit, with the *same* fold
@@ -258,21 +239,18 @@ A run that fails is found by `Rscript <study>/<prefix>_check.R`, which writes
 Every jobscript writes its PBS output to a `jobscripts/logs*/` folder, which is
 not in git, so create them once on the cluster before the first submit
 (`Rscript make_log_dirs.R`). `Rscript check_all.R` on the login node counts
-expected, found and missing runs for every study in `R/study_registry.R`. The
-history of the re-run campaign is in `docs/DEVLOG.md`.
+expected, found and missing runs for every study in `R/study_registry.R`.
 
-## History
-
-`docs/DEVLOG.md` holds the record behind the code: the bug ledger (A–S), which
-studies were re-run and why, how the re-runs were tracked, and why resource
-profiling was removed. Nothing there is needed to read or run the code.
+`docs/DEVLOG.md` holds the history: the bug ledger (A–S), the re-run campaign,
+the scenario renumbering and each study's past status notes. Nothing there is
+needed to read or run the code.
 
 ## Verifying a change
 
 ```bash
 Rscript tests/run_tests.R               # quick invariants, no results needed
 Rscript R/regression_check.R baseline   # before touching anything
-Rscript R/regression_check.R verify     # after - must be 8/8
+Rscript R/regression_check.R verify     # after - every study identical
 Rscript crossfitting/cf_testing.R       # independent check of the estimators
 ```
 

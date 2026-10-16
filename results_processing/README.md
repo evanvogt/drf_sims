@@ -35,13 +35,8 @@ Shared presentation lives in `R/figures.R`: the display labels
 (`MODEL_LABELS`, `METHOD_LABELS`, `MECHANISM_LABELS`), the palette and theme,
 `summarise_metrics()` for mean ± Monte Carlo SE, `save_fig()` for the standard
 21×15cm size, and the plot shapes both pairs of scripts use
-(`point_range_plot`, `distribution_plot`, `make_bm_plots`).
-
-That module exists because the scripts had drifted into near-copies:
-`cts_ss.R` and `bin_ss.R` differed in 18 of 280 lines once the outcome prefix was
-normalised, `miss_cts.R` and `miss_bin.R` in 64 of 140, and `make_bm_plots()` was
-defined **identically** in both of the latter. Renaming an estimator for the
-write-up used to mean editing six files.
+(`point_range_plot`, `distribution_plot`, `make_bm_plots`), so renaming an
+estimator is a one-line change.
 
 Each script still owns its paths, its filters and its choice of panels — the
 shared module handles presentation, not analysis.

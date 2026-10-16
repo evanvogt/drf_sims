@@ -1,14 +1,36 @@
 # Missing covariates — continuous outcome
 
-The main missing-data design. See `missing/README.md` for the mechanisms,
-handling methods and the shared bug fixes (B, C, D — all of which originated
-here).
+The main missing-data design. See `missing/README.md` for the mechanisms and
+handling methods.
 
 | | |
 |---|---|
 | array | **12,600 jobs**: `cts_miss_1.sh` (1–9900, scenarios 1, 3, 4, 5) and `cts_miss_extra.sh` (9901–12600, scenario 2) |
 | results | `../results/missing/continuous/scenario_<k>/<n>/<type>/<prop>/<mechanism>/<method>/` |
 | metrics | `cts_miss_metrics.RDS`, including `rel_efficiency` against the `complete_data` arm; plus `cts_miss_true_cate_tests.RDS`, the true-CATE HTE test evaluation |
+
+## Calibration
+
+The `continuous_missing` table shares `sample_size/`'s baseline (`b0 = 0.4`,
+`b1 = −0.5`, `b2 = 1`) and its `bW` calibration (`sample_size/README.md`,
+"Calibration of bW"): every trial is planned for 80% power under homogeneity.
+With correlated covariates the planned SD carries Cov(X1, X2), which moves the
+planned effect to −0.27, and scenario 3's `bW` moves further because
+E[X4·X5] = 0.5. The MNAR `U` term is heterogeneity the plan knows nothing
+about, like the rest, so it is left out of the calibration too; that keeps one
+`bW` and one truth per scenario across every mechanism. At n = 500, from
+`Rscript R/calibration_report.R`:
+
+| scenario | `bW` | realised power | MNAR-Y0 | MNAR-tau |
+|---|---|---|---|---|
+| 1 | −0.27 | 0.81 | 0.54 | — |
+| 2 | −0.27 | 0.66 | 0.46 | 0.54 |
+| 3 | −1.42 | 0.56 | 0.41 | 0.47 |
+| 4 | −0.87 | 0.76 | 0.51 | 0.61 |
+| 5 | −1.67 | 0.68 | 0.47 | 0.56 |
+
+MNAR-Y0's `U` (`bU = 1`, as prognostic as X2) adds variance 1 to *both* arms,
+the plan knows nothing about it, and so it costs the most power.
 
 ## Files
 
@@ -19,17 +41,15 @@ here).
 | `cts_miss_models.R` | `family = gaussian()`, `profile = "missing"`, `ipw` threaded through |
 | `cts_miss_analysis.R` | array entry point |
 | `cts_miss_results.R` / `.qmd` | every metric, to `results/all_figures/` — the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts.R` |
-| `results_cts_miss.R` | removed 2026-10-11 (git tag `diagnostics-2026-10`): superseded by `cts_miss_results.R`/`.qmd`; it pointed at a cluster path and a metrics file that no longer exist |
 
 The `ipw` argument is the only thing separating this study's estimators from
-`continuous/`: it becomes grf `sample.weights` and SuperLearner `obsWeights`.
-`ipw = NULL` reproduces the unweighted path exactly.
+`sample_size/continuous/`: it becomes grf `sample.weights` and SuperLearner
+`obsWeights`. `ipw = NULL` reproduces the unweighted path exactly.
 
 ## Gotchas
 
-**Scenario numbers are the main study's** (since 2026-09-26; see
-`missing/README.md` for the old numbering). Scenario 2 was appended later, as a
-second block in `cts_miss_config.R`, so rows 1–9900 kept their meaning.
+**Scenario 2 is a second block** in `cts_miss_config.R`, appended after the
+others, so rows 1–9900 keep their meaning.
 
 **`multiple_imputation` returns a list of 50 datasets, not one.** The analysis
 script fits each and Rubin-combines with `combine_mi()`; only
@@ -54,15 +74,8 @@ the true CATE is constant there. `method == "multiple_imputation"` rows are `NA`
 there, the same pooling question as the estimated-CATE tests above: `data` is a
 list of 50 imputed data.frames, with no single covariate matrix to test against.
 
-**`dr_random_forest` used to carry no BLP or independence test in this study**,
-unlike `continuous/`, so `BLP_p` was `NA` for that one model. Copy-paste drift
-rather than a decision, and the decision has been taken: every model carries the
-tests where possible. `PROFILES$missing` (`R/cate_models.R`) now sets
-`dr_rf_tests = TRUE`, so the re-run writes them natively. The results made
-before that were back-filled in place by a one-off patch rather than re-run,
-and are now archived; that history is written up once, in
-`missing/binary/README.md`, since `profile = "missing"` covers both studies.
-The re-run has no patch step.
+**Every model carries the HTE tests**, `dr_random_forest` included
+(`PROFILES$missing` sets `dr_rf_tests = TRUE` in `R/cate_models.R`).
 
 ## Running it
 
@@ -81,64 +94,6 @@ Rscript missing/continuous/cts_miss_results.R           # every metric, to resul
 quarto render missing/continuous/cts_miss_results.qmd   # the same, as a browsable report
 ```
 
-To run only the `complete_data` reference arm, take
-`grid_indices(study, method = "complete_data")` (1,100 indices) and submit those
-— do **not** filter the grid.
-
-## Status
-
-**Also re-run for the 2026-09-29 review** (`missing/README.md`, Status): U
-drawn under MAR, the saved missingness mask, and imputation within arm with Y.
-`cts_miss_metrics.R` refuses runs without the mask.
-
-**And for 2026-09-30** (`missing/README.md`, Handling methods): the `IPW` model
-now includes `W * Y`, with stabilised weights, and `regression` imputes within
-arm with Y. Only those two methods' rows change: if they have already run, use
-`grid_indices(study, method = c("IPW", "regression"))` (2,800 indices).
-
-**All 12,600 rows re-run** (`cts_miss_1.sh`, then `cts_miss_extra.sh` for
-scenario 2), after archiving the old tree with `R/archive_old_results.R` (root
-`README.md`, Status, step 0). Bug O, below, supersedes rows 1–9900. The old
-tree uses the pre-2026-09-26 numbers, so running into it would put the new
-scenario 2 on top of the old scenario 2 (now 5). Then collect/metrics - no
-patch step, see `missing/README.md` Status.
-
-**Re-runs required** — for the crossfitting strategy change to
-`R/cate_models.R` (see the root README's Methods and docs/DEVLOG.md's Status), which moves all five
-estimator arms, and separately for bug F (`dr_superlearner` only). Bugs B and C
-were collection/metrics problems, so re-running `cts_miss_collect.R` and
-`cts_miss_metrics.R` over the existing per-run files recovers the mechanisms
-that were being missed and populates `rel_efficiency` — no cluster time needed
-for those two.
-
-**Also re-run for bug O** — the `continuous_missing` table now shares the main
-study's baseline (`b0 = 0.4`, `b1 = −0.5`, `b2 = 1`; scenario 4 alone had
-`b2 = 1` before) and its `bW` calibration: every trial is planned for 80% power
-under homogeneity, so every scenario has a true ATE of −0.29 at n = 500. See
-`sample_size/README.md`'s "Calibration of bW". With complete
-data, realised power is 0.81 in scenario 1 and 0.63–0.76 elsewhere. MNAR-Y's `U`
-term is heterogeneity the plan knows nothing about, like the rest, so it is
-left out of the calibration too. That keeps one `bW` and one truth per scenario
-across every mechanism, and lowers realised power under MNAR-Y to 0.54–0.67.
-
-**Superseded on 2026-09-28 by the correlated-covariate redesign**
-(`missing/ADEMP.md`): X1–X5 and X01–X03 are now drawn with exchangeable latent
-correlation 0.5, and the mechanisms are MAR / MNAR-Y0 / MNAR-tau. The planned
-SD now carries Cov(X1, X2) (b1 and b2 have opposite signs, so it shrinks, to
-√1.117), which moves the planned effect to −0.27; scenario 3's `bW` moves
-further (−1.69 → −1.42) because E[X4·X5] = 0.5. At n = 500, from
-`Rscript R/calibration_report.R`:
-
-| scenario | `bW` | realised power | MNAR-Y0 | MNAR-tau |
-|---|---|---|---|---|
-| 1 | −0.27 | 0.81 | 0.54 | — |
-| 2 | −0.27 | 0.66 | 0.46 | 0.54 |
-| 3 | −1.42 | 0.56 | 0.41 | 0.47 |
-| 4 | −0.87 | 0.76 | 0.51 | 0.61 |
-| 5 | −1.67 | 0.68 | 0.47 | 0.56 |
-
-MNAR-Y0's `U` (`bU = 1`, as prognostic as X2) adds variance 1 to *both* arms,
-the plan knows nothing about it, and so it costs the most power.
-With `PROFILES$missing` already set, re-run results carry the
-`dr_random_forest` tests, so the back-fill patch only ever mattered for results
-made before bug O.
+To run only some methods, take e.g. `grid_indices(study, method = "complete_data")`
+(1,100 indices) or `grid_indices(study, method = c("IPW", "regression"))` (2,800)
+and submit those — do **not** filter the grid.

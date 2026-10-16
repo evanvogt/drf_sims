@@ -54,7 +54,7 @@
 # (n = 500, scenarios 2-4, two seeds) cor(mu1_DR - mu0_DR, tau) was about the
 # same under both (0.73-0.96), and a little lower per arm in scenario 4.
 # Every score in a result tree written before this change is S-learner scored
-# and not comparable with one written after (README.md, "Status"; DEVLOG R).
+# and not comparable with one written after (docs/DEVLOG.md, bug R).
 require(h2o)
 require(xgboost)
 

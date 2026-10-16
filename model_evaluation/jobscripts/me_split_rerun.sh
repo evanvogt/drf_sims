@@ -3,7 +3,7 @@
 # tree's counterpart of me_strat_rerun.sh. Nothing writes that file
 # automatically (me_check.R checks the split tree with write = FALSE, for the
 # reason given in its header); write it by hand, or with grid_indices() as in
-# README.md's "Status", and set -J to its line count. Keep the %N at 10 or
+# README.md's "Rerunning part of a derived tree", and set -J to its line count. Keep the %N at 10 or
 # below, as in me_split.sh.
 #
 # Resources and trailing args as me_split.sh's - change them together.

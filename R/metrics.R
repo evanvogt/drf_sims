@@ -86,7 +86,7 @@ cate_metrics_split <- function(est, true, scenario, miss_mask, retained,
                                r_shift = NULL) {
   if (is.null(miss_mask) || is.null(retained)) {
     stop("no miss_mask / retained_indices in this run - it predates the ",
-         "2026-09-29 rerun (see missing/README.md)", call. = FALSE)
+         "2026-09-29 rerun (see docs/DEVLOG.md)", call. = FALSE)
   }
   n <- nrow(miss_mask)
   if (length(retained) != n || sum(retained) != length(est)) {

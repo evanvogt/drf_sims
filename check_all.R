@@ -13,7 +13,7 @@
 # Results only exist on the HPC (too large to sync here), so this is written
 # and syntax-tested locally but run for real on the HPC login node - same
 # split as the existing per-study check scripts. See study_registry.R and
-# README.md's Status section for what "rerun" means for each study.
+# docs/DEVLOG.md's Status section for what "rerun" means for each study.
 #
 # Writes check_all_studies.csv and check_all_studies.md next to this script.
 # Those two files are committed (not gitignored, unlike failed_ids.txt) so

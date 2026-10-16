@@ -1,12 +1,14 @@
 # Crossfitting comparison
 
-Does the double crossfitting procedure used throughout this study earn its cost?
+Does double crossfitting earn its cost?
 
-Everywhere else in `drf_sims`, two-stage estimators fit nuisances over all `C(V,2)`
-fold *pairs*; `collate_predictions` (`R/utils.R`) assembles an `n x V` pseudo-outcome
-matrix whose column `k` is untouched by fold `k`, and the second stage trains on
+Double crossfitting fits nuisances over all `C(V,2)` fold *pairs*;
+`collate_predictions` (`R/utils.R`) assembles an `n x V` pseudo-outcome matrix
+whose column `k` is untouched by fold `k`, and the second stage trains on
 `po_matrix[, k]` before predicting fold `k`. At `V = 10` that is 45 nuisance fits
-instead of 10 — 4.5x the cost — and it has never been benchmarked.
+instead of 10 — 4.5x the cost. This study benchmarks it against cheaper
+alternatives; its result is the per-method strategy `R/cate_models.R` uses
+(root `README.md`, "Methods").
 
 **The hypothesis.** Under ordinary crossfitting, a stage-2 training row `i` carries a
 pseudo-outcome from a nuisance model trained on every fold except `i`'s, which
@@ -18,9 +20,7 @@ rest of the study can be sped up 4.5x.
 T-learner), as the production DR-learners in `R/cate_models.R` do, so the arms
 differ only in how they split the sample. The per-arm fits are production's own
 code, not copies: `t_learner_rf_split` / `nuisance_rf` for the forests and
-`sl_split_fit` / `nuisance_sl` for SuperLearner. (Until 2026-09-27 most arms used
-an S-learner outcome model on `cbind(W, X)`; that design, and the S-vs-T arms
-`scf_oob_t` / `oob_oob_s` / `oob_oob_manual` that went with it, are gone.)
+`sl_split_fit` / `nuisance_sl` for SuperLearner.
 
 ## Design
 
@@ -117,7 +117,7 @@ The 8 split by stage-2 structure, and the bootstrap differs between them:
 
 Nuisances are held fixed and sliced in every case — only the final-stage forest
 is refit, which is `R/bootstrap_ci.R`'s existing design. That includes
-`cf_default`, the one arm with no nuisance stage of its own: `cf_whole` now
+`cf_default`, the one arm with no nuisance stage of its own: `cf_whole`
 returns the `Y.hat`/`W.hat` grf cross-fit internally so its bootstrap can hold
 them fixed too, rather than letting grf re-cross-fit each half sample and put
 nuisance variability into that arm's band and nobody else's.
@@ -146,9 +146,9 @@ forest fits — a paired contrast, since masking costs nothing:
   this `n` is a question for the pilot, which is why both are computed rather
   than one being argued for on paper.
 
-`simultaneous_band()` gained an `na.rm` argument for the masked variant. It
-defaults to `FALSE`, so every pre-existing caller is bit-for-bit unaffected —
-`cf_ci_testing.R` check 5 asserts that directly.
+`simultaneous_band()`'s `na.rm` argument serves the masked variant. It
+defaults to `FALSE`; `cf_ci_testing.R` check 5 asserts that the default leaves
+every other caller bit-for-bit unchanged.
 
 ### grf's own variance, for free
 
@@ -156,7 +156,7 @@ The OOB arms carry a **third** interval, `grf_normal`. For a whole-sample forest
 grf returns OOB variance estimates (bootstrap of little bags) alongside the
 predictions at no extra compute, and `R/metrics.R`'s `normal_interval()` — the
 same function `sample_size/confidence_intervals/binary/` uses for its `causal_forest_inbuilt`
-method — turns those into a CI. `cf_stage2_whole_rf`/`cf_whole` now return
+method — turns those into a CI. `cf_stage2_whole_rf`/`cf_whole` return
 `var_oob`, and `arm()` carries it; the 4 crossfit arms have none, and downstream
 code keys off exactly that.
 
@@ -182,20 +182,14 @@ It is a **pilot, not the production run**: 3 scenarios (`1, 4, 8`) × 50 runs
 = 150 replicates, `CI_boot = 200`, `CI_sf` fixed at 0.5 (grf's default
 `sample.fraction`, no sweep).
 
-Because the pilot now makes the same orchestrator call as `cf_analysis.R` minus
+Because the pilot makes the same orchestrator call as `cf_analysis.R` minus
 a SuperLearner block that sits strictly *after* every RF/CF arm in the RNG
 stream, its point estimates are **bit-identical** to the production study's for
 the same `(scenario, run)` — `cf_ci_testing.R` check 2 asserts that arm by arm
-(under `full`, since it needs SuperLearner). This replaces the earlier
-`run_crossfit_structured_arms()` orchestrator, which trimmed the out-of-scope
-nuisance fits and consequently produced a *different, equally valid* draw of
-`dcf`/`cf_dcf` that could only be checked by correlation. That function is gone;
-its trimming bought nothing once the OOB arms came into scope, since they need
-the very nuisances it was skipping.
+(under `full`, since it needs SuperLearner).
 
-`cf_half_boot` accepts single-crossfit vector nuisances (`cf_scf`) alongside its
-original double-crossfit matrix nuisances (`cf_dcf`) — a shape-detection change,
-backward compatible with its existing caller in `R/cate_models.R`.
+`cf_half_boot` accepts single-crossfit vector nuisances (`cf_scf`) as well as
+double-crossfit matrix nuisances (`cf_dcf`), by shape.
 
 Results land in `../results/crossfitting_ci/`, a wholly separate tree from
 `../results/crossfitting/` — the production study's 400 replicates are
@@ -203,7 +197,7 @@ never read or touched. Per-run files drop the bootstrap `draws` matrices
 before saving (only the bounds and `var_oob` are needed downstream), following
 this folder's existing small-file convention.
 
-Coverage from this method is already known (from `confidence_intervals/`) to
+Coverage from this method is already known (from `sample_size/confidence_intervals/`) to
 run below nominal — that's the pilot's actual research question, so
 `cf_ci_testing.R` checks band well-formedness (finite, brackets `tau` for
 most units, non-degenerate width) rather than gating on ~95% coverage.
@@ -225,9 +219,7 @@ qsub crossfitting/confidence_intervals/jobscripts/cf_ci_collect.sh
 ### Sizing the CI pilot's array job
 
 `cf_ci_1.sh`'s `#PBS -l` lines and trailing `CI_boot`/`workers`/`grf_threads`
-args are **placeholders** set by hand (currently 2 cores, 5gb, 1h, `200 2 1`).
-The `syrup` sweep meant to measure them didn't work for this study (see the root
-README's "Resource profiling (removed)"). Size them by hand, and check the first
+args are set by hand (2 cores, 5gb, 1h, `200 2 1`). Check the first
 real subjobs with `qstat -fx <jobid> | grep resources_used`. What drives the
 cost:
 
@@ -254,30 +246,10 @@ Nothing is forked: `R/utils.R` supplies `setup_rng_stream` and
 `nuisance_rf`, `sl_split_fit`, `nuisance_sl`) and, via `R/sl_library.R`,
 `pretest_superlearner`, the per-nuisance SuperLearner libraries and
 `sl_fit_predict`. `cf_testing.R` section 1 checks that `oob_oob` reproduces
-production's `dr_random_forest` bit-for-bit (this folder's stage-2 function is `cf_stage2_whole_rf`, renamed from
-`stage2_whole_rf` so it no longer masks production's; the check still sources `R/cate_models.R` into an
+production's `dr_random_forest` bit-for-bit (this folder's stage-2 function is `cf_stage2_whole_rf`, named apart from
+`stage2_whole_rf` so it does not mask production's; the check sources `R/cate_models.R` into an
 environment of its own), and section 1b that each arm's outcome forest never
 sees the other arm's outcomes.
-
-This folder was the model for the repo-wide `R/` refactor: it was already
-sourcing shared code rather than copying it, at a time when the same CATE
-estimators existed in seven files. The reference implementations it compares
-against moved from `sample_size/continuous/cts_models.R` into `R/cate_models.R`, which is
-now the only copy - `cts_models.R` became a thirteen-line profile shim (now
-`sample_size/continuous/cts_corr_models.R`).
-
-## Status
-
-**Re-run owed** - the arms were rebuilt around per-arm outcome models
-(2026-09-27, above), so no existing result reflects the current design. Before
-that, bug O changed the continuous DGM this study generates from
-(`docs/DEVLOG.md`), and the 2026-09-26 renumbering made its scenarios
-1 / 4 / 6 / 8 (were 1 / 4 / 6 / 9; the pilot's 1 / 6 / 9 are now 1 / 4 / 8).
-The comparison's conclusions were drawn on the old DGM. Archive both old trees
-(`../results/crossfitting/`, `../results/crossfitting_ci/`) first with
-`R/archive_old_results.R` (root `README.md`, Status, step 0) - `cf_results.R`
-and `cf_ci_results.R` label the new numbers, so they would mislabel the old
-`cf_metrics.RDS` / `cf_ci_metrics.RDS`.
 
 ## Running it
 
@@ -296,27 +268,27 @@ Results land in `../results/crossfitting/` (a sibling of the repo, as elsewhere)
 ## Sizing the array job
 
 `cf_1.sh`'s `#PBS -l` lines and trailing `workers`/`grf_threads` args are set by
-hand (currently 1 core, 2gb, 30 minutes, `1 1`). They were meant to be measured by
-a `syrup` profiling sweep, but that didn't work for this study (see the root
-README's "Resource profiling (removed)"). When changing them:
+hand (1 core, 2gb, 30 minutes, `1 1`). When changing them:
 
 - keep `workers x grf_threads` within `ncpus`. Otherwise the grf threads
   oversubscribe the allocated cores
 - change the trailing args and the `#PBS -l` line together, so they can't drift
   apart
-- keep `ompthreads=ncpus` (see "Deviations" below)
+- keep `ompthreads=ncpus`: PBS Pro sets `NCPUS` from `ompthreads`, and
+  `parallelly::availableCores()` reads `NCPUS`, so a lower `ompthreads`
+  understates the cores available to `plan(multisession, workers = ...)` and
+  can make it fail once `workers` exceeds it. Per-worker thread control is done
+  in R (`Sys.setenv(OMP_NUM_THREADS = grf_threads)` before `plan()`, and grf's
+  `num.threads`), independently of what PBS puts in the environment
 - check the memory request against `qstat -fx <jobid> | grep resources_used` on
   the first real subjobs
 
-## Deviations from the rest of the study, on purpose
+## Conventions specific to this folder
 
-- **Propensities are trimmed to `[0.05, 0.95]` in every arm**, including the RF ones
-  (no longer a deviation: `R/cate_models.R` now trims its RF propensities too, where
-  it used to trim only for SuperLearner). With `W ~ Bernoulli(0.5)` this is a no-op
-  for the double-crossfit nuisances — `cf_testing.R` asserts it — but it stops any
-  arm from producing exploding pseudo-outcomes and losing on a technicality.
-- **`bias` is `estimate - truth`** (bug G, fixed repo-wide).
-- **`stage2_crossfit_sl` uses the pretested library in both branches** (bug F, fixed repo-wide).
+- **Propensities are trimmed to `[0.05, 0.95]` in every arm**, as in
+  `R/cate_models.R`. With `W ~ Bernoulli(0.5)` this is a no-op for the
+  double-crossfit nuisances — `cf_testing.R` asserts it — but it stops any arm
+  from producing exploding pseudo-outcomes and losing on a technicality.
 - **The per-run files carry no `data` and no nuisance matrices** — only `tau`,
   `tau_test` and timings per arm, plus the truth vectors. Replicates are
   reproducible from `run` via `setup_rng_stream`. This is why `cf_collect.sh` asks
@@ -325,15 +297,4 @@ README's "Resource profiling (removed)"). When changing them:
   while streaming, so the large nested intermediate the other studies write to disk
   is never materialised and there is no separate `cf_metrics.sh` to submit.
 - **`num.threads` is passed explicitly to grf** and `OMP_NUM_THREADS` is set before
-  the `multisession` workers spawn. Elsewhere in the repo neither is set, which
-  means `ompthreads=2` alongside `workers <- 2` lets each worker claim 2 threads
-  against 2 allocated cores.
-- **The select lines now request `ompthreads=ncpus`, like every other study's
-  jobscripts.** PBS Pro sets `NCPUS` from `ompthreads`, and
-  `parallelly::availableCores()` reads `NCPUS` — so `ompthreads` below `ncpus`
-  understates the cores available to `plan(multisession, workers = ...)` and can
-  make it fail outright once `workers` exceeds `ompthreads`. Per-worker thread
-  control is unaffected: it's still done in R, via the `Sys.setenv(OMP_NUM_THREADS
-  = grf_threads)` call before `plan()` and via grf's `num.threads`, both of which
-  run before or independently of whatever PBS put in the environment.
-  `cf_1.sh` requests `ompthreads=ncpus` accordingly.
+  the `multisession` workers spawn, so each worker claims only its own threads.
