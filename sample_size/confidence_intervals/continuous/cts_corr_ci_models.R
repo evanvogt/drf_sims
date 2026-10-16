@@ -5,9 +5,7 @@
 # This file is the correlated continuous CI and optimal_sf studies'
 # configuration of them: the "ci" orchestration profile, which adds half-sample
 # bootstrap intervals and causal-forest variance estimates, and drops the
-# SuperLearner arm and the post-estimation BLP / independence tests. It was
-# sample_size/confidence_intervals/continuous/cts_ci_models.R until that study
-# was retired (2026-10-06); the function is unchanged.
+# SuperLearner arm and the post-estimation BLP / independence tests.
 
 source(here::here("R", "cate_models.R"))
 

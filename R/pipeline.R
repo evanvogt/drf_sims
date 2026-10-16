@@ -1,25 +1,10 @@
 ##########
 # title: shared simulation-pipeline plumbing
 ##########
-# One copy of get_results() and check_failed(), which existed in eight near-
-# identical versions differing only in a parameter grid and a results path.
-#
-# The point is not the line count. Each study defined its grid FOUR times - in
-# *_analysis.R, *_check.R, *_collect.R and implicitly in *_metrics.R - and the
-# copies had drifted:
-#
-#   * missing/continuous/cts_miss_collect.R looked for mechanism "AUX"/"AUX-Y"
-#     while the DGM, analysis and check scripts all used "MNAR"/"MNAR-Y", so two
-#     of the three mechanisms were silently collected as empty.  (bug B)
-#   * cts_miss_metrics.R built its relative-efficiency reference from
-#     method == "complete_data", which the collect grid never included, so
-#     rel_efficiency was NA for every row.  (bug C)
-#   * cts_miss_analysis.R filtered the grid AFTER expand.grid, which renumbered
-#     the array index, so index i meant different parameters in the analysis
-#     script than in the check and rerun scripts.  (bug D)
-#
-# A study now declares its grid once, in <study>/<prefix>_config.R, and every
-# script reads it from there. The array index is always a row of `grid`.
+# A study declares its parameter grid once, in <study>/<prefix>_config.R, and
+# every script (analysis, check, collect, metrics) reads it from there. The
+# PBS array index is a row number of `grid`, so the grid is never filtered or
+# reordered after construction: that would renumber every job.
 
 library(dplyr)
 library(purrr)
@@ -78,7 +63,7 @@ load_study <- function(config_path, config_var) {
 #' Array indices of the grid rows matching a set of column values
 #'
 #' The safe way to run part of a study. Filtering the grid itself renumbers every
-#' job (bug D); this selects row numbers and leaves the numbering alone.
+#' job; this selects row numbers and leaves the numbering alone.
 #'
 #'   idx <- grid_indices(study, method = "complete_data")
 #'   cat(idx, file = "jobscripts/subset_ids.txt", sep = "\n")
@@ -135,17 +120,10 @@ run_numbers <- function(files) {
 #' Indices are row numbers of study$grid, which is why the grid must never be
 #' filtered after construction.
 #'
-#' Also points <prefix>_rerun.sh at the list it just wrote - see
-#' update_rerun_script(). Keeping the two in step used to be a manual edit the
-#' rerun scripts asked for in a comment, and nothing checked it: -J below the
-#' line count silently drops the tail of the list, and -J above it feeds the
-#' analysis script an empty index.
+#' Also points <prefix>_rerun.sh at the list it just wrote (update_rerun_script()).
 #'
 #' The runs expected for each combination are the `run` values the grid holds
-#' for it, not seq_len(study$n_sims). The two agree for a rectangular grid, but
-#' binary and continuous append rows taking scenarios 1-4 to 500 runs while the rest stay at 100, and a
-#' flat n_sims would either miss runs 101-500 or report them missing for the
-#' scenarios that never had them.
+#' for it (expected_runs()), not seq_len(study$n_sims).
 #'
 #' @param write write the index list to study$failed_file
 #' @param update_rerun also rewrite the rerun jobscript. Only consulted when
@@ -190,21 +168,17 @@ check_failed <- function(study, write = TRUE, update_rerun = TRUE, ...) {
 
 ##### jobscript editing #######################################################
 # check_failed() writes failed_ids.txt and then rewrites the study's
-# <prefix>_rerun.sh to match it. Doing that by hand is what the "Set -J to
-# 1-<number of lines in failed_ids.txt> before submitting" comments in the
-# rerun scripts were asking for, and it is easy to get wrong in a way nothing
-# catches: -J too small silently drops the tail of failed_ids.txt, and -J too
-# large makes `sed -n "${PBS_ARRAY_INDEX}p"` return an empty string, so the
-# analysis script is called with an empty index argument.
+# <prefix>_rerun.sh to match it. A mismatch fails silently: -J too small drops
+# the tail of failed_ids.txt, and -J too large makes
+# `sed -n "${PBS_ARRAY_INDEX}p"` return an empty string, so the analysis
+# script is called with an empty index argument.
 
 #' Read a jobscript without disturbing its line endings
 #'
-#' Every jobscript in this repo is CRLF, four of the rerun scripts have no
-#' trailing newline, and there is no .gitattributes. Editing with
-#' readLines()/writeLines() strips the \r from only the lines it edits when it
-#' runs on the HPC login node, and always appends a
-#' final newline, so a three-line edit shows up as a whole-file diff. Round-trip
-#' the bytes instead and put back exactly what was there.
+#' The jobscripts are CRLF, some have no trailing newline, and there is no
+#' .gitattributes. readLines()/writeLines() on the HPC login node would strip
+#' the \r from only the edited lines and add a final newline, so a three-line
+#' edit would show as a whole-file diff. Round-trip the bytes instead.
 read_script <- function(path) {
   txt <- rawToChar(readBin(path, "raw", file.size(path)))
   list(lines    = strsplit(gsub("\r\n", "\n", txt, fixed = TRUE), "\n",
@@ -262,8 +236,8 @@ parse_select <- function(line) {
 #' The bump is always computed from the base script and then max()ed against
 #' what the rerun script already asks for. That makes repeat calls idempotent -
 #' the second call finds its own output and changes nothing - while leaving hand
-#' escalations alone: bin_ci_rerun.sh was raised to mem=15gb against a 5gb base,
-#' and recomputing from the base alone would quietly drop it back to 6gb.
+#' escalations alone: a rerun raised by hand to mem=15gb against a 5gb base
+#' would otherwise drop back to 6gb.
 #'
 #' A single failure is the exception to -J 1-<n_failed>: PBS Pro rejects an
 #' array whose range has one subjob, so -J 1-1 never gets past qsub. The -J line
@@ -274,12 +248,12 @@ parse_select <- function(line) {
 #' one-line failed_ids.txt - the one index. The next call with more than one
 #' failure finds the ##PBS line and turns it back into a live -J.
 #'
-#' @param n_failed number of indices in study$failed_file
 #' A directive line in the rerun script that is present but unreadable is left
 #' exactly as it is, with a warning, because there is then no way to tell what
 #' it currently asks for and so no way to promise not to lower it. The other
 #' directive is still updated - the two are independent.
 #'
+#' @param n_failed number of indices in study$failed_file
 #' @param cpu_add cores added to the base ncpus; rounded up to a whole core.
 #'   ompthreads is deliberately not raised with it: the R-level parallelism is
 #'   fixed by the trailing args on the Rscript line (workers x grf_threads =
@@ -366,10 +340,9 @@ update_rerun_script <- function(study, n_failed, cpu_add = 1, mem_factor = 1.2,
         list(ncpus = 0L, ompthreads = 0L, mem = 0L)
       } else cur_sel
 
-      # ceiling(), not the raw product: PBS wants whole cores and whole seconds,
-      # and sprintf's %d rejects a fractional double outright, so a non-integer
-      # cpu_add or time_factor used to abort the call before anything was
-      # written - taking the -J fix down with it.
+      # ceiling(): PBS wants whole cores and seconds, and sprintf's %d rejects a
+      # fractional double, which would abort the call before the -J fix is
+      # written
       ncpus <- max(ceiling(base_sel$ncpus + cpu_add), floor_sel$ncpus)
       omp   <- max(base_sel$ompthreads,               floor_sel$ompthreads)
       mem   <- max(ceiling(base_sel$mem * mem_factor), floor_sel$mem)

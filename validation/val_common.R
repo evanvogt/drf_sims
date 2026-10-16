@@ -8,40 +8,21 @@
 # this and fixes the outcome family; its <prefix>_val_analysis.R is the array
 # entry point.
 #
-# This lived in continuous/cts_val_models.R and continuous/cts_val_analysis.R
-# until the binary arm was added (2026-10-08) and moved here unchanged, apart
-# from two arguments that default to the continuous behaviour:
+# Two arguments carry the outcome-family difference between the arms:
 #   family  the DR SuperLearner's outcome-model family (fit_val_methods)
 #   robust  HC3 standard errors in the interaction tests (interaction_test,
 #           interaction_test_adj, chunk_validations) - see coef_test
+# chunk_validations_se() runs chunk_validations() with classical and HC3 SEs
+# and stacks the two under an `se` column. Every interaction test saves its W:v
+# estimate and SE next to its p-value, plus two reference contrasts, ref1 and
+# true2 (see "Reference contrasts" below), whose signs say whether a
+# replication went the right way.
 #
-# Since 2026-10-11 the analysis scripts call chunk_validations_se(), which runs
-# chunk_validations() once with classical and once with HC3 standard errors and
-# stacks the two under an `se` column, and the top-covariate tests carry two
-# data-driven forms (p_dd, p_proj) alongside p_cts/p_cts_adj/p_split.
-#
-# Since 2026-10-12 every interaction test saves its W:v estimate and standard
-# error next to its p-value, and two reference contrasts: ref1, the contrast
-# chunk 1's estimated tau implied, and true2, the value the chunk-2 test is
-# estimating, from chunk 2's true tau (see "Reference contrasts" below). Their
-# signs say whether a replication went the right way. The p-values are
-# unchanged, under their old names.
-#
-# The estimation logic here (both importance measures and the interaction
-# tests) is specific to these studies - nothing else in the repo uses it - so it
-# stays in validation/ rather than moving into R/.
-#
-# The nuisance estimation and the three estimators (causal_forest,
-# dr_random_forest, dr_superlearner) live in R/cate_models.R. The question is
-# whether subgroups/variance/variable-importance found on one chunk of a trial
-# replicate on the next, not which estimator is best, so the oracle and
-# semi-oracle arms are not run.
-#
-# Adopting R/cate_models.R's run_causal_forest also switches the causal-forest
-# arm to the shared Y.hat.cf nuisance (a regression of Y on X alone) rather than
-# the old validation-local nuisance (Y on (W,X) with the observed W plugged
-# back in). That is a deliberate change, not an accident - see
-# continuous/README.md's Status section.
+# The question is whether subgroups/variance/variable importance found on one
+# chunk replicate on the next, not which estimator is best, so the oracle and
+# semi-oracle arms are not run. The three estimators come from R/cate_models.R,
+# so the causal forest uses the shared Y.hat.cf nuisance (Y on X alone) - a
+# deliberate choice, see continuous/README.md's Status section.
 #
 # The two forest estimators (and their TE-VIM refits below) are whole-sample
 # OOB, not fold-crossfit - see R/cate_models.R's crossfitting-strategy note.
@@ -61,10 +42,9 @@ source(here::here("R", "cate_models.R"))
 #' Split one generated trial at the interim analysis
 #'
 #' The first n * interim_prop participants are chunk 1, the rest chunk 2. Rows
-#' are iid, so the first n1 are a valid "enrolled by the interim" cohort. The
-#' chunks used to be drawn as two separate datasets, and
-#' generate_scenario_data() calibrates bW to 80% power at the n it is given - so
-#' each chunk was its own trial with its own ATE, not two halves of one.
+#' are iid, so the first n1 are a valid "enrolled by the interim" cohort. Two
+#' separate draws would not do: generate_scenario_data() calibrates bW to 80%
+#' power at the n it is given, so each would be its own trial with its own ATE.
 #' Splitting one draw also nests the chunks across interim_prop: run r's chunk 1
 #' at 0.25 is a subset of its chunk 1 at 0.30, so curves over interim_prop are
 #' paired within run.
@@ -204,8 +184,7 @@ fit_val_methods <- function(data, n_folds = 10, num.threads = NULL,
 # covariate dropped and take its OOB predictions, then compare their
 # prediction error against the full model's OOB predictions - a
 # pathwise-derivative-style importance measure. Whole-sample OOB throughout,
-# matching R/cate_models.R's stage2_whole_rf / run_causal_forest - this used
-# to refit per fold instead, before those moved off fold-crossfitting.
+# matching R/cate_models.R's stage2_whole_rf / run_causal_forest.
 # `get_te_vims` covers estimators whose second stage is a plain regression
 # forest on a pseudo-outcome (DR Random Forest); `get_te_vims_causal_forest`
 # refits a causal_forest instead, since that estimator takes (X, Y, W)
@@ -265,11 +244,10 @@ get_te_vims <- function(X, po, tau, num.threads = NULL) {
 #' dropped covariate
 #'
 #' Each dropped-covariate forest cross-fits its own nuisances internally, same
-#' as the full model (R/cate_models.R::run_causal_forest) - this used to
-#' refit fold-wise against externally-supplied double-crossfit nuisances.
+#' as the full model (R/cate_models.R::run_causal_forest).
 #'
 #' @param po the po field of nuisance_rf()'s output, used for scoring only -
-#'   the forest itself no longer takes externally-supplied nuisances
+#'   the forest itself takes no externally-supplied nuisances
 #' @param tau full-model OOB CATE estimates
 #' @param num.threads grf thread count, as in get_te_vims() - and it matters more
 #'   here, since a causal_forest cross-fits its own nuisances and so is the more
@@ -454,8 +432,7 @@ NO_TEST <- c(est = NA_real_, se = NA_real_, p = NA_real_)
 #' Estimate, standard error and p-value of one coefficient of a fitted lm,
 #' classical or HC3
 #'
-#' The classical triple is summary.lm's own row, so the p-value is bit-identical
-#' to what coef_pval() returned before it saved the estimate too (2026-10-12).
+#' The classical triple is summary.lm's own row.
 #'
 #' @param robust FALSE: summary.lm's t-test. TRUE: the same t-test on
 #'   sandwich::vcovHC(type = "HC3") standard errors, which both arms pass. A
@@ -574,7 +551,7 @@ tau_slope_adj <- function(tau, X, x_top) {
 #'   true2)
 #' @return named numeric vector est_<test>..., se_<test>..., ref1_<test>...,
 #'   true2_<test>..., tests in the order given. The p-values are left to the
-#'   caller, which saves them under their pre-2026-10-12 names.
+#'   caller, which saves them under their own names (top, bottom, p_<form>).
 stat_cols <- function(tests) {
   per_stat <- list(
     est   = vapply(tests, function(t) t$test[["est"]], numeric(1)),
@@ -666,7 +643,7 @@ projection_score <- function(x1, tau1, x2) {
 #'   scripts attach it as results2$truth; a caller without it gets NA true2_*.
 #' @return list(subgroups, variances, var_imps, top_var_tests), each a named
 #'   list by model. Every interaction test carries its p-value under its
-#'   original name (top, bottom, p_<form>) and, since 2026-10-12, est_<test>,
+#'   original name (top, bottom, p_<form>) and est_<test>,
 #'   se_<test>, ref1_<test> and true2_<test> - see "Reference contrasts" above
 chunk_validations <- function(results1, results2, data1, data2, robust = FALSE,
                               tau2 = results2$truth$tau) {
@@ -684,9 +661,8 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE,
   ##########
   # Fit a tree on chunk 1's top/bottom-10%-CATE groups, predict them into chunk
   # 2, and test the W x subgroup interaction there. interaction_pval indexes the
-  # W:v coefficient by name. This used to be two positional lookups, and the
-  # bottom one read `pvals_bottom[1]` - the intercept - so bottom_pval was never
-  # a subgroup test at all. Results from before that fix are not comparable.
+  # W:v coefficient by name, not position (a positional lookup once read the
+  # intercept - continuous/README.md).
   #
   # The groups are cut on rank(tau1), not tau1: a tau1 with tied values (a DR
   # SuperLearner fold predicting one constant) gives tied quantiles, and cut()
@@ -838,10 +814,8 @@ chunk_validations <- function(results1, results2, data1, data2, robust = FALSE,
     top_var_tests[[model]] <- do.call(rbind, rows)
   }
 
-  # TODO: all three estimators carry BLP_whole/independence_cate/independence_po
-  # (see R/cate_models.R, R/metrics.R::hte_test_metrics()) in a shape a
-  # chunk-vs-chunk HTE-test comparison could use directly. Not implemented yet -
-  # see continuous/README.md's Status section.
+  # TODO: a chunk-vs-chunk comparison of the saved BLP/independence HTE tests
+  # (continuous/README.md, Status).
 
   list(subgroups = subgroups, variances = variances,
        var_imps = var_imps, top_var_tests = top_var_tests)

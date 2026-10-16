@@ -1,91 +1,45 @@
 ##########
 # title: shared data-generating mechanisms
 ##########
-# One implementation of what was four forked DGM files:
-#   sample_size/continuous/cts_dgms.R
-#   sample_size/binary/bin_dgms.R
-#   sample_size/confidence_intervals/continuous/cts_ci_dgms.R  (a verbatim copy of the first,
-#                                                   as its own header admitted)
-#   sample_size/confidence_intervals/binary/bin_ci_dgms.R
-#   missing/{continuous,binary}/*_miss_dgms.R      (scenario half; the missingness
-#                                                   machinery is in R/missingness.R)
+# A scenario is one row of a scenario table: its treatment effect (te_expr)
+# and its oracle formula (oracle_expr) are string columns, so it is defined in
+# one place. Both outcomes are one model, E[Y | x, W] = m0(x) + W * tau(x),
+# differing in m0, the noise, and the scale and sign of the modifiers. X1 and
+# X2 are purely prognostic; every scenario draws X1-X5, and which of X3-X5
+# modify the effect is read off te_expr (te_uses()).
 #
-# Each fork carried TWO parallel 10-branch switch() statements - one for the
-# treatment effect, one for the oracle formula string - that had to be kept in
-# step by hand. Both are now string columns on the scenario table, so a scenario
-# is defined in one place and the cts/bin divergences are single table cells.
+# BINARY OUTCOMES ARE ON THE RISK-DIFFERENCE SCALE: P(Y = 1 | x, W) =
+# m0(x) + W * tau(x), with the control risk m0 bounded in [p0_lo, p0_hi] so the
+# treated risk stays inside [0, 1] (control_mean(), RD_SCALE). The CATE is then
+# exactly te_expr. sample_size/README.md has the reasoning.
 #
 # DRAW ORDER IS PART OF THE CONTRACT. Every study seeds with setup_rng_stream()
-# and reproduces runs by index, so the sequence of random draws below must not
+# and reproduces runs by index, so the sequence of random draws must not
 # change:
 #     W, X1, X2, X3, X4, X5, [U], [err], X01, X02, X03, cats
-# U only for the MNAR mechanisms, and err only for continuous outcomes. The
-# correlated sets - the missing-data sets and the *_corr_* sets, which have a
-# `rho` column (see CORRELATED COVARIATES below) - draw instead
+# err only for continuous outcomes. Sets with a `rho` column (the missing-data
+# and *_corr_* sets) draw instead
 #     W, Z-block (X1-X5, X01-X03), [U], [err], cats
-# The *_corr_* sets take no mechanism, so draw no U. The missing-data sets draw
-# U under EVERY mechanism, MAR included, whenever a mechanism is
-# given (since 2026-09-29). MAR never uses it; drawing it anyway keeps err and
-# cats on the same draws under all three mechanisms, so within a run the MAR
-# and MNAR datasets share W, X, err and cats and differ only by U's term in Y
-# (and by the amputation). Before then U was drawn only under MNAR, which
-# shifted err and cats, so MAR and MNAR were not paired on Y.
-# R/regression_check.R fingerprints the generated dataset precisely to catch a
-# change here.
+# U is drawn whenever a missingness mechanism is given, MAR included, so that
+# within a run the MAR and MNAR datasets share W, X, err and cats. rho = 0 still
+# takes the copula branch, so it is paired run for run with rho > 0.
+# R/regression_check.R fingerprints the generated dataset to catch a change here.
 #
-# CORRELATED COVARIATES (missing-data sets since 2026-09-28; the *_corr_* sets
-# of sample_size/ since 2026-10-01). The main studies draw every
-# covariate independently. The correlated sets draw X1-X5
-# and X01-X03 from a Gaussian copula with exchangeable latent correlation rho
-# (correlated_covariates()): X1 and X3 thresholded at their prevalences, the
-# rest scaled latent columns. In the missing-data sets X01-X03 are then
-# auxiliaries - never amputated,
-# in neither m0 nor tau, but informative about the amputed covariates. With
-# independent covariates imputation had nothing to impute from and MAR only
-# selected on X. The truth functions m0 and tau are unchanged; what moves is
-# E[g] where tau multiplies two modifiers, and the planned SD / control event
-# rate through Cov(X1, X2), which te_grid(), baseline_grid() and
-# calibrate_bW() integrate over the correlated latent. rho = 0 still takes the
-# copula branch (the *_corr_0 sets): independent covariates, but drawn in the
-# copula's order, so paired run-for-run with the same run at rho > 0.
+# CORRELATED COVARIATES. X1-X5 and X01-X03 come from a Gaussian copula with
+# exchangeable latent correlation rho (correlated_covariates()): X1 and X3
+# thresholded at their prevalences, the rest scaled latent columns. In the
+# missing-data sets X01-X03 are auxiliaries: never amputated, in neither m0 nor
+# tau, but informative about the amputed covariates. te_grid(), baseline_grid()
+# and calibrate_bW() integrate over the correlated latent.
 #
-# MISSINGNESS MECHANISMS (MISS_MECHS). MAR needs no U (it is drawn, unused - see
-# DRAW ORDER). Under both MNAR ones an
-# unobserved U ~ N(0, sU), independent of X, drives the missingness
-# (R/missingness.R) and enters the outcome as the set's u_expr: MNAR-Y0 adds it
-# to the control mean (both arms), MNAR-tau to the treatment effect. They
-# replaced MNAR / MNAR-Y on 2026-09-28: the old MNAR had U in neither X nor Y,
-# so it was MCAR, and the old MNAR-Y is MNAR-tau.
+# MISSINGNESS MECHANISMS (MISS_MECHS). Under MNAR-Y0 and MNAR-tau an unobserved
+# U ~ N(0, sU), independent of X, drives the missingness (R/missingness.R) and
+# enters the outcome as the set's u_expr: in the control mean (MNAR-Y0) or the
+# treatment effect (MNAR-tau). MAR draws U but does not use it.
 #
-# EVERY SCENARIO DRAWS X1-X5. Since 2026-09-27 X3, X4 and X5 are drawn and
-# returned whether or not the scenario's treatment effect uses them, so every
-# dataset has the same ten covariates and scenarios differ only in the CATE.
-# Before then each was drawn only where the scenario needed it (plus X3 in
-# scenario 9), which shifted every later draw: runs of scenarios 1, 2, 4-8 and
-# 10 made before 2026-09-27 are not reproducible from this file. Which
-# covariates modify the effect is read off te_expr (te_uses()).
-#
-# SCENARIO NUMBERING. The four scenarios the chapters report come first:
-# 1 null, 2 simple, 3 complex, 4 non-linear, then the other six. Before
-# 2026-09-26 the ten were numbered differently; old -> new is
+# SCENARIO NUMBERING: 1 null, 2 simple, 3 complex, 4 non-linear, then the other
+# six. Results saved before 2026-09-26 use the old numbers; old -> new is
 #   1 -> 1, 3 -> 2, 8 -> 3, 9 -> 4, 2 -> 5, 4 -> 6, 5 -> 7, 6 -> 8, 7 -> 9, 10 -> 10
-# and the missing-data set moved with them (see TE_MISS). Only the numbering
-# changed: each scenario generates exactly the data it did under its old number.
-# Anything saved before then - collected metrics, figures, results_processing/
-# notebooks - uses the old numbers.
-#
-# BINARY OUTCOMES ARE ON THE RISK-DIFFERENCE SCALE. Every binary set generates
-#     P(Y = 1 | x, W) = m0(x) + W * tau(x)
-# so the treatment effect adds to the risk, with the control risk m0 bounded in
-# [p0_lo, p0_hi] to keep the treated risk inside [0, 1] (control_mean(),
-# RD_SCALE). The CATE the binary studies estimate is a risk difference, and it
-# is now exactly the scenario's te_expr: X1 and X2 are purely prognostic. Until
-# 2026-09-26 the effect was on the logit scale, so the link made X1 and X2
-# effect modifiers on the RD scale, scenario 1 was not an RD null, and the HTE
-# changed with n (sample_size/README.md). Both outcomes are now one model,
-# E[Y | x, W] = m0(x) + W * tau(x), differing in m0, the noise, and the scale and
-# sign of the modifiers. Binary scenario 10 now draws X3, which it did not
-# before.
 
 library(dplyr)
 
@@ -108,10 +62,7 @@ TE_10 <- c(
 
 # oracle formulas. Every oracle formula in this file returns the outcome MEAN
 # E[Y | X, W] - the linear predictor here, the risk in ORACLE_RD - so the model
-# code applies no link. Until the risk-difference DGM the binary formulas were
-# linear predictors and the binary studies passed oracle_link = "logit" for the
-# model code to apply plogis; a mismatch there was bug M. See the header of
-# R/cate_models.R.
+# code applies no link.
 ORACLE_10 <- c(
   "b0 + b1*X$X1 + b2*X$X2 + W*bW",
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b4*X$X4)",
@@ -129,7 +80,6 @@ ORACLE_10 <- c(
 # and X5 entering through tanh - bounded, monotone and close to linear within
 # +-1 SD - so every treated risk stays in [0, 1] without changing the
 # covariates' distributions. cos(X4) and exp(-|X4|) are bounded already.
-# Scenario 10 takes the continuous form; it was b4 * exp(X4), unbounded.
 TE_RD <- c(
   "rep(bW, n)",
   "bW + b4 * tanh(X4)",
@@ -166,31 +116,24 @@ ORACLE_RD <- paste0(RD_CONTROL, c(
 #   - at n = 100, where the planned RD (-0.248) is largest: the floor, which
 #     binds in every scenario but 4
 #   - at n = 1000, where it is smallest: the ceiling
-# EXCEPT scenario 4, frozen at 0.204. Until 2026-09-29 RD_SCALE also had to
-# hold under missing/binary's MNAR mechanisms, whose ceiling capped scenario 4
-# at 0.204. The missing set now has its own scale (RD_SCALE_MISS below), which
-# would let scenario 4 rise to 0.209, but the binary sample_size studies
-# (binary/, confidence_intervals/binary, optimal_sf) were already running on
-# 0.204, so it was left there.
+# EXCEPT scenario 4, frozen at 0.204 (the bounds would now allow 0.209) because
+# the binary studies were already running on it.
 # Reversing the signs points each asymmetric scenario's larger swing towards
 # LESS benefit, where the bounds leave room - with the continuous signs,
 # scenarios 3, 4, 5, 8 and 10 would have to be much smaller. The price is that
-# the opposite subgroup benefits more than in continuous/, undoing bug P's sign
-# harmonisation. R/bin_verify_hte.R re-derives RD_SCALE from the tables
-# and fails if it drifts: change p0_lo, p0_hi, b0-b2, RD_EPS or the binary
-# studies' n, and it must be recomputed.
-# The binary_corr_* sets keep RD_SCALE except in scenario 9 (RD_SCALE_CORR
-# below), so binary_corr_0.5's scenario 3 and 8 floors dip below RD_EPS - see
-# CORRELATED SAMPLE-SIZE SETS below.
+# the opposite subgroup benefits more than in the continuous table.
+# R/bin_verify_hte.R re-derives RD_SCALE from the tables and fails if it
+# drifts: change p0_lo, p0_hi, b0-b2, RD_EPS or the binary studies' n, and it
+# must be recomputed.
 RD_SCALE <-c(NA, 0.082, 0.051, 0.204, 0.137, 0.075, 0.082, 0.137, 0.164, 0.596)
 RD_EPS <- 0.01
 
-# missing/binary's own scale, for its scenarios 1-6 at n = 500 (since
-# 2026-09-29; before then it inherited RD_SCALE). Each RD_SCALE_MISS[k] is
-# min(RD_SCALE[k], the largest value, floored to 3 dp, that keeps every treated
-# risk inside [RD_EPS, 1 - RD_EPS] at n = 500 with bU * tanh(U) added under
-# either MNAR mechanism). So the HTE is sample_size/binary's wherever the bounds
-# allow it, and only scenario 4 - where the MNAR ceiling binds - is smaller.
+# missing/binary's own scale, for its scenarios 1-6 at n = 500. Each
+# RD_SCALE_MISS[k] is min(RD_SCALE[k], the largest value, floored to 3 dp, that
+# keeps every treated risk inside [RD_EPS, 1 - RD_EPS] at n = 500 with
+# bU * tanh(U) added under either MNAR mechanism). So the HTE is RD_SCALE's
+# wherever the bounds allow it, and only scenario 4 - where the MNAR ceiling
+# binds - is smaller.
 # BU_MISS is the largest bU, to 2 dp, that leaves every floor-bound scenario
 # (2, 3, 5, 6) its RD_SCALE: n = 500's smaller planned RD frees floor room that
 # n = 100 needs in the main studies, and U spends it. The larger bU is what
@@ -199,14 +142,12 @@ RD_EPS <- 0.01
 BU_MISS <- 0.12
 RD_SCALE_MISS <- c(NA, 0.082, 0.051, 0.179, 0.137, 0.075)
 
-# sample_size/binary's scale (since 2026-10-04, when its scenarios
-# 5-10 were added): RD_SCALE, except scenario 9. At rho = 0.5, E[g] in
+# The binary_corr_* sets' scale: RD_SCALE, except scenario 9. At rho = 0.5, E[g] in
 # scenario 9 (tanh(X4) * tanh(X5)) rises, bW falls, and under RD_SCALE the
 # treated-risk floor at n = 100 is -0.004 - generate_scenario_data() would stop.
 # 0.139 is the largest value, floored to 3 dp, that keeps that floor at RD_EPS
 # (derived as RD_SCALE is, before bW's rounding). It is used at both rhos, so
-# the rho = 0 and rho = 0.5 arms stay paired on tau; scenario 9 is therefore
-# the one binary_corr_* scenario whose tau(x) is not binary/'s.
+# the rho = 0 and rho = 0.5 arms stay paired on tau.
 # bin_verify_hte.R re-derives it.
 RD_SCALE_CORR <- replace(RD_SCALE, 9, 0.139)
 
@@ -261,9 +202,8 @@ SCENARIO_SETS <- list(
   continuous = scenario_table(
     scenario = 1:10, description = DESC_10,
     X1_prob = 0.4, X3_prob = 0.7,
-    # one baseline for every scenario (bug O). With the identity link these set
-    # the outcome's noise, not the CATE; they varied by scenario before, with
-    # b1 = -0.05 leaving X1 all but unprognostic
+    # one prognostic baseline for every scenario; it sets the outcome's
+    # prognosis and noise, not the CATE
     b0 = 0.4, b1 = -0.5, b2 = 1,
     # NA wherever the scenario's te_expr doesn't use the coefficient
     b3 = c(NA, NA, 2, NA, 2, 0.3, NA, 2, NA, 0.3),
@@ -277,7 +217,7 @@ SCENARIO_SETS <- list(
   continuous_missing = scenario_table(
     scenario = 1:6, description = DESC_MISS,
     X1_prob = 0.4, X3_prob = 0.7,
-    # the same shared baseline as the main continuous table (bug O)
+    # the same baseline as the continuous table
     b0 = 0.4, b1 = -0.5, b2 = 1,
     b3 = c(NA, NA, 2, NA, 2, 0.3),
     b4 = c(NA, -1, 0.5, 1, NA, -1),
@@ -295,8 +235,8 @@ SCENARIO_SETS <- list(
 )
 
 # The binary table is the continuous one on the risk-difference scale (see the
-# file header and RD_SCALE): the same covariates and descriptions, the modifiers sign-reversed and scaled by RD_SCALE, and the
-# control risk m0 = p0_lo + (p0_hi - p0_lo) * plogis(b0 + b1 X1 + b2 X2). b1 and
+# file header and RD_SCALE): the same covariates and descriptions, the
+# modifiers sign-reversed and scaled by RD_SCALE, and the control risk m0 = p0_lo + (p0_hi - p0_lo) * plogis(b0 + b1 X1 + b2 X2). b1 and
 # b2 are continuous's, and b0 = -1.72 puts the control event rate at
 # E[m0] = 0.400. m0 lies in [0.34, 0.70] (5-95%: 0.35-0.50, SD 0.048), so X1
 # and X2 are only weakly prognostic: at n = 100 the planned RD is -0.248, and
@@ -322,15 +262,13 @@ SCENARIO_SETS$binary <- transform(
 # same bound under either), and mean zero, so the truth given the observed
 # covariates - the U-free m0 + tau - is exactly the average over U, as it is
 # for continuous_missing's bU * U.
-# bU = BU_MISS = 0.12 with sU = 2 (since 2026-09-29; was bU = 0.08, sU = 1):
-# tanh(U) at sU = 2 is closer to +-1, so U's contribution has SD 0.095 and the
-# amputation (which standardises U, so is unmoved by sU) selects on it harder.
-# Complete cases' ATE bias under MNAR-tau is about -0.022, 19% of the RD,
-# against 10% before; U is about 4% of Var(Y), against 1%. The bounds cap it
-# there - a Bernoulli outcome's own variance dominates - so the binary
-# mechanisms stay much weaker than continuous_missing's (U 45% of Var(Y)); see
-# missing/miss_dgm_checks.R. (Until the risk-difference DGM U entered a logit,
-# and that average needed quadrature - bug N.)
+# bU = BU_MISS = 0.12 with sU = 2: tanh(U) at sU = 2 is close to +-1, so U's
+# contribution has SD 0.095 and the amputation (which standardises U, so is
+# unmoved by sU) selects on it hard. Complete cases' ATE bias under MNAR-tau is
+# about -0.022, 19% of the RD; U is about 4% of Var(Y). The bounds cap it there
+# - a Bernoulli outcome's own variance dominates - so the binary mechanisms
+# stay much weaker than continuous_missing's (U 45% of Var(Y)); see
+# missing/miss_dgm_checks.R.
 SCENARIO_SETS$binary_missing_fixed <- transform(
   SCENARIO_SETS$binary[1:6, ],
   description = DESC_MISS,
@@ -343,28 +281,21 @@ SCENARIO_SETS$binary_missing_fixed <- transform(
   te_expr = c(TE_RD[1], paste(TE_RD[2:6], "+ U_term"))
 )
 
-# CORRELATED SAMPLE-SIZE SETS (sample_size/, since 2026-10-01): the
-# main tables' scenarios 1-10 on the missing sets' copula, one set per rho in
-# CORR_RHOS, named by corr_set() - "continuous_corr_0.5", "binary_corr_0".
-# (Scenarios 1-4 only until 2026-10-04; 5-10 were added for the appendix, and
-# rows 1-4 are unchanged.) The truth functions m0 and tau, and every
-# coefficient, are the main tables' - binary scenario 9's scale aside, below -
-# so tau(x) is continuous/'s and binary/'s; only the covariates' distribution
-# moves. rho = 0 is the paired independent arm: the same run seed gives the
-# same W, raw latent normals, err and cats at every rho (see DRAW ORDER), and
-# its bW equals the main studies'. At rho = 0.5 bW and the ATE move through
-# E[g] (wherever g multiplies two modifiers: scenarios 3, 7, 8 and 9) and
-# Cov(X1, X2), as in the missing sets.
-# binary_corr_* takes RD_SCALE_CORR, which is RD_SCALE except scenario 9, so
-# that tau(x) matches binary/ wherever the bounds allow it. At rho = 0.5 two
-# floors at n = 100 fall inside [0, 1] but below RD_EPS, and are accepted:
+# CORRELATED SAMPLE-SIZE SETS (sample_size/): the continuous and binary
+# tables' scenarios 1-10 on the copula, one set per rho in CORR_RHOS, named by
+# corr_set() - "continuous_corr_0.5", "binary_corr_0". Every coefficient is the
+# tables', binary scenario 9's scale aside, so only the covariates'
+# distribution moves. rho = 0 is the paired independent arm: the same run seed
+# gives the same W, raw latent normals, err and cats at every rho (see DRAW
+# ORDER). At rho = 0.5 bW and the ATE move through E[g] (wherever g multiplies
+# two modifiers: scenarios 3, 7, 8 and 9) and Cov(X1, X2).
+# binary_corr_* takes RD_SCALE_CORR. At rho = 0.5 two floors at n = 100 fall
+# inside [0, 1] but below RD_EPS, and are accepted to keep RD_SCALE's HTE:
 # scenario 3's, 0.007 (a scale of 0.049 would restore it), and scenario 8's,
-# 0.003 (0.127 would). bin_verify_hte.R check 7 exempts both. Scenario 9's
-# floor went below 0, so it takes its own scale (RD_SCALE_CORR).
+# 0.003 (0.127 would). bin_verify_hte.R check 7 exempts both.
 CORR_RHOS <- c(0, 0.5)
 corr_set <- function(outcome, rho) paste0(outcome, "_corr_", rho)
-# built by lapply() rather than a for loop, so no loop variable is left behind in
-# whoever sourced this file (a trailing rm(r) used to delete any global `r`)
+# lapply(), not a for loop, so no loop variable leaks into the caller
 SCENARIO_SETS <- c(SCENARIO_SETS, unlist(lapply(CORR_RHOS, function(rho) {
   setNames(
     list(
@@ -382,7 +313,7 @@ SCENARIO_SETS <- c(SCENARIO_SETS, unlist(lapply(CORR_RHOS, function(rho) {
   )
 }), recursive = FALSE))
 
-# BINARY SNR SET (sample_size/snr/, since 2026-10-15): the
+# BINARY SNR SET (sample_size/snr/): the
 # binary_corr_0.5 table plus its own risk thresholds risk_lo / risk_hi. The
 # SNR check scales the effect modifiers by hte_mult (generate_scenario_data(),
 # get_oracle_info()), and past about x2.5 (x1.25 in scenario 4) the worst-case
@@ -772,16 +703,6 @@ TARGET_POWER <- 0.80
 #' delta = p1 - p0. Realised power equals planned: each arm's variance is fixed
 #' by its marginal risk, so heterogeneity has no variance to add.
 #'
-#' Before bug O the continuous branch used sd = s_err + s2 (adding SDs, and
-#' ignoring b1 and b2) and set bW rather than the ATE to the planned effect, so
-#' the true ATE drifted by E[g] - to the opposite sign in scenarios 3, 5 and 8 -
-#' and realised power ran from 3% to 100%. Before bug P the binary branch
-#' planned at 75% power at the risk plogis(b0), ignoring X1 and X2, and set bW
-#' to the planned log-odds ratio, so the true RD drifted the same way and
-#' realised power ran from 5% to 99%. Between bug P and the risk-difference
-#' DGM the binary effect was on the logit scale, and bW solved
-#' E[plogis(b0 + b1 X1 + b2 X2 + bW + g)] = p1 by uniroot.
-#'
 #' Neither branch consumes RNG. bW is rounded to 2 dp for a continuous outcome
 #' and 3 dp for a binary one: on the risk-difference scale 2 dp would move the
 #' RD by up to 0.005, and the power by several percentage points at n = 1000.
@@ -808,11 +729,9 @@ calibrate_bW <- function(params, n, calibration = c("t", "prop")) {
 #'
 #' @param scenario scenario index within `set`
 #' @param n sample size
-#' @param set which scenario table - see SCENARIO_SETS, plus "binary_ci"
+#' @param set which scenario table - see SCENARIO_SETS and resolve_set()
 #' @param return_truth attach the true p0 / p1 / tau
-#' @param mech missingness mechanism, one of MISS_MECHS; the MNAR ones draw the
-#'   unobserved U. The retired names MNAR / MNAR-Y / AUX / AUX-Y are errors
-#'   (check_mech()).
+#' @param mech missingness mechanism, one of MISS_MECHS (check_mech())
 #' @param seed optional convenience seed; the studies use setup_rng_stream instead
 #' @param calib_n the sample size bW is calibrated at; defaults to n, which is
 #'   what every study does. Diagnostics that simulate a study's DGM at a large
@@ -957,12 +876,9 @@ generate_scenario_data <- function(scenario, n, set, return_truth = TRUE,
 
 #' True p0/p1/tau at an arbitrary set of covariate rows
 #'
-#' Factored out of generate_scenario_data()'s non-MNAR truth block so that
-#' build_query_grid_truth() below cannot silently diverge from what
-#' generate_scenario_data() itself reports as ground truth. The MNAR branch
-#' (mech != NULL, leaving out the U terms) is NOT reproduced here - it stays inline
-#' in generate_scenario_data(), since the query grid is only used by the
-#' non-missing CI studies, which never pass mech.
+#' Shared by generate_scenario_data() and build_query_grid_truth(), so the
+#' query-grid truth cannot drift from the sample's. The missing-data truth
+#' (mech given, U terms left out) stays inline in generate_scenario_data().
 #'
 #' @param params one-row scenario params, already subset to `scenario` (as
 #'   resolve_set(set) then filtered - see get_oracle_info for the pattern)
@@ -1010,16 +926,12 @@ get_oracle_info <- function(scenario, bW, set, hte_mult = 1) {
   list(fmla = fmla, params = param_list)
 }
 
-# ---- covariate query grid (confidence_intervals/{binary,continuous} only) --
+# ---- covariate query grid (the CI studies) -----------------------------------
 
 # Fixed reference value for covariates the query grid holds constant (X1, X2,
 # any of X3/X4/X5 this scenario's te_expr doesn't use, and the unrelated
-# X01..X05).
-# Inert for the true CATE on either outcome: tau at a grid point is exactly the
-# scenario's treatment effect, which never involves X1 or X2. It still sets the
-# grid's p0/p1, through m0. (Until the risk-difference DGM the binary CATE was
-# plogis(base + te) - plogis(base), so this reference shifted every binary grid
-# point's true CATE through the link.)
+# X01..X05). Inert for the true CATE: tau at a grid point never involves X1 or
+# X2. It still sets the grid's p0/p1, through m0.
 GRID_REFERENCE_VALUE <- 0
 
 #' Fixed covariate-grid query points for a scenario's active HTE covariates
@@ -1039,8 +951,7 @@ GRID_REFERENCE_VALUE <- 0
 #' thing to cbind against) rather than left to that edge case.
 #'
 #' @param scenario scenario index within `set`
-#' @param set which scenario table, as get_oracle_info (use "binary_ci" for
-#'   the binary CI study, "continuous" for the continuous one)
+#' @param set which scenario table, as get_oracle_info
 #' @param covariate_names names(data)[-(1:2)] from the observed dataset - the
 #'   exact column set/order predict(forest, newdata=...) must be handed,
 #'   since grf matches newdata columns by position, not name

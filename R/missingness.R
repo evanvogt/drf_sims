@@ -1,12 +1,9 @@
 ##########
 # title: shared missingness generation and handling
 ##########
-# One copy of what was duplicated across missing/continuous/, missing/binary/ and
-# missing/ci_example/. The three differed only in the function-name suffix
-# (_continuous / _binary), the MNAR-vs-AUX spelling, and the number of multiple
-# imputations - none of which is about the outcome type, so the suffixes are gone
-# and the imputation count is an argument. The mechanisms are MISS_MECHS
-# (R/dgm_scenarios.R) since 2026-09-28; the old names are rejected.
+# Shared by missing/continuous/, missing/binary/ and missing/ci_example/; the
+# number of multiple imputations is an argument. The mechanisms are MISS_MECHS
+# (R/dgm_scenarios.R); any other name is rejected.
 
 library(dplyr)
 library(mice)
@@ -25,7 +22,7 @@ MISS_METHODS <- c("complete_cases", "mean_imputation", "missforest", "regression
 
 #' Which covariates an amputation left missing
 #'
-#' Saved with every missing-data run (since 2026-09-29) so the metrics can
+#' Saved with every missing-data run so the metrics can
 #' score each method on the complete units, the incomplete units, and the
 #' complete-unit subset every method shares (R/metrics.R,
 #' cate_metrics_split()). The truth is tau at the unamputed covariates, which no
@@ -151,13 +148,10 @@ introduce_missingness <- function(data, type, prop, mech, U = NULL) {
   # indicator R <- 0, a scalar, which recycles over EVERY row - so that
   # pattern's variables go missing for the whole dataset, and rows turn up with
   # missingness patterns that were never specified (all-missing, unions of
-  # patterns). Found 2026-09-29: 6 of 40 MAR draws at n = 120 (about 4
-  # candidates per pattern). At the studies' n = 500 a pattern has about 17
-  # candidates and a single-candidate pattern is rare (none in 3000 MAR and
-  # 1000 MNAR-Y0 draws of scenario 2), but
-  # guard anyway: redraw until every incomplete row carries one of the
-  # specified patterns. A valid first draw - every one at n = 500 so far - is
-  # returned unchanged, with the same RNG consumption as before the guard.
+  # patterns). That hit 6 of 40 MAR draws at n = 120; at the studies' n = 500
+  # it is rare (none in 4000 draws of scenario 2), but guard anyway: redraw
+  # until every incomplete row carries one of the specified patterns. A valid
+  # first draw is returned unchanged, with no extra RNG consumption.
   pattern_key <- function(m) apply(m, 1, paste, collapse = "")
   allowed <- pattern_key(matrix(as.matrix(indicators) == 0, ncol = length(covs)))
   for (attempt in 1:20) {
@@ -216,8 +210,8 @@ handle_missingness <- function(data, method, n_imp = 50) {
       list(data = imputed_data)
     },
     "missforest" = {
-      # within each arm, with Y as a predictor (since 2026-09-29; before then Y
-      # and W were both left out, which flattened the HTE - see impute_by_arm)
+      # within each arm, with Y as a predictor (leaving Y and W out flattens
+      # the HTE - see impute_by_arm)
       imputed <- impute_by_arm(data, function(df) {
         # missForest wants binary columns as factors (Y too, for a binary
         # outcome), so round-trip them
@@ -238,9 +232,9 @@ handle_missingness <- function(data, method, n_imp = 50) {
     "regression" = {
       # single deterministic regression imputation, within each arm, each
       # incomplete covariate regressed (lm) on the fully observed columns: the
-      # always-observed covariates and Y (since 2026-09-30; before then one
-      # pooled model on the covariates alone, Y and W excluded, which flattened
-      # the HTE - see impute_by_arm). The predictor set is fixed from the whole
+      # always-observed covariates and Y (a pooled model without Y and W
+      # flattens the HTE - see impute_by_arm). The predictor set is fixed
+      # from the whole
       # dataset, so both arms fit the same model even if an arm happens to
       # observe every value of some covariate.
       miss <- names(data)[sapply(data, anyNA)]
@@ -271,9 +265,9 @@ handle_missingness <- function(data, method, n_imp = 50) {
     },
     "IPW" = {
       # P(complete) by logistic regression on the fully observed covariates
-      # plus W * Y, fit on every unit (since 2026-09-30; before then Y and W
-      # were excluded, so under MNAR the weights were near constant and IPW
-      # reproduced complete cases). W alone cannot predict the missingness of
+      # plus W * Y, fit on every unit (without Y and W the weights are near
+      # constant under MNAR and IPW reproduces complete cases). W alone
+      # cannot predict the missingness of
       # a baseline covariate; W * Y lets its relation to Y differ by arm.
       covs <- setdiff(names(data), c("Y", "W"))
       miss <- covs[sapply(data[covs], anyNA)]
@@ -293,7 +287,6 @@ handle_missingness <- function(data, method, n_imp = 50) {
       # reproduce the unweighted forest exactly, constant weights of 1.43
       # (= 1 / 0.7, the unstabilised scale) do not - so stabilising keeps the
       # weighted forests on the same footing as every other arm's
-      # (checked 2026-09-30)
       ipw <- mean(retained_indices) / miss_lr$fitted.values[retained_indices]
 
       message(paste("IPW: removed", nrow(data) - nrow(complete_data), "observations"))
@@ -302,8 +295,8 @@ handle_missingness <- function(data, method, n_imp = 50) {
     },
     "multiple_imputation" = {
       # within each arm, every other column - Y included - predicting each
-      # incomplete one (since 2026-09-29; before then one pooled model with Y
-      # and W both excluded, which flattened the HTE - see impute_by_arm)
+      # incomplete one (a pooled model without Y and W flattens the HTE - see
+      # impute_by_arm)
       data_mi <- impute_by_arm(data, function(df) {
         n_var <- ncol(df)
         predMat <- matrix(1, nrow = n_var, ncol = n_var,

@@ -8,27 +8,19 @@
 # me_strategies.R, which is why study_strat below reuses this exact grid
 # rather than one narrowed to the runs that completed.
 #
-# Scenario set is deliberately 4, not all 10: this study's research question
-# (do cheap proxy losses rank 9 candidate models the way true PEHE would?)
-# doesn't need every CATE-structure re-litigated. The 4 are the main ones
-# every other study reports - 1 null, 2 simple, 3 complex, 4 non-linear (see
-# R/dgm_scenarios.R's SCENARIO NUMBERING) - since 2026-10-11. Until then the
-# grid was c(1, 4, 6, 8), crossfitting/'s subset, which predates the main
-# four and was carried through the 2026-09-26 renumbering number for number.
+# Scenarios are the main four every study reports (1 null, 2 simple, 3 complex,
+# 4 non-linear; R/dgm_scenarios.R's SCENARIO NUMBERING): enough to ask whether
+# cheap proxy losses rank the 9 candidates the way true PEHE would.
 #
 # WHY c(1, 4, 2, 3) AND NOT 1:4. expand.grid() varies scenario fastest, so a
-# scenario's position in this vector fixes its array indices. 1 and 4 keep the
-# positions they had in c(1, 4, 6, 8), and 2 and 3 take 6 and 8's. So every
-# array index of scenario 1 and 4 means the same (scenario, n, run) it did
-# before the swap, and the runs already made for them stay valid in all three
-# trees - which matters beyond file paths, because me_strategies.R and
-# me_split.R seed on the array index i, not on run (me_analysis.R seeds on
-# run). Only scenarios 2 and 3 need running; README.md, "Status", says how.
-# The report orders scenarios by its own labels, not by this vector.
+# scenario's position in this vector fixes its array indices. The grid was
+# c(1, 4, 6, 8); keeping 1 and 4 in place kept their runs valid in all three
+# trees, which matters beyond file paths because me_strategies.R and me_split.R
+# seed on the array index i, not on run (me_analysis.R seeds on run). The
+# report orders scenarios by its own labels, not by this vector.
 #
-# The data are correlated-covariate (rho = 0.5, me_dgms.R's ME_RHO) since
-# 2026-10-08, so all three trees live under results/correlated/. rho is not a
-# grid column - only one value is run - so the grid is unchanged.
+# The data are correlated-covariate (rho = 0.5, me_dgms.R's ME_RHO). rho is not
+# a grid column - only one value is run.
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -71,16 +63,9 @@ CANDIDATE_MODELS <- c("rf1", "rf2", "rf3", "net1", "net2", "net3", "SL1", "SL2",
 #   cv_shared  the candidate's own V-1 training folds, predicted on its held-out fold
 #   holdout    the candidate's held-out fold only, fit AND predicted there
 #
-# A fourth arm, cv_indep, was removed before the 2026-10-08 rerun. It fit the
-# nuisance leave-one-fold-out over a SECOND, independent fold draw, on the
-# theory that sharing the candidates' draw would correlate a candidate's
-# tau_hat with the nuisance at the same row. Row-level honesty - whether row
-# i's own (Y_i, W_i) entered the model predicting at row i - holds under both
-# draws; the second draw only cut the two training sets' overlap from 100% to
-# (V-1)/V = 90% (crossfitting/README.md: "re-randomising the stage-2 split
-# cannot remove that dependence"). It was kept while it was free to carry;
-# on a rerun it cost a full 10-fold nuisance pipeline per replicate, and the
-# report already discarded it.
+# There is no second-fold-draw arm (cv_indep): row-level honesty holds with the
+# shared draw, and a second draw cost a full nuisance pipeline per replicate.
+# See README.md, "Why cv_indep was removed".
 NUISANCE_ARMS <- c("whole", "cv_shared", "holdout")
 
 # ---- the calibration score's group counts -----------------------------------

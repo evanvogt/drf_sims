@@ -1,51 +1,29 @@
 ##########
 # title: shared CATE estimators (DR-learner family + causal forest)
 ##########
-# One implementation of what used to be seven near-identical copies:
-#   sample_size/continuous/cts_models.R              sample_size/binary/bin_models.R
-#   missing/continuous/cts_miss_models.R missing/binary/bin_miss_models.R
-#   missing/ci_example/cts_miss_ci_models.R
-#   sample_size/confidence_intervals/continuous/cts_ci_models.R
-#   sample_size/confidence_intervals/binary/bin_ci_models.R
-#
-# Those copies differed on four axes. Three are the arguments below:
+# cate_methods() fits every arm on one dataset. What a study sets:
 #
 #   family   gaussian() vs binomial(), controlling the SuperLearner outcome model
 #            (family + method.NNloglik).
 #   ipw      sample.weights (grf) / obsWeights (SuperLearner) for the missing-data
-#            IPW arm. NULL reproduces the unweighted path exactly.
+#            IPW arm. NULL is the unweighted path exactly.
 #   ci       list(boot=, sf=, alpha=) turns on the half-sample bootstrap.
-#   profile  which historical variant's *orchestration* to reproduce - see below.
+#   profile  which post-estimation extras run - see PROFILES.
 #
-# The fourth, where the inverse link lives for the oracle arm, is gone. Every
-# oracle formula in R/dgm_scenarios.R returns the outcome MEAN - the linear
-# predictor for a continuous outcome, the risk for a binary one - so the oracle
-# arm applies no link. Until the binary DGM moved to the risk-difference scale
-# the binary formulas were linear predictors, and an `oracle_link` argument said
-# whether to apply plogis; missing/binary/ once passed "identity" to formulas
-# that no longer carried their plogis (bug M).
+# Every oracle formula in R/dgm_scenarios.R returns the outcome MEAN (the risk,
+# for a binary outcome), so the oracle arm applies no link.
 #
-# `profile` exists because the variants also disagree about which post-estimation
-# tests get run, and those disagreements look like drift rather than design. They
-# are reproduced exactly rather than harmonised, because harmonising would change
-# results for studies that are not otherwise re-running. See PROFILES.
-#
-# Crossfitting strategy, per crossfitting/'s comparison of alternatives against
-# the double-crossfitting this file used to do throughout:
+# Crossfitting strategy, chosen by crossfitting/'s comparison of alternatives:
 #   dr_random_forest, dr_oracle, dr_semi_oracle  whole-sample OOB, "oob_oob":
 #     a T-learner outcome model (t_learner_rf - one forest per arm) with no
 #     sample splitting, each unit's own-arm prediction out-of-bag and its
 #     other-arm prediction from a forest that never saw it, and an OOB stage-2
-#     regression forest (stage2_whole_rf). Until the move to per-arm outcome
-#     models this was "oob_oob_s", an S-learner forest on cbind(W, X) read at
-#     counterfactual rows through grf's X.orig (oob_predict_counterfactual).
+#     regression forest (stage2_whole_rf).
 #   causal_forest   grf's own internal cross-fitting, "cf_default": a plain
 #     causal_forest(X, Y, W) with no externally-supplied nuisances.
 #   dr_superlearner   single leave-one-fold-out crossfit, "scf_scf": nuisance_sl
-#     and stage_2_sl share the same fold_indices, rather than double-crossfit
-#     nuisances feeding a separately-split stage 2. Its outcome model is also a
+#     and stage_2_sl share the same fold_indices. Its outcome model is also a
 #     T-learner: one SuperLearner per arm (libraries in R/sl_library.R).
-# See crossfitting/cf_models.R for the full arm comparison these three replace.
 
 library(coin)
 library(grf)
@@ -59,46 +37,18 @@ source(here::here("R", "utils.R"))        # collate_predictions, setup_rng_strea
 source(here::here("R", "bootstrap_ci.R")) # cf_half_boot, rf_half_boot
 source(here::here("R", "sl_library.R"))   # as_sl_libs, sl_fit_predict, pretest_superlearner
 
-# ---- flags pending a decision ----------------------------------------------
-
-
 # ---- orchestration profiles -------------------------------------------------
 #
-#                        base      ci        missing                  full
-#  causal forest variance  no       yes       yes                      yes
-#  causal forest tests     yes      no        yes                      yes
-#  dr_random_forest tests  yes      no        yes (was "no", see NOTE) yes
-#  oracle / semi tests     yes      no        yes                      yes
-#  SuperLearner arm        yes      no        yes (skipped if X still has NAs)
-#  half-sample bootstrap   no       yes       no
+#                          base   ci    missing
+#  causal forest variance   no    yes   yes
+#  post-estimation tests    yes   no    yes
+#  skip_incomplete          no    no    yes  (SuperLearner, oracle and
+#                                             semi-oracle skipped if X has NAs)
 #
-# (The "SuperLearner arm" and "bootstrap" rows are really set by sl_lib and
-# ci, which work under any profile. "ci" and "ci_mi" drop the tests only to
-# save runtime in the CI simulation studies.)
-#
-# "full" is "missing" under a name that says what it is: everything on, for an
-# applied analysis that wants the tests, the causal forest's variance and -
-# with `ci` - the bootstrap intervals from one run. Like "missing" it skips the
-# arms that need a complete covariate matrix (SuperLearner, oracle,
-# semi-oracle) when X still has NAs; `skip_incomplete` below is that switch.
-#
-# NOTE: the missing profile used to set dr_rf_tests = FALSE, so that arm alone
-# was built inline as list(tau = stage2_whole_rf(...)$tau) and carried no BLP or
-# independence test while every other arm did - copy-paste drift from the file
-# missing/ was forked from, not a decision. The decision was then taken that
-# every model should carry the tests where possible, and this is it.
-#
-# Results made before the change were back-filled in place by a one-off patch
-# script (removed after commit e7b1d59; the results it patched are archived,
-# and patched files lack dr_random_forest$variance). The re-run needs no patch.
-#
-# The CI profiles keep tests off; that one IS deliberate (see
-# sample_size/README.md).
-#
-# aggregate_nuisances (row-mean summaries of a double-crossfit matrix) used to
-# be a fourth axis here; it was dropped when nuisance_rf/nuisance_sl moved to
-# whole-sample OOB / single-crossfit vectors, which have no matrix to aggregate.
-
+# "ci_mi" has the same switches as "ci", and "full" (the applied-analysis name)
+# the same as "missing". The CI profiles drop the tests only to save runtime.
+# The SuperLearner arm and the bootstrap are set by sl_lib and ci, under any
+# profile.
 PROFILES <- list(
   base    = list(cf_variance = FALSE, tests = TRUE,  dr_rf_tests = TRUE,  skip_incomplete = FALSE),
   ci      = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE, skip_incomplete = FALSE),
@@ -154,10 +104,12 @@ ps_oob <- function(X, X_ps, W, num.threads = NULL) {
 
 #' Fit every CATE method on one simulated dataset
 #'
+#' Each study's *_models.R wraps this as `run_all_cate_methods`; the shared
+#' function has its own name so those wrappers do not recurse into themselves.
+#'
 #' @param data data.frame laid out as the DGMs emit it: Y, W, then covariates
 #' @param n_folds number of crossfitting folds V. Only the SuperLearner arm
-#'   still crossfits (see the strategy note above); the others are whole-sample
-#'   OOB and ignore this beyond it feeding fold_indices, which they still return.
+#'   crossfits; the others ignore it beyond the returned fold_indices.
 #' @param sl_lib SuperLearner libraries, list(W = , Y = , tau = ) as
 #'   R/sl_library.R's sl_libraries(n) builds them, or one character vector used
 #'   for all three; NULL skips the SuperLearner arm. Learners the pretest drops
@@ -168,38 +120,27 @@ ps_oob <- function(X, X_ps, W, num.threads = NULL) {
 #' @param ci NULL, or list(boot = , sf = , alpha = ) to add half-sample bootstrap CIs
 #' @param profile "base", "ci", "missing", "ci_mi" or "full" - see PROFILES
 #' @param num.threads grf thread count, forwarded to every regression_forest()/
-#'   causal_forest() call this function reaches (nuisance_rf, stage2_whole_rf,
-#'   run_causal_forest, run_dr_semi_oracle). NULL (default) is grf's own default
-#'   (all visible cores) - unchanged from this function's behaviour before this
-#'   parameter existed. SuperLearner arms have no equivalent thread knob.
-#' @param verbose_timing if TRUE, time each top-level block below with
-#'   R/utils.R's `timed()` and attach the elapsed seconds as `results$timings`
-#'   (a named list). Default FALSE leaves `results` exactly as before this
-#'   parameter existed, so production output is unchanged.
-#'
-#' Each study's *_models.R is a thin shim defining `run_all_cate_methods` with
-#' that study's historical signature and forwarding to this. The shared function
-#' is named differently so those shims do not recurse into themselves.
+#'   causal_forest() call. NULL is grf's own default (all visible cores).
+#'   SuperLearner arms have no equivalent thread knob.
+#' @param verbose_timing if TRUE, time each top-level block with R/utils.R's
+#'   `timed()` and attach the elapsed seconds as `results$timings`.
 #' @param Z_query optional data.frame/matrix of covariate rows (same columns,
 #'   same order as data[, -c(1:2)]) to also predict CATE and, when `ci` is set,
 #'   a half-sample bootstrap band at - e.g. R/dgm_scenarios.R's
-#'   build_query_grid(). NULL (default) skips all of it, so every existing
-#'   caller is unaffected. Adds `tau_grid` (and, with `ci`, `grid_lb`/
+#'   build_query_grid(). Adds `tau_grid` (and, with `ci`, `grid_lb`/
 #'   `grid_ub`/`grid_draws`) to each arm's result list.
-#' @param models NULL (default: every arm, as before this parameter existed), or
-#'   a subset of CATE_MODELS to run - e.g. to leave out the oracle-type arms in
-#'   an applied analysis. The oracle and SuperLearner arms still need fmla_info
-#'   and sl_lib as well. nuisance_rf() always runs: the causal forest's tests
-#'   and the DR random forest both use it.
+#' @param models NULL (every arm), or a subset of CATE_MODELS to run - e.g. to
+#'   leave out the oracle-type arms in an applied analysis. The oracle and
+#'   SuperLearner arms still need fmla_info and sl_lib as well. nuisance_rf()
+#'   always runs: the causal forest's tests and the DR random forest both use it.
 #' @param X_ps NULL (default), or a matrix/data.frame of propensity-only
 #'   covariates, nrow(data) rows: they enter every estimated propensity model
 #'   (nuisance_rf's, the causal forest's, the SuperLearner arm's) and nothing
 #'   else - see cbind_ps(). The oracle-type arms fix the propensity at 0.5.
-#' @param sl_plan NULL (default: every arm runs on the caller's future plan, as
-#'   before this parameter existed), or a future plan - e.g.
-#'   tweak(multisession, workers = 5) - set for the SuperLearner arm alone and
-#'   switched back afterwards. Its learners are single-threaded, so it wants
-#'   more workers than the grf arms, whose forests each already take many
+#' @param sl_plan NULL (every arm runs on the caller's future plan), or a future
+#'   plan - e.g. tweak(multisession, workers = 5) - set for the SuperLearner arm
+#'   alone and switched back afterwards. Its learners are single-threaded, so it
+#'   wants more workers than the grf arms, whose forests each already take many
 #'   threads and whose memory sets the limit. Setting a plan shuts down the
 #'   previous plan's workers, so the arm starts in fresh processes. Results are
 #'   unchanged: furrr's seeds do not depend on the number of workers.
@@ -397,9 +338,9 @@ t_learner_rf <- function(X, Y, W, ipw = NULL, num.threads = NULL) {
 #' T-learner outcome model with regression forests, for one train/test split
 #'
 #' One forest per arm, each fit on that arm's training rows only and predicting
-#' every test row. No production estimator crossfits its forests any more; this
-#' is for crossfitting/cf_models.R's crossfit arms (dcf, scf_*), which then
-#' differ from the whole-sample t_learner_rf only in splitting.
+#' every test row. Used only by crossfitting/cf_models.R's crossfit arms (dcf,
+#' scf_*), which then differ from the whole-sample t_learner_rf only in
+#' splitting.
 #' @param in_train,in_test logical row masks
 #' @return list(Y0.hat, Y1.hat), each of length sum(in_test)
 t_learner_rf_split <- function(X, Y, W, in_train, in_test, ipw = NULL,
@@ -421,10 +362,7 @@ t_learner_rf_split <- function(X, Y, W, in_train, in_test, ipw = NULL,
 #'
 #' No sample splitting: t_learner_rf supplies Y0.hat/Y1.hat, and two more
 #' whole-sample forests supply W.hat and Y.hat.cf, both taken out-of-bag. This
-#' is the "oob_oob" arm of crossfitting/cf_models.R. It replaced the S-learner
-#' "oob_oob_s" arm (one forest on cbind(W, X), read at counterfactual rows via
-#' grf's X.orig) when the DR-learners moved to per-arm outcome models; that
-#' arm had itself replaced the double-crossfit this function used to do.
+#' is the "oob_oob" arm of crossfitting/cf_models.R.
 #'
 #' @param X_ps optional propensity-only covariates, added to X for W.hat alone
 #'   (see cbind_ps)
@@ -551,10 +489,8 @@ nuisance_sl <- function(X, Y, W, fold_indices, sl_lib, ipw = NULL,
 #' var_oob is grf's own OOB variance estimate (bootstrap of little bags), free
 #' alongside the predictions since regression_forest already defaults to
 #' ci.group.size = 2. predict() does not consume R's RNG stream, so asking for
-#' the variance leaves the point estimate unchanged. Ported from
-#' crossfitting/cf_models.R::stage2_whole_rf, replacing the leave-one-fold-out
-#' stage_2_rf this function used to be for dr_random_forest, dr_oracle and
-#' dr_semi_oracle alike.
+#' the variance leaves the point estimate unchanged. Shared by
+#' dr_random_forest, dr_oracle and dr_semi_oracle.
 #' @param Z_query optional covariate rows (matrix/data.frame, same columns as
 #'   X) to also predict at, off this same fitted forest, before it goes out of
 #'   scope. NULL (default) adds nothing - see cate_methods' Z_query doc.
@@ -600,8 +536,7 @@ stage_2_sl <- function(X, po, fold_indices, fold_list, sl_lib, ipw = NULL) {
 #'
 #' No externally-supplied nuisances: leaving Y.hat/W.hat NULL makes grf
 #' cross-fit them internally, and tau is grf's own out-of-bag prediction. This
-#' is the "cf_default" arm validated in crossfitting/cf_models.R against the
-#' fold-wise external-crossfit alternative this function used to implement.
+#' is the "cf_default" arm of crossfitting/cf_models.R.
 #'
 #' `nuisances` is only used for the BLP/independence tests below - it is the
 #' nuisance_rf() object shared with dr_random_forest, not what fits the forest.
@@ -726,7 +661,8 @@ run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list,
 #' Both tests below are meaningless for a constant CATE, and neither fails
 #' cleanly on one. coin::independence_test() only warns ("zero diagonal
 #' elements") and returns a huge statistic with p ~ 0 - a spurious rejection.
-#' GenericML::BLP() errors only when tau is EXACTLY constant (bug L below). A
+#' GenericML::BLP() errors only when tau is EXACTLY constant (see
+#' run_blp_whole()). A
 #' true CATE can be constant up to rounding instead: truth_at() computes tau as
 #' (p0 + bW) - p0, which leaves noise of ~1e-17 in scenario 1, and BLP then fits
 #' beta.2 ~ 1e15 on it. The tolerance is relative, far below any real variation
@@ -738,29 +674,22 @@ is_constant <- function(x, tol = sqrt(.Machine$double.eps)) {
 
 # Best Linear Predictor of the CATE (GenericML). Returns the whole coefficient
 # block - Estimate, Std. Error, t value, Pr(>|t|) - with the residual df as
-# attr(, "df"); blp_p_value() below reads beta.2's p-value from it. It used to
-# keep only columns 1 and 4, which dropped the standard error a
-# multiple-imputation pooling rule needs (mi_test_table() below).
-# blp_p_value() reads both shapes, so results saved before the change still
-# read correctly.
+# attr(, "df"); blp_p_value() below reads beta.2's p-value from it, and
+# mi_test_table() its standard error.
 #
 # vcov_type is the sandwich::vcovHC type. The default "const" (homoskedastic
 # OLS SEs, GenericML's own default) is what every estimation-time call uses, so
 # the saved BLP_whole objects are unchanged; R/metrics.R::hte_test_metrics()
 # recomputes with "HC3" for BLP_p_os - see blp_inputs().
 #
-# bug L: GenericML::BLP() regresses on beta.2 = (W - W.hat) * (tau - mean(tau)).
-# When tau is exactly constant (a degenerate/near-constant CATE fit - seen with
-# scenario 4's low-amplitude cos(X4) effect at small n, especially once
-# pretest_superlearner has whittled a fold's library down to 1-2 survivors),
-# beta.2 becomes identically zero, lm() marks it aliased (coef = NA), and
-# sandwich::vcovHC() drops that coefficient's row/column entirely rather than
-# keeping it as NA - so GenericML's internal indexing by name throws "subscript
-# out of bounds". NULL is a deliberate fallback, not just a safe default:
-# hte_test_metrics() (R/metrics.R) already maps BLP_whole = NULL to BLP_p = NA,
-# and NA is the statistically correct answer here - beta.2 has no fitted
-# coefficient to attach a p-value to when tau has zero variance. is_constant()
-# extends the same fallback to a tau that is constant only up to rounding.
+# A constant tau returns NULL. GenericML::BLP() regresses on
+# beta.2 = (W - W.hat) * (tau - mean(tau)); with tau constant (seen with
+# scenario 4's low-amplitude cos(X4) effect at small n) beta.2 is identically
+# zero, lm() marks it aliased, sandwich::vcovHC() drops its row, and BLP()
+# throws "subscript out of bounds". NULL maps to BLP_p = NA in
+# hte_test_metrics() (R/metrics.R), the right answer: beta.2 has no fitted
+# coefficient when tau has zero variance. is_constant() extends this to a tau
+# constant only up to rounding.
 run_blp_whole <- function(Y, W, W.hat, Y0.hat, tau, vcov_type = "const") {
   if (is_constant(tau)) {
     warning("run_blp_whole: tau is constant (up to rounding); returning NULL.")
@@ -786,10 +715,9 @@ run_blp_whole <- function(Y, W, W.hat, Y0.hat, tau, vcov_type = "const") {
 #' that ranks units in reverse (beta.2 < 0) is not evidence of heterogeneity,
 #' but it gets the same two-sided p as a correct one.
 #'
-#' Reads both block shapes run_blp_whole() has saved: the full block
-#' (Estimate, Std. Error, t value, Pr(>|t|), attr "df") and the older
-#' Estimate + Pr(>|t|) pair, for which the one-sided p is recovered from the
-#' two-sided one and the sign of the estimate.
+#' Reads the full block (Estimate, Std. Error, t value, Pr(>|t|), attr "df")
+#' and the older Estimate + Pr(>|t|) pair, for which the one-sided p is
+#' recovered from the two-sided one and the sign of the estimate.
 #' @param blp a run_blp_whole() result; NULL (degenerate tau) gives NA
 blp_p_value <- function(blp, sided = c("one", "two")) {
   sided <- match.arg(sided)
@@ -873,8 +801,7 @@ run_independence_test_whole <- function(X, tau) {
 #' handler), which a rejection rate would count as "not significant" and so
 #' under-report power. Metrics read the p-value through this instead, so a
 #' failure is an NA, counted in n_na_indep_* by summarise_metrics(), as a
-#' constant tau already is. Results saved before this carry the p = 1 and the
-#' method field, so no re-run is needed.
+#' constant tau already is.
 #' @param test a run_independence_test_whole() result, or NULL
 indep_p_value <- function(test) {
   if (is.null(test) || identical(test$method, "independence_test_failed")) {
@@ -965,10 +892,9 @@ combine_mi <- function(res_list, model) {
 
 #' Per-imputation HTE test results for one model, unpooled
 #'
-#' Every imputation's fit already runs the BLP and independence tests (profile
-#' "missing" has tests on), but combine_mi() pools only tau and variance, so
-#' they used to be discarded - which is why the multiple_imputation arm had no
-#' HTE tests. This keeps what any candidate pooling rule needs, one row per
+#' Every imputation's fit runs the BLP and independence tests (profile
+#' "missing" has tests on), but combine_mi() pools only tau and variance. This
+#' keeps what any candidate pooling rule needs, one row per
 #' imputation: beta.2's estimate, SE and residual df (Rubin's rules), each
 #' independence test's chi-square statistic and df (D2), and every p-value (a
 #' p-value combination rule).
@@ -999,7 +925,7 @@ mi_test_table <- function(res_list, model, data_list) {
     blp_hc3 <- if (is.null(blp) || is.null(inp)) NULL else {
       run_blp_whole(inp$Y, inp$W, inp$W.hat, inp$Y0.hat, inp$tau, vcov_type = "HC3")
     }
-    # NULL is bug L's degenerate-tau fallback (run_blp_whole) - kept as an NA
+    # NULL is the degenerate-tau fallback (run_blp_whole) - kept as an NA
     # row rather than dropped, so the table always has one row per imputation
     # by position, not name: a coeftest block is always Estimate, Std. Error,
     # statistic, p-value, but the last two are named t or z depending on the

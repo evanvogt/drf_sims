@@ -5,9 +5,8 @@
 # learners are chosen in one place. Depends only on SuperLearner and the learner
 # packages (glmnet, gam, earth, ranger); sources nothing else from R/.
 #
-# ONE LIBRARY PER NUISANCE. The DR-learner fits three different regressions, and
-# they used to share a single library (glm, glmnet, earth, gam, mean, ranger,
-# with earth and ranger dropped at n <= 100):
+# ONE LIBRARY PER NUISANCE. The DR-learner fits three different regressions,
+# and one shared library suits none of them:
 #   W    the propensity. Every study is an RCT with P(W = 1) = 0.5, so flexible
 #        learners only fit noise, which the 1 / (e(1 - e)) weight then
 #        amplifies. mean + glm keeps the efficiency gain from estimating a known
@@ -70,9 +69,8 @@ sl_libraries <- function(n) {
 
 #' Normalise an sl_lib argument to list(W = , Y = , tau = )
 #'
-#' A plain character vector is the old single-library form and is used for
-#' all three nuisances, so callers that still pass one (R/regression_check.R's
-#' SL_LIB, crossfitting/confidence_intervals/cf_ci_testing.R) behave as before.
+#' A plain character vector is used for all three nuisances (R/regression_check.R's
+#' SL_LIB and crossfitting/confidence_intervals/cf_ci_testing.R pass one).
 as_sl_libs <- function(sl_lib) {
   if (is.null(sl_lib)) return(NULL)
   if (is.character(sl_lib)) return(list(W = sl_lib, Y = sl_lib, tau = sl_lib))
@@ -140,7 +138,7 @@ predict.SL.glmnet.int.1se <- no_predict
 #'
 #' FAILED FITS. If SuperLearner() itself errors, every row is predicted as the
 #' (weighted) mean of Y, with a warning, and `failed` carries the error. The
-#' pretest's SL.mean fallback (bug K) cannot cover this: a learner can pass the
+#' pretest's SL.mean fallback cannot cover this: a learner can pass the
 #' pretest's 2-fold CV and still fail the live 10-fold one. It happens with
 #' per-arm binary outcome models at n = 100, where an arm's training rows can
 #' hold ~2 events - binary scenario 4, whose treated risk is low - so every
@@ -224,10 +222,9 @@ mark_failed_fit <- function(lib, fit) {
 #' Drop SuperLearner algorithms that error or give non-finite predictions
 #'
 #' Fits each candidate on its own with a 2-fold inner CV and keeps the
-#' survivors. Warnings are recorded, not fatal: this used to catch them with
-#' tryCatch(warning = ), which aborted the fit at the first warning and dropped
-#' the learner, so a benign glm or gam warning emptied a fold's library down to
-#' one or two learners (see bug L in R/cate_models.R).
+#' survivors. Warnings are recorded, not fatal: tryCatch(warning = ) would
+#' abort the fit at the first warning and drop the learner, so a benign glm or
+#' gam warning would empty a fold's library down to one or two learners.
 #'
 #' @return the surviving library, with attr "dropped" (named reasons for the
 #'   removed learners) and attr "warned" (the first warning of each kept
@@ -270,7 +267,7 @@ pretest_superlearner <- function(Y, X, SL.library, family) {
     print(dropped)
   }
   if (length(working_lib) == 0) {
-    # bug K: every candidate failed on this fold - falling through with
+    # every candidate failed on this fold - falling through with
     # character(0) sends an empty SL.library into the caller's live SuperLearner()
     # call, which crashes building a 0-column predictions data.frame() ("arguments
     # imply differing number of rows: 0, 1"). SL.mean is asserted directly, not

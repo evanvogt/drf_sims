@@ -3,10 +3,6 @@
 ##########
 # Definitions only, no side effects: each study's *_metrics.R sources this and
 # supplies its own grouping columns.
-#
-# Taken from crossfitting/cf_metrics.R, which was the best-written of the six
-# near-identical copies. The others differed only in which grouping columns they
-# carried and in guarding against absent HTE tests.
 
 library(dplyr)
 library(tibble)
@@ -21,7 +17,7 @@ source(here::here("R", "utils.R"))   # CATE_MODELS
 #' @param true true CATEs
 #' @param scenario scenario index. Scenario 1 has no heterogeneity, so the true
 #'   CATE is constant, the correlation metrics are undefined, and both are
-#'   reported as 0 rather than NA - the convention the study has always used.
+#'   reported as 0 rather than NA.
 #'
 #' `rel_ate_bias` and `rel_bias_cate` are "relative bias" in the conventional,
 #' vs-true-parameter sense (as opposed to `rel_efficiency_cu` and
@@ -57,12 +53,12 @@ cate_metrics <- function(est, true, scenario) {
 
 #' cate_metrics() on all analysed units, the complete units, and the incomplete ones
 #'
-#' For the missing-data studies (since 2026-09-29). The truth is tau at the
+#' For the missing-data studies. The truth is tau at the
 #' UNAMPUTED covariates, which no method can recover for a unit whose effect
 #' modifiers are missing: an imputation arm carries an error floor on its
 #' incomplete units that the row-dropping arms (complete_cases, IPW), scored on
 #' their complete units only, never face. So every metric comes three ways:
-#'   (no suffix)  all analysed units - as before; ~350 units for complete_cases
+#'   (no suffix)  all analysed units; ~350 units for complete_cases
 #'                and IPW, 500 for the rest, so NOT comparable across the two
 #'   _cu          complete units only: the subset every method has, so the
 #'                comparison across methods, including the row-dropping ones
@@ -321,8 +317,7 @@ normal_interval <- function(tau, variance, alpha = 0.05) {
 
 #' One row per (run, sim_res) with this study's grouping keys attached
 #'
-#' Factored out of compute_metrics() so a driver that doesn't need a per-model
-#' loop (e.g. compute_run_metrics()) can share the same unnesting.
+#' Shared by compute_metrics() and compute_run_metrics().
 #'
 #' @param study the study config (supplies path_cols)
 #' @param all_results_df output of get_results()
@@ -408,9 +403,8 @@ be_reference_for <- function(be_ref, keys, model, path_cols) {
 
 #' Turn a collected results tibble into one metrics row per (combination, run, model)
 #'
-#' Replaces seven near-identical unnest / pmap / map_dfr pipelines. The grouping
-#' columns are taken from the study config rather than retyped, so a study that
-#' gains a factor does not need its metrics script edited.
+#' The grouping columns are taken from the study config rather than retyped, so
+#' a study that gains a factor does not need its metrics script edited.
 #'
 #' @param study the study config (supplies path_cols)
 #' @param all_results_df output of get_results()

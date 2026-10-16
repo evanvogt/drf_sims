@@ -1,10 +1,8 @@
 ##########
 # title: half-sample bootstrap estimation - correlated continuous outcome
 ##########
-# The retired confidence_intervals/continuous/cts_ci_analysis.R (tag
-# independent-ss-final) on the correlated sets: the same estimators and
-# bootstrap (cts_corr_ci_models.R, formerly
-# confidence_intervals/continuous/cts_ci_models.R), with rho read from the grid row.
+# Fits cts_corr_ci_models.R's estimators and bootstrap to one grid row of the
+# correlated sets, with rho read from the grid row.
 
 # libraries
 library(here)

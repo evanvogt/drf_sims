@@ -6,8 +6,7 @@
 # from the continuous one (cts_corr_models.R):
 #   family = binomial()      SuperLearner outcome model + method.NNloglik
 # The oracle formula from the binary DGM returns the risk itself, so the oracle
-# arm needs no link. It was sample_size/binary/bin_models.R until that study was
-# retired (2026-10-06); the function is unchanged.
+# arm needs no link.
 
 source(here::here("R", "cate_models.R"))
 

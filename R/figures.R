@@ -43,9 +43,8 @@ METHOD_LABELS <- c(
   multiple_imputation = "MI"
 )
 
-# MAR / MNAR-Y0 / MNAR-tau since 2026-09-28 (R/dgm_scenarios.R, MISS_MECHS).
-# Results made before then (MNAR / MNAR-Y, or AUX / AUX-Y) are archived;
-# label_factor() passes their names through unchanged.
+# MAR / MNAR-Y0 / MNAR-tau (R/dgm_scenarios.R, MISS_MECHS). label_factor()
+# passes any other (archived) mechanism name through unchanged.
 MECHANISM_LABELS <- c(
   MAR = "MAR",
   `MNAR-Y0` = "MNAR-Y0",
@@ -81,12 +80,10 @@ SS_SUPP_SCENARIO_PLOT_LABELS <- sub(" $\\times$ ", " × ", SS_SUPP_SCENARIO_LABE
 HTE_ALPHA <- 0.05
 
 # the missing-data studies' six-scenario set, numbered as the main study's
-# scenarios 1-6. Was copy-pasted verbatim into all three thesis_figures/miss_*.R
-# scripts, minus scenario 6. continuous/ and binary/ never run 6 (their grid is
-# 1-5), so it drops out of those by droplevels(); ci_example runs 1 and 3-6 and
-# keeps it. The order here is the facet order, and it is the order these
-# figures had before the 2026-09-26 renumbering (then 1, 2, 6, 3, 4, 5), so the
-# missing-data chapter reads Null, Simple, Complex, Non-linear as it did.
+# scenarios 1-6. continuous/ and binary/ never run 6 (their grid is 1-5), so it
+# drops out of those by droplevels(); ci_example runs 1 and 3-6 and keeps it.
+# The order here is the facet order: the missing-data chapter reads Null,
+# Simple, Complex, Non-linear.
 MISS_SCENARIO_LABELS <- c(
   `1` = "Null",
   `5` = "Simple",

@@ -16,9 +16,8 @@
 #   beta2_est, beta2_se, beta2_t, beta2_p   the beta.2 row of BLP_whole
 #   df                                      residual df of the BLP regression
 # A model whose BLP_whole is NULL (constant tau - see run_blp_whole()) gets a
-# row of NAs, as BLP_p is NA there. Results saved before 2026-09-27 kept only
-# the Estimate and Pr(>|t|) columns, so se, t and df would be NA for those;
-# every correlated run is later than that.
+# row of NAs, as BLP_p is NA there. An older two-column BLP_whole (Estimate,
+# Pr(>|t|)) would give NA se, t and df; no correlated run has that shape.
 #
 # Writes <res_path>/<prefix>_blp_beta2.RDS for each outcome. Run from
 # sample_size/:
@@ -45,7 +44,7 @@ beta2_row <- function(blp) {
                beta2_p = NA_real_, df = NA_real_)
   if (is.null(blp) || !"beta.2" %in% rownames(blp)) return(na)
   b <- blp["beta.2", ]
-  full <- length(b) >= 4  # the pre-2026-09-27 shape is Estimate, Pr(>|t|) only
+  full <- length(b) >= 4  # the older shape is Estimate, Pr(>|t|) only
   df <- attr(blp, "df")
   tibble(
     beta2_est = unname(b[1]),

@@ -388,10 +388,9 @@ combine_mi_ci <- function(res_list, model, alpha = 0.05) {
   col_max <- apply(draws_norm, 2, max)
   S_star <- quantile(col_max, 1 - alpha)
 
-  # Same margin as the other two strategies and simultaneous_band(). Until
-  # 2026-10-11 this was sqrt(lambda_hat * S_star), which took the square root of
-  # the critical value and gave bands about half as wide; results made before
-  # then are wrong for this strategy.
+  # Same margin as the other two strategies and simultaneous_band(); not
+  # sqrt(lambda_hat * S_star), which roots the critical value and halves the
+  # band (missing/ci_example/README.md).
   margin <- sqrt(lambda_hat) * S_star
   res$lb_hybrid <- tau - margin
   res$ub_hybrid <- tau + margin
@@ -408,11 +407,9 @@ combine_mi_ci <- function(res_list, model, alpha = 0.05) {
 #'
 #' Coverage is measured against `tau.hat` as a plug-in truth: pseudo-outcome
 #' residuals are resampled whole-sample (nuisance_rf's po is a single OOB
-#' vector now, not a per-fold matrix - see R/cate_models.R), tau is
+#' vector - see R/cate_models.R), tau is
 #' re-estimated with stage2_whole_rf, and the interval is asked whether it
-#' covers the original estimate. Calibrates against rf_oob_half_boot, the
-#' whole-sample counterpart of the fold-crossfit rf_half_boot this used to
-#' calibrate.
+#' covers the original estimate. Calibrates against rf_oob_half_boot.
 #'
 #' @param nuisances_rf output of R/cate_models.R::nuisance_rf() - only $po is used
 find_optimal_sf <- function(X, Y, W, nuisances_rf, tau.hat,

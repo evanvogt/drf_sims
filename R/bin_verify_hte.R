@@ -17,12 +17,12 @@
 #   5. each RD_SCALE[k] is the largest scale check 4 allows at the binary
 #      studies' n, floored to 3 dp - except scenario 4, frozen below it (see
 #      RD_SCALE in R/dgm_scenarios.R)
-#   6. missing/binary's own RD_SCALE_MISS and BU_MISS (since 2026-09-29): BU_MISS
+#   6. missing/binary's own RD_SCALE_MISS and BU_MISS: BU_MISS
 #      is the largest bU, to 2 dp, that leaves every floor-bound scenario its
 #      RD_SCALE at n = 500, and RD_SCALE_MISS[k] = min(RD_SCALE[k], the largest
 #      scale feasible at n = 500 with that bU)
-#   7. sample_size/'s binary_corr_<rho> sets (since 2026-10-01;
-#      scenarios 5-10 since 2026-10-04): binary's coefficients exactly, so
+#   7. sample_size/'s binary_corr_<rho> sets (scenarios 1-10):
+#      binary's coefficients exactly, so
 #      tau(x) is binary/'s, except scenario 9, scaled by RD_SCALE_CORR - which
 #      is re-derived as the largest scale feasible at rho = 0.5, floored to
 #      3 dp; oracle vs generator; SD(tau) the same at every n; the planned RD
@@ -30,19 +30,13 @@
 #      the bounds except binary_corr_0.5 scenario 3's and 8's floors (0.007 and
 #      0.003 at n = 100), which only have to stay above 0 - the exceptions
 #      R/dgm_scenarios.R documents
-#   8. sample_size/snr/'s binary_snr set (since 2026-10-15):
+#   8. sample_size/snr/'s binary_snr set:
 #      binary_corr_0.5 exactly at hte_mult = 1; the clamped oracle formula vs
 #      the generator, and every risk inside [RD_EPS, 1 - RD_EPS], at each
 #      hte_mult; the share clamped and the ATE drift stay small
 #
-# Until 2026-09-26 the effect was on the logit scale, and this script measured
-# how much of var(tau) the link handed to X1 and X2 - up to 80% at n = 100.
-# That table is in sample_size/binary/README.md at git tag independent-ss-final.
-#
-# The independent binary study itself is retired (2026-10-06), but its "binary"
-# set is still the coefficient table the correlated and missing-data sets build
-# on, so checks 1-5 still pin what those studies inherit. This script lived in
-# sample_size/binary/ until then.
+# The "binary" set is the coefficient table the correlated and missing-data
+# sets build on, so checks 1-5 pin what those studies inherit.
 #
 # Writes nothing, and stops at the first failed check. Run from the repo root:
 #   Rscript R/bin_verify_hte.R
@@ -158,11 +152,10 @@ check(mb[, 1] >= RD_EPS - ROUNDING & mb[, 2] <= 1 - RD_EPS + ROUNDING,
 # p0_hi + delta_n + k * hi (-/+ bU under MNAR-Y0 / MNAR-tau), so each bound caps k. A
 # negative cap means no k satisfies that bound, which fails the check below.
 #
-# Until 2026-09-29 RD_SCALE also had to hold under missing/binary's MNAR
-# mechanisms, which capped scenario 4 at 0.204. That bound now belongs to
-# RD_SCALE_MISS (check 6); scenario 4 could rise to 0.209, but the binary
-# sample_size studies were already running on 0.204, so it stays there - it
-# must be feasible, not the largest.
+# RD_SCALE[4] = 0.204 was the cap under missing/binary's MNAR mechanisms when
+# that bound applied to RD_SCALE; it now belongs to RD_SCALE_MISS (check 6).
+# Scenario 4 could rise to 0.209, but the binary sample_size studies ran on
+# 0.204, so it stays there - it must be feasible, not the largest.
 
 cts <- resolve_set("continuous")
 FROZEN <- 4   # scenarios whose RD_SCALE is feasible but deliberately below k_max

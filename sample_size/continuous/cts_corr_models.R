@@ -4,8 +4,7 @@
 # The estimators live in R/cate_models.R. This file is the correlated continuous
 # study's configuration of them: a Gaussian outcome on the "base" orchestration
 # profile (post-estimation BLP and independence tests on, no bootstrap, no IPW
-# weights). It was sample_size/continuous/cts_models.R until that study was
-# retired (2026-10-06); the function is unchanged.
+# weights).
 
 source(here::here("R", "cate_models.R"))
 

@@ -1,9 +1,8 @@
 ###############
 # script for running all the CATE models in one run - correlated bin outcome
 ###############
-# The retired binary/bin_analysis.R (tag independent-ss-final) on the
-# correlated sets: the same estimators (bin_corr_models.R, formerly
-# binary/bin_models.R, family = binomial()), with rho read from the grid row.
+# Fits bin_corr_models.R's estimators (family = binomial()) to one grid row of
+# the correlated sets, with rho read from the grid row.
 
 library(dplyr)
 library(furrr)

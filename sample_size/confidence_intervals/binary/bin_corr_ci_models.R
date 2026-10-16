@@ -4,9 +4,7 @@
 # The estimators live in R/cate_models.R and the bootstrap in R/bootstrap_ci.R.
 # As cts_corr_ci_models.R, but with a binomial outcome family; used by the
 # correlated binary CI study. The oracle formula from the
-# binary DGM returns the risk itself, so the oracle arm needs no link. It was
-# sample_size/confidence_intervals/binary/bin_ci_models.R until that study was
-# retired (2026-10-06); the function is unchanged.
+# binary DGM returns the risk itself, so the oracle arm needs no link.
 
 source(here::here("R", "cate_models.R"))
 

@@ -12,7 +12,7 @@
 #
 # Scenarios 1-4 run to 500 runs, rows 1-16000. rho varies slowest, so rows
 # 1-8000 are rho = 0 (jobscripts/bin_corr_1.sh) and rows 8001-16000 rho = 0.5
-# (bin_corr_2.sh). Scenarios 5-10 (the appendix's, since 2026-10-04) run to
+# (bin_corr_2.sh). Scenarios 5-10 (the appendix's) run to
 # 100, like binary/'s, and are appended as a second block rather than widening
 # `scenario` above, so rows 1-16000 keep the meaning they were submitted under
 # and the new rows are one contiguous range, 16001-20800, for

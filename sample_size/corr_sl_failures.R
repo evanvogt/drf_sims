@@ -14,7 +14,7 @@
 #                   zero, ...", runs after 2026-10-09 only)
 # Nothing downstream reads it. This summarises it for both outcomes. One more
 # event is derived rather than saved: when the pretest drops every learner in a
-# library, the fit falls back to SL.mean alone (bug K); that shows here as a
+# library, the fit falls back to SL.mean alone; that shows here as a
 # fold/model whose drops cover the whole sl_libraries(n) library.
 #
 # NOT RECOVERABLE from the saved results - only in the PBS logs, as warnings:

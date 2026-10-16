@@ -1,10 +1,9 @@
 ##########
 # title: optimal sample.fraction calibration simulation - correlated continuous outcome
 ##########
-# The retired confidence_intervals/optimal_sf/cts_ci_sf_analysis.R (tag
-# independent-ss-final) on the correlated sets, with the grid read from the
-# study config and rho from the grid row. The calibration settings are the
-# parent's. find_optimal_sf() is in R/bootstrap_ci.R.
+# Calibrates the half-sample bootstrap's sample.fraction on one grid row of the
+# correlated sets, with rho read from the grid row. find_optimal_sf() is in
+# R/bootstrap_ci.R.
 
 # libraries
 library(here)
