@@ -7,7 +7,7 @@
 # see surv_models.R's nuis_dr/nuis_sl (results$nuisances <- list(rf =, sl =)).
 # Nothing in the pipeline looks at these: surv_metrics.R only scores the final
 # tau vectors. This script reduces surv_all.RDS (already collected by
-# surv_collect.R) down to two much smaller objects a plotting script can work
+# study.R collect) down to two much smaller objects a plotting script can work
 # with:
 #
 #   nuisance_run_summary.RDS   one row per (rho, scenario, censoring, run, arm,

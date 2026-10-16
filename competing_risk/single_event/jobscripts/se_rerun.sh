@@ -6,7 +6,7 @@
 #PBS -o logs_rerun/
 #PBS -j oe
 
-# -J and the resources are rewritten by se_check.R (check_failed()) to match
+# -J and the resources are rewritten by study.R check (check_failed()) to match
 # failed_ids.txt - run that before submitting this.
 
 module purge

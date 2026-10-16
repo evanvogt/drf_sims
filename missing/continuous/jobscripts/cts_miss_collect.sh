@@ -14,4 +14,4 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script with parameters
-Rscript cts_miss_collect.R 
+Rscript ../../study.R collect missing/continuous/cts_miss_config.R

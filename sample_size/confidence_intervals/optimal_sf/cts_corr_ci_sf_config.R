@@ -1,8 +1,8 @@
 ##########
 # title: correlated optimal sample.fraction calibration (continuous) - the one definition of its parameter grid
 ##########
-# Sourced by cts_corr_ci_sf_analysis.R, cts_corr_ci_sf_check.R,
-# cts_corr_ci_sf_collect.R and cts_corr_ci_sf_metrics.R. The array index is a
+# Sourced by cts_corr_ci_sf_analysis.R, study.R (check, collect) and
+# cts_corr_ci_sf_metrics.R. The array index is a
 # row number of `grid`, so `grid` must never be filtered or reordered.
 #
 # confidence_intervals/optimal_sf/'s design (scenarios 1-4, n in {500, 1000},

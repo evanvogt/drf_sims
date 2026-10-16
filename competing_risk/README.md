@@ -22,7 +22,7 @@ from the repo root first, for `logs_1/` and `logs_2/`):
 ```bash
 qsub surv_1.sh               # 1-7000, rho = 0 (sensitivity)
 qsub surv_2.sh               # 7001-14000, rho = 0.5 (primary)
-Rscript ../surv_check.R      # writes failed_ids.txt, points surv_rerun.sh at it
+Rscript ../../study.R check competing_risk/surv_config.R      # writes failed_ids.txt, points surv_rerun.sh at it
 qsub surv_rerun.sh           # only if the check found failures
 qsub surv_collect.sh
 qsub surv_metrics.sh
@@ -311,7 +311,7 @@ and pass it `--out`, since its stages 2 and 3 overwrite their CSVs in place.
 
 `surv_config.R` (grid), `surv_dgm.R`, `surv_models.R`, `surv_analysis.R`,
 `surv_run.R` (the no-queue RStudio-session alternative, see "Without the
-queue" above), `surv_check.R`, `surv_collect.R`, `surv_metrics.R`.
+queue" above), `surv_metrics.R`; check and collect are the root `study.R`.
 `surv_dgm_check.R` produces ADEMP's "What the DGM implies" numbers (event mix,
 population truths, X3 separation) for each ρ.
 `single_event/` is a separate, smaller study: event 1 with event 2 removed,

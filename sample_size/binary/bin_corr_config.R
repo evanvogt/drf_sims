@@ -1,7 +1,7 @@
 ##########
 # title: correlated binary study - the one definition of its parameter grid
 ##########
-# Sourced by bin_corr_analysis.R, bin_corr_check.R, bin_corr_collect.R and
+# Sourced by bin_corr_analysis.R, study.R (check, collect) and
 # bin_corr_metrics.R. The array index handed to bin_corr_analysis.R is a row
 # number of `grid`, so `grid` must never be filtered or reordered after
 # construction.

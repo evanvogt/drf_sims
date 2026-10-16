@@ -94,13 +94,13 @@ dropped.
 | `cf_models.R` | DGP wrapper, nuisance producers (over production's per-arm fits), stage-2 consumers, `run_all_crossfit_variants` |
 | `cf_analysis.R` | array entry point, one replicate per index |
 | `cf_testing.R` | verification checks — run before submitting anything |
-| `cf_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
+| `../study.R check` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
 | `cf_metrics.R` | metric definitions (functions only, no side effects) |
 | `cf_collect.R` | streams the per-run files through `cf_metrics.R` into `cf_metrics.RDS` |
 | `cf_results.R` | figures |
 | `confidence_intervals/cf_ci_analysis.R` | confidence-interval pilot, all 8 RF/CF arms — see below |
 | `confidence_intervals/cf_ci_testing.R` | verification checks for the CI pilot (`full` adds the production-parity check) |
-| `confidence_intervals/cf_ci_check.R` / `cf_ci_metrics.R` / `cf_ci_collect.R` | CI pilot's own check/metrics/collect, parallel to the files above |
+| `confidence_intervals/cf_ci_metrics.R` / `cf_ci_collect.R` | CI pilot's own metrics/collect, parallel to the files above |
 
 ## Half-sample bootstrap CI pilot
 
@@ -212,7 +212,7 @@ Rscript crossfitting/confidence_intervals/cf_ci_testing.R full         # adds th
 Rscript crossfitting/confidence_intervals/cf_ci_analysis.R 1 10 2 1    # local smoke test: index 1, CI_boot=10
 
 qsub crossfitting/confidence_intervals/jobscripts/cf_ci_1.sh           # the pilot itself (150 jobs)
-Rscript crossfitting/confidence_intervals/cf_ci_check.R                # 150/150?
+Rscript study.R check crossfitting/confidence_intervals/cf_ci_config.R                # 150/150?
 qsub crossfitting/confidence_intervals/jobscripts/cf_ci_collect.sh
 ```
 
@@ -258,7 +258,7 @@ Rscript crossfitting/cf_testing.R              # structure + regression checks (
 Rscript crossfitting/cf_testing.R full         # adds the SuperLearner family
 
 qsub crossfitting/jobscripts/cf_1.sh        # the study itself
-Rscript crossfitting/cf_check.R             # 400/400?
+Rscript study.R check crossfitting/cf_config.R             # 400/400?
 qsub crossfitting/jobscripts/cf_collect.sh
 Rscript crossfitting/cf_results.R
 ```

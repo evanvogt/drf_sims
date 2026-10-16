@@ -1,7 +1,7 @@
 ##########
 # title: application sizing - the one definition of the timing grid
 ##########
-# Sourced by as_analysis.R, as_check.R, as_collect.R and as_summary.R. The array
+# Sourced by as_analysis.R, study.R (check), as_collect.R and as_summary.R. The array
 # index is a row number of `grid`, so `grid` must never be filtered or
 # reordered; add rows at the end.
 #

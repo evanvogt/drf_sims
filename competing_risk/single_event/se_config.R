@@ -1,7 +1,7 @@
 ##########
 # title: single-event survival study - the one definition of its parameter grid
 ##########
-# Sourced by se_analysis.R, se_check.R, se_collect.R and se_metrics.R. The
+# Sourced by se_analysis.R, study.R (check, collect) and se_metrics.R. The
 # array index handed to se_analysis.R is a row number of `grid`, so `grid` must
 # never be filtered or reordered after construction.
 #

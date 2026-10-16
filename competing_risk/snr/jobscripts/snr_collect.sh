@@ -17,4 +17,4 @@ conda activate sim-env
 # Navigate to the script directory
 cd "${PBS_O_WORKDIR}/.."
 
-Rscript snr_collect.R
+Rscript ../../study.R collect competing_risk/snr/snr_config.R

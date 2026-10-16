@@ -1,7 +1,7 @@
 ##########
 # title: correlated continuous CI study - the one definition of its parameter grid
 ##########
-# Sourced by cts_corr_ci_analysis.R, cts_corr_ci_check.R, cts_corr_ci_collect.R
+# Sourced by cts_corr_ci_analysis.R, study.R (check, collect)
 # and cts_corr_ci_metrics.R. The array index handed to cts_corr_ci_analysis.R is
 # a row number of `grid`, so `grid` must never be filtered or reordered after
 # construction.

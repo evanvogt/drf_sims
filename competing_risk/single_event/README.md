@@ -24,7 +24,7 @@ On the cluster, from `competing_risk/single_event/jobscripts/` (run
 
 ```bash
 qsub se_1.sh                # 1-3000
-Rscript ../se_check.R       # writes failed_ids.txt, points se_rerun.sh at it
+Rscript ../../../study.R check competing_risk/single_event/se_config.R       # writes failed_ids.txt, points se_rerun.sh at it
 qsub se_rerun.sh            # only if the check found failures
 qsub se_collect.sh
 qsub se_metrics.sh
@@ -33,7 +33,7 @@ qsub se_metrics.sh
 Local smoke test, from `competing_risk/single_event/`:
 `Rscript se_analysis.R 3` (scenario 3, censoring on, run 1), then
 `Rscript se_analysis.R 6` (the same run, censoring off). Each takes about 1.5
-minutes locally with the default 2 workers. Don't run `se_check.R` locally: it
+minutes locally with the default 2 workers. Don't run `study.R check` locally: it
 would rewrite `failed_ids.txt` and `se_rerun.sh` for every run you haven't
 produced.
 
@@ -105,6 +105,6 @@ not paired.
 | `se_dgm.R` | DGM and closed-form truth |
 | `se_models.R` | `all_cate_se_models()`, plus the single-event pieces |
 | `se_analysis.R` | one array index |
-| `se_check.R`, `se_collect.R`, `se_metrics.R` | the pipeline |
+| `se_metrics.R` | the metrics (check and collect are the root `study.R`) |
 | `se_dgm_check.R` | DGM assertions and the ADEMP numbers |
 | `se_results.qmd` | the results report (render once the results are back) |

@@ -102,7 +102,7 @@ On the cluster, from `sample_size/snr/jobscripts/` (run
 ```bash
 qsub bin_snr_1.sh                 # 1-1300, n = 500
 qsub bin_snr_2.sh                 # 1301-2500, n = 1000 / 2000 / 4000
-Rscript ../bin_snr_check.R        # writes failed_ids.txt, points bin_snr_rerun.sh at it
+Rscript ../../../study.R check sample_size/snr/bin_snr_config.R        # writes failed_ids.txt, points bin_snr_rerun.sh at it
 qsub bin_snr_rerun.sh             # only if the check found failures
 qsub bin_snr_collect.sh
 qsub bin_snr_metrics.sh

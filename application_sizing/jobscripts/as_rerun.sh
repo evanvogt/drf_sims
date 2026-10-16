@@ -1,5 +1,5 @@
 #!/bin/bash
-# Reruns only the array indices listed in failed_ids.txt by as_check.R.
+# Reruns only the array indices listed in failed_ids.txt by study.R check.
 # -J and the resource request are rewritten by check_failed().
 #PBS -l walltime=24:00:00
 #PBS -l select=1:ncpus=8:ompthreads=8:mem=32gb

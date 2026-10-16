@@ -15,4 +15,4 @@ conda activate sim-env
 # Navigate to the script directory
 cd "${PBS_O_WORKDIR}/.."
 
-Rscript surv_collect.R
+Rscript ../study.R collect competing_risk/surv_config.R

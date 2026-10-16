@@ -1,7 +1,7 @@
 ##########
 # title: correlated binary SNR check - the one definition of its parameter grid
 ##########
-# Sourced by bin_snr_analysis.R, bin_snr_check.R, bin_snr_collect.R and
+# Sourced by bin_snr_analysis.R, study.R (check, collect) and
 # bin_snr_metrics.R. The array index handed to bin_snr_analysis.R is a row
 # number of `grid`, so `grid` must never be filtered or reordered after
 # construction.

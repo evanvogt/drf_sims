@@ -47,7 +47,7 @@
 #
 # ---- what it deliberately does not do ---------------------------------------
 # It never writes jobscripts/failed_ids.txt and never edits surv_rerun.sh.
-# Those belong to the queue path and are surv_check.R's to write; writing
+# Those belong to the queue path and are study.R check's to write; writing
 # them from here would leave a resubmission list pointing at rows this
 # script has already retried itself. Failed rows are reported and picked up
 # by the next source() instead.
@@ -252,5 +252,5 @@ if (length(ids) == 0) {
   } else {
     cat("every requested row has a results file - nothing missing.\n")
   }
-  cat("next: Rscript competing_risk/surv_check.R, then surv_collect.R / surv_metrics.R\n")
+  cat("next: Rscript study.R check competing_risk/surv_config.R, then collect / surv_metrics.R\n")
 }

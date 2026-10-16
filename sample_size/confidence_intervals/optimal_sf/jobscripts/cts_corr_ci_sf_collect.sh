@@ -15,4 +15,4 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 # Run R script
-Rscript cts_corr_ci_sf_collect.R
+Rscript ../../../study.R collect sample_size/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R

@@ -185,8 +185,8 @@ there and keeps the two arms' tests the same.
 | `../val_common.R` | shared with `binary/`: the split, the estimators and importance measures, the interaction tests (including the data-driven ones), the four comparisons |
 | `cts_val_run.R` | runs the whole grid in one RStudio session, 8 rows at a time — the no-queue alternative to `cts_val_1.sh` |
 | `cts_val_testing.R` | pre-submission verification — dependencies, grid, and the helpers above |
-| `cts_val_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
-| `cts_val_collect.R` | gathers per-run files into `cts_val_all.RDS` |
+| `study.R check` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript |
+| `study.R collect` | gathers per-run files into `cts_val_all.RDS` |
 | `cts_val_metrics.R` | flattens `validations` into tidy `cts_val_metrics.RDS` |
 | `results_cts_val.R` | summary plots, one scenario at a time (`Rscript results_cts_val.R <scenario>`), HC3 |
 | `../val_results.qmd` | the written-up report, shared with `binary/`, one render per scenario (Quarto `outcome` and `scenario` params) |
@@ -196,7 +196,7 @@ there and keeps the two arms' tests the same.
 ```bash
 Rscript validation/continuous/cts_val_testing.R full   # do this first - see below
 qsub validation/continuous/jobscripts/cts_val_1.sh     # 1-4400
-Rscript validation/continuous/cts_val_check.R          # writes failed_ids.txt if any are missing
+Rscript study.R check validation/continuous/cts_val_config.R          # writes failed_ids.txt if any are missing
 qsub validation/continuous/jobscripts/cts_val_collect.sh
 qsub validation/continuous/jobscripts/cts_val_metrics.sh
 cd validation
@@ -230,7 +230,7 @@ land in the same place. Budget 4400 × (the replicate time
 `cts_val_testing.R full` reports) / 8.
 
 Rows that already have a results file are skipped (the same missing-run logic
-`cts_val_check.R` uses), so an interrupted session — or one that hits its
+`study.R check` uses), so an interrupted session — or one that hits its
 walltime — is resumed by sourcing the file again, and so is a row that failed.
 Edit `ids` at the top to run a subset, e.g.
 `grid_indices(study, interim_prop = 0.25)`; trailing arguments do the same
@@ -238,7 +238,7 @@ non-interactively (`Rscript cts_val_run.R 1 2 3`). Per-row logs go to
 `<results>/validation/continuous/session_logs/`.
 
 It never writes `jobscripts/failed_ids.txt` and never edits `cts_val_rerun.sh` —
-those belong to the queue path. Afterwards, `cts_val_check.R`, collect and
+those belong to the queue path. Afterwards, check, collect and
 metrics run exactly as they would after an array run.
 
 ### Sizing the job

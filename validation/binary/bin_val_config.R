@@ -2,7 +2,7 @@
 # title: interim-analysis validation study, binary outcome - the one definition
 #        of its parameter grid
 ##########
-# Sourced by bin_val_analysis.R, bin_val_check.R, bin_val_collect.R and
+# Sourced by bin_val_analysis.R, study.R (check, collect) and
 # bin_val_metrics.R. The array index handed to bin_val_analysis.R is a row
 # number of `grid`, so `grid` must never be filtered or reordered after
 # construction.

@@ -16,7 +16,7 @@ the nearest 50 and domains named D1-D5.
 | `as_mock_check.R` | checks the mock datasets against the schema; re-derives the missingness calibration |
 | `as_config.R` | the timing grid (201 rows) and the analysis settings it times |
 | `as_analysis.R` | times one grid row |
-| `as_check.R`, `as_collect.R` | the usual todo list / collection; `as_collect.R` writes `as_fits.csv` and `as_jobs.csv` |
+| `as_collect.R` | collection (the todo list is `study.R check`); writes `as_fits.csv` and `as_jobs.csv` |
 | `as_summary.R` | the totals: hours per trial and missing-data method, CI and sf-calibration cost per outcome, peak memory |
 
 ## What is timed
@@ -71,7 +71,7 @@ Cluster:
 ```
 cd application_sizing/jobscripts
 qsub as_1.sh                 # rows 1-201, 8 cores (4 workers x 2 grf threads), 32 GB, 24 h
-Rscript ../as_check.R        # writes failed_ids.txt, updates as_rerun.sh
+Rscript ../../study.R check application_sizing/as_config.R        # writes failed_ids.txt, updates as_rerun.sh
 qsub as_rerun.sh
 qsub as_collect.sh           # as_collect.R then as_summary.R
 ```

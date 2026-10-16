@@ -1,7 +1,7 @@
 ##########
 # title: interim-analysis validation study - the one definition of its parameter grid
 ##########
-# Sourced by cts_val_analysis.R, cts_val_check.R, cts_val_collect.R and
+# Sourced by cts_val_analysis.R, study.R (check, collect) and
 # cts_val_metrics.R. The array index handed to cts_val_analysis.R is a row
 # number of `grid`, so `grid` must never be filtered or reordered after
 # construction.

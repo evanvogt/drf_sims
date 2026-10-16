@@ -1,5 +1,5 @@
 #!/bin/bash
-# Reruns only the array indices listed in failed_ids.txt by cts_val_check.R.
+# Reruns only the array indices listed in failed_ids.txt by study.R check.
 # -J and the resource request are rewritten by check_failed(); the values here
 # are what it computes from cts_val_1.sh, so the first check leaves them alone.
 #PBS -l walltime=01:00:00

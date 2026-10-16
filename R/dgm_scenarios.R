@@ -269,7 +269,7 @@ SCENARIO_SETS$binary <- transform(
 # - a Bernoulli outcome's own variance dominates - so the binary mechanisms
 # stay much weaker than continuous_missing's (U 45% of Var(Y)); see
 # missing/miss_dgm_checks.R.
-SCENARIO_SETS$binary_missing_fixed <- transform(
+SCENARIO_SETS$binary_missing <- transform(
   SCENARIO_SETS$binary[1:6, ],
   description = DESC_MISS,
   b3 = -RD_SCALE_MISS * SCENARIO_SETS$continuous$b3[1:6],
@@ -332,29 +332,19 @@ SCENARIO_SETS$binary_snr <- transform(
 )
 
 # which sets produce a binary outcome
-BINARY_SETS <- c("binary", "binary_missing", "binary_missing_fixed",
-                 corr_set("binary", CORR_RHOS), "binary_snr")
+BINARY_SETS <- c("binary", "binary_missing", corr_set("binary", CORR_RHOS),
+                 "binary_snr")
 
 #' Resolve a scenario-set name to its table
 #'
-#' @param set one of names(SCENARIO_SETS), or "binary_ci" for the binary CI study,
-#'   or "binary_missing" for the missing/binary study (resolves to the
-#'   `binary_missing_fixed` table)
+#' @param set one of names(SCENARIO_SETS)
 resolve_set <- function(set) {
-  if (set == "binary_ci") {
-    return(SCENARIO_SETS$binary)
-  }
-  if (set == "binary_missing") {
-    return(SCENARIO_SETS$binary_missing_fixed)
-  }
   tbl <- SCENARIO_SETS[[set]]
   if (is.null(tbl)) stop("unknown scenario set: ", set)
   tbl
 }
 
-is_binary_set <- function(set) {
-  set %in% BINARY_SETS || (set == "binary_ci")
-}
+is_binary_set <- function(set) set %in% BINARY_SETS
 
 #' Scale a scenario's effect modifiers b3, b4, b34 and b45 by hte_mult
 #'

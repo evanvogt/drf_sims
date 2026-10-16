@@ -1,7 +1,7 @@
 ##########
 # title: crossfitting CI pilot - the one definition of its parameter grid
 ##########
-# Sourced by cf_ci_check.R. Kept separate from crossfitting/cf_config.R so a
+# Sourced by study.R check. Kept separate from crossfitting/cf_config.R so a
 # re-run of one study never clobbers the other's todo list, matching the
 # previous check script's intent. This used to need a differently-named
 # failed_file (failed_ci_ids.txt); it no longer does, because the two studies

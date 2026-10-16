@@ -30,7 +30,7 @@
 #
 # ---- what it deliberately does not do ---------------------------------------
 # It never writes jobscripts/failed_ids.txt and never edits cts_val_rerun.sh.
-# Those belong to the queue path and are cts_val_check.R's to write; writing
+# Those belong to the queue path and are study.R check's to write; writing
 # them from here would leave a resubmission list pointing at rows this script
 # has already retried itself. Failed rows are reported and picked up by the
 # next source() instead.
@@ -64,7 +64,7 @@ cli_ids <- suppressWarnings(as.integer(commandArgs(trailingOnly = TRUE)))
 if (length(cli_ids) > 0 && !anyNA(cli_ids)) {
   ids <- cli_ids
 } else if (is.null(ids)) {
-  # the same missing-run logic cts_val_check.R uses. write = FALSE is what makes
+  # the same missing-run logic study.R check uses. write = FALSE is what makes
   # it safe to call here: it touches neither failed_ids.txt nor the rerun script.
   ids <- if (overwrite) seq_len(nrow(study$grid)) else check_failed(study, write = FALSE)
 } else if (!overwrite) {
@@ -235,5 +235,5 @@ if (length(ids) == 0) {
                 length(missing_after)),
         "to retry them\n", sep = "")
   }
-  cat("next: Rscript validation/continuous/cts_val_check.R, then collect and metrics\n")
+  cat("next: Rscript study.R check validation/continuous/cts_val_config.R, then collect and metrics\n")
 }

@@ -1,7 +1,7 @@
 ##########
 # title: competing-risk SNR check - the one definition of its parameter grid
 ##########
-# Sourced by snr_analysis.R, snr_check.R, snr_collect.R and snr_metrics.R. The
+# Sourced by snr_analysis.R, study.R (check, collect) and snr_metrics.R. The
 # array index handed to snr_analysis.R is a row number of `grid`, so `grid`
 # must never be filtered or reordered after construction.
 #

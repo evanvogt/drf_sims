@@ -75,8 +75,8 @@ are shared code and are the same as in the continuous arm — see
 | `bin_val_models.R` | `run_all_cate_methods()`: `../val_common.R`'s `fit_val_methods()` with `family = binomial()` |
 | `bin_val_analysis.R` | array entry point; splits the trial, fits both chunks, runs `chunk_validations_se()` |
 | `bin_val_testing.R` | pre-submission verification — dependencies, grid, the HC3 tests, the binary DGM in each scenario, the split, one chunk's fit, both standard-error kinds; `full` adds one replicate end to end |
-| `bin_val_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates the rerun jobscript |
-| `bin_val_collect.R` | gathers per-run files into `bin_val_all.RDS` |
+| `study.R check` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates the rerun jobscript |
+| `study.R collect` | gathers per-run files into `bin_val_all.RDS` |
 | `bin_val_metrics.R` | flattens `validations` into tidy `bin_val_metrics.RDS` |
 | `../val_results.qmd` | the written-up report, shared with `continuous/`, one render per scenario (Quarto `outcome` and `scenario` params) |
 
@@ -90,7 +90,7 @@ changed if the queue is ever slower than the work.
 ```bash
 Rscript validation/binary/bin_val_testing.R full   # do this first
 qsub validation/binary/jobscripts/bin_val_1.sh     # 1-4400
-Rscript validation/binary/bin_val_check.R          # writes failed_ids.txt if any are missing
+Rscript study.R check validation/binary/bin_val_config.R          # writes failed_ids.txt if any are missing
 qsub validation/binary/jobscripts/bin_val_collect.sh
 qsub validation/binary/jobscripts/bin_val_metrics.sh
 cd validation/binary

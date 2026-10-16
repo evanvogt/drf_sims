@@ -140,7 +140,12 @@ On 2026-10-16, with the campaign over, the registry was cut to `study_name` and
 `config_path` (the `category`, `reason` and `blocked` columns went), `check_all.R`
 was cut to printing its table, and the committed snapshots
 (`check_all_studies.*`, `collect_metrics_status.csv`) and
-`collect_all_metrics.R`, which nothing read, were deleted.
+`collect_all_metrics.R`, which nothing read, were deleted. The same day the
+one-line `<prefix>_check.R` / `<prefix>_collect.R` scripts (31 of them) became
+the root `study.R check|collect <config_path>`; `me_check.R`, `me_collect.R`,
+`as_collect.R` and the crossfitting collects do more and stayed. The root
+`utils.R` shim went too, and `resolve_set()` lost its `binary_ci` and
+`binary_missing_fixed` aliases (the table is now just `binary_missing`).
 
 ## Resource profiling (removed)
 

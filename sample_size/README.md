@@ -304,7 +304,7 @@ cd sample_size/continuous/jobscripts
 qsub cts_corr_1.sh            # rows 1-10000 (rho = 0 is 1-8000)
 qsub cts_corr_2.sh            # rows 10001-16000, all rho = 0.5
 qsub cts_corr_extra.sh        # rows 16001-20800, scenarios 5-10
-Rscript ../cts_corr_check.R   # run after all three finish
+Rscript ../../../study.R check sample_size/continuous/cts_corr_config.R   # run after all three finish
 qsub cts_corr_rerun.sh        # only if the check found failures
 qsub cts_corr_collect.sh
 qsub cts_corr_metrics.sh

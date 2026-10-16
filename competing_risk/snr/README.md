@@ -78,7 +78,7 @@ qsub snr_1.sh                 # 1-400, n = 500
 qsub snr_2.sh                 # 401-600, n = 1000 / 2000
 qsub -J 601-602 snr_3.sh      # n = 4000: two first, see Resources
 qsub -J 603-700 snr_3.sh      # then the rest (command-line -J overrides the script's)
-Rscript ../snr_check.R        # writes failed_ids.txt, points snr_rerun.sh at it
+Rscript ../../../study.R check competing_risk/snr/snr_config.R        # writes failed_ids.txt, points snr_rerun.sh at it
 qsub snr_rerun.sh             # only if the check found failures
 qsub snr_collect.sh
 qsub snr_metrics.sh

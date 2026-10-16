@@ -18,4 +18,4 @@ conda activate sim-env
 # Navigate to the script directory
 cd "${PBS_O_WORKDIR}/.."
 
-Rscript se_collect.R
+Rscript ../../study.R collect competing_risk/single_event/se_config.R

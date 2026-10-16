@@ -12,4 +12,4 @@ conda activate sim-env
 # Navigate to the script directory
 cd "${PBS_O_WORKDIR}/.."
 
-Rscript cts_val_collect.R
+Rscript ../../study.R collect validation/continuous/cts_val_config.R

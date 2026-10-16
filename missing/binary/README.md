@@ -94,7 +94,7 @@ for the test columns themselves (`BLP_p_os` is the one-sided, HC3 BLP).
 ```bash
 qsub missing/binary/jobscripts/bin_miss_1.sh        # 1-9900
 qsub missing/binary/jobscripts/bin_miss_extra.sh    # 9901-12600, scenario 2
-Rscript missing/binary/bin_miss_check.R
+Rscript study.R check missing/binary/bin_miss_config.R
 qsub missing/binary/jobscripts/bin_miss_collect.sh
 qsub missing/binary/jobscripts/bin_miss_metrics.sh
 ```

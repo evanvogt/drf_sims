@@ -82,7 +82,7 @@ list of 50 imputed data.frames, with no single covariate matrix to test against.
 ```bash
 qsub missing/continuous/jobscripts/cts_miss_1.sh       # 1-9900
 qsub missing/continuous/jobscripts/cts_miss_extra.sh   # 9901-12600, scenario 2
-Rscript missing/continuous/cts_miss_check.R
+Rscript study.R check missing/continuous/cts_miss_config.R
 qsub missing/continuous/jobscripts/cts_miss_collect.sh
 qsub missing/continuous/jobscripts/cts_miss_metrics.sh
 ```

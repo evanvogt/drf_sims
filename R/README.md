@@ -21,9 +21,6 @@ study: the differences between them are arguments, not forks.
 | `calibration_report.R` | planned vs realised power and `bW` per scenario |
 | `archive_old_results.R` | packs results trees into `results/_archive/<label>/*.tar` (`--trees`, `--label`) |
 
-The repo-root `utils.R` is a two-line shim onto `R/utils.R`, so existing
-`source(here("utils.R"))` calls keep working.
-
 ## `cate_methods()` — the axes
 
 | argument | what it changes | who uses it |

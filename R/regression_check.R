@@ -49,7 +49,7 @@ STUDIES <- list(
   # (sample_size/). Kept because those wrappers - the "base" and
   # "ci" profiles on each outcome family - are what the correlated studies run.
   continuous = list(
-    sources = c("utils.R", "R/dgm_scenarios.R",
+    sources = c("R/utils.R", "R/dgm_scenarios.R",
                 "sample_size/continuous/cts_corr_models.R"),
     run = function() {
       setup_rng_stream(3)
@@ -64,7 +64,7 @@ STUDIES <- list(
   ),
 
   binary = list(
-    sources = c("utils.R", "R/dgm_scenarios.R",
+    sources = c("R/utils.R", "R/dgm_scenarios.R",
                 "sample_size/binary/bin_corr_models.R"),
     run = function() {
       setup_rng_stream(3)
@@ -79,7 +79,7 @@ STUDIES <- list(
   ),
 
   ci_continuous = list(
-    sources = c("utils.R", "R/dgm_scenarios.R",
+    sources = c("R/utils.R", "R/dgm_scenarios.R",
                 "sample_size/confidence_intervals/continuous/cts_corr_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
@@ -94,12 +94,12 @@ STUDIES <- list(
   ),
 
   ci_binary = list(
-    sources = c("utils.R", "R/dgm_scenarios.R",
+    sources = c("R/utils.R", "R/dgm_scenarios.R",
                 "sample_size/confidence_intervals/binary/bin_corr_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
-      gen <- generate_scenario_data(3, 120, set = "binary_ci")
-      fmla <- get_oracle_info(3, gen$bW, set = "binary_ci")
+      gen <- generate_scenario_data(3, 120, set = "binary")
+      fmla <- get_oracle_info(3, gen$bW, set = "binary")
       setup_rng_stream(3)
       res <- run_all_cate_methods(gen$dataset, n_folds = 3, fmla_info = fmla,
                                   CI_boot = 10, CI_sf = 0.5, alpha = 0.05)
@@ -112,7 +112,7 @@ STUDIES <- list(
   # the SuperLearner one where bug F lives), IPW exercises the sample.weights /
   # obsWeights threading that is the only difference from the base models file.
   missing_continuous = list(
-    sources = c("utils.R",
+    sources = c("R/utils.R",
                 "missing/continuous/cts_miss_dgms.R",
                 "missing/continuous/cts_miss_models.R"),
     run = function() {
@@ -137,7 +137,7 @@ STUDIES <- list(
   ),
 
   missing_binary = list(
-    sources = c("utils.R",
+    sources = c("R/utils.R",
                 "missing/binary/bin_miss_dgms.R",
                 "missing/binary/bin_miss_models.R"),
     run = function() {
@@ -167,7 +167,7 @@ STUDIES <- list(
   # the study's 50: the point is to exercise mi_boot + combine_mi, and mice
   # dominates the runtime.
   ci_example = list(
-    sources = c("utils.R",
+    sources = c("R/utils.R",
                 "missing/ci_example/cts_miss_ci_dgms.R",
                 "missing/ci_example/cts_miss_ci_models.R"),
     run = function() {
@@ -202,7 +202,7 @@ STUDIES <- list(
   # cannot find oob_predict_counterfactual and the capture dies partway - a
   # second reason this entry had never been captured, hidden behind the abort.
   competing_risk = list(
-    sources = c("utils.R", "R/cate_models.R", "competing_risk/surv_dgm.R",
+    sources = c("R/utils.R", "R/cate_models.R", "competing_risk/surv_dgm.R",
                 "competing_risk/surv_models.R"),
     run = function() {
       # n = 400 not 120: at the smaller size grf's causal_survival_forest rejects
@@ -231,7 +231,7 @@ STUDIES <- list(
   # bit from run to run - enough to move rsf_dr_oob's stage-2 forest splits. The
   # analysis script gets the same from OMP_NUM_THREADS = grf_threads = 1.
   single_event = list(
-    sources = c("utils.R", "R/cate_models.R", "competing_risk/surv_models.R",
+    sources = c("R/utils.R", "R/cate_models.R", "competing_risk/surv_models.R",
                 "competing_risk/single_event/se_dgm.R",
                 "competing_risk/single_event/se_models.R"),
     run = function() {

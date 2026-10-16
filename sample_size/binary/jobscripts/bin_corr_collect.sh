@@ -16,4 +16,4 @@ conda activate sim-env
 cd "${PBS_O_WORKDIR}/.."
 
 # Run the R script for the assigned scenario and sample size
-Rscript bin_corr_collect.R
+Rscript ../../study.R collect sample_size/binary/bin_corr_config.R

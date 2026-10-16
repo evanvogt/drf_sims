@@ -131,8 +131,6 @@ Each study folder has the same shape:
 | `<s>_dgms.R` | names this study's scenario set |
 | `<s>_models.R` | this study's configuration of the shared estimators |
 | `<s>_analysis.R` | array entry point; one grid row per index |
-| `<s>_check.R` | finds missing runs |
-| `<s>_collect.R` | gathers per-run files |
 | `<s>_metrics.R` | computes metrics |
 | `jobscripts/` | PBS submission scripts |
 
@@ -222,7 +220,7 @@ there. `Rscript` lines run anywhere, including as a local smoke test.
 ```bash
 cd sample_size/continuous/jobscripts   # jobscripts cd to ${PBS_O_WORKDIR}/..
 qsub cts_corr_1.sh            # the array job — cluster only
-Rscript ../cts_corr_check.R   # any missing runs? — runs locally too
+Rscript ../../../study.R check sample_size/continuous/cts_corr_config.R   # any missing runs? — runs locally too
 qsub cts_corr_collect.sh      # cluster only
 qsub cts_corr_metrics.sh      # cluster only
 ```
@@ -234,12 +232,14 @@ grid — that renumbers every job. To run a subset:
 idx <- grid_indices(study, method = "complete_data")
 ```
 
-A run that fails is found by `Rscript <study>/<prefix>_check.R`, which writes
+A run that fails is found by `Rscript study.R check <config_path>`, which writes
 `jobscripts/failed_ids.txt` and points `jobscripts/<prefix>_rerun.sh` at it.
 Every jobscript writes its PBS output to a `jobscripts/logs*/` folder, which is
 not in git, so create them once on the cluster before the first submit
 (`Rscript make_log_dirs.R`). `Rscript check_all.R` on the login node counts
 expected, found and missing runs for every study in `R/study_registry.R`.
+`Rscript study.R collect <config_path>` gathers a study's per-run files into
+`<prefix>_all.RDS`; the `*_collect.sh` jobscripts call it.
 
 `docs/DEVLOG.md` holds the history: the bug ledger (A–S), the re-run campaign,
 the scenario renumbering and each study's past status notes. Nothing there is
