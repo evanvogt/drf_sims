@@ -42,12 +42,13 @@ arguments:
 | `ipw` | grf `sample.weights` / SuperLearner `obsWeights`. `NULL` is the unweighted path exactly | the missing-data IPW arm |
 | `ci` | `list(boot=, sf=, alpha=)` turns on the half-sample bootstrap | the CI studies |
 
-Two more were added for applied analyses (2026-10-06). Both default to the old
-behaviour exactly:
+More were added for applied analyses (from 2026-10-06). Each defaults to the
+old behaviour exactly:
 
 | argument | what it changes |
 |---|---|
 | `models` | `NULL` runs every arm; a subset of `CATE_MODELS` runs only those (e.g. no oracle-type arms) |
+| `sl_plan` | a future plan (e.g. `tweak(multisession, workers = 5)`) set for the SuperLearner arm alone, then switched back: its learners are single-threaded and want more workers than the grf arms, whose memory is the limit. Results are unchanged (furrr's seeds do not depend on the worker count). Added 2026-10-16 |
 | `X_ps` | propensity-only covariates (e.g. calendar time under a drifting allocation): added to every *estimated* propensity model - `nuisance_rf`'s, the causal forest's (which then takes `nuisance_rf`'s `W.hat` instead of its own), the SuperLearner arm's - and to nothing else. `all_cate_surv_models()` takes the same argument, along with `models` and `estimands` |
 
 The fourth was where the oracle arm's inverse link lives, and it is gone. Every

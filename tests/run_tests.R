@@ -158,6 +158,25 @@ check("save_run leaves exactly one finished file, overwriting on a repeat",
 check("save_run's temporary name is not mistaken for a finished run",
       !grepl(RES_PATTERN, ".tmp_res_sim_7.RDS"))
 
+# sl_plan moves the SuperLearner arm onto its own workers. Its answer must not
+# move with it, and the caller's plan must be back afterwards.
+sl_fit <- function(sl_plan) {
+  setup_rng_stream(3)
+  dat <- generate_scenario_data(2, 200, "continuous", seed = 3)$dataset
+  suppressWarnings(capture.output(fit <- cate_methods(
+    dat, n_folds = 3, sl_lib = c("SL.mean", "SL.glm"), models = "dr_superlearner",
+    num.threads = 1, sl_plan = sl_plan)))
+  fit
+}
+plan(sequential)
+fit_seq <- sl_fit(NULL)
+fit_ms <- sl_fit(tweak(multisession, workers = 2))
+check("sl_plan leaves the SuperLearner arm's estimates unchanged and restores the plan",
+      length(fit_seq$dr_superlearner$tau) == 200 &&
+        identical(fit_seq$dr_superlearner$tau, fit_ms$dr_superlearner$tau) &&
+        identical(fit_seq$nuisances_sl, fit_ms$nuisances_sl) &&
+        inherits(plan(), "sequential"))
+
 suppressPackageStartupMessages(source(here("crossfitting", "cf_models.R")))
 check("sourcing crossfitting/cf_models.R leaves the shared stage2_whole_rf alone",
       all(c("ipw", "Z_query") %in% names(formals(stage2_whole_rf))))

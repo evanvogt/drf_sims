@@ -195,11 +195,20 @@ ps_oob <- function(X, X_ps, W, num.threads = NULL) {
 #'   covariates, nrow(data) rows: they enter every estimated propensity model
 #'   (nuisance_rf's, the causal forest's, the SuperLearner arm's) and nothing
 #'   else - see cbind_ps(). The oracle-type arms fix the propensity at 0.5.
+#' @param sl_plan NULL (default: every arm runs on the caller's future plan, as
+#'   before this parameter existed), or a future plan - e.g.
+#'   tweak(multisession, workers = 5) - set for the SuperLearner arm alone and
+#'   switched back afterwards. Its learners are single-threaded, so it wants
+#'   more workers than the grf arms, whose forests each already take many
+#'   threads and whose memory sets the limit. Setting a plan shuts down the
+#'   previous plan's workers, so the arm starts in fresh processes. Results are
+#'   unchanged: furrr's seeds do not depend on the number of workers.
 cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
                          family = gaussian(), ipw = NULL, ci = NULL,
                          profile = c("base", "ci", "missing", "ci_mi", "full"),
                          num.threads = NULL, verbose_timing = FALSE,
-                         Z_query = NULL, models = NULL, X_ps = NULL) {
+                         Z_query = NULL, models = NULL, X_ps = NULL,
+                         sl_plan = NULL) {
 
   profile <- match.arg(profile)
   p <- PROFILES[[profile]]
@@ -315,6 +324,10 @@ cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
 
   if (want("dr_superlearner") && !is.null(sl_lib) && full_X_ok) {
     cat("Running DR SuperLearner...\n")
+    if (!is.null(sl_plan)) {
+      old_plan <- plan(sl_plan)
+      on.exit(plan(old_plan), add = TRUE)
+    }
     X <- as.data.frame(X)
     results$dr_superlearner <- time_step("dr_superlearner", {
       nuisances_sl <- nuisance_sl(X, Y, W, fold_indices, sl_lib, ipw, family = family,
