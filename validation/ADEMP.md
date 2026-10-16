@@ -37,7 +37,7 @@ Secondary aims:
 ## Data-generating mechanisms
 
 The correlated sample-size studies' DGM at ρ = 0.5 (`R/dgm_scenarios.R`,
-CORRELATED COVARIATES; see `sample_size/correlated/ADEMP.md` for the copula
+CORRELATED COVARIATES; see `sample_size/ADEMP.md` for the copula
 and the calibration of bW).
 
 - `E[Y | x, W] = m0(x) + W·τ(x)`, `τ(x) = bW + g(x)`, `W ~ Bernoulli(0.5)`

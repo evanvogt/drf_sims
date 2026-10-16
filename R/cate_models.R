@@ -93,7 +93,7 @@ source(here::here("R", "sl_library.R"))   # as_sl_libs, sl_fit_predict, pretest_
 # and patched files lack dr_random_forest$variance). The re-run needs no patch.
 #
 # The CI profiles keep tests off; that one IS deliberate (see
-# sample_size/confidence_intervals/README.md).
+# sample_size/README.md).
 #
 # aggregate_nuisances (row-mean summaries of a double-crossfit matrix) used to
 # be a fourth axis here; it was dropped when nuisance_rf/nuisance_sl moved to

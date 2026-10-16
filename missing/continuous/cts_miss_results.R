@@ -373,7 +373,7 @@ save_fig("cts_miss_blp_summary.png", fig_path)
 
 # --- BLP test p-values, one-sided with HC3 SEs ------------------------------
 # BLP_p_os: H1 beta.2 > 0 with heteroskedasticity-robust SEs, recomputed at
-# metrics time - see sample_size/continuous/README.md's "HTE tests"
+# metrics time - see sample_size/README.md's "HTE tests"
 BLP_os_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p_os"),
                              "BLP_p_os", "p-value", hline = 0.05, facet_scales = "free_x") +
   labs(title = "BLP test (one-sided, HC3)")

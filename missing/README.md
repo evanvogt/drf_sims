@@ -192,7 +192,7 @@ reads `p = 1`, `stat = 0`, `df = NA`. From the `is_constant()` guard on, a
 constant tau gives `NA` for both tests (`p`, `stat` and `df` all `NA` for the
 independence tests); rows saved before it can instead carry an independence
 p ≈ 0 for a constant tau, which coin returns with only a warning (see
-`sample_size/continuous/README.md`, "True-CATE HTE test evaluation").
+`sample_size/README.md`, "True-CATE tests" under "HTE tests").
 
 **No pooling rule is applied yet.** What "the" heterogeneity test across 50
 imputations should be is still a methodological decision. The options answer
@@ -204,7 +204,7 @@ not "the test failed".
 
 The same gap carries over to the true-CATE HTE test evaluation
 (`*_true_cate_tests.RDS`, `true_cate_test_row()` in `R/cate_models.R` — see
-`sample_size/continuous/README.md`): `multiple_imputation` rows are `NA`/`NA` there too,
+`sample_size/README.md`): `multiple_imputation` rows are `NA`/`NA` there too,
 for the same reason (`data` is a list of 50 imputed data.frames, not one),
 even though that evaluation needs no nuisances from `nuisances_rf` at all.
 It is the same pooling question as above, not a missing-nuisance problem, that
@@ -230,11 +230,11 @@ the question is settled.
 (`R/archive_old_results.R`; root `README.md`, Status, step 0):
 
 - `missing/continuous` — bug O changed `continuous_missing`'s baseline and `bW`
-  (see `sample_size/continuous/README.md`), which moves every dataset, on top of the
+  (see `docs/DEVLOG.md`), which moves every dataset, on top of the
   crossfitting strategy change and bug F. Its finished rows 1–9,900 are
   superseded, not "untouched".
 - `missing/binary` — bug P and then the risk-difference DGM
-  (`sample_size/binary/README.md`), on top of the three defects and bug K in its own
+  (`sample_size/README.md`), on top of the three defects and bug K in its own
   README. Submit on the risk-difference code.
 - Both, and `ci_example` (which runs on `continuous_missing`), also for the
   2026-09-28 redesign: correlated covariates with X01–X03 as auxiliaries, and

@@ -1,7 +1,7 @@
 # Missing covariates — binary outcome
 
-The `missing/continuous` design with a binary outcome, on `binary/`'s
-risk-difference DGM (`sample_size/binary/README.md`, "Outcome model and `bW` calibration").
+The `missing/continuous` design with a binary outcome, on the sample-size studies'
+risk-difference DGM (`sample_size/README.md`, "Binary outcome: the risk-difference scale").
 See `missing/README.md` for the mechanisms, handling methods and the shared bug
 fixes.
 
@@ -27,8 +27,8 @@ correspondence had been inferred from the scenario descriptions.
 ### Bug P and the risk-difference DGM
 
 The binary calibration changed with bug P, and the whole binary DGM with the
-move to the risk-difference scale; `sample_size/binary/README.md`'s "Outcome model and `bW`
-calibration" has the design. Here it means:
+move to the risk-difference scale; `sample_size/README.md`'s "Binary outcome: the
+risk-difference scale" has the design. Here it means:
 
 - **The effect is on the risk-difference scale.** `P(Y = 1) = m0(x) + W·τ(x)`,
   with the control risk m0 bounded in [0.34, 0.70] and a 40% control event
@@ -235,7 +235,7 @@ them. Two things carry over for anyone comparing against the archived tree:
 independence tests run on the true CATE and true nuisances (`truth$tau`,
 `truth$p0`, `W.hat = 0.5`) instead of an estimator's fitted ones, one
 `BLP_p`/`BLP_p_os`/`indep_cate` row per (scenario, n, type, prop, mechanism, method,
-run). See `sample_size/continuous/README.md`'s "True-CATE HTE test evaluation" for what
+run). See `sample_size/README.md`'s "True-CATE tests" for what
 it means and why every scenario-1 true-CATE test is `NA`, and its "HTE tests"
 for the test columns themselves (`BLP_p_os` is the one-sided, HC3 BLP). `method == "multiple_imputation"`
 rows are `NA`/`NA` too, for the same reason as above: `data` is a list of 50

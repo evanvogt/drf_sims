@@ -82,7 +82,7 @@
 # is now exactly the scenario's te_expr: X1 and X2 are purely prognostic. Until
 # 2026-09-26 the effect was on the logit scale, so the link made X1 and X2
 # effect modifiers on the RD scale, scenario 1 was not an RD null, and the HTE
-# changed with n (sample_size/binary/README.md). Both outcomes are now one model,
+# changed with n (sample_size/README.md). Both outcomes are now one model,
 # E[Y | x, W] = m0(x) + W * tau(x), differing in m0, the noise, and the scale and
 # sign of the modifiers. Binary scenario 10 now draws X3, which it did not
 # before.

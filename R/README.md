@@ -135,7 +135,7 @@ scenarios 1, 2, 4–8 and 10 are not reproducible from the current code.
 Both outcomes are one model, `E[Y | x, W] = m0(x) + W·τ(x)` (`control_mean()`
 gives `m0`). For a binary outcome `m0` is a logistic scaled into
 `[p0_lo, p0_hi]`, so the treatment effect adds on the risk-difference scale;
-`sample_size/binary/README.md` has the design and why.
+`sample_size/README.md` has the design and why.
 
 ## Fixed bugs
 

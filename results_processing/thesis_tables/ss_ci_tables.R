@@ -21,7 +21,7 @@
 # - Only the per-unit intervals: the half-sample bootstrap band of each
 #   model, and the causal forest's own variance-based interval
 #   (causal_forest_inbuilt). The query-grid rows (*_grid) are left out; the
-#   grid is extrapolation at rho = 0.5 (confidence_intervals/README.md, "The
+#   grid is extrapolation at rho = 0.5 (sample_size/README.md, "The
 #   query grid"), so the per-unit band is the primary comparison.
 # - The inbuilt interval comes from the full-sample causal forest, which is
 #   fit before any bootstrap and never sees CI_sf (R/cate_models.R), so it is

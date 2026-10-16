@@ -11,7 +11,7 @@
 # The tables are thesis_tables/ss_tables.R and ss_test_tables.R.
 #
 # The differences: run r at rho = 0 and at rho = 0.5 shares its random draws
-# (sample_size/correlated/README.md), so each metric is differenced per run
+# (sample_size/README.md), so each metric is differenced per run
 # (paired_rho_diff()) and its MCSE is sd(diff) / sqrt(pairs). The truth moves
 # with rho too - bW, the ATE, SD(tau) and cor(m0, tau)
 # (sample_size/correlated/corr_truth_summary.R) - so a difference is the

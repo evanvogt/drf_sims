@@ -14,7 +14,7 @@
 # the metric set and the extra factors are the same. The outcome is binary, so
 # every effect below is a RISK DIFFERENCE, and the truth is on the probability
 # scale. The DGM puts the treatment effect on that scale directly (see
-# sample_size/binary/README.md), and the oracle formula returns the risk itself.
+# sample_size/README.md), and the oracle formula returns the risk itself.
 
 rm(list = ls())
 # libraries
@@ -379,7 +379,7 @@ save_fig("bin_miss_blp_summary.png", fig_path)
 
 # --- BLP test p-values, one-sided with HC3 SEs ------------------------------
 # BLP_p_os: H1 beta.2 > 0 with heteroskedasticity-robust SEs, recomputed at
-# metrics time - see sample_size/continuous/README.md's "HTE tests"
+# metrics time - see sample_size/README.md's "HTE tests"
 BLP_os_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p_os"),
                              "BLP_p_os", "p-value", hline = 0.05, facet_scales = "free_x") +
   labs(title = "BLP test (one-sided, HC3)")

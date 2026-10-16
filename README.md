@@ -109,13 +109,10 @@ R/                    shared library - every study sources from here
 ├── bin_verify_hte.R  checks the binary risk-difference scenarios, re-derives RD_SCALE
 └── regression_check.R  old-vs-new equivalence harness
 
-sample_size/
-├── correlated/           continuous and binary outcomes, sample size sweep,
-│                         correlated covariates at rho 0 / 0.5
-│                         (continuous, binary, confidence_intervals/)
-├── continuous/           RETIRED 2026-10-06 - README only (method notes)
-├── binary/               RETIRED 2026-10-06 - README only (method notes)
-└── confidence_intervals/ RETIRED 2026-10-06 - READMEs only (method notes)
+sample_size/           README.md and ADEMP.md for all of them
+└── correlated/        continuous and binary outcomes, sample size sweep,
+                       correlated covariates at rho 0 / 0.5
+                       (continuous, binary, confidence_intervals/)
 competing_risk/       competing risks - the target setting
 missing/              missing covariates (continuous, binary, CI example)
 crossfitting/         compared double crossfitting against cheaper alternatives
@@ -191,7 +188,7 @@ the estimand, with the control risk bounded in [0.34, 0.70] (a 40% event rate).
 The binary modifiers are the continuous ones with X4 and X5 through `tanh`,
 signs reversed, and scaled per scenario to the largest effect the risk bounds
 allow. Until 2026-09-26 the binary effect was on the logit scale, which made X1
-and X2 effect modifiers of the risk difference too. See `sample_size/binary/README.md`.
+and X2 effect modifiers of the risk difference too. See `sample_size/README.md`.
 
 ## Methods
 

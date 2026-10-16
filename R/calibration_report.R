@@ -4,8 +4,8 @@
 # Prints, for every scenario at every n a study generates at, the calibrated
 # bW, the true ATE, and the ATE's planned and realised power, for both outcome
 # types - and for binary outcomes the worst-case treated risks. The design is
-# in the "Outcome model and bW calibration" sections of sample_size/continuous/README.md
-# and sample_size/binary/README.md: each trial is planned for TARGET_POWER under
+# in the "Calibration of bW" section of sample_size/README.md:
+# each trial is planned for TARGET_POWER under
 # homogeneity, and the true ATE equals the planned effect.
 #
 #   Rscript R/calibration_report.R

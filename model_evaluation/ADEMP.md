@@ -22,7 +22,7 @@ candidate is.
 
 The continuous outcome of the correlated sample-size studies,
 `set = "continuous_corr_0.5"` in `R/dgm_scenarios.R` (see
-`sample_size/correlated/ADEMP.md` for the copula and the calibration of bW):
+`sample_size/ADEMP.md` for the copula and the calibration of bW):
 
 - `Y = 0.4 − 0.5·X1 + X2 + W·τ(x) + ε`, `ε ~ N(0, 0.5²)`, `τ(x) = bW + g(x)`;
 - `W ~ Bernoulli(0.5)`, independent of X, so the true propensity is 0.5;

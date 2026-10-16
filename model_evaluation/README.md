@@ -38,7 +38,7 @@ correlation 0.5 — the primary arm of `sample_size/correlated/`. τ(x) and m0(x
 are unchanged; only the covariates' joint distribution moves, and with it bW,
 the ATE and SD(τ) wherever g multiplies two modifiers (scenario 3 here,
 X4·X5), and the correlation between the prognostic m0 and τ. See
-`sample_size/correlated/README.md` for the numbers. Only ρ = 0.5 is run, so ρ
+`sample_size/README.md` for the numbers. Only ρ = 0.5 is run, so ρ
 is a constant rather than a grid column and the grid is unchanged.
 
 **Why only 4 of the 10 scenarios, not all of them like `continuous/`.** This
@@ -763,7 +763,7 @@ grid already covers 1–4.
    Then render `me_results.qmd`.
 
 **Re-run owed — every tree.** The runs described below predate bug O, which
-changed the continuous DGM this study generates from (`sample_size/continuous/README.md`),
+changed the continuous DGM this study generates from (`docs/DEVLOG.md`),
 and use the pre-2026-09-26 scenario numbers (1/4/6/9, now 1/4/6/8). The main,
 strategies and split trees are archived by `R/archive_old_results.R` (root
 `README.md`, Status, step 0), and all three re-run from empty.

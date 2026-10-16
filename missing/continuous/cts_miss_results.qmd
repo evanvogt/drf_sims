@@ -434,7 +434,7 @@ Best linear predictor test of heterogeneity, against the nominal 5% significance
 threshold (dashed line) — where the CATE truly varies, low p-values indicate the
 model detects it; in the Null scenario, p-values should sit uniform on [0, 1].
 Two versions of the p-value for the BLP's beta.2 (see
-`sample_size/continuous/README.md`, "HTE tests"): `BLP_p` is two-sided with
+`sample_size/README.md`, "HTE tests"): `BLP_p` is two-sided with
 constant-variance SEs, as computed when the models were fitted; `BLP_p_os` is
 one-sided (H1: beta.2 > 0) with HC3 SEs, recomputed at metrics time from the
 saved nuisances.

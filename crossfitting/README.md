@@ -271,7 +271,7 @@ now the only copy - `cts_models.R` became a thirteen-line profile shim (now
 **Re-run owed** - the arms were rebuilt around per-arm outcome models
 (2026-09-27, above), so no existing result reflects the current design. Before
 that, bug O changed the continuous DGM this study generates from
-(`sample_size/continuous/README.md`), and the 2026-09-26 renumbering made its scenarios
+(`docs/DEVLOG.md`), and the 2026-09-26 renumbering made its scenarios
 1 / 4 / 6 / 8 (were 1 / 4 / 6 / 9; the pilot's 1 / 6 / 9 are now 1 / 4 / 8).
 The comparison's conclusions were drawn on the old DGM. Archive both old trees
 (`../results/crossfitting/`, `../results/crossfitting_ci/`) first with
