@@ -27,7 +27,7 @@ source(here("R", "figures.R"))
 
 `continuous/`'s and `binary/`'s scenarios 1–4, with every covariate but the
 categorical pair (X1–X5, X01–X03) drawn from a Gaussian copula with
-exchangeable latent correlation ρ. The design is in `README.md`. Each study
+exchangeable latent correlation ρ. The design is in `sample_size/README.md`. Each study
 runs two values of ρ:
 
 - **ρ = 0** is the paired independent arm: the copula with no correlation.

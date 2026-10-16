@@ -53,7 +53,7 @@ n_obs <- nrow(X)
 
 # fixed covariate-grid query points, for the grid-based (as opposed to
 # per-unit) band on the final CI below - see R/dgm_scenarios.R::build_query_grid
-# and ../README.md, "The query grid".
+# and sample_size/README.md, "The query grid".
 set         <- corr_set("continuous", rho)
 Z_query     <- build_query_grid(scenario, set = set,
                                 covariate_names = names(data)[-c(1, 2)])

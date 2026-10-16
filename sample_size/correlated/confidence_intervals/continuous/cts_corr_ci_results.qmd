@@ -31,7 +31,7 @@ library(knitr)
 scenarios 1–4. X1–X5 and X01–X03 are drawn from a Gaussian copula with
 exchangeable latent correlation ρ. τ(x) and m0(x) are the parent studies'
 functions, so only the covariates' joint distribution changes. Full design in
-`../README.md`. The grid itself is defined once, in `cts_corr_ci_config.R`.
+`sample_size/README.md`. The grid itself is defined once, in `cts_corr_ci_config.R`.
 
 | | |
 |---|---|
@@ -58,7 +58,7 @@ functions, so only the covariates' joint distribution changes. Full design in
 
 **Pairing.** A run is seeded by its run index alone. Run *r* is the same
 dataset at every `CI_sf`, and at the two values of ρ it shares W, the raw
-latent normals, the noise and the categorical covariates (`../../README.md`,
+latent normals, the noise and the categorical covariates (`sample_size/README.md`,
 "Pairing"). Every ρ = 0.5 − ρ = 0 comparison below is a per-run difference
 with MCSE sd(diff)/√pairs. The level plots show each ρ's own (unpaired) MCSE,
 so the paired differences are where to judge whether ρ matters.

@@ -8,7 +8,7 @@
 #
 # continuous/'s scenarios 1-10 with correlated covariates, at every rho in
 # CORR_RHOS (R/dgm_scenarios.R). A run is seeded by its run index alone, so the
-# same run at the two rhos is a paired dataset - see ../README.md.
+# same run at the two rhos is a paired dataset - see sample_size/README.md.
 #
 # Scenarios 1-4 run to 500 runs, rows 1-16000. rho varies slowest, so rows
 # 1-8000 are rho = 0 (jobscripts/cts_corr_1.sh) and rows 8001-16000 rho = 0.5

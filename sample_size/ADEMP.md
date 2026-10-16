@@ -1,72 +1,79 @@
-# ADEMP — sample size studies
+# ADEMP — sample-size studies
 
-Ten studies, sharing one set of data-generating mechanisms
-(`R/dgm_scenarios.R`) and one set of estimators (`R/cate_models.R`).
+Five studies on one data-generating mechanism: ten treatment-effect scenarios
+(1–4 in the main text, 5–10 in the appendix), with the covariates drawn from a
+Gaussian copula at latent correlation ρ ∈ {0, 0.5}. ρ = 0.5 is the primary
+setting; ρ = 0 is the independent-covariate comparison, paired run for run.
+The SNR check in `correlated/binary/snr/` has its own README.
 
-The five independent-covariate studies (continuous, binary, CI continuous / binary,
-optimal_sf) were **retired on 2026-10-06** and are not used in the thesis. Their
-code is at git tag `independent-ss-final`. They stay in this document because
-the correlated studies are defined against them, and each correlated study's
-ρ = 0 arm is the independent-covariate comparator.
+| study | folder | prefix | question |
+|---|---|---|---|
+| continuous | `correlated/continuous/` | `cts_corr_*` | CATE estimation and HTE tests, continuous outcome |
+| binary | `correlated/binary/` | `bin_corr_*` | the same, binary outcome (risk-difference scale) |
+| CI, continuous | `correlated/confidence_intervals/continuous/` | `cts_corr_ci_*` | bootstrap simultaneous bands for the CATE across `CI_sf` |
+| CI, binary | `correlated/confidence_intervals/binary/` | `bin_corr_ci_*` | the same, binary outcome |
+| optimal_sf | `correlated/confidence_intervals/optimal_sf/` | `cts_corr_ci_sf_*` | data-driven choice of `CI_sf`, scored against the true CATE; continuous only |
 
-| study | folder | question |
-|---|---|---|
-| continuous *(retired)* | `continuous/` | CATE estimation and HTE tests, continuous outcome |
-| binary *(retired)* | `binary/` | the same, binary outcome (risk-difference scale) |
-| correlated, continuous / binary | `correlated/continuous/`, `correlated/binary/` | the same, scenarios 1–4 (5–10 for the appendix), with correlated covariates (ρ = 0 vs 0.5, paired) |
-| CI, continuous *(retired)* | `confidence_intervals/continuous/` | bootstrap confidence bands for the CATE |
-| CI, binary *(retired)* | `confidence_intervals/binary/` | the same, binary outcome |
-| optimal_sf *(retired)* | `confidence_intervals/optimal_sf/` | data-driven choice of the bootstrap `sample.fraction`, both outcomes |
-| correlated CI, continuous / binary | `correlated/confidence_intervals/continuous/`, `.../binary/` | the CI studies, scenarios 1–4, with correlated covariates (ρ = 0 vs 0.5, paired) |
-| correlated optimal_sf | `correlated/confidence_intervals/optimal_sf/` | optimal_sf, scenarios 1–4, with correlated covariates (ρ = 0 vs 0.5, paired), both outcomes |
+Folders are relative to `sample_size/`.
 
 ## Aims
 
-- **continuous / binary:** assess how well DR-learner and causal forest
-  estimators recover the CATE in a two-arm RCT, across CATE structures and
-  sample sizes, and the size and power of post-estimation heterogeneity tests.
-- **correlated continuous / binary:** the same, for scenarios 1–4 (and 5–10 for the appendix), and how it
-  changes when the covariates are correlated, so that prognosis and effect
-  modification move together.
-- **CI continuous / binary:** assess the coverage and width of half-sample
-  bootstrap simultaneous confidence bands for the CATE, and how they depend on
-  the bootstrap forests' `sample.fraction` (`CI_sf`).
-- **optimal_sf:** choose `CI_sf` per dataset by a calibration that uses the
-  point estimate as a plug-in truth.
-- **correlated CI / optimal_sf:** the CI and optimal_sf aims for scenarios 1–4,
-  and how they change when the covariates are correlated. For optimal_sf,
-  whether a calibration that cannot see bias still reaches nominal coverage of
-  the true CATE.
+When covariates are correlated, prognosis (m0) and effect modification (τ)
+move together, and an estimator has to tell them apart. Each study measures
+its performance within each ρ, and how that performance changes from ρ = 0 to
+ρ = 0.5.
+
+- **Continuous / binary:**
+  - how well DR-learner, T-learner and causal forest estimators recover the
+    CATE in a two-arm RCT, across scenarios 1–4 (5–10 in the appendix) and
+    n = 100 to 1000;
+  - the size and power of the post-estimation heterogeneity tests, on both the
+    estimated and the true CATE;
+  - whether separating prognosis from effect modification gets harder when the
+    two are correlated.
+- **CI continuous / binary:** the coverage and width of half-sample
+  bootstrap simultaneous confidence bands for the CATE, across the bootstrap
+  forests' `sample.fraction` (`CI_sf`), and whether this changes with ρ.
+- **optimal_sf (continuous):** whether a per-dataset choice of
+  `CI_sf` still reaches nominal 0.90 coverage of the *true* CATE when m0
+  tracks τ. The choice is made by a calibration that uses the point estimate as
+  a plug-in truth, so it cannot see that estimate's bias, and at ρ = 0.5
+  that bias is where any growth is expected.
 
 ## Data-generating mechanisms
 
-### Common to both outcomes
+The implementation is in `R/dgm_scenarios.R`.
+The scenario sets are `continuous_corr_<ρ>` and `binary_corr_<ρ>`
+(`corr_set()`), one per ρ in `CORR_RHOS`.
 
-- `W ~ Bernoulli(0.5)`
-- Prognostic: `X1 ~ Bernoulli(0.4)`, `X2 ~ N(0, 1)`
-- Potential effect modifiers (drawn in every scenario, whether or not τ uses
-  them): `X3 ~ Bernoulli(0.7)`, `X4, X5 ~ N(0, 1)`
-- Noise: `X01`–`X03 ~ N(0, 1)`; `X04`, `X05` indicators of a 3-level factor
-  (0.45 / 0.30 / 0.25)
-- `E[Y | x, W] = m0(x) + W·τ(x)`, `τ(x) = bW + g(x)`
-- `bW` set so the true ATE gives 80% power in an unadjusted test at that n
-  (`calibrate_bW()`)
+### Outcome model
 
-### Continuous
+Both outcomes use
 
-- `Y = 0.4 − 0.5·X1 + X2 + W·τ(x) + ε`, `ε ~ N(0, 0.5²)`
-- Two-sample t-test calibration: ATE −0.65, −0.41, −0.29, −0.20 at
-  n = 100, 250, 500, 1000
+`E[Y | x, W] = m0(x) + W·τ(x)`, `τ(x) = bW + g(x)`, `W ~ Bernoulli(0.5)`.
 
-### Binary
+X1 and X2 are purely prognostic. X3, X4 and X5 are the potential effect
+modifiers, and each scenario's g uses some of them. All ten covariates
+X1–X5 and X01–X05 are drawn and returned in every scenario, and every
+estimator sees all ten.
 
-- `Y ~ Bernoulli(m0(x) + W·τ(x))`
-- Control risk `m0(x) = 0.34 + 0.36·plogis(−1.72 − 0.5·X1 + X2)`; E[m0] = 0.40
-- `g` is the continuous modifier with signs reversed, scaled by `RD_SCALE`,
-  with X4 and X5 entering through `tanh` (t4 = tanh(X4), t5 = tanh(X5))
-- Two-proportion test calibration: RD −0.248, −0.164, −0.118, −0.085 at
-  n = 100, 250, 500, 1000
-- Every treated risk stays within [0.01, 0.99]
+**Continuous.**
+
+- `Y = 0.4 − 0.5·X1 + X2 + W·τ(x) + ε`, `ε ~ N(0, 0.5²)`.
+
+**Binary.** The effect is on the risk-difference scale.
+
+- `Y ~ Bernoulli(m0(x) + W·τ(x))`.
+- Control risk: `m0(x) = 0.34 + 0.36·plogis(−1.72 − 0.5·X1 + X2)`.
+  - E[m0] = 0.40, and m0 lies in [0.34, 0.70].
+  - X1 and X2 are therefore only weakly prognostic.
+- g is the continuous g with its signs reversed and scaled by `RD_SCALE_CORR`.
+  That is `RD_SCALE` (0.082, 0.051, 0.204 for scenarios 2, 3, 4) in every
+  scenario except 9, which takes 0.139 instead of 0.164 (see the binary
+  floors below).
+- X4 and X5 enter g through tanh (t4 = tanh(X4), t5 = tanh(X5)), which
+  keeps the risks bounded without changing the covariates' distributions.
+- The event is harmful, and treatment lowers its risk.
 
 ### Scenarios
 
@@ -77,139 +84,266 @@ the correlated studies are defined against them, and each correlated study's
 | 3 | complex | 2·X3 + 0.5·X4 − 0.5·X4·X5 | −0.102·X3 − 0.026·t4 + 0.026·t4·t5 |
 | 4 | non-linear | cos(X4) | −0.204·cos(X4) |
 | 5 | simple, binary | 2·X3 | −0.274·X3 |
-| 6 | two variables | 0.3·X3 − X4 | −0.023·X3 + 0.075·t4 |
+| 6 | two variables | 0.3·X3 − X4 | −0.0225·X3 + 0.075·t4 |
 | 7 | binary × continuous | X3·X4 | −0.082·X3·t4 |
-| 8 | single effects + interaction | 2·X3 + 0.5·X4 − 0.5·X3·X4 | −0.274·X3 − 0.069·t4 + 0.069·X3·t4 |
-| 9 | continuous × continuous | −0.5·X4·X5 | 0.082·t4·t5 |
-| 10 | exponential | 0.3·X3 + 0.1·exp(−\|X4\|) | −0.179·X3 − 0.060·exp(−\|X4\|) |
+| 8 | single effects + interaction | 2·X3 + 0.5·X4 − 0.5·X3·X4 | −0.274·X3 − 0.0685·t4 + 0.0685·X3·t4 |
+| 9 | continuous × continuous | −0.5·X4·X5 | 0.0695·t4·t5 |
+| 10 | exponential | 0.3·X3 + 0.1·exp(−\|X4\|) | −0.1788·X3 − 0.0596·exp(−\|X4\|) |
 
-Scenarios 1–4 are the ones reported. Results saved before 2026-09-26 use the
-old numbering (see the header of `R/dgm_scenarios.R`).
+The tables are `SCENARIO_SETS$continuous` and `SCENARIO_SETS$binary` plus a
+`rho` column, with binary scenario 9 on its own scale. τ(x) and m0(x) are the
+same functions at both ρ. Why the binary effect is on the risk-difference
+scale, and how its scales are set, is in `README.md`.
 
-### Correlated covariates (correlated continuous / binary)
+### Covariates: the copula
 
-- Scenarios 1–4 with exactly the coefficients, m0(x) and τ(x) above
-  (`continuous_corr_<ρ>`, `binary_corr_<ρ>`).
-- X1–X5 and X01–X03 come from a Gaussian copula with exchangeable latent
-  correlation ρ (`correlated_covariates()`, as in `missing/`). X1 and X3 are
-  thresholded at 0.4 and 0.7; X2, X4 and X5 are latent columns with SD 1. The
-  marginals are as above. X04 and X05 are independent.
-- ρ ∈ {0, 0.5}. ρ = 0 is the paired independent arm: same seeds, and so the
-  same W, raw normals, noise and categorical covariates as ρ = 0.5.
-- `bW` is calibrated as above, integrating over the correlated latent. At
-  ρ = 0.5 the continuous ATE is −0.60 … −0.19 (n = 100 … 1000), and the
-  binary RD is unchanged.
-- Binary scenario 3's treated-risk floor at ρ = 0.5, n = 100 is 0.007, below
-  `RD_EPS`. This is accepted so that τ(x) matches `binary/`.
+- A latent `Z ~ N(0, R)` is drawn over (X1, X2, X3, X4, X5, X01, X02, X03),
+  with R exchangeable at ρ (`correlated_covariates()`, `exch_cor()`). Z is one
+  `rnorm()` block of n × 8 draws, multiplied by `chol(R)`.
+- X1 and X3 are thresholds of their latent columns, so X1 ~ Bernoulli(0.4)
+  and X3 ~ Bernoulli(0.7) marginally.
+- X2, X4 and X5 are the latent columns, so each is N(0, 1) marginally.
+- X01–X03 are the latent columns themselves, N(0, 1) marginally:
+  - noise for both the outcome and the CATE;
+  - correlated with X1–X5, so they are partial proxies for the modifiers.
+- X04 and X05 are indicators of a 3-level factor (0.45 / 0.30 / 0.25), drawn
+  independently of everything else.
 
-Details in `correlated/README.md`.
+Every marginal is the same at both ρ; only the dependence changes. At ρ = 0.5
+the observed correlations are about 0.5 between continuous covariates, and
+0.3–0.4 for pairs involving X1 or X3.
+
+**ρ = 0 is the paired independent arm.** The covariates are independent, but
+drawn through the copula in the same order, so each run is paired with the
+same run at ρ = 0.5 (see Seeding and pairing below).
+
+### Treatment-effect calibration
+
+`bW` is set so that the true ATE equals the effect an unadjusted test would
+have 80% power to detect at that n, planned as if the effect were homogeneous
+(`calibrate_bW()`):
+
+- **Continuous:**
+  - The power calculation is a two-sample t-test with n/2 per arm.
+  - The planned SD is
+    `sqrt(b1²·p(1 − p) + b2²·s2² + 2·b1·b2·Cov(X1, X2) + s_err²)`.
+  - The covariance term (`cov_X1X2()`) is zero at ρ = 0. Var(g) is left out
+    of the plan on purpose.
+  - bW is rounded to 2 dp.
+- **Binary:**
+  - The power calculation is a two-proportion test with n/2 per arm, at the
+    control event rate E[m0].
+  - bW is rounded to 3 dp.
+- **Both:** `bW = δ − E[g]`, with E[g] (`te_moments()`) and E[m0] taken over
+  the correlated latent.
+
+At ρ = 0.5, bW and the ATE move through two channels:
+
+- E[g], wherever g contains a product of two modifiers: scenarios 3 and 9
+  (X4·X5), and 7 and 8 (X3·X4);
+- the planned SD or control event rate, through Cov(X1, X2).
+
+From `R/calibration_report.R` and, for SD(τ) and cor(m0, τ),
+`corr_truth_summary.R`:
+
+| | ρ = 0 | ρ = 0.5 |
+|---|---|---|
+| **continuous** | | |
+| true ATE, n = 100 / 250 / 500 / 1000 | −0.65 / −0.41 / −0.29 / −0.20 | −0.60 / … / −0.19 |
+| realised power, scenarios 2 / 3 / 4 | 0.65–0.67 / 0.61–0.63 / 0.76–0.77 | 0.65–0.66 / 0.55–0.56 / 0.75–0.76 |
+| SD(τ), scenario 3 | 1.16 | 1.36 |
+| cor(m0, τ), scenarios 2 / 3 / 4 | 0 / 0 / 0 | −0.43 / 0.39 / 0.01 |
+| **binary** | | |
+| true RD, n = 100 / 250 / 500 / 1000 | −0.248 / −0.164 / −0.118 / −0.085 | −0.247 / … / −0.085 |
+| power | 0.80 | 0.80 |
+| cor(m0, τ), scenarios 2 / 3 / 4 | 0 / 0 / 0 | 0.39 / −0.34 / 0.06 |
+| lowest treated risk, scenario 3, n = 100 | 0.011 | **0.007** |
+
+Realised power for the continuous outcome falls below 0.80 because the plan
+ignores Var(g), as a trial planned under homogeneity would. For the binary
+outcome, realised power equals planned power, because each arm's variance is
+fixed by its marginal risk.
+
+The table covers scenarios 1–4. `R/calibration_report.R` prints all ten.
+
+**Binary floors at ρ = 0.5.**
+
+- Every treated risk stays within [0.01, 0.99] (`RD_EPS` = 0.01), with two
+  exceptions. At ρ = 0.5, E[g] rises in scenarios 3 and 8 and bW falls, so the
+  lowest treated risk over the covariate support at n = 100 is 0.007 and
+  0.003 respectively.
+- Both are inside [0, 1] but below `RD_EPS`. They are accepted on purpose, to
+  keep the HTE at `RD_SCALE`'s size. Scales of 0.049 and 0.127 would restore
+  the floors, at the cost of a smaller HTE.
+- Under `RD_SCALE`, scenario 9's floor would be −0.004, which the generator
+  cannot produce. So scenario 9 takes `RD_SCALE_CORR[9]` = 0.139, the largest
+  scale (floored to 3 dp) that keeps its floor at `RD_EPS` at ρ = 0.5. The
+  same scale is used at both ρ, so the arms stay paired.
+- `R/bin_verify_hte.R` check 7 re-derives 0.139, holds
+  scenarios 3 and 8 at ρ = 0.5 to > 0, and holds every other cell to
+  `RD_EPS`.
 
 ### Design
 
-Full factorial over the rows below, per outcome type:
+Full factorial, per outcome:
 
-| | continuous / binary | correlated continuous / binary | CI continuous / binary | optimal_sf |
-|---|---|---|---|---|
-| scenarios | 1–10 | 1–4 | 1–10 | 1–4 |
-| n | 100, 250, 500, 1000 | 100, 250, 500, 1000 | 500, 1000 | 500, 1000 |
-| ρ | — (independent) | 0, 0.5 (design factor) | — | — |
-| `CI_sf` | — | — | 0.05 to 0.5 by 0.05 (design factor) | chosen per run from the same values |
-| repetitions | 100; 500 for scenarios 1–4 | 500 | 100 | 100 |
+| | cts / bin | CI cts / bin | optimal_sf (cts) |
+|---|---|---|---|
+| scenarios | 1–4; 5–10 | 1–4 | 1–4 |
+| n | 100, 250, 500, 1000 | 500, 1000 | 500, 1000 |
+| ρ | 0, 0.5 | 0, 0.5 | 0, 0.5 |
+| `CI_sf` | — | 0.05 to 0.5 by 0.05 (design factor) | chosen per run from the same 10 values |
+| repetitions | 500; 100 | 100 | 100 |
+| grid rows per outcome | 16,000 + 4,800 = 20,800 | 16,000 | 1,600 |
+| ρ boundary in the grid | rows 1–8000 / 8001–16000; 16001–18400 / 18401–20800 | rows 1–8000 / 8001–16000 | rows 1–800 / 801–1600 |
 
-The correlated CI and optimal_sf studies take their parents' columns with
-scenarios 1–4 and ρ ∈ {0, 0.5} as a design factor
-(`correlated/confidence_intervals/README.md`).
+ρ varies slowest in every grid, and in each of the cts/bin grid's two blocks.
+The jobscripts split at the PBS array cap (1–10000, 10001–16000), not at the
+ρ boundary. The cts/bin scenario 5–10 block (16001–20800) is one jobscript,
+`*_corr_extra.sh`.
 
-Each run is seeded by its run index alone (`setup_rng_stream(run)`). So a
-given (scenario, n, run) is the same dataset in every independent-covariate
-study and every `CI_sf` cell. The correlated studies draw in the copula's
-order: their runs are paired across ρ, but not with the other studies.
+### Seeding and pairing
+
+- Each run is seeded by its run index alone (`setup_rng_stream(run)`).
+- The draw order is W, then the n × 8 latent block, then the continuous noise
+  ε, then the categorical pair X04/X05.
+- So run *r* at ρ = 0 and at ρ = 0.5 shares:
+  - W;
+  - the raw normals of the latent block, multiplied by a different Cholesky
+    factor;
+  - ε (continuous outcome);
+  - X04 and X05.
+- Binary Y is coupled across ρ only through `rbinom`'s shared uniforms. About
+  91–99% of outcomes agree.
+- In the CI studies, run *r* is also the same dataset at every `CI_sf`.
+- Scenarios share seeds within a run, so their errors are correlated.
 
 ## Estimands
 
-- Unit-level CATE `τ(x_i)` for every unit in the simulated sample: a mean
-  difference (continuous) or risk difference
-  `P(Y=1 | x, W=1) − P(Y=1 | x, W=0)` (binary).
-- ATE, as the sample mean of the CATE.
-- Presence of heterogeneity (H0: τ constant), for the tests (continuous /
-  binary).
-- CI and optimal_sf studies: the CATE at a fixed covariate query grid
-  (`build_query_grid()`) over the scenario's effect modifiers, all other
-  covariates at 0; the same points in every run.
-- optimal_sf calibration only: the estimated CATE `tau.hat` (plug-in target).
+- **Unit-level CATE** `τ(x_i)` for every unit in the simulated sample:
+  - continuous outcome: a mean difference;
+  - binary outcome: a risk difference,
+    `P(Y = 1 | x, W = 1) − P(Y = 1 | x, W = 0)`.
+
+  The truth is computed per run at that run's correlated covariate draws, with
+  the ρ-specific bW (`truth_at()`), and saved with the run.
+- **ATE**, as the sample mean of the CATE.
+- **Presence of heterogeneity** (H0: τ constant), for the tests (cts / bin).
+  Scenario 1 is the null and scenarios 2–4 are alternatives.
+- **CI and optimal_sf:** the CATE at a fixed covariate query grid
+  (`build_query_grid()`), with the same points in every run and at both ρ.
+  - The grid crosses whichever of X3 (0, 1), X4 and X5 (−2, −1, 0, 1, 2) the
+    scenario's τ uses, with every other covariate at 0.
+  - That gives 1 point in scenario 1, 5 in scenario 2, 50 in scenario 3 and 5
+    in scenario 4.
+  - The bands are also scored over the sample's own units.
+- **optimal_sf calibration only:** the estimated CATE τ̂, used as a plug-in
+  target.
+- **The comparison of interest** in every study is the change in each
+  performance measure from ρ = 0 to ρ = 0.5.
+
+**Query-grid caveat.**
+
+- The grid is the same at both ρ, and τ at its points is the truth at both.
+- But a point such as (X4 = 2, X5 = −2) is about 4 SD from the centre of the
+  correlated latent at ρ = 0.5, against about 2 SD at ρ = 0, so the forests
+  extrapolate there.
+- A fall in grid coverage at ρ = 0.5 can therefore be extrapolation rather
+  than miscalibration. **The per-unit band is the primary ρ comparison.**
 
 ## Methods
+
+The cts / bin analysis scripts source `correlated/continuous/cts_corr_models.R`
+and `correlated/binary/bin_corr_models.R`, and the CI and optimal_sf scripts
+source `correlated/confidence_intervals/{continuous,binary}/*_corr_ci_models.R`.
+Model code is in `R/cate_models.R` (`cate_methods()`), and SuperLearner set-up
+is in `R/sl_library.R`.
 
 ### Estimators
 
 | method | description | used in |
 |---|---|---|
-| `causal_forest` | grf `causal_forest`, internal cross-fitting | all but optimal_sf |
-| `dr_random_forest` | DR-learner; outcome model fit per arm (T-learner RF, own-arm predictions OOB), RF propensity, OOB RF second stage | all |
-| `dr_superlearner` | DR-learner; SuperLearner per-arm outcome models and propensity, single leave-one-fold-out crossfit (V = 4, 5, 10 at n = 100, 250, ≥ 500), SuperLearner second stage | continuous / binary |
-| `dr_oracle` | DR-learner with the true outcome model (binary: true risk) and propensity 0.5 | all but optimal_sf |
-| `dr_semi_oracle` | DR-learner with the known propensity 0.5 and per-arm outcome forests specified as in `dr_random_forest` (refitted) | all but optimal_sf |
-| `t_random_forest` | T-learner $\hat\mu_1 - \hat\mu_0$ from `dr_random_forest`'s per-arm outcome forests (own-arm predictions OOB); derived at metrics time, not refitted | continuous / binary |
-| `t_superlearner` | T-learner $\hat\mu_1 - \hat\mu_0$ from `dr_superlearner`'s per-arm SuperLearners (out-of-fold); derived at metrics time, not refitted | continuous / binary |
+| `causal_forest` | grf `causal_forest`, internal cross-fitting | cts / bin, CI |
+| `dr_random_forest` | DR-learner: per-arm outcome forests (own-arm predictions OOB), RF propensity, OOB RF second stage | all five |
+| `dr_superlearner` | DR-learner: SuperLearner per-arm outcome models and propensity, single leave-one-fold-out cross-fit, SuperLearner second stage | cts / bin |
+| `dr_oracle` | DR-learner with the true outcome mean (binary: the true risk) and propensity 0.5 | cts / bin, CI |
+| `dr_semi_oracle` | DR-learner with the known propensity 0.5 and per-arm outcome forests specified as in `dr_random_forest` (refitted) | cts / bin, CI |
+| `t_random_forest` | T-learner μ̂1 − μ̂0 from `dr_random_forest`'s per-arm outcome forests; derived at metrics time, not refitted | cts / bin |
+| `t_superlearner` | T-learner μ̂1 − μ̂0 from `dr_superlearner`'s per-arm SuperLearners (out of fold); derived at metrics time, not refitted | cts / bin |
+| `causal_forest_inbuilt` | `causal_forest`'s own pointwise interval from grf's variance estimate (an interval, not a separate fit) | CI |
 
-Estimated propensities in the DR-learners (`dr_random_forest`,
-`dr_superlearner`) are trimmed to [0.05, 0.95]; the causal forest's internal
-propensity is not.
+The CI and optimal_sf studies have no SuperLearner arm. SuperLearner's
+`family` is the only difference between the continuous and binary model code,
+so the continuous and binary CI studies fit identical models. The oracles'
+outcome formula is the ρ-specific one (`get_oracle_info()` with the run's bW).
 
 ### Model fitting
 
-Implementation: `R/cate_models.R::cate_methods()`, called through each study's
-`*_models.R` shim. The binary and continuous studies differ only in the
-SuperLearner `family` (see below).
+**Inputs.**
 
-**Inputs.** Every learner receives the 10 covariates X1–X5, X01–X05 as they
-are generated (no scaling or feature engineering, except the interaction lasso
-below). W enters the causal forest as the treatment; it is never a covariate
-of an outcome model, which is fit per arm.
+- Every learner receives the 10 covariates X1–X5 and X01–X05 as generated,
+  with no scaling or feature engineering. The interaction lassos below are
+  the one exception.
+- W enters the causal forest as the treatment. It is never a covariate of an
+  outcome model, which is fit per arm.
 
 **DR pseudo-outcome** (`dr_pseudo`), shared by every DR-learner:
 
 $$\hat\phi_i = \hat\mu_1(x_i) - \hat\mu_0(x_i) + \frac{(Y_i - \hat\mu_{W_i}(x_i))(W_i - \hat e(x_i))}{\hat e(x_i)(1 - \hat e(x_i))}$$
 
-The CATE is the second-stage regression of $\hat\phi$ on X.
+The CATE is the second-stage regression of φ̂ on X. Estimated propensities in
+`dr_random_forest` and `dr_superlearner` are trimmed to [0.05, 0.95]. The
+causal forest's internal propensity is not trimmed.
 
-**Forests.** All forests are grf `regression_forest` / `causal_forest` at
-grf's defaults: 2000 trees, `sample.fraction` 0.5, honest splitting
-(`honesty.fraction` 0.5, `honesty.prune.leaves` TRUE), `min.node.size` 5,
-`mtry` = min(⌈√p⌉ + 20, p) = all 10 covariates, `alpha` 0.05,
-`ci.group.size` 2, no parameter tuning. Only the CI studies' bootstrap forests
-change a setting (`sample.fraction = CI_sf`).
+**Forests.**
 
-**Per estimator:**
+- All forests are grf `regression_forest` / `causal_forest` at grf's defaults:
+  - 2000 trees, `sample.fraction` 0.5;
+  - honest splitting (`honesty.fraction` 0.5, `honesty.prune.leaves` TRUE);
+  - `min.node.size` 5, `alpha` 0.05, `ci.group.size` 2;
+  - `mtry` = min(⌈√p⌉ + 20, p), which is all 10 covariates;
+  - no parameter tuning.
+- Only the CI studies' bootstrap forests change a setting
+  (`sample.fraction = CI_sf`).
 
-- `causal_forest`: `causal_forest(X, Y, W)` with no supplied nuisances, so grf
-  fits `Y.hat` and `W.hat` itself as OOB predictions from regression forests of
-  500 trees (max(50, 2000/4)); τ̂ is the forest's OOB prediction. Splits use
-  grf's default `stabilize.splits = TRUE`.
+**Per estimator.**
+
+- `causal_forest`:
+  - fit as `causal_forest(X, Y, W)` with no supplied nuisances;
+  - grf fits `Y.hat` and `W.hat` itself, as OOB predictions from regression
+    forests of 500 trees;
+  - τ̂ is the forest's OOB prediction, with grf's default
+    `stabilize.splits = TRUE`.
 - `dr_random_forest` (whole sample, no sample splitting):
-  - $\hat\mu_0, \hat\mu_1$: one regression forest of Y on X per arm, fit on that
-    arm's rows. A unit's own-arm prediction is OOB; its other-arm prediction is
-    from a forest that never saw it.
-  - $\hat e$: regression forest of W on X, OOB predictions, trimmed.
-  - Stage 2: regression forest of $\hat\phi$ on X; τ̂ is its OOB prediction,
-    with grf's OOB variance estimate saved.
-- `dr_oracle`: $\mu_w(x)$ is the true outcome mean evaluated at W = w (the
-  DGM's oracle formula, `get_*_oracle_info()`); e = 0.5. Stage 2 as
-  `dr_random_forest`.
-- `dr_semi_oracle`: per-arm outcome forests as in `dr_random_forest` (a separate
-  fit); e = 0.5. Stage 2 as `dr_random_forest`.
-- `dr_superlearner` (single cross-fit; V = 4, 5, 10 folds at n = 100, 250,
-  ≥ 500; rows assigned to folds in contiguous blocks):
-  - Stage 1, per fold k: on the rows outside k, one SuperLearner of Y on X per
-    arm and one of W on X; predict fold k's rows; trim $\hat e$; form
-    $\hat\phi$ for fold k.
-  - Stage 2, per fold k: SuperLearner of $\hat\phi$ on X fit on the rows outside
-    k, predicting fold k. Stage 1 and stage 2 use the same folds.
-- `t_random_forest`, `t_superlearner`: $\hat\mu_1 - \hat\mu_0$, recovered at
-  metrics time from the saved DR nuisances by removing the residual term from
-  $\hat\phi$ (`R/metrics.R::add_t_learners`).
+  - μ̂0 and μ̂1: one regression forest of Y on X per arm, fit on that arm's rows.
+    A unit's own-arm prediction is OOB, and its other-arm prediction comes from
+    a forest that never saw it.
+  - ê: a regression forest of W on X, OOB predictions, trimmed.
+  - Stage 2: a regression forest of φ̂ on X. τ̂ is its OOB prediction, and
+    grf's OOB variance estimate is saved.
+- `dr_oracle`:
+  - μ_w(x) is the true outcome mean at W = w;
+  - e = 0.5;
+  - stage 2 as `dr_random_forest`.
+- `dr_semi_oracle`:
+  - per-arm outcome forests as in `dr_random_forest` (a separate fit);
+  - e = 0.5;
+  - stage 2 as `dr_random_forest`.
+- `dr_superlearner`:
+  - A single cross-fit with V = 4, 5, 10 folds at n = 100, 250, ≥ 500. Rows
+    are assigned to folds in contiguous blocks.
+  - Stage 1, per fold k: on the rows outside k, fit one SuperLearner of Y on X
+    per arm and one of W on X. Predict fold k's rows, trim ê, and form φ̂ for
+    fold k.
+  - Stage 2, per fold k: fit a SuperLearner of φ̂ on X on the rows outside k,
+    and predict fold k. Stage 1 and stage 2 use the same folds.
+- `t_random_forest`, `t_superlearner`: μ̂1 − μ̂0, recovered at metrics time
+  from the saved DR nuisances by removing the residual term from φ̂
+  (`add_t_learners()` in `R/metrics.R`).
 
-**SuperLearner settings** (`R/sl_library.R::sl_fit_predict`):
+### SuperLearner (`dr_superlearner` only)
+
+`sl_fit_predict()`:
 
 | model | family | meta-learner |
 |---|---|---|
@@ -218,22 +352,25 @@ change a setting (`sample.fraction = CI_sf`).
 | outcome, binary | binomial | `method.NNloglik` |
 | CATE (stage 2) | gaussian | `method.NNLS` |
 
-- Ensemble weights from SuperLearner's internal 10-fold CV (package default),
-  within each cross-fitting training set.
+**Fitting rules.**
+
+- Ensemble weights come from SuperLearner's internal 10-fold CV, within each
+  cross-fitting training set.
 - Before each fit, each candidate is fit alone with 2-fold CV
-  (`pretest_superlearner`); learners that error or give non-finite predictions
-  are dropped and recorded in `sl_dropped`. If all fail, the library is
-  `SL.mean` alone.
+  (`pretest_superlearner`). Learners that error or give non-finite
+  predictions are dropped and recorded in `sl_dropped`. If every candidate
+  fails, the library is `SL.mean` alone.
 - If a SuperLearner fit itself errors, every prediction is the mean of its
-  training outcome, with a warning, recorded in `sl_dropped` as `(whole fit)`.
+  training outcome, with a warning, recorded in `sl_dropped` as
+  `(whole fit)`.
 - If an outcome or propensity fit returns all-zero predictions, they are
-  replaced by the training mean (for the outcome model, that arm's mean), with
+  replaced by the training mean (for an outcome model, that arm's mean), with
   a warning.
 
-SuperLearner libraries, one per nuisance (`R/sl_library.R::sl_libraries`),
-chosen without reference to the scenarios' HTE shapes. The outcome model is fit
-in each arm separately, so its library is sized to about half the training
-rows (~37 per arm at n = 100):
+**Libraries.** There is one library per nuisance (`sl_libraries()`), chosen
+without reference to the scenarios' HTE shapes. The outcome model is fit in
+each arm separately, so its library is sized to about half the training rows
+(about 37 per arm at n = 100):
 
 | | n = 100 | n = 250 | n ≥ 500 |
 |---|---|---|---|
@@ -241,110 +378,174 @@ rows (~37 per arm at n = 100):
 | outcome (per arm) | mean, lasso, ranger (min.node.size 25) | + glm, gam | + earth |
 | CATE (stage 2) | mean, glm, lasso (lambda.min and lambda.1se), gam, ranger (min.node.size 25) | + lasso on pairwise interactions (both tunings), earth | same |
 
-`family = binomial()` for the binary outcome model. Each stage-2 lasso is
-included at both tunings and SuperLearner's CV weighs them. Learners that error
-or give non-finite predictions on a fold are dropped before fitting
-(`pretest_superlearner`) and saved as `sl_dropped`.
-
-Candidate learners (SuperLearner wrapper defaults unless stated; p = 10):
+**Candidate learners.** These use SuperLearner's wrapper defaults unless
+stated, with p = 10:
 
 | learner | definition |
 |---|---|
 | `SL.mean` | training mean |
 | `SL.glm` | `glm` on all main effects |
-| `SL.glmnet` | lasso (`alpha` 1) on main effects, λ chosen by 10-fold `cv.glmnet` at `lambda.min` |
+| `SL.glmnet` | lasso (`alpha` 1) on main effects, λ by 10-fold `cv.glmnet` at `lambda.min` |
 | `SL.glmnet.1se` | as `SL.glmnet`, at `lambda.1se` (custom wrapper) |
 | `SL.glmnet.int` | lasso on all main effects and pairwise interactions (`model.matrix(~ .^2)`), `lambda.min` (custom wrapper) |
 | `SL.glmnet.int.1se` | as `SL.glmnet.int`, at `lambda.1se` (custom wrapper) |
 | `SL.gam` | `gam` package; smoothing spline with 2 df for covariates with more than 4 unique values, linear otherwise |
 | `SL.earth` | MARS: `degree` 2, `penalty` 3, `nk` = max(21, 2p + 1), backward pruning |
-| `SL.ranger.ns25` | ranger, 500 trees, `mtry` ⌊√p⌋ = 3, `min.node.size` 25 (custom wrapper; the default is 5); probability forest for a binomial outcome |
+| `SL.ranger.ns25` | ranger, 500 trees, `mtry` ⌊√p⌋ = 3, `min.node.size` 25 (custom wrapper); a probability forest for a binomial outcome |
 
-### Heterogeneity tests (continuous / binary)
+### Heterogeneity tests (cts / bin)
 
-Per method, on the full sample (`run_blp_whole`,
-`run_independence_test_whole`). Also run on the true CATE and nuisances
-(`cts_true_cate_tests.RDS`, `bin_true_cate_tests.RDS`).
+These are run per method on the full sample (`run_blp_whole()`,
+`run_independence_test_whole()`).
 
-- **BLP** (GenericML `BLP`, Chernozhukov et al.): weighted least squares, weights
-  $1/(\hat e(1-\hat e))$, of Y on an intercept, the baseline proxy
-  $\hat\mu_0(x)$, $(W - \hat e)$ and $(W - \hat e)(\hat\tau(x) - \bar{\hat\tau})$.
-  The test is on the last coefficient, β2. $\hat e$ and $\hat\mu_0$ are the
-  estimator's own stage-1 nuisances: `nuisances_rf` for `causal_forest`,
-  `dr_random_forest` and `t_random_forest`; `nuisances_sl` for
-  `dr_superlearner` and `t_superlearner`; e = 0.5 and the arm's own
-  $\mu_0$ for the oracles.
-  - `BLP_p`: two-sided, homoskedastic OLS standard errors (saved at
-    estimation time).
-  - `BLP_p_os`: one-sided (H1: β2 > 0), HC3 standard errors (recomputed at
-    metrics time from the saved nuisances).
-- **Independence test** (coin `independence_test(τ ~ X, teststat =
-  "quadratic")`, asymptotic χ² reference): of the estimated CATE against the
-  covariates (`indep_cate`), and of the pseudo-outcome against the covariates
-  (`indep_po`; reported once per pseudo-outcome, so not for `causal_forest` or
-  the T-learners).
-- A CATE that is constant (up to rounding) gives NA for both tests.
+**BLP** (GenericML `BLP`, Chernozhukov et al.):
+
+- A weighted least squares regression of Y, with weights 1/(ê(1 − ê)), on:
+  - an intercept;
+  - the baseline proxy μ̂0(x);
+  - (W − ê);
+  - (W − ê)(τ̂(x) − mean τ̂).
+- The test is on the last coefficient, β2.
+- ê and μ̂0 are the estimator's own stage-1 nuisances:
+  - the forest nuisances for `causal_forest`, `dr_random_forest` and
+    `t_random_forest`;
+  - the SuperLearner nuisances for `dr_superlearner` and `t_superlearner`;
+  - e = 0.5 and the arm's own μ0 for the oracles.
+- Two p-values are reported:
+  - `BLP_p`: two-sided, homoskedastic OLS standard errors, saved at estimation
+    time.
+  - `BLP_p_os`: one-sided (H1: β2 > 0), HC3 standard errors, recomputed at
+    metrics time from the saved nuisances.
+
+**Independence test** (coin `independence_test(τ ~ X, teststat =
+"quadratic")`, with an asymptotic χ² reference):
+
+- `indep_cate`: the estimated CATE against the covariates.
+- `indep_po`: the DR pseudo-outcome against the covariates. It is reported
+  once per pseudo-outcome, so it is not reported for `causal_forest` (which
+  shares `dr_random_forest`'s) or for the T-learners.
+
+A CATE that is constant up to rounding gives NA for both tests.
+
+**True-CATE tests.** The BLP (both p-values) and `indep_cate` are also run on
+the true CATE, with the true nuisances: tau = τ, μ̂0 = the true m0, ê = 0.5.
+These use the same test functions and call shape (`run_true_cate_tests()`,
+`true_cate_test_row()`), and the true CATE is the one computed for that run at
+that ρ. They show how the tests behave with no estimation error. Scenario 1's
+true CATE is constant, so these tests are NA there.
 
 ### Intervals (CI studies)
 
-No SuperLearner arm and no HTE tests. The point estimators are fit exactly as
-above; since `family` only reaches SuperLearner, the continuous and binary CI
-studies fit the same models. The causal forest also saves grf's variance
-estimate (for `causal_forest_inbuilt`).
+**Half-sample bootstrap band** (`R/bootstrap_ci.R`), with B = 200 and
+α = 0.05:
 
-- **Half-sample bootstrap band** (`R/bootstrap_ci.R`), B = 200, α = 0.05: per
-  draw, refit the second stage (DR-learners: regression forest on the fixed
-  pseudo-outcomes; causal forest: with `Y.hat`, `W.hat` fixed) on an
-  unstratified half sample, with `sample.fraction = CI_sf`. Roots
-  `tau_full − tau_half` (in-half units OOB, the rest out of sample) are
-  standardised by their bootstrap SD; critical value = `1 − α` quantile of
-  the per-draw maximum of absolute standardised roots over units (the
-  absolute value already makes it two-sided, so this is a 95% simultaneous
-  band). Built over the sample's units and,
-  separately, over the query grid.
-- **`causal_forest_inbuilt`:** pointwise normal interval from grf's variance
-  estimate, α = 0.05.
+1. In each draw, refit the second stage on an unstratified half sample, with
+   `sample.fraction = CI_sf`:
+   - DR-learners: a regression forest on the fixed pseudo-outcomes;
+   - causal forest: with `Y.hat` and `W.hat` fixed.
+2. Form the roots `tau_full − tau_half`. In-half units are predicted OOB, and
+   the rest out of sample.
+3. Standardise the roots by their bootstrap SD.
+4. Take as the critical value the 1 − α quantile of the per-draw maximum, over
+   units, of the absolute standardised roots. The absolute value makes the
+   band two-sided, so this gives a 95% simultaneous band.
+
+The band is built over the sample's units and, separately, over the query
+grid.
+
+**`causal_forest_inbuilt`:** a pointwise normal interval from grf's variance
+estimate, at α = 0.05.
 
 ### Calibration (optimal_sf)
 
-`dr_random_forest` only. `find_optimal_sf()`: for each candidate `CI_sf`, 50
-times, resample the pseudo-outcome residuals around `tau.hat` (whole sample,
-with replacement), re-estimate the CATE, build the band (B = 100) and record
-its coverage of `tau.hat`. Pick the candidate whose mean coverage is closest
-to `1 − α`, then build the final band on the observed data at that value
-(B = 200). α = 0.10 here, so the target is 0.90.
+This is `dr_random_forest` only (`find_optimal_sf()`), with α = 0.10, so the
+target is 0.90.
+
+1. For each candidate `CI_sf` in 0.05, 0.10, …, 0.50, repeat 50 times:
+   - resample the pseudo-outcome residuals around τ̂, whole sample, with
+     replacement;
+   - re-estimate the CATE from τ̂ plus the resampled residuals;
+   - build the half-sample band (B = 100);
+   - record its marginal coverage of τ̂ (the plug-in truth) and its mean width.
+2. Pick the candidate whose mean coverage is closest to 0.90.
+3. Build the final band on the observed data at that `CI_sf` (B = 200), over
+   the sample's units and the query grid.
 
 ## Performance measures
 
-### continuous / binary
+### Continuous / binary
 
-Per run, over the units in the sample (`R/metrics.R::cate_metrics`), then
-averaged over runs:
+Each measure is computed per run over the units in the sample
+(`cate_metrics()`), then averaged over runs within each (ρ, scenario, n,
+model) cell:
 
-- bias (mean of estimate − truth), ATE bias, relative ATE bias, relative CATE bias
-- MSE, RMSE, MAE
-- Pearson and Spearman correlation with the true CATE (set to 0 in scenario 1)
-- sign accuracy
-- HTE tests: p-values `BLP_p`, `BLP_p_os`, `indep_cate`, `indep_po` → rejection rates at
-  0.05 (type I error in scenario 1, power in 2–10)
+- **bias:** mean of (τ̂ − τ) over units.
+- **ATE bias:** mean τ̂ − mean τ.
+- **relative ATE bias:** ATE bias / true ATE.
+- **relative CATE bias:** mean of (τ̂ − τ)/τ over units with τ ≠ 0.
+- **MSE, RMSE, MAE** of τ̂ against τ.
+- **Pearson and Spearman correlation** of τ̂ with τ. These are set to 0 in
+  scenario 1, where τ is constant.
+- **sign accuracy:** the proportion of units where sign(τ̂) = sign(τ).
+- **`n_na`:** the number of units with no estimate.
+- **HTE tests:** `BLP_p`, `BLP_p_os`, `indep_cate` and `indep_po` for each
+  estimator, plus the true-CATE `BLP_p`, `BLP_p_os` and `indep_cate`.
+  - Each becomes a rejection rate at 0.05: type I error in scenario 1, power
+    in scenarios 2–4.
+  - The number of runs with an NA p-value is reported alongside.
+- **ATE bias relative to `dr_oracle`:** each estimator's ATE bias minus
+  `dr_oracle`'s on the same run. This removes the noise the estimators share
+  through a common dataset.
 
 ### CI continuous / binary
 
-Per run (`R/metrics.R::interval_metrics`), then averaged over runs. Nominal
-coverage 0.95.
+Per run (`interval_metrics()`), then averaged over runs within each
+(ρ, scenario, n, `CI_sf`, model) cell. Nominal coverage is 0.95.
 
-- marginal coverage (proportion of units covered by their own interval)
-- simultaneous coverage (band covers every unit; the target the method controls)
-- mean interval length
-- query grid only: bias-eliminated marginal and simultaneous coverage
-  (coverage of the across-run mean estimate)
+- **marginal coverage:** the proportion of units covered by their own interval.
+- **simultaneous coverage:** whether the band covers every unit; this is the
+  target the method controls.
+- **mean interval length.**
+- **query grid** (`<model>_grid` rows): the same three measures, plus
+  bias-eliminated marginal and simultaneous coverage (`be_interval_metrics()`).
+  - These are coverage of the across-run mean estimate at each grid point
+    (`grid_be_reference()`), computed within each ρ.
+  - Bias drops out, which separates miscalibration from extrapolation bias.
 
-### optimal_sf
+The per-unit band is the primary ρ comparison (see the query-grid caveat
+under Estimands).
 
-No metrics script yet. Each run saves the selected `CI_sf`, the calibration
-curve (mean coverage of `tau.hat` and mean width per candidate) and the final
-band over units and query grid alongside the truth, so coverage of the true
-CATE (nominal 0.90) can be scored as in the CI studies. The correlated
-optimal_sf studies do score it (`*_corr_ci_sf_metrics.R`): the CI studies'
-measures for the final band, plus the chosen `CI_sf` and the calibration's own
-plug-in coverage at it.
+### optimal_sf (continuous)
+
+Each run's final band is scored against the true CATE with the CI measures
+above, over units and over the grid, at nominal 0.90. Each row also records:
+
+- `optimal_sf`: the chosen `CI_sf`;
+- `plugin_coverage`: the calibration's own mean coverage of τ̂ at the chosen
+  value;
+- `plugin_ci_width`: the calibration's mean width at the chosen value.
+
+The quantity of interest is the gap between `plugin_coverage`, which is
+calibrated to 0.90, and the true-τ coverage. It shows how much of τ̂'s bias the
+calibration misses, and whether that gap grows at ρ = 0.5.
+
+### Monte Carlo error and comparisons
+
+- **The effect of ρ (ρ = 0.5 − ρ = 0):** use paired per-run differences. The
+  MCSE is sd(diff)/√runs.
+- **Within one ρ:**
+  - compare estimators against `dr_oracle` on the same run;
+  - compute MCSEs per scenario, never pooled, because scenarios share seeds
+    and so their errors are correlated;
+  - rejection rates and coverages are per-run 0/1 indicators with a binomial
+    MCSE.
+- **Summary plots:** mean ± qnorm(0.975) × MCSE.
+
+### Where they are reported
+
+| report | contents |
+|---|---|
+| `correlated/corr_results.qmd` | both outcomes: levels by ρ, paired differences, HTE-test rejection rates, ATE bias relative to `dr_oracle` |
+| `correlated/{continuous,binary}/*_corr_results.qmd` | one outcome each: every metric by ρ, paired differences, the true-CATE tests, NA tables, and a headline table |
+| `correlated/confidence_intervals/<outcome>/*_corr_ci_results.qmd` | coverage and length by ρ across `CI_sf`, paired ρ differences, interval types, the best `CI_sf` by ρ, the optimal_sf pick and its true-τ coverage (continuous), and a headline table |
+| `correlated/confidence_intervals/optimal_sf/cts_corr_ci_sf_results.qmd` | the optimal_sf study on its own: calibration curves, the pick by ρ, plug-in against true-τ coverage |

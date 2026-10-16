@@ -29,7 +29,7 @@ source(here("R", "figures.R"))
 copula with exchangeable latent correlation ρ, at four sample sizes (100, 250,
 500, 1000) and 500 runs each. Every marginal, τ(x) and m0(x) are
 `binary/`'s; only the covariates' joint distribution changes. Full design
-in `../README.md`.
+in `sample_size/README.md`.
 
 | Scenario | true CATE $\tau(x)$, a risk difference |
 |---|---|
@@ -40,7 +40,7 @@ in `../README.md`.
 
 The outcome is $P(Y = 1 \mid x, W) = m_0(x) + W \tau(x)$, with the control risk
 $m_0(x) = 0.34 + 0.36\,\mathrm{plogis}(b_0 + b_1 X_1 + b_2 X_2)$, as in
-`binary/` (see `binary/README.md` for the coefficients).
+`binary/` (see `sample_size/ADEMP.md` for the coefficients).
 
 Two values of ρ:
 
@@ -61,8 +61,8 @@ What the correlation does to the design (`Rscript R/calibration_report.R`):
 The ATE and power barely move, so a change below is not the target getting
 larger or smaller: what ρ adds is prognosis (m0) moving with the effect
 modifiers. Scenario 3's treated-risk floor at ρ = 0.5, n = 100 is below
-`RD_EPS` = 0.01 on purpose, to keep `binary/`'s τ(x) (`../README.md`, "Binary
-scenario 3 floor").
+`RD_EPS` = 0.01 on purpose, to keep `binary/`'s τ(x) (`sample_size/README.md`, "Binary outcome:
+the risk-difference scale").
 
 **Pairing.** Both values of ρ use the same run seeds, so run *r* shares W, the
 raw latent normals and the categorical covariates across ρ. Y is coupled only
@@ -426,7 +426,7 @@ bind_true_cate <- function(df, true_df, extra_cols) {
 Best linear predictor test of heterogeneity, against the nominal 5% threshold
 (dashed line). `BLP_p` is two-sided with constant-variance SEs, as computed
 when the models were fitted; `BLP_p_os` is one-sided (H1: beta.2 > 0) with HC3
-SEs, recomputed at metrics time (see `binary/README.md`, "HTE tests").
+SEs, recomputed at metrics time (see `sample_size/README.md`, "HTE tests").
 
 ```{r blp-plot}
 box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p"), "BLP_p",

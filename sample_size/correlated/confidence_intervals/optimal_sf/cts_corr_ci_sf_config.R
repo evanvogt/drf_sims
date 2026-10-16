@@ -9,7 +9,7 @@
 # 100 runs, no CI_sf axis - that is what each run picks) on correlated/'s
 # copula, at every rho in CORR_RHOS. rho varies slowest: rows 1-800 are
 # rho = 0, rows 801-1600 rho = 0.5, and the same run at the two rhos is a
-# paired dataset (../README.md).
+# paired dataset (sample_size/README.md).
 
 library(here)
 source(here("R", "pipeline.R"))

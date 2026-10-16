@@ -53,7 +53,7 @@ fmla_info <- get_binary_oracle_info(scenario, gen$bW, rho)
 # fixed covariate-grid query points, as the parent study - see
 # R/dgm_scenarios.R::build_query_grid. The grid does not depend on rho (the
 # truth function tau(x) is the parent's), but at rho = 0.5 its corners are
-# low-density points: see ../README.md, "The query grid".
+# low-density points: see sample_size/README.md, "The query grid".
 set <- corr_set("binary", rho)
 Z_query <- build_query_grid(scenario, set = set,
                             covariate_names = names(data)[-c(1, 2)])
