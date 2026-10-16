@@ -1,6 +1,6 @@
 # Correlated covariates — confidence interval studies
 
-`confidence_intervals/`'s three studies, run on `correlated/`'s copula DGM.
+Three of `confidence_intervals/`'s studies (all but the binary optimal_sf), run on `correlated/`'s copula DGM.
 They ask whether the half-sample bootstrap's simultaneous bands, and the
 data-driven choice of their `sample.fraction`, still behave when prognosis and
 effect modification move together. The method, estimators and metrics are the
@@ -11,13 +11,13 @@ are `correlated/`'s (`../README.md`).
 |---|---|---|
 | `continuous/` | `confidence_intervals/continuous/` | `cts_corr_ci_*` |
 | `binary/` | `confidence_intervals/binary/` | `bin_corr_ci_*` |
-| `optimal_sf/` | `confidence_intervals/optimal_sf/` | `cts_corr_ci_sf_*`, `bin_corr_ci_sf_*` |
+| `optimal_sf/` | `confidence_intervals/optimal_sf/` | `cts_corr_ci_sf_*` (continuous only; the binary study was dropped) |
 
 ## Design
 
-| | `continuous/`, `binary/` | `optimal_sf/` (cts, bin) |
+| | `continuous/`, `binary/` | `optimal_sf/` (cts) |
 |---|---|---|
-| scenario sets | `continuous_corr_<ρ>`, `binary_corr_<ρ>` | same |
+| scenario sets | `continuous_corr_<ρ>`, `binary_corr_<ρ>` | `continuous_corr_<ρ>` |
 | scenarios | 1–4 | 1–4 |
 | ρ | 0, 0.5 (`CORR_RHOS`) | same |
 | n | 500, 1000 | 500, 1000 |
@@ -25,7 +25,7 @@ are `correlated/`'s (`../README.md`).
 | runs | 100 | 100 |
 | array per outcome | 16,000: rows 1–8000 are ρ = 0, 8001–16000 ρ = 0.5 | 1,600: rows 1–800 are ρ = 0, 801–1600 ρ = 0.5 |
 | jobscripts | `*_1.sh` (1–10000), `*_2.sh` (10001–16000) — the PBS array cap, not the ρ boundary | `*_1.sh` (1–1600) |
-| results | `../results/correlated/confidence_intervals/<outcome>/rho_<ρ>/scenario_<k>/<n>/<CI_sf>/` | `.../<outcome>/sf_calibration/rho_<ρ>/scenario_<k>/<n>/` |
+| results | `../results/correlated/confidence_intervals/<outcome>/rho_<ρ>/scenario_<k>/<n>/<CI_sf>/` | `.../continuous/sf_calibration/rho_<ρ>/scenario_<k>/<n>/` |
 
 Everything else is the parent's: `CI_boot = 200`, `alpha = 0.05` and
 `profile = "ci"` for the CI studies. The optimal_sf calibration uses 50
@@ -80,8 +80,8 @@ changed.
 |---|---|
 | `*_config.R` | the grid (`rho` is a path column, prefix `rho_`) |
 | `*_analysis.R` | the parent's analysis script. DGM from `../<outcome>/*_corr_dgms.R`, models from the parent's `*_ci_models.R`, `set = corr_set(outcome, rho)` for the query grid, writes to `combo_dir()` |
-| `*_check.R`, `*_collect.R`, `*_metrics.R` | as the parent's, outputs carry a `rho` column. optimal_sf's two studies share `optimal_sf/jobscripts/`, so their todo lists are `failed_cts_ids.txt` / `failed_bin_ids.txt` |
-| `continuous/cts_corr_ci_results.qmd`, `binary/bin_corr_ci_results.qmd` | per outcome: coverage and length by ρ across the sweep, paired ρ differences, interval kinds (with the grid caveat), the best `CI_sf` by ρ, the optimal_sf pick and its true-τ coverage, a ρ = 0 sanity check against the parent CI study, and a headline table. The optimal_sf and sanity sections are skipped if their inputs are not on disk |
+| `*_check.R`, `*_collect.R`, `*_metrics.R` | as the parent's, outputs carry a `rho` column. optimal_sf's todo list is `failed_cts_ids.txt` |
+| `continuous/cts_corr_ci_results.qmd`, `binary/bin_corr_ci_results.qmd` | per outcome: coverage and length by ρ across the sweep, paired ρ differences, interval kinds (with the grid caveat), the best `CI_sf` by ρ, the optimal_sf pick and its true-τ coverage (continuous only), a ρ = 0 sanity check against the parent CI study, and a headline table. The optimal_sf and sanity sections are skipped if their inputs are not on disk |
 | `optimal_sf/cts_corr_ci_sf_results.qmd` | the continuous optimal_sf study on its own: the calibration curves (from `_all.RDS`), the pick by ρ, true-τ coverage and length at the pick for both bands, plug-in vs true-τ coverage, BE grid coverage, the pick against the sweep's best `CI_sf`, and a headline table. The curve and sweep sections are skipped if their inputs are not on disk |
 
 ## Running it
@@ -107,13 +107,13 @@ qsub cts_corr_ci_sf_collect.sh
 qsub cts_corr_ci_sf_metrics.sh
 ```
 
-Binary is the same with `bin_`. Render a results qmd after both its CI
-metrics and its optimal_sf metrics exist.
+The binary CI study is the same with `bin_` (it has no optimal_sf step).
+Render the continuous results qmd after both its CI metrics and its
+optimal_sf metrics exist.
 
 Resources are hand-set. The CI jobs take the parent's (30 min, 2 cores,
 3 GB). The optimal_sf jobs take 8 h, 2 cores and 7 GB. About half the parent
-optimal_sf runs outgrew 6 h / 5 GB, and the parent binary rerun went to
-10 GB, so watch the binary memory.
+optimal_sf runs outgrew 6 h / 5 GB.
 
 Local smoke test, from the study folder: `Rscript cts_corr_ci_analysis.R 3`
 (scenario 3, n = 500, `CI_sf` = 0.05, run 1, ρ = 0) and `8003` (the same run
@@ -123,5 +123,5 @@ copy to check the wiring.
 
 ## Status
 
-First run (2026-10-04), with nothing to archive. All four studies are
+First run (2026-10-04), with nothing to archive. All three studies are
 `first_run` in `R/study_registry.R` and skipped by `R/archive_old_results.R`.

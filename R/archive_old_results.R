@@ -44,7 +44,7 @@
 # (competing_risk/surv_dgm.R) and was unchanged by the 2026-09-26 change (its
 # own 2026-10-01 retune is archived separately, by hand - competing_risk/
 # README.md), sample_size/correlated/'s studies (its two sample-size studies
-# and the four under correlated/confidence_intervals/), which were first run
+# and the three under correlated/confidence_intervals/), which were first run
 # after 2026-09-26 so have nothing old to archive (and archiving them would tar
 # new results), and anything no study config names -
 # the figure directories, and ../collected_metrics/, which is outside results/.
@@ -60,8 +60,7 @@ UNAFFECTED <- c("competing_risk", "model_evaluation",
                 "correlated/continuous", "correlated/binary",
                 "correlated/confidence_intervals/continuous",
                 "correlated/confidence_intervals/binary",
-                "correlated/confidence_intervals/optimal_sf (cts)",
-                "correlated/confidence_intervals/optimal_sf (bin)")
+                "correlated/confidence_intervals/optimal_sf (cts)")
 
 args <- commandArgs(trailingOnly = TRUE)
 apply <- "--apply" %in% args

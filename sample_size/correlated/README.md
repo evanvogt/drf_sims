@@ -19,7 +19,7 @@ appendix's and, like the parent studies' 5–10, run to 100.
 | results | `../results/correlated/continuous/rho_<ρ>/scenario_<k>/<n>/res_sim_<run>.RDS` | `.../correlated/binary/...` |
 
 `confidence_intervals/` holds the CI studies' counterparts on the same DGM:
-the continuous and binary `CI_sf` sweeps and both optimal_sf calibrations, at
+the continuous and binary `CI_sf` sweeps and the continuous optimal_sf calibration, at
 n ∈ {500, 1000}. See `confidence_intervals/README.md`.
 
 ## DGM

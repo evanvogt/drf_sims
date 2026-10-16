@@ -31,9 +31,7 @@ library(tibble)
 #' @param prefix the file-name stem this study's scripts share - "bin_corr" for
 #'   bin_corr_config.R, bin_corr_analysis.R, jobscripts/bin_corr_1.sh,
 #'   jobscripts/bin_corr_rerun.sh. update_rerun_script() uses it to find the
-#'   last two. It is declared rather than inferred because
-#'   sample_size/correlated/confidence_intervals/optimal_sf/jobscripts holds two
-#'   studies, so globbing that directory for *_rerun.sh matches both.
+#'   last two.
 #' @param res_path directory holding this study's results
 #' @param grid THE parameter grid. One row per array job, in array-index order,
 #'   and it must include a `run` column. Never filter this after the fact - the
@@ -266,10 +264,6 @@ parse_select <- function(line) {
 #' the second call finds its own output and changes nothing - while leaving hand
 #' escalations alone: bin_ci_rerun.sh was raised to mem=15gb against a 5gb base,
 #' and recomputing from the base alone would quietly drop it back to 6gb.
-#'
-#' Scripts are found by study$prefix rather than by globbing for *_rerun.sh,
-#' because sample_size/correlated/confidence_intervals/optimal_sf/jobscripts holds two
-#' studies and a glob there matches both.
 #'
 #' A single failure is the exception to -J 1-<n_failed>: PBS Pro rejects an
 #' array whose range has one subjob, so -J 1-1 never gets past qsub. The -J line

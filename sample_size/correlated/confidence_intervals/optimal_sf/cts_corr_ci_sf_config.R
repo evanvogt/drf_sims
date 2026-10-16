@@ -10,9 +10,6 @@
 # copula, at every rho in CORR_RHOS. rho varies slowest: rows 1-800 are
 # rho = 0, rows 801-1600 rho = 0.5, and the same run at the two rhos is a
 # paired dataset (../README.md).
-#
-# failed_cts_ids.txt, not failed_ids.txt: jobscripts/ serves both optimal_sf
-# studies, as in the parent, so the two todo lists are named apart.
 
 library(here)
 source(here("R", "pipeline.R"))

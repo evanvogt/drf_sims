@@ -7,14 +7,14 @@
 #   rows scenario / n / model, the ten subsampling ratios across the columns.
 #   Like ss_tables.R, one set at rho = 0, one at rho = 0.5 and one of the
 #   paired rho = 0.5 - rho = 0 differences.
-# - the data-driven CI_sf (optimal_sf/): one table per outcome, rows
+# - the data-driven CI_sf (optimal_sf/, continuous only): rows
 #   scenario / n / rho, with the paired difference as a third row per n.
 # Each cell is "mean (MCSE)". Labels and the summary come from R/figures.R,
 # the layout from R/tables.R.
 #
 # Writes to ../results/thesis_tables/:
 #   {cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.tex
-#   {cts,bin}_corr_ci_sf.tex
+#   cts_corr_ci_sf.tex
 # \input{} them into a document with
 #   \usepackage{booktabs, longtable, pdflscape, array}
 #
@@ -228,7 +228,7 @@ sf_cols <- tibble::tribble(
   "ci_len",     "mean_ci_length",        "\\shortstack[r]{Mean\\\\length}",                NA,      FALSE
 )
 
-for (o in outcomes) {
+for (o in outcomes[1]) {  # the binary optimal_sf study was dropped
   name <- paste0(o$prefix, "_corr_ci_sf")
   metrics <- read_complete(
     file.path(res_root, o$dir, "sf_calibration", paste0(o$prefix, "_corr_ci_sf_metrics.RDS")),

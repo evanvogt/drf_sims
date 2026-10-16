@@ -1,6 +1,6 @@
 # ADEMP — correlated covariates
 
-Six studies, all on one data-generating mechanism: scenarios 1–4 of the
+Five studies, all on one data-generating mechanism: scenarios 1–4 of the
 sample-size studies, with the covariates drawn from a Gaussian copula at
 latent correlation ρ ∈ {0, 0.5}. The correlated cts/bin studies also run
 scenarios 5–10 for the appendix (since 2026-10-04), at 100 repetitions, as
@@ -15,7 +15,8 @@ code, unchanged. Only the covariates' joint distribution differs.
 | correlated CI, continuous | `confidence_intervals/continuous/` | `cts_corr_ci_*` | `sample_size/confidence_intervals/continuous/` | bootstrap simultaneous bands for the CATE across `CI_sf` |
 | correlated CI, binary | `confidence_intervals/binary/` | `bin_corr_ci_*` | `sample_size/confidence_intervals/binary/` | the same, binary outcome |
 | correlated optimal_sf, continuous | `confidence_intervals/optimal_sf/` | `cts_corr_ci_sf_*` | `sample_size/confidence_intervals/optimal_sf/` | data-driven choice of `CI_sf`, scored against the true CATE |
-| correlated optimal_sf, binary | `confidence_intervals/optimal_sf/` | `bin_corr_ci_sf_*` | the same | the same, binary outcome |
+
+There is no binary optimal_sf study: it was dropped before it finished.
 
 Folders are relative to `sample_size/correlated/`. The cts/bin studies were
 first run on 2026-10-01, and the CI and optimal_sf studies on 2026-10-04
@@ -39,7 +40,7 @@ and then how that performance changes from ρ = 0 to ρ = 0.5.
 - **Correlated CI continuous / binary:** the coverage and width of half-sample
   bootstrap simultaneous confidence bands for the CATE, across the bootstrap
   forests' `sample.fraction` (`CI_sf`), and whether this changes with ρ.
-- **Correlated optimal_sf continuous / binary:** whether a per-dataset choice of
+- **Correlated optimal_sf continuous:** whether a per-dataset choice of
   `CI_sf` still reaches nominal 0.90 coverage of the *true* CATE when m0
   tracks τ. The choice is made by a calibration that uses the point estimate as
   a plug-in truth, so it cannot see that estimate's bias, and at ρ = 0.5
@@ -193,7 +194,7 @@ The table covers scenarios 1–4. `R/calibration_report.R` prints all ten.
 
 Full factorial, per outcome:
 
-| | correlated cts / bin | correlated CI cts / bin | correlated optimal_sf cts / bin |
+| | correlated cts / bin | correlated CI cts / bin | correlated optimal_sf cts |
 |---|---|---|---|
 | scenarios | 1–4; 5–10 | 1–4 | 1–4 |
 | n | 100, 250, 500, 1000 | 500, 1000 | 500, 1000 |
@@ -276,7 +277,7 @@ SuperLearner set-up is in `R/sl_library.R`.
 | method | description | used in |
 |---|---|---|
 | `causal_forest` | grf `causal_forest`, internal cross-fitting | cts / bin, CI |
-| `dr_random_forest` | DR-learner: per-arm outcome forests (own-arm predictions OOB), RF propensity, OOB RF second stage | all six |
+| `dr_random_forest` | DR-learner: per-arm outcome forests (own-arm predictions OOB), RF propensity, OOB RF second stage | all five |
 | `dr_superlearner` | DR-learner: SuperLearner per-arm outcome models and propensity, single leave-one-fold-out cross-fit, SuperLearner second stage | cts / bin |
 | `dr_oracle` | DR-learner with the true outcome mean (binary: the true risk) and propensity 0.5 | cts / bin, CI |
 | `dr_semi_oracle` | DR-learner with the known propensity 0.5 and per-arm outcome forests specified as in `dr_random_forest` (refitted) | cts / bin, CI |
@@ -527,7 +528,7 @@ Per run (`interval_metrics()`), then averaged over runs within each
 The per-unit band is the primary ρ comparison (see the query-grid caveat
 under Estimands).
 
-### Correlated optimal_sf continuous / binary
+### Correlated optimal_sf continuous
 
 Each run's final band is scored against the true CATE with the CI measures
 above, over units and over the grid, at nominal 0.90. Each row also records:
