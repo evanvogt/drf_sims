@@ -154,7 +154,7 @@ print(missing_table(resolve_set("binary_missing"), binary_row,
                     c("bW", "E[m0]", "true RD", "power", "MNAR floor", "MNAR ceiling"),
                     bW_digits = 3))
 
-# ---- sample_size/correlated/ ------------------------------------------------
+# ---- sample_size/ ------------------------------------------------
 # scenarios 1-10 on the copula at each rho in CORR_RHOS; rho = 0 should repeat
 # the main tables' bW in every row. At rho = 0.5 binary scenario 3's and 8's
 # floors are 0.007 and 0.003, below RD_EPS - the documented exceptions - and

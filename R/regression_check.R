@@ -46,11 +46,11 @@ STUDIES <- list(
   # continuous / binary / ci_continuous / ci_binary: the retired independent
   # sample-size studies' DGMs (now called straight from R/dgm_scenarios.R) and
   # the models wrappers the correlated studies inherited from them
-  # (sample_size/correlated/). Kept because those wrappers - the "base" and
+  # (sample_size/). Kept because those wrappers - the "base" and
   # "ci" profiles on each outcome family - are what the correlated studies run.
   continuous = list(
     sources = c("utils.R", "R/dgm_scenarios.R",
-                "sample_size/correlated/continuous/cts_corr_models.R"),
+                "sample_size/continuous/cts_corr_models.R"),
     run = function() {
       setup_rng_stream(3)
       gen <- generate_scenario_data(8, 120, set = "continuous")
@@ -65,7 +65,7 @@ STUDIES <- list(
 
   binary = list(
     sources = c("utils.R", "R/dgm_scenarios.R",
-                "sample_size/correlated/binary/bin_corr_models.R"),
+                "sample_size/binary/bin_corr_models.R"),
     run = function() {
       setup_rng_stream(3)
       gen <- generate_scenario_data(3, 120, set = "binary")
@@ -80,7 +80,7 @@ STUDIES <- list(
 
   ci_continuous = list(
     sources = c("utils.R", "R/dgm_scenarios.R",
-                "sample_size/correlated/confidence_intervals/continuous/cts_corr_ci_models.R"),
+                "sample_size/confidence_intervals/continuous/cts_corr_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
       gen <- generate_scenario_data(8, 120, set = "continuous")
@@ -95,7 +95,7 @@ STUDIES <- list(
 
   ci_binary = list(
     sources = c("utils.R", "R/dgm_scenarios.R",
-                "sample_size/correlated/confidence_intervals/binary/bin_corr_ci_models.R"),
+                "sample_size/confidence_intervals/binary/bin_corr_ci_models.R"),
     run = function() {
       setup_rng_stream(3)
       gen <- generate_scenario_data(3, 120, set = "binary_ci")

@@ -7,7 +7,7 @@
 # construction.
 #
 # Correlated covariates only, at rho = 0.5 - the correlated studies' primary arm
-# (sample_size/correlated/, R/dgm_scenarios.R's CORRELATED COVARIATES). rho is a
+# (sample_size/, R/dgm_scenarios.R's CORRELATED COVARIATES). rho is a
 # path column with the same "rho_" prefix those studies use, so results sit
 # under rho_0.5/ and a rho = 0 arm would be a one-value change to the grid. (It
 # briefly ran both rhos, 2026-10-09; the rho_0/ results from then are outside

@@ -2,7 +2,7 @@
 # title: figures for the thesis chapter - sample size, correlated covariates
 ##########
 # The sample-size chapter's figures, from the correlated-covariate studies
-# (sample_size/correlated/). Per outcome, for the main text's scenarios 1-4
+# (sample_size/). Per outcome, for the main text's scenarios 1-4
 # and the appendix's 5-10 (*_supp_*), each at rho = 0.5 and as the paired
 # rho = 0.5 - rho = 0 difference (*_rhodiff_*):
 #   - CATE bias on the top row, RMSE on the bottom, the scenarios across;
@@ -14,7 +14,7 @@
 # (sample_size/README.md), so each metric is differenced per run
 # (paired_rho_diff()) and its MCSE is sd(diff) / sqrt(pairs). The truth moves
 # with rho too - bW, the ATE, SD(tau) and cor(m0, tau)
-# (sample_size/correlated/corr_truth_summary.R) - so a difference is the
+# (sample_size/corr_truth_summary.R) - so a difference is the
 # models' response to the whole change in DGM, not to the correlation alone.
 #
 # Labels, palette, summaries, HTE_ALPHA and figure sizing come from

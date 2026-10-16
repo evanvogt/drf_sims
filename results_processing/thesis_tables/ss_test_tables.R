@@ -3,7 +3,7 @@
 ##########
 # Rejection rates of the four heterogeneity tests, as "rate (MCSE)", with
 # sample size across the columns so each test's power reads left to right.
-# The correlated-covariate studies (sample_size/correlated/), per outcome: the
+# The correlated-covariate studies (sample_size/), per outcome: the
 # rho = 0 and rho = 0.5 rates, and the paired rho = 0.5 - rho = 0
 # differences, as ss_tables.R does for the estimation metrics. Each as one
 # table for the reported scenarios 1-4 and one for the supplementary 5-10.

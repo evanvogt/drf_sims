@@ -3,7 +3,7 @@
 ###############
 # The scenario tables and the generator live in R/dgm_scenarios.R. This file
 # names this study's slice of them: the binary_corr_<rho> sets that
-# sample_size/correlated/binary/bin_corr_dgms.R also names - binary/'s
+# sample_size/binary/bin_corr_dgms.R also names - binary/'s
 # scenarios on the risk-difference scale, with X1-X5 and X01-X03 drawn from a
 # Gaussian copula with exchangeable latent correlation rho.
 

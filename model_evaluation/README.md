@@ -34,7 +34,7 @@ sizes, 100 runs each — **1200 array jobs** (30 before 2026-10-08).
 
 Since 2026-10-08 the study runs on `continuous_corr_0.5`: `continuous/`'s
 scenario table, with the covariates drawn from the copula at latent
-correlation 0.5 — the primary arm of `sample_size/correlated/`. τ(x) and m0(x)
+correlation 0.5 — the primary arm of `sample_size/`. τ(x) and m0(x)
 are unchanged; only the covariates' joint distribution moves, and with it bW,
 the ATE and SD(τ) wherever g multiplies two modifiers (scenario 3 here,
 X4·X5), and the correlation between the prognostic m0 and τ. See

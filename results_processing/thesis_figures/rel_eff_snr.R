@@ -11,7 +11,7 @@
 #
 # The pairs, by DR learner family (the facet rows):
 #   continuous / binary   DR-RandomForest and DR-SuperLearner vs Causal forest
-#                         (sample_size/correlated/, scenarios 1-4 in the main
+#                         (sample_size/, scenarios 1-4 in the main
 #                         figure, 5-10 in *_supp - those have 100 runs, not 500)
 #   competing risks       DR-RF on PV, DR-SuperLearner on PV and DR-RSF vs
 #                         Causal forest on PV (competing_risk/, all 7

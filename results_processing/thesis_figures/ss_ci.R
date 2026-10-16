@@ -1,7 +1,7 @@
 ##########
 # title: figures for the thesis chapter - sample size, CI studies
 ##########
-# The correlated-covariate CI studies (sample_size/correlated/
+# The correlated-covariate CI studies (sample_size/
 # confidence_intervals/), per outcome, the CI_sf sweep: one figure per
 # interval metric (marginal coverage, simultaneous coverage, mean interval
 # length) at rho = 0, at rho = 0.5 and as the paired rho = 0.5 - rho = 0

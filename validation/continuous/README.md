@@ -8,7 +8,7 @@ lives in `../val_common.R`.
 
 | | |
 |---|---|
-| covariates | correlated, rho = 0.5 — the `continuous_corr_0.5` set (`R/dgm_scenarios.R`, CORRELATED COVARIATES), the same set `sample_size/correlated/` runs as its primary arm |
+| covariates | correlated, rho = 0.5 — the `continuous_corr_0.5` set (`R/dgm_scenarios.R`, CORRELATED COVARIATES), the same set `sample_size/` runs as its primary arm |
 | scenarios | 1, 2, 3, 4 (`R/dgm_scenarios.R`, `DESC_10`): 1 the null, no HTE (since 2026-10-12); 2 simple HTE, `b4 * X4`; 3 complex, `b3 * X3 + b4 * X4 + b45 * X4 * X5`; 4 non-linear, `b4 * cos(X4)`. Scenario 2 was scenario 3 before the 2026-09-26 renumbering |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |

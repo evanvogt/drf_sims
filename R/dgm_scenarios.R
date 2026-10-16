@@ -34,7 +34,7 @@
 # change here.
 #
 # CORRELATED COVARIATES (missing-data sets since 2026-09-28; the *_corr_* sets
-# of sample_size/correlated/ since 2026-10-01). The main studies draw every
+# of sample_size/ since 2026-10-01). The main studies draw every
 # covariate independently. The correlated sets draw X1-X5
 # and X01-X03 from a Gaussian copula with exchangeable latent correlation rho
 # (correlated_covariates()): X1 and X3 thresholded at their prevalences, the
@@ -199,7 +199,7 @@ RD_EPS <- 0.01
 BU_MISS <- 0.12
 RD_SCALE_MISS <- c(NA, 0.082, 0.051, 0.179, 0.137, 0.075)
 
-# sample_size/correlated/binary's scale (since 2026-10-04, when its scenarios
+# sample_size/binary's scale (since 2026-10-04, when its scenarios
 # 5-10 were added): RD_SCALE, except scenario 9. At rho = 0.5, E[g] in
 # scenario 9 (tanh(X4) * tanh(X5)) rises, bW falls, and under RD_SCALE the
 # treated-risk floor at n = 100 is -0.004 - generate_scenario_data() would stop.
@@ -343,7 +343,7 @@ SCENARIO_SETS$binary_missing_fixed <- transform(
   te_expr = c(TE_RD[1], paste(TE_RD[2:6], "+ U_term"))
 )
 
-# CORRELATED SAMPLE-SIZE SETS (sample_size/correlated/, since 2026-10-01): the
+# CORRELATED SAMPLE-SIZE SETS (sample_size/, since 2026-10-01): the
 # main tables' scenarios 1-10 on the missing sets' copula, one set per rho in
 # CORR_RHOS, named by corr_set() - "continuous_corr_0.5", "binary_corr_0".
 # (Scenarios 1-4 only until 2026-10-04; 5-10 were added for the appendix, and
@@ -382,7 +382,7 @@ SCENARIO_SETS <- c(SCENARIO_SETS, unlist(lapply(CORR_RHOS, function(rho) {
   )
 }), recursive = FALSE))
 
-# BINARY SNR SET (sample_size/correlated/binary/snr/, since 2026-10-15): the
+# BINARY SNR SET (sample_size/snr/, since 2026-10-15): the
 # binary_corr_0.5 table plus its own risk thresholds risk_lo / risk_hi. The
 # SNR check scales the effect modifiers by hte_mult (generate_scenario_data(),
 # get_oracle_info()), and past about x2.5 (x1.25 in scenario 4) the worst-case

@@ -43,8 +43,8 @@
 # its config no longer names anything old; competing_risk/, whose DGM is its own
 # (competing_risk/surv_dgm.R) and was unchanged by the 2026-09-26 change (its
 # own 2026-10-01 retune is archived separately, by hand - competing_risk/
-# README.md), sample_size/correlated/'s studies (its two sample-size studies
-# and the three under correlated/confidence_intervals/), which were first run
+# README.md), sample_size/'s studies (its two sample-size studies
+# and the three under sample_size/confidence_intervals/), which were first run
 # after 2026-09-26 so have nothing old to archive (and archiving them would tar
 # new results), and anything no study config names -
 # the figure directories, and ../collected_metrics/, which is outside results/.

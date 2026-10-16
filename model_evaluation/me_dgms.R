@@ -5,7 +5,7 @@
 # names this study's slice of them - the continuous_corr_0.5 set (since
 # 2026-10-08; it ran on set = "continuous" before): continuous/'s 10-scenario
 # table with the covariates drawn from the copula at latent correlation
-# ME_RHO, the same set sample_size/correlated/ uses as its primary arm. tau(x)
+# ME_RHO, the same set sample_size/ uses as its primary arm. tau(x)
 # and m0(x) are unchanged; only the covariates' joint distribution moves, and
 # with it bW, the ATE and SD(tau) wherever g multiplies two modifiers
 # (scenario 3 here, X4*X5) - see sample_size/README.md. This study

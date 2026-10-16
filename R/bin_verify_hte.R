@@ -21,7 +21,7 @@
 #      is the largest bU, to 2 dp, that leaves every floor-bound scenario its
 #      RD_SCALE at n = 500, and RD_SCALE_MISS[k] = min(RD_SCALE[k], the largest
 #      scale feasible at n = 500 with that bU)
-#   7. sample_size/correlated/'s binary_corr_<rho> sets (since 2026-10-01;
+#   7. sample_size/'s binary_corr_<rho> sets (since 2026-10-01;
 #      scenarios 5-10 since 2026-10-04): binary's coefficients exactly, so
 #      tau(x) is binary/'s, except scenario 9, scaled by RD_SCALE_CORR - which
 #      is re-derived as the largest scale feasible at rho = 0.5, floored to
@@ -30,7 +30,7 @@
 #      the bounds except binary_corr_0.5 scenario 3's and 8's floors (0.007 and
 #      0.003 at n = 100), which only have to stay above 0 - the exceptions
 #      R/dgm_scenarios.R documents
-#   8. sample_size/correlated/binary/snr/'s binary_snr set (since 2026-10-15):
+#   8. sample_size/snr/'s binary_snr set (since 2026-10-15):
 #      binary_corr_0.5 exactly at hte_mult = 1; the clamped oracle formula vs
 #      the generator, and every risk inside [RD_EPS, 1 - RD_EPS], at each
 #      hte_mult; the share clamped and the ATE drift stay small
@@ -230,7 +230,7 @@ check(abs(RD_SCALE_MISS[-1] - pmin(RD_SCALE[miss$scenario[-1]], k_max_miss(BU_MI
 check(isTRUE(all.equal(miss$bU, rep(BU_MISS, nrow(miss)))),
       "missing/binary's table uses BU_MISS")
 
-# ---- 7. sample_size/correlated/'s binary_corr_<rho> sets ----------------------
+# ---- 7. sample_size/'s binary_corr_<rho> sets ----------------------
 # binary/'s scenarios 1-10 on the copula. RD_SCALE is kept so tau(x) matches
 # binary/, which at rho = 0.5 takes scenario 3's and 8's floors below RD_EPS:
 # those cells are held only to (0, RD_EPS). Scenario 9's floor went below 0, so
@@ -321,7 +321,7 @@ for (rho in CORR_RHOS) {
                 } else ""))
 }
 
-# ---- 8. sample_size/correlated/binary/snr/'s binary_snr set ------------------
+# ---- 8. sample_size/snr/'s binary_snr set ------------------
 # binary_corr_0.5 plus risk thresholds: the treated risk is clamped into
 # [RD_EPS, 1 - RD_EPS] once hte_mult pushes it out, and the truth is the
 # clamped risk difference. bW is calibrated at n = 500 in every cell. At

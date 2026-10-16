@@ -19,8 +19,8 @@ mechanisms, estimands, methods, performance measures).
 
 | question | study (code) | what it produces |
 |---|---|---|
-| How do bias, accuracy and HTE tests behave as sample size shrinks, for continuous and binary outcomes with correlated covariates? | `sample_size/correlated/{continuous,binary}/` | figures `results_processing/thesis_figures/sample_size.R`; tables `thesis_tables/ss_tables.R`, `ss_test_tables.R` |
-| Do CATE intervals reach their nominal coverage? | `sample_size/correlated/confidence_intervals/{continuous,binary}/`, with `optimal_sf/` choosing the half-sample fraction | figures `thesis_figures/ss_ci.R`; tables `thesis_tables/ss_ci_tables.R` |
+| How do bias, accuracy and HTE tests behave as sample size shrinks, for continuous and binary outcomes with correlated covariates? | `sample_size/{continuous,binary}/` | figures `results_processing/thesis_figures/sample_size.R`; tables `thesis_tables/ss_tables.R`, `ss_test_tables.R` |
+| Do CATE intervals reach their nominal coverage? | `sample_size/confidence_intervals/{continuous,binary}/`, with `optimal_sf/` choosing the half-sample fraction | figures `thesis_figures/ss_ci.R`; tables `thesis_tables/ss_ci_tables.R` |
 | What do missing covariates do, and which handling method is best? | `missing/{continuous,binary}/` | figures `thesis_figures/missing.R`; tables `thesis_tables/miss_tables.R` |
 | How should an interval be built after multiple imputation? | `missing/ci_example/` | figures `thesis_figures/miss_cts_ci.R` |
 | Do the estimators work with competing risks (the target setting)? | `competing_risk/` (and `competing_risk/single_event/`, the same without the competing event) | figures `thesis_figures/surv.R`; tables `thesis_tables/surv_tables.R` |
@@ -66,7 +66,7 @@ run of any study can be tried locally, as a smoke test, by giving the analysis
 script a row number of the study's grid:
 
 ```bash
-cd sample_size/correlated/continuous
+cd sample_size/continuous
 Rscript cts_corr_analysis.R 1        # row 1 of the grid; writes to ../results, beside the repository
 ```
 
@@ -109,10 +109,9 @@ R/                    shared library - every study sources from here
 ├── bin_verify_hte.R  checks the binary risk-difference scenarios, re-derives RD_SCALE
 └── regression_check.R  old-vs-new equivalence harness
 
-sample_size/           README.md and ADEMP.md for all of them
-└── correlated/        continuous and binary outcomes, sample size sweep,
-                       correlated covariates at rho 0 / 0.5
-                       (continuous, binary, confidence_intervals/)
+sample_size/          continuous and binary outcomes, sample size sweep,
+                      correlated covariates at rho 0 / 0.5
+                      (continuous, binary, confidence_intervals/, snr/)
 competing_risk/       competing risks - the target setting
 missing/              missing covariates (continuous, binary, CI example)
 crossfitting/         compared double crossfitting against cheaper alternatives
@@ -240,7 +239,7 @@ correlation, sign accuracy. `bias` is `estimate - truth` throughout.
 there. `Rscript` lines run anywhere, including as a local smoke test.
 
 ```bash
-cd sample_size/correlated/continuous/jobscripts   # jobscripts cd to ${PBS_O_WORKDIR}/..
+cd sample_size/continuous/jobscripts   # jobscripts cd to ${PBS_O_WORKDIR}/..
 qsub cts_corr_1.sh            # the array job — cluster only
 Rscript ../cts_corr_check.R   # any missing runs? — runs locally too
 qsub cts_corr_collect.sh      # cluster only

@@ -680,7 +680,7 @@ Each run is seeded by its run index alone, so run *r* at the two ρ shares W,
 the copula's raw normals, the categorical noise and the event-time uniforms.
 The differences below are therefore paired: per run, ρ = 0 minus ρ = 0.5 (the
 sensitivity analysis minus the primary), then averaged, with MCSE =
-sd(diff) / √pairs (as `sample_size/correlated/`). A positive MSE difference
+sd(diff) / √pairs (as `sample_size/`). A positive MSE difference
 means that arm does worse with independent covariates than in the primary
 analysis; a positive correlation or C-statistic difference means it does
 better.

@@ -45,7 +45,7 @@ saw 8 covariates; keeping them took no extra random draws, so each run's W, Y,
 D and truth are unchanged.)
 
 **Correlation (since 2026-10-01).** X1–X5 and X01–X03 come from the
-Gaussian copula the missing-data and `sample_size/correlated/` sets use
+Gaussian copula the missing-data and `sample_size/` sets use
 (`correlated_covariates()`, `R/dgm_scenarios.R`). A latent
 `Z ~ N(0, R)` over X1–X5 and X01–X03, with R exchangeable at ρ, is drawn. X1
 and X3 are Z thresholded at their prevalences, while X2, X4, X5 and X01–X03

@@ -12,7 +12,7 @@ importance measures, `p_cts_adj`, the no-queue runner and job sizing — see
 | | |
 |---|---|
 | outcome | binary, treatment effect on the **risk-difference** scale |
-| covariates | correlated, rho = 0.5 — the `binary_corr_0.5` set (`R/dgm_scenarios.R`), the same set `sample_size/correlated/binary/` runs as its primary arm |
+| covariates | correlated, rho = 0.5 — the `binary_corr_0.5` set (`R/dgm_scenarios.R`), the same set `sample_size/binary/` runs as its primary arm |
 | scenarios | 1: the null, `tau = bW`; 2: `tau = bW + b4 * tanh(X4)`, `b4 = 0.082`; 3: `bW + b3 * X3 + b4 * tanh(X4) + b45 * tanh(X4) * tanh(X5)`, `b3 = -0.102`, `b4 = -0.0255`, `b45 = 0.0255`; 4: `bW + b4 * cos(X4)`, `b4 = -0.204` (`R/dgm_scenarios.R`, `TE_RD`) |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |

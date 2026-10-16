@@ -264,7 +264,7 @@ sourcing shared code rather than copying it, at a time when the same CATE
 estimators existed in seven files. The reference implementations it compares
 against moved from `sample_size/continuous/cts_models.R` into `R/cate_models.R`, which is
 now the only copy - `cts_models.R` became a thirteen-line profile shim (now
-`sample_size/correlated/continuous/cts_corr_models.R`).
+`sample_size/continuous/cts_corr_models.R`).
 
 ## Status
 

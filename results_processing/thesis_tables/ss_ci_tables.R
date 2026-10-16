@@ -1,7 +1,7 @@
 ##########
 # title: LaTeX tables of the CI studies - sample size, both outcomes
 ##########
-# The correlated-covariate CI studies (sample_size/correlated/
+# The correlated-covariate CI studies (sample_size/
 # confidence_intervals/), per outcome, for the appendix:
 # - the CI_sf sweep (continuous/, binary/): one table per interval metric,
 #   rows scenario / n / model, the ten subsampling ratios across the columns.

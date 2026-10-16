@@ -81,7 +81,7 @@ remove `competing_risk/` so `surv_check.R` and `surv_collect.R` don't mix the
 two DGMs.
 
 **Correlated covariates added 2026-10-01.** X1, X2, X3 and the noise X01–X03 (X4, X5 too since 2026-10-10)
-now come from the copula `sample_size/correlated/` uses
+now come from the copula `sample_size/` uses
 (`correlated_covariates()` in `R/dgm_scenarios.R`), at ρ ∈ {0, 0.5}. That
 makes ρ a grid factor and a `rho_<ρ>/` level in the results path. Key points:
 

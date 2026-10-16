@@ -59,15 +59,15 @@ study_registry <- data.frame(
     "missing/ci_example/cts_miss_ci_config.R",
     "model_evaluation/me_config.R",
     "validation/continuous/cts_val_config.R",
-    "sample_size/correlated/continuous/cts_corr_config.R",
-    "sample_size/correlated/binary/bin_corr_config.R",
-    "sample_size/correlated/confidence_intervals/continuous/cts_corr_ci_config.R",
-    "sample_size/correlated/confidence_intervals/binary/bin_corr_ci_config.R",
-    "sample_size/correlated/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R",
+    "sample_size/continuous/cts_corr_config.R",
+    "sample_size/binary/bin_corr_config.R",
+    "sample_size/confidence_intervals/continuous/cts_corr_ci_config.R",
+    "sample_size/confidence_intervals/binary/bin_corr_ci_config.R",
+    "sample_size/confidence_intervals/optimal_sf/cts_corr_ci_sf_config.R",
     "competing_risk/single_event/se_config.R",
     "validation/binary/bin_val_config.R",
     "competing_risk/snr/snr_config.R",
-    "sample_size/correlated/binary/snr/bin_snr_config.R"
+    "sample_size/snr/bin_snr_config.R"
   ),
   config_var = "study",
   category = c(
@@ -106,7 +106,7 @@ study_registry <- data.frame(
     "new 2026-10-04: competing_risk/'s event 1 without event 2 - pseudo-value CF / DR / T, SuperLearner DR / T, RSF DR / T and the causal survival forest on the RMST, scenarios 1-3 (null, constant, heterogeneous), censoring on/off, 500 runs (competing_risk/single_event/README.md)",
     "new 2026-10-08: the interim-analysis validation study with a binary outcome (risk-difference scale, binary_corr_0.5), scenarios 1-4 (the null added 2026-10-12, with interaction estimates saved with every test: 4,400 rows, archive the whole tree first), one trial of 1000 split at eleven interim points, 100 runs (validation/binary/README.md)",
     "new 2026-10-15: competing_risk/'s scenario 7 (rho = 0.5, censoring on) with the X3 effect x1/1.5/2/3 at n = 500 and n = 1000/2000/4000 at x1, one factor at a time; pseudo-value CF, the two production DR-learners and their semi-oracle twins only; 700 rows, 100 runs (competing_risk/snr/README.md)",
-    "new 2026-10-15: correlated/binary's scenarios 1-4 at rho = 0.5 (the binary_snr set: treated risk clamped to [0.01, 0.99], bW calibrated at n = 500 in every cell) with the effect modifiers x1/1.5/2/3 at n = 500 and n = 1000/2000/4000 at x1, one factor at a time; causal forest, DR random forest, DR semi-oracle and DR oracle only, no SuperLearner; 2,500 rows, 100 runs (sample_size/correlated/binary/snr/README.md)"
+    "new 2026-10-15: correlated/binary's scenarios 1-4 at rho = 0.5 (the binary_snr set: treated risk clamped to [0.01, 0.99], bW calibrated at n = 500 in every cell) with the effect modifiers x1/1.5/2/3 at n = 500 and n = 1000/2000/4000 at x1, one factor at a time; causal forest, DR random forest, DR semi-oracle and DR oracle only, no SuperLearner; 2,500 rows, 100 runs (sample_size/snr/README.md)"
   ),
   blocked = c(
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
