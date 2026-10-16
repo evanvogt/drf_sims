@@ -91,7 +91,7 @@ cate_fit <- function(Y, W, X, X_ps = NULL, family = gaussian(), ci = NULL,
                      ipw = NULL) {
   data <- data.frame(Y = Y, W = W, X)
   cate_methods(data, n_folds = N_FOLDS, sl_lib = sl_libraries(nrow(data)),
-               family = family, ipw = ipw, ci = ci, profile = "full",
+               family = family, ipw = ipw, ci = ci, profile = "missing",
                models = CATE_MODELS_APPLIED, X_ps = X_ps,
                num.threads = grf_threads, verbose_timing = TRUE)
 }

@@ -52,10 +52,9 @@ Which post-estimation tests run is set by `profile` (`PROFILES` in
 | BLP / independence tests, every model | yes | no | yes |
 | SuperLearner, oracle and semi-oracle skipped when `X` has NAs | no | no | yes |
 
-`ci_mi` has the same switches as `ci`, and `full` (the applied-analysis name)
-the same as `missing`. The CI profiles drop the tests only to save runtime. The
-SuperLearner arm and the bootstrap are set by `sl_lib` and `ci`, under any
-profile.
+The CI profile drops the tests only to save runtime. The SuperLearner arm and
+the bootstrap are set by `sl_lib` and `ci`, under any profile, so applied
+analyses use `missing` with `ci` set.
 
 `multiple_imputation` runs keep each imputation's tests unpooled, in `mi_tests`
 (`mi_test_table()`). The pooling rule is still to be decided; see

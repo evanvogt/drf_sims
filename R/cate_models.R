@@ -45,16 +45,13 @@ source(here::here("R", "sl_library.R"))   # as_sl_libs, sl_fit_predict, pretest_
 #  skip_incomplete          no    no    yes  (SuperLearner, oracle and
 #                                             semi-oracle skipped if X has NAs)
 #
-# "ci_mi" has the same switches as "ci", and "full" (the applied-analysis name)
-# the same as "missing". The CI profiles drop the tests only to save runtime.
-# The SuperLearner arm and the bootstrap are set by sl_lib and ci, under any
-# profile.
+# The CI profile drops the tests only to save runtime. The SuperLearner arm and
+# the bootstrap are set by sl_lib and ci, under any profile, so applied
+# analyses use "missing" with ci set.
 PROFILES <- list(
   base    = list(cf_variance = FALSE, tests = TRUE,  dr_rf_tests = TRUE,  skip_incomplete = FALSE),
   ci      = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE, skip_incomplete = FALSE),
-  missing = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = TRUE,  skip_incomplete = TRUE),
-  ci_mi   = list(cf_variance = TRUE,  tests = FALSE, dr_rf_tests = FALSE, skip_incomplete = FALSE),
-  full    = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = TRUE,  skip_incomplete = TRUE)
+  missing = list(cf_variance = TRUE,  tests = TRUE,  dr_rf_tests = TRUE,  skip_incomplete = TRUE)
 )
 
 # The arms cate_methods() can run, in the order it runs them, are CATE_MODELS
@@ -118,7 +115,7 @@ ps_oob <- function(X, X_ps, W, num.threads = NULL) {
 #' @param family gaussian() or binomial(); controls the SuperLearner outcome model
 #' @param ipw optional length-n weights for the missing-data IPW arm
 #' @param ci NULL, or list(boot = , sf = , alpha = ) to add half-sample bootstrap CIs
-#' @param profile "base", "ci", "missing", "ci_mi" or "full" - see PROFILES
+#' @param profile "base", "ci" or "missing" - see PROFILES
 #' @param num.threads grf thread count, forwarded to every regression_forest()/
 #'   causal_forest() call. NULL is grf's own default (all visible cores).
 #'   SuperLearner arms have no equivalent thread knob.
@@ -146,7 +143,7 @@ ps_oob <- function(X, X_ps, W, num.threads = NULL) {
 #'   unchanged: furrr's seeds do not depend on the number of workers.
 cate_methods <- function(data, n_folds = 10, sl_lib = NULL, fmla_info = NULL,
                          family = gaussian(), ipw = NULL, ci = NULL,
-                         profile = c("base", "ci", "missing", "ci_mi", "full"),
+                         profile = c("base", "ci", "missing"),
                          num.threads = NULL, verbose_timing = FALSE,
                          Z_query = NULL, models = NULL, X_ps = NULL,
                          sl_plan = NULL) {

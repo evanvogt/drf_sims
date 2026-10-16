@@ -6,10 +6,7 @@
 # This study asks how to build a CATE confidence interval when the covariates
 # were multiply imputed: fit every imputed dataset, then pool. The pooling
 # offers three strategies side by side (pooled / mib / hybrid) - see
-# combine_mi_ci().
-#
-# Profile "ci_mi" is the "ci" profile plus the nuisance row means, which this
-# study kept and confidence_intervals/ did not.
+# combine_mi_ci(). Profile "ci", as the sample-size CI studies.
 
 source(here::here("R", "cate_models.R"))
 
@@ -17,7 +14,7 @@ run_all_cate_methods <- function(data, n_folds = 10, fmla_info = NULL,
                                  CI_boot = 200, CI_sf = 0.5, alpha = 0.05,
                                  num.threads = NULL, verbose_timing = FALSE) {
   cate_methods(data, n_folds = n_folds, sl_lib = NULL, fmla_info = fmla_info,
-               family = gaussian(), profile = "ci_mi",
+               family = gaussian(), profile = "ci",
                ci = list(boot = CI_boot, sf = CI_sf, alpha = alpha),
                num.threads = num.threads, verbose_timing = verbose_timing)
 }
