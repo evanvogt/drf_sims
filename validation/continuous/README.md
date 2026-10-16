@@ -189,7 +189,7 @@ there and keeps the two arms' tests the same.
 | `cts_val_collect.R` | gathers per-run files into `cts_val_all.RDS` |
 | `cts_val_metrics.R` | flattens `validations` into tidy `cts_val_metrics.RDS` |
 | `results_cts_val.R` | summary plots, one scenario at a time (`Rscript results_cts_val.R <scenario>`), HC3 |
-| `cts_val_results.qmd` | the written-up report, one render per scenario (Quarto `scenario` param) |
+| `../val_results.qmd` | the written-up report, shared with `binary/`, one render per scenario (Quarto `outcome` and `scenario` params) |
 
 ## Running it
 
@@ -199,8 +199,8 @@ qsub validation/continuous/jobscripts/cts_val_1.sh     # 1-4400
 Rscript validation/continuous/cts_val_check.R          # writes failed_ids.txt if any are missing
 qsub validation/continuous/jobscripts/cts_val_collect.sh
 qsub validation/continuous/jobscripts/cts_val_metrics.sh
-cd validation/continuous
-quarto render cts_val_results.qmd -P scenario:1 --output cts_val_results_sc1.html   # and 2, 3, 4
+cd validation
+quarto render val_results.qmd -P outcome:continuous -P scenario:1 --output cts_val_results_sc1.html   # and 2, 3, 4
 ```
 
 `cts_val_testing.R` runs eight cheap checks; `full` adds one real

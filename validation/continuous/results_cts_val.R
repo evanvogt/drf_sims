@@ -6,10 +6,10 @@
 #
 # interim_prop is a numeric x-axis here, not a facet: there are 11 of them now
 # (cts_val_config.R), and the quantity of interest in every summary below is one
-# number per interim point, which reads as a curve. cts_val_results.qmd carries
+# number per interim point, which reads as a curve. ../val_results.qmd carries
 # the distribution-level versions.
 #
-# One scenario at a time, HC3 standard errors (cts_val_results.qmd carries the
+# One scenario at a time, HC3 standard errors (../val_results.qmd carries the
 # classical-vs-HC3 comparison):
 #   Rscript results_cts_val.R        # scenario 2
 #   Rscript results_cts_val.R 4      # scenario 4

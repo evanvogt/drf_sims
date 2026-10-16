@@ -26,7 +26,7 @@ mechanisms, estimands, methods, performance measures).
 | Do the estimators work with competing risks (the target setting)? | `competing_risk/` (and `competing_risk/single_event/`, the same without the competing event) | figures `thesis_figures/surv.R`; tables `thesis_tables/surv_tables.R` |
 | Why does the code use the crossfitting strategy it does? | `crossfitting/` (and `crossfitting/confidence_intervals/`) | report `crossfitting/cf_results.qmd` |
 | Can a cheap proxy score pick the right CATE learner? | `model_evaluation/` | report `model_evaluation/me_results.qmd` |
-| Do subgroups, CATE variance and variable importance found at an interim analysis replicate on the rest of the trial? | `validation/{continuous,binary}/` | reports `validation/*/..._val_results.qmd` |
+| Do subgroups, CATE variance and variable importance found at an interim analysis replicate on the rest of the trial? | `validation/{continuous,binary}/` | report `validation/val_results.qmd` (Quarto `outcome` and `scenario` params) |
 
 The shared code is in `R/`; the layout section below says what is where.
 

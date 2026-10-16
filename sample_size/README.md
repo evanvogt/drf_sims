@@ -281,13 +281,14 @@ continuous and binary studies' `*_dgms.R`, and optimal_sf the CI studies'
 | `<prefix>_analysis.R` | the array entry point: one grid row per index |
 | `<prefix>_check.R` | lists missing runs in `jobscripts/failed_ids.txt` and points `<prefix>_rerun.sh` at it |
 | `<prefix>_collect.R`, `<prefix>_metrics.R` | write `<prefix>_all.RDS` and `<prefix>_metrics.RDS` (and, for continuous and binary, `<prefix>_true_cate_tests.RDS`), all with a `rho` column |
-| `*_results.qmd` | the per-study report |
 
 In `sample_size/` itself:
 
 | file | |
 |---|---|
 | `corr_results.qmd` | both outcomes: levels by ρ, paired differences, tests, ATE bias against `dr_oracle` |
+| `corr_outcome_results.qmd` | one outcome (Quarto `outcome` param): every metric by ρ, paired differences, the true-CATE tests, NA tables, a headline table |
+| `confidence_intervals/corr_ci_results.qmd` | the CI studies, one outcome per render (`outcome` param); the optimal_sf section, `corr_ci_results_sf.qmd`, is included for the continuous outcome only |
 | `corr_truth_summary.R` | SD(τ) and cor(m0, τ) for every outcome, ρ and scenario; needs no simulation output |
 | `corr_sl_failures.R` | summarises the SuperLearner arm's dropped learners and failed fits |
 | `corr_blp_beta2.R` | pulls the saved BLP β2 estimates back out of the collected runs |

@@ -211,7 +211,7 @@ inputs.
 ## Performance measures
 
 Computed per (arm, scenario, estimator, `interim_prop`) over 100 runs, HC3
-unless stated (`<prefix>_val_results.qmd`, one render per scenario). A
+unless stated (`val_results.qmd`, one render per outcome and scenario). A
 proportion's Monte Carlo SE is `sqrt(p(1 − p) / runs)`; a mean's is
 `sd / sqrt(runs)`. At 100 runs that is at most 0.05 for a proportion, and
 about 0.022 at p = 0.05.

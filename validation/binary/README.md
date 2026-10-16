@@ -33,7 +33,7 @@ X3, X4 and X5 in 3.
 
 **The heterogeneity is small.** At n = 1000 the CATE's SD is ≈ 0.051 in
 scenario 2, 0.056 in scenario 3 and 0.094 in scenario 4 (in-sample, run 1).
-`bin_val_results.qmd` computes each scenario's `Var(tau)` reference line from a
+`../val_results.qmd` computes each scenario's `Var(tau)` reference line from a
 large draw of the DGM rather than hard-coding it.
 With 250–750 binary outcomes per chunk, every interaction test here has much
 less power than its continuous counterpart. Low replication rates partly
@@ -78,7 +78,7 @@ are shared code and are the same as in the continuous arm — see
 | `bin_val_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates the rerun jobscript |
 | `bin_val_collect.R` | gathers per-run files into `bin_val_all.RDS` |
 | `bin_val_metrics.R` | flattens `validations` into tidy `bin_val_metrics.RDS` |
-| `bin_val_results.qmd` | the written-up report, all three estimators, one render per scenario (Quarto `scenario` param) |
+| `../val_results.qmd` | the written-up report, shared with `continuous/`, one render per scenario (Quarto `outcome` and `scenario` params) |
 
 There is no `bin_val_run.R` (the continuous arm's no-queue runner) and no
 `results_bin_val.R` (its standalone plot script). The report carries every
@@ -94,7 +94,7 @@ Rscript validation/binary/bin_val_check.R          # writes failed_ids.txt if an
 qsub validation/binary/jobscripts/bin_val_collect.sh
 qsub validation/binary/jobscripts/bin_val_metrics.sh
 cd validation/binary
-quarto render bin_val_results.qmd -P scenario:1 --output bin_val_results_sc1.html   # and 2, 3, 4
+quarto render ../val_results.qmd -P outcome:binary -P scenario:1 --output bin_val_results_sc1.html   # and 2, 3, 4
 ```
 
 If old results become incomparable, archive the tree first — see

@@ -7,7 +7,7 @@
 #   - bias difference, bias - complete-data bias, per run and averaged over
 #     runs: the bias the missingness and its handling add. 0 is no change.
 #     The same measure as bias_diff_complete/_cu in missing/*/*_miss_metrics.R
-#     and missing/*/*_miss_results.qmd, extended to the incomplete units;
+#     and missing/miss_results.qmd, extended to the incomplete units;
 #   - relative efficiency, MSE / complete-data MSE (rel_efficiency/_cu/_iu from
 #     *_miss_metrics.R, a per-run ratio averaged over runs, as in the
 #     appendix tables). 1 is no loss.

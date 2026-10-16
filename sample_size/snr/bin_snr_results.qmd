@@ -81,7 +81,7 @@ ARM_COLOURS <- setNames(
   ARM_LABELS
 )
 
-# as bin_corr_results.qmd, so the reports read side by side
+# as corr_outcome_results.qmd, so the reports read side by side
 SCENARIO_LABELS <- c(
   `1` = "1: No HTE",
   `2` = "2: Continuous HTE",

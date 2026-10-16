@@ -546,6 +546,6 @@ calibration misses, and whether that gap grows at ρ = 0.5.
 | report | contents |
 |---|---|
 | `corr_results.qmd` | both outcomes: levels by ρ, paired differences, HTE-test rejection rates, ATE bias relative to `dr_oracle` |
-| `{continuous,binary}/*_corr_results.qmd` | one outcome each: every metric by ρ, paired differences, the true-CATE tests, NA tables, and a headline table |
-| `confidence_intervals/<outcome>/*_corr_ci_results.qmd` | coverage and length by ρ across `CI_sf`, paired ρ differences, interval types, the best `CI_sf` by ρ, the optimal_sf pick and its true-τ coverage (continuous), and a headline table |
+| `corr_outcome_results.qmd` | one outcome per render (`outcome` param): every metric by ρ, paired differences, the true-CATE tests, NA tables, and a headline table |
+| `confidence_intervals/corr_ci_results.qmd` | one outcome per render: coverage and length by ρ across `CI_sf`, paired ρ differences, interval types, the best `CI_sf` by ρ, the optimal_sf pick and its true-τ coverage (continuous), and a headline table |
 | `confidence_intervals/optimal_sf/cts_corr_ci_sf_results.qmd` | the optimal_sf study on its own: calibration curves, the pick by ρ, plug-in against true-τ coverage |

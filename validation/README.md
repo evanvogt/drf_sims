@@ -59,7 +59,7 @@ claimed), and `true2_<test>`, the same contrast in chunk 2's true CATE (what
 the test estimates). The signs say whether a replication went the right way.
 See `ADEMP.md`, Methods, and either arm's README.
 
-Each arm's report (`<prefix>_val_results.qmd`) renders one scenario at a time,
-through a Quarto `scenario` parameter — see each arm's README.
+Both arms share one report, `val_results.qmd`, rendered once per outcome and
+scenario through the Quarto `outcome` and `scenario` parameters — see each arm's README.
 
 See each arm's README for its design and file roles.

@@ -185,8 +185,9 @@ saves its per-imputation tests (above).
 
 ## Results files
 
-Each study has a `*_results.R` / `*_results.qmd` pair showing **every** metric
-its `*_metrics.R` computes — bias, ATE bias, MSE, RMSE, MAE, relative
+`miss_results.R` / `miss_results.qmd` (one copy for both outcomes: an
+`outcome` argument / Quarto param) show **every** metric a study's
+`*_metrics.R` computes — bias, ATE bias, MSE, RMSE, MAE, relative
 efficiency, correlation, Spearman, sign accuracy, the three HTE-test p-values,
 and the `n_na` diagnostic. Figures go to `results/all_figures/missing/<study>/`.
 

@@ -1,0 +1,125 @@
+## Data-driven `CI_sf` (`optimal_sf`)
+
+```{r sf-data}
+sf_file <- file.path(res_path, "sf_calibration", "cts_corr_ci_sf_metrics.RDS")
+has_sf <- file.exists(sf_file)
+if (has_sf) {
+  sf <- readRDS(sf_file) %>% tidy_ci()
+  sf_runs <- filter(sf, interval == interval_labels[["half_boot"]])
+}
+```
+
+`r if (!has_sf) "**Skipped: the optimal_sf metrics (\x60sf_calibration/cts_corr_ci_sf_metrics.RDS\x60) are not on disk.**"`
+
+`optimal_sf/` picks `CI_sf` per run for `dr_random_forest`. It resamples
+the pseudo-outcome residuals around the run's own estimate and takes the
+ratio whose band covers that estimate closest to 90%. It then builds the final
+band at that ratio. Two things to keep in mind:
+
+- **α = 0.10 here, against the sweep's 0.05**, so the final bands are 90%
+  bands and are judged against 0.90 (dashed lines). Compare the *picks* with
+  the sweep's best ratio, not the coverage levels.
+- **The calibration cannot see bias.** Its target is the estimate itself. At
+  ρ = 0.5 the prognostic function tracks τ, which is where bias would grow, so
+  the gap between the calibration's own coverage (`plugin coverage`) and the
+  true-τ coverage is the thing to watch.
+
+The distribution of the pick:
+
+```{r sf-pick-plot, eval=has_sf, fig.height=8}
+sf_runs %>%
+  mutate(pick = factor(optimal_sf, levels = seq(0.05, 0.5, 0.05))) %>%
+  ggplot(aes(x = pick, fill = rho_lab)) +
+  geom_bar(position = position_dodge(preserve = "single")) +
+  scale_x_discrete(drop = FALSE) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  facet_grid(rows = vars(scenario), cols = vars(n),
+             labeller = labeller(n = function(x) paste("n =", x))) +
+  ci_theme() +
+  labs(title = "Calibrated CI_sf per run", x = "Chosen subsampling ratio",
+       y = "Runs", fill = "ρ")
+```
+
+```{r sf-pick-diff, eval=has_sf, fig.height=4}
+diff_plot(paired_diff(sf_runs, "optimal_sf", by = c("scenario", "n")),
+          "Paired change in the calibrated CI_sf", "Δ CI_sf (ρ = 0.5 − ρ = 0)",
+          x = "n", colour = "scenario", facet = facet_null(), xlab = "Sample size",
+          colour_lab = "Scenario")
+```
+
+The final band's true-τ coverage, per unit and on the query grid:
+
+```{r sf-coverage-plot, eval=has_sf, fig.height=8}
+sf_summary <- summarise_ci(sf, c("rho", "rho_lab", "scenario", "n", "interval")) %>%
+  left_join(sf %>%
+              group_by(rho, scenario, n, interval) %>%
+              summarise(mean_pick = mean(optimal_sf),
+                        mean_plugin_cov = mean(plugin_coverage, na.rm = TRUE),
+                        mean_be_simul_cov = mean(be_simultaneous_coverage, na.rm = TRUE),
+                        mcse_be_simul_cov = sqrt(mean_be_simul_cov * (1 - mean_be_simul_cov) /
+                                                   sum(!is.na(be_simultaneous_coverage))),
+                        .groups = "drop"),
+            by = c("rho", "scenario", "n", "interval"))
+
+sf_summary %>%
+  with_ci("mean_simul_cov", "mcse_simul_cov") %>%
+  ggplot(aes(x = n, y = est, colour = rho_lab, ymin = lo, ymax = hi)) +
+  geom_hline(yintercept = 0.90, linetype = "dashed") +
+  geom_point(position = position_dodge(width = 0.4), size = 2) +
+  geom_errorbar(position = position_dodge(width = 0.4), linewidth = 0.3, width = 0.2) +
+  facet_grid(rows = vars(scenario), cols = vars(interval)) +
+  ci_theme() +
+  labs(title = "Simultaneous coverage of the true CATE at the calibrated CI_sf",
+       y = "Simultaneous coverage", x = "Sample size", colour = "ρ")
+```
+
+```{r sf-coverage-diff, eval=has_sf, fig.height=6}
+sf_diff_facet <- facet_grid(rows = vars(scenario), cols = vars(interval), scales = "free_y")
+diff_plot(paired_diff(sf, "simultaneous_coverage", by = c("scenario", "n", "interval")),
+          "Paired change in simultaneous coverage at the calibrated CI_sf",
+          "Δ simultaneous coverage (ρ = 0.5 − ρ = 0)", x = "n", colour = "interval",
+          facet = sf_diff_facet, xlab = "Sample size", colour_lab = "Interval kind")
+diff_plot(paired_diff(sf, "marginal_coverage", by = c("scenario", "n", "interval")),
+          "Paired change in marginal coverage at the calibrated CI_sf",
+          "Δ marginal coverage (ρ = 0.5 − ρ = 0)", x = "n", colour = "interval",
+          facet = sf_diff_facet, xlab = "Sample size", colour_lab = "Interval kind")
+```
+
+```{r sf-coverage-table, eval=has_sf}
+kable(sf_summary %>%
+        select(scenario, n, rho, interval, mean_pick, mean_plugin_cov, mean_marg_cov,
+               mean_simul_cov, mcse_simul_cov, mean_be_simul_cov, mcse_be_simul_cov,
+               mean_ci_len) %>%
+        arrange(scenario, n, interval, rho),
+      digits = 3,
+      col.names = c("Scenario", "n", "ρ", "Interval", "Mean CI_sf picked",
+                    "Plug-in coverage (calibration)", "Marginal coverage",
+                    "Simultaneous coverage", "MCSE (simul.)",
+                    "BE simultaneous coverage", "MCSE (BE simul.)", "Mean CI length"))
+```
+
+The pick against the sweep's best ratio for `dr_random_forest`. The sweep's
+best is for a 95% band, the pick for a 90% one, so agreement is not expected
+to be exact. What matters is whether the two move the same way with ρ.
+
+```{r sf-vs-sweep, eval=has_sf}
+pick_summary <- sf_runs %>%
+  group_by(rho, scenario, n) %>%
+  summarise(mean_pick = mean(optimal_sf),
+            median_pick = median(optimal_sf),
+            modal_pick = as.numeric(names(which.max(table(optimal_sf)))),
+            .groups = "drop")
+
+sweep_best <- best_sf %>%
+  filter(model == model_labels[["dr_random_forest"]]) %>%
+  transmute(rho, scenario, n, best_sweep_sf = as.numeric(as.character(CI_sf)),
+            sweep_simul_cov = mean_simul_cov)
+
+kable(left_join(pick_summary, sweep_best, by = c("rho", "scenario", "n")) %>%
+        select(scenario, n, rho, everything()) %>%
+        arrange(scenario, n, rho),
+      digits = 3,
+      col.names = c("Scenario", "n", "ρ", "Mean pick", "Median pick", "Modal pick",
+                    "Sweep's best CI_sf", "Sweep simul. coverage there"))
+```
+

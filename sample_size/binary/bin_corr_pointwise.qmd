@@ -41,7 +41,7 @@ source(here("R", "figures.R"))
 
 ## What this shows
 
-`bin_corr_results.qmd` summarises each run by one number per metric. This
+`corr_outcome_results.qmd` summarises each run by one number per metric. This
 report takes a single run (run **`r params$run`**, ρ = **`r params$rho`**) in
 every scenario × sample size cell and plots every estimator's CATE unit by
 unit, against the truth, across the trial population.
@@ -73,7 +73,7 @@ RUN <- as.integer(params$run)
 SCENARIOS <- 1:4
 N_LEVELS <- c(100, 250, 500, 1000)
 
-# as bin_corr_results.qmd, so the reports read side by side
+# as corr_outcome_results.qmd, so the reports read side by side
 scenario_labels <- c(
   `1` = "1: No HTE",
   `2` = "2: Continuous HTE",
@@ -83,7 +83,7 @@ scenario_labels <- c(
 
 # named, so a figure with a subset of models (the pseudo-outcomes) keeps each
 # model's colour; in MODEL_LABELS order, which is the order drf_scale() gives
-# them in bin_corr_results.qmd
+# them in corr_outcome_results.qmd
 MODEL_ORDER <- c("dr_oracle", "dr_semi_oracle", "dr_random_forest",
                  "dr_superlearner", "causal_forest", "t_random_forest",
                  "t_superlearner")
@@ -190,7 +190,7 @@ truth_layer <- function(df) {
 ## This run's metrics
 
 `R/metrics.R::cate_metrics()` on the run shown, i.e. the numbers
-`bin_corr_results.qmd` averages. Where `bin_corr_metrics.RDS` is in the
+`corr_outcome_results.qmd` averages. Where `bin_corr_metrics.RDS` is in the
 results folder, *MSE percentile* places this run's MSE among all runs of its
 cell for that model (50 = a typical run, high = a bad one).
 

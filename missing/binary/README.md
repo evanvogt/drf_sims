@@ -8,7 +8,7 @@ See `missing/README.md` for the mechanisms and handling methods.
 |---|---|
 | array | **12,600 jobs**: `bin_miss_1.sh` (1–9900, scenarios 1, 3, 4, 5) and `bin_miss_extra.sh` (9901–12600, scenario 2) |
 | results | `../results/missing/binary/scenario_<k>/<n>/<type>/<prop>/<mechanism>/<method>/` |
-| figures | `bin_miss_results.R` / `.qmd` — every metric, to `results/all_figures/`; the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_bin.R` |
+| figures | `../miss_results.R` / `.qmd` (`outcome = binary`) — every metric, to `results/all_figures/`; the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_bin.R` |
 
 ## The DGM
 
@@ -106,6 +106,6 @@ Every model's HTE tests are written by the simulation itself
 Then, for the figures:
 
 ```bash
-Rscript missing/binary/bin_miss_results.R           # every metric, to results/all_figures/
-quarto render missing/binary/bin_miss_results.qmd   # the same, as a browsable report
+Rscript missing/miss_results.R binary              # every metric, to results/all_figures/
+quarto render missing/miss_results.qmd -P outcome:binary --output bin_miss_results.html
 ```

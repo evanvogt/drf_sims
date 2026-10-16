@@ -20,7 +20,7 @@
 # The differences: run r at rho = 0 and at rho = 0.5 shares its random draws
 # (sample_size/README.md, "Pairing"), so each metric is
 # differenced per run (paired_rho_diff() in R/figures.R) and its MCSE is
-# sd(diff) / sqrt(pairs), as in sample_size/*/*_corr_results.qmd's
+# sd(diff) / sqrt(pairs), as in sample_size/corr_outcome_results.qmd's
 # paired_diff(). Runs missing at either rho drop out of the pairs. Pearson
 # and sign accuracy get a third decimal there: their differences are
 # hundredths.

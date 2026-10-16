@@ -40,7 +40,7 @@ the plan knows nothing about it, and so it costs the most power.
 | `cts_miss_dgms.R` | names the `continuous_missing` scenario set + the missingness machinery |
 | `cts_miss_models.R` | `family = gaussian()`, `profile = "missing"`, `ipw` threaded through |
 | `cts_miss_analysis.R` | array entry point |
-| `cts_miss_results.R` / `.qmd` | every metric, to `results/all_figures/` — the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts.R` |
+| `../miss_results.R` / `.qmd` | shared with `binary/`: every metric, to `results/all_figures/` — the diagnostic counterpart to the chapter script `results_processing/thesis_figures/miss_cts.R` |
 
 The `ipw` argument is the only thing separating this study's estimators from
 `sample_size/continuous/`: it becomes grf `sample.weights` and SuperLearner
@@ -90,8 +90,8 @@ qsub missing/continuous/jobscripts/cts_miss_metrics.sh
 Then, for the figures:
 
 ```bash
-Rscript missing/continuous/cts_miss_results.R           # every metric, to results/all_figures/
-quarto render missing/continuous/cts_miss_results.qmd   # the same, as a browsable report
+Rscript missing/miss_results.R continuous         # every metric, to results/all_figures/
+quarto render missing/miss_results.qmd -P outcome:continuous --output cts_miss_results.html
 ```
 
 To run only some methods, take e.g. `grid_indices(study, method = "complete_data")`

@@ -5,7 +5,7 @@
 # at rho = 0.5: three CATE estimators fit on the first `interim_prop` of a
 # trial of 1000, and what they find there tested on the rest. The exploratory,
 # one-scenario-per-render version of these figures is
-# validation/continuous/cts_val_results.qmd. HC3 standard errors throughout.
+# validation/val_results.qmd. HC3 standard errors throughout.
 #
 # Every figure has stage 1's share of the trial on x and the scenarios across,
 # and shows the mean over runs with a 95% Monte Carlo ribbon (binomial MCSE for
