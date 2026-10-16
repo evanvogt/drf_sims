@@ -136,6 +136,12 @@ so `git push` on the HPC + `git pull` locally is how progress gets checked
 from off the cluster. The registry of studies it scans lives in
 `R/study_registry.R` - add a row there for any new study.
 
+On 2026-10-16, with the campaign over, the registry was cut to `study_name` and
+`config_path` (the `category`, `reason` and `blocked` columns went), `check_all.R`
+was cut to printing its table, and the committed snapshots
+(`check_all_studies.*`, `collect_metrics_status.csv`) and
+`collect_all_metrics.R`, which nothing read, were deleted.
+
 ## Resource profiling (removed)
 
 Profiling with the [`syrup`](https://simonpcouch.github.io/syrup/) package is

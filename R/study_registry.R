@@ -1,34 +1,10 @@
 ##########
-# title: registry of every simulation study, for the unified rerun checker
+# title: registry of every simulation study
 ##########
-# One row per study. Sourced only by check_all.R (repo root) - none of the
-# per-study *_check.R / *_collect.R / *_metrics.R scripts need this, so
-# adding or removing a study here can never affect the existing per-study
-# rerun workflow.
-#
-# category is one of:
-#   crossfit_rerun - needs resubmitting because of the crossfitting strategy
-#                     change, possibly plus a study-specific bug fix (see
-#                     `reason`)
-#   dgm_rerun       - needs resubmitting because the DGM changed under it
-#                     (bug O, 2026-09-26); the results it had are archived
-#                     by R/archive_old_results.R
-#   first_run       - never successfully run before; not a rerun
-#   no_rerun        - already fine as-is; own arms/results are unaffected
-#   broken          - currently fails to run; excluded from the filesystem
-#                     scan (blocked = TRUE). No study is in this state right
-#                     now - it's a mechanism kept for the next one that is.
-#
-# config_path is relative to the repo root (resolved with here::here()).
-# config_var is the name study_config() is assigned to in that file - every
-# current config uses "study", but the column exists so a future config that
-# doesn't can still be added without changing check_all.R.
-#
-# To add a new study: add one row. To retire a study: delete its row.
-# Retired 2026-10-06: the independent-covariate sample-size studies
-# (sample_size/continuous, binary, and confidence_intervals/{continuous,
-# binary, optimal_sf}); code at tag independent-ss-final, results archived
-# under results/_archive/retired_2026-10/.
+# One row per study: a display name and its config file, relative to the repo
+# root. Sourced by check_all.R, tests/run_tests.R (jobscript ranges against
+# each grid) and R/archive_old_results.R. To add a study, add a row; to retire
+# one, delete it.
 
 study_registry <- data.frame(
   study_name  = c(
@@ -68,50 +44,6 @@ study_registry <- data.frame(
     "validation/binary/bin_val_config.R",
     "competing_risk/snr/snr_config.R",
     "sample_size/snr/bin_snr_config.R"
-  ),
-  config_var = "study",
-  category = c(
-    "dgm_rerun",
-    "dgm_rerun",
-    "dgm_rerun",
-    "crossfit_rerun",
-    "crossfit_rerun",
-    "crossfit_rerun",
-    "dgm_rerun",
-    "crossfit_rerun",
-    "first_run",
-    "first_run",
-    "first_run",
-    "first_run",
-    "first_run",
-    "first_run",
-    "first_run",
-    "first_run",
-    "first_run"
-  ),
-  reason = c(
-    "2026-10-10 (the committed tracker predates it): get_ipw() post-horizon drop fixed (IPW arms), X4/X5 now kept as noise covariates (10 covariates), three semi-oracle DR arms added - every earlier result is stale, so archive them first (Rscript R/archive_old_results.R --label pre_2026-10-10 --trees competing_risk) and re-run all 14,000 rows. Earlier: crossfitting strategy change - the last production study still double-crossfitting; now runs clean end-to-end, so this is its first run under the new strategy; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models",
-    "own comparison arms unchanged by the crossfitting change, but bug O changed the continuous DGM it runs on, and the 2026-09-26 renumbering its scenario ids (1/4/6/9 -> 1/4/6/8); old results archived; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only",
-    "pilot study, not part of the production rerun; re-run because bug O changed the continuous DGM and the 2026-09-26 renumbering its scenario ids (1/6/9 -> 1/4/8); old results archived",
-    "crossfitting strategy change; also bug F (dr_superlearner); plus bug O (continuous DGM) - all 12,600 rows re-run; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 missing-data redesign - correlated covariates (X01-X03 auxiliary) and mechanisms MAR / MNAR-Y0 / MNAR-tau (missing/ADEMP.md)",
-    "crossfitting strategy change; also the DGM was wrong three ways; plus scenario 2 (added later; was numbered 6 before the 2026-09-26 renumbering), rows 9901-12600; plus bug N (MNAR-Y truth), repaired at metrics time - no re-run; plus bug P and the risk-difference DGM - all 12,600 rows re-run, which also makes bug N moot; plus bug Q and the per-nuisance SuperLearner libraries (R/sl_library.R) - SuperLearner arms only; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 missing-data redesign - correlated covariates (X01-X03 auxiliary) and mechanisms MAR / MNAR-Y0 / MNAR-tau (missing/ADEMP.md)",
-    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models; plus the 2026-09-28 correlated covariates of continuous_missing (missing/ADEMP.md); plus the 2026-10-11 hybrid-band fix in combine_mi_ci() (R/bootstrap_ci.R) - the saved bands are final, so all 400 rows re-run",
-    "its 358/360 runs (the first under single crossfitting, me_models.R) predate bug O, which changed the continuous DGM, and the 2026-09-26 renumbering (1/4/6/9 -> 1/4/6/8); archived with the strategies and split trees, so the count restarts from zero; plus, since 2026-10-08, correlated covariates - continuous_corr_0.5 only (sample_size/README.md), results under results/correlated/",
-    "crossfitting strategy change; plus T-learner (per-arm) DR outcome models; plus the 2026-10-11 redesign - scenarios 2-4 (was scenario 2 only), rho = 0.5 correlated covariates, data-driven top-covariate tests and HC3 interaction tests: the grid is 3,300 rows (was 1,100) and nothing earlier is comparable; plus the 2026-10-12 null scenario 1 (4,400 rows, grid reordered) and interaction estimates saved with every test - archive the whole tree first (validation/continuous/README.md, Running it)",
-    "new 2026-10-01: continuous/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/README.md)",
-    "new 2026-10-01: binary/'s scenarios 1-4 with correlated covariates (copula, X01-X03 correlated too), at rho = 0 (the paired independent arm) and rho = 0.5, 500 runs (sample_size/README.md)",
-    "new 2026-10-04: confidence_intervals/continuous/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/README.md)",
-    "new 2026-10-04: confidence_intervals/binary/'s full CI_sf sweep on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/README.md)",
-    "new 2026-10-04: confidence_intervals/optimal_sf (cts) on correlated/'s scenarios 1-4, rho = 0 and 0.5, n 500/1000, 100 runs (sample_size/README.md)",
-    "new 2026-10-04: competing_risk/'s event 1 without event 2 - pseudo-value CF / DR / T, SuperLearner DR / T, RSF DR / T and the causal survival forest on the RMST, scenarios 1-3 (null, constant, heterogeneous), censoring on/off, 500 runs (competing_risk/single_event/README.md)",
-    "new 2026-10-08: the interim-analysis validation study with a binary outcome (risk-difference scale, binary_corr_0.5), scenarios 1-4 (the null added 2026-10-12, with interaction estimates saved with every test: 4,400 rows, archive the whole tree first), one trial of 1000 split at eleven interim points, 100 runs (validation/binary/README.md)",
-    "new 2026-10-15: competing_risk/'s scenario 7 (rho = 0.5, censoring on) with the X3 effect x1/1.5/2/3 at n = 500 and n = 1000/2000/4000 at x1, one factor at a time; pseudo-value CF, the two production DR-learners and their semi-oracle twins only; 700 rows, 100 runs (competing_risk/snr/README.md)",
-    "new 2026-10-15: correlated/binary's scenarios 1-4 at rho = 0.5 (the binary_snr set: treated risk clamped to [0.01, 0.99], bW calibrated at n = 500 in every cell) with the effect modifiers x1/1.5/2/3 at n = 500 and n = 1000/2000/4000 at x1, one factor at a time; causal forest, DR random forest, DR semi-oracle and DR oracle only, no SuperLearner; 2,500 rows, 100 runs (sample_size/snr/README.md)"
-  ),
-  blocked = c(
-    FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE, FALSE,
-    FALSE, FALSE, FALSE, FALSE
   ),
   stringsAsFactors = FALSE
 )

@@ -99,7 +99,7 @@ check("only binary_snr clamps its risks",
 cat("\nJobscripts: -J ranges cover the grid exactly\n")
 for (i in seq_len(nrow(study_registry))) {
   reg <- study_registry[i, ]
-  s <- load_study(reg$config_path, reg$config_var)
+  s <- load_study(reg$config_path)
   dir <- file.path(dirname(s$failed_file))
   scripts <- list.files(dir, pattern = paste0("^", s$prefix, "_(\\d+|extra)\\.sh$"),
                         full.names = TRUE)

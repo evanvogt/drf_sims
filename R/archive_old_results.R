@@ -47,7 +47,7 @@
 # and the three under sample_size/confidence_intervals/), which were first run
 # after 2026-09-26 so have nothing old to archive (and archiving them would tar
 # new results), and anything no study config names -
-# the figure directories, and ../collected_metrics/, which is outside results/.
+# the figure directories.
 #
 # Safe to re-run: a tree whose .tar already exists is skipped, and every
 # archived tree adds a row to _archive/pre_2026-09-26/MANIFEST.csv.
@@ -116,12 +116,12 @@ if (!is.null(explicit_trees)) {
   trees <- data.frame(study = explicit_trees, rel = explicit_trees)
 } else {
   studies <- study_registry[!study_registry$study_name %in% UNAFFECTED, ]
-  configs <- studies[, c("study_name", "config_path", "config_var")]
+  configs <- studies[, c("study_name", "config_path")]
 
   # every config builds its res_path as file.path(dirname(here()), "results", ...);
   # the part after that is the tree's path inside results_root
   rel_paths <- vapply(seq_len(nrow(configs)), function(i) {
-    res_path <- load_study(configs$config_path[i], configs$config_var[i])$res_path
+    res_path <- load_study(configs$config_path[i])$res_path
     prefix <- paste0(default_root, "/")
     if (!startsWith(res_path, prefix)) {
       stop(configs$study_name[i], "'s res_path is not under ", default_root, ": ",

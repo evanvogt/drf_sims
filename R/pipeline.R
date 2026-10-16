@@ -45,13 +45,12 @@ study_config <- function(name, prefix, res_path, grid, path_cols, n_sims = 100,
 #'
 #' Sourcing several config files in one script run can't leak variables
 #' between them this way (some configs define extra top-level constants
-#' alongside `study`). Shared by check_all.R and collect_all_metrics.R, which
-#' both need to iterate every study in R/study_registry.R.
+#' alongside `study`). Used by everything that iterates R/study_registry.R.
 #'
 #' @param config_path path to the config file, relative to the repo root
 #'   (resolved with here::here())
 #' @param config_var name study_config() is assigned to in that file
-load_study <- function(config_path, config_var) {
+load_study <- function(config_path, config_var = "study") {
   env <- new.env()
   source(here::here(config_path), local = env)
   if (!exists(config_var, envir = env, inherits = FALSE)) {
