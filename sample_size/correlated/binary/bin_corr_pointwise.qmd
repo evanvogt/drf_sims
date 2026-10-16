@@ -1,0 +1,344 @@
+---
+title: "Correlated binary outcome study: one run, unit by unit"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+params:
+  res_path: ""
+  rho: 0.5
+  run: 1
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+<!--
+Reads one run's res_sim_<run>.RDS from each scenario x n cell (bin_corr_analysis.R
+output), not bin_corr_all.RDS, plus bin_corr_metrics.RDS if it is there. From
+sample_size/correlated/binary/:
+  quarto render bin_corr_pointwise.qmd
+Another run, rho or results folder:
+  quarto render bin_corr_pointwise.qmd -P run:7 -P rho:0 -P res_path:<dir>
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 9)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggplot2)
+library(here)
+library(knitr)
+source(here("sample_size", "correlated", "binary", "bin_corr_config.R"))
+source(here("R", "metrics.R"))
+source(here("R", "figures.R"))
+```
+
+## What this shows
+
+`bin_corr_results.qmd` summarises each run by one number per metric. This
+report takes a single run (run **`r params$run`**, ρ = **`r params$rho`**) in
+every scenario × sample size cell and plots every estimator's CATE unit by
+unit, against the truth, across the trial population.
+
+| Scenario | true CATE $\tau(x)$, a risk difference |
+|---|---|
+| 1: No HTE | $b_W$ |
+| 2: Continuous HTE | $b_W + b_4 \tanh(X_4)$ |
+| 3: Two vars + cts x cts | $b_W + b_3 X_3 + b_4 \tanh(X_4) + b_{45} \tanh(X_4) \tanh(X_5)$ |
+| 4: Cosine HTE | $b_W + b_4 \cos(X_4)$ |
+
+with control risk $m_0(x) = 0.34 + 0.36\,\mathrm{plogis}(b_0 + b_1 X_1 + b_2 X_2)$.
+X4 drives the heterogeneity in scenarios 2–4, so it is the x axis throughout.
+At ρ = 0.5 the prognostic X1, X2 are correlated with X3–X5, so the control
+risk moves with the effect modifiers; the bias is also plotted against it.
+
+A run is seeded by its run index alone, so at a given n the four scenarios
+share W and the covariates: the differences down a column of panels are the
+DGM, not the draw. Across n they are different datasets. The estimates are the
+ones the metrics score: in-sample on the trial's own units (out-of-bag for the
+forests, cross-fitted for the SuperLearner nuisances). The T-learners are
+recovered from the DR learners' saved stage 1 (`R/metrics.R::t_learner_tau()`).
+
+```{r data}
+if (nzchar(params$res_path)) study$res_path <- params$res_path
+RHO <- as.numeric(params$rho)
+RUN <- as.integer(params$run)
+
+SCENARIOS <- 1:4
+N_LEVELS <- c(100, 250, 500, 1000)
+
+# as bin_corr_results.qmd, so the reports read side by side
+scenario_labels <- c(
+  `1` = "1: No HTE",
+  `2` = "2: Continuous HTE",
+  `3` = "3: Two vars + cts x cts",
+  `4` = "4: Cosine HTE"
+)
+
+# named, so a figure with a subset of models (the pseudo-outcomes) keeps each
+# model's colour; in MODEL_LABELS order, which is the order drf_scale() gives
+# them in bin_corr_results.qmd
+MODEL_ORDER <- c("dr_oracle", "dr_semi_oracle", "dr_random_forest",
+                 "dr_superlearner", "causal_forest", "t_random_forest",
+                 "t_superlearner")
+MODEL_COLOURS <- setNames(
+  as.character(paletteer::paletteer_d("rcartocolor::Safe")[seq_along(MODEL_ORDER)]),
+  MODEL_LABELS[MODEL_ORDER]
+)
+
+# the DR learners' pseudo-outcomes: where each one's po is saved
+PO_SOURCES <- list(
+  dr_oracle = c("dr_oracle", "po"),
+  dr_semi_oracle = c("dr_semi_oracle", "po"),
+  dr_random_forest = c("nuisances_rf", "po"),
+  dr_superlearner = c("nuisances_sl", "po")
+)
+
+cells <- expand.grid(scenario = SCENARIOS, n = N_LEVELS)
+cells$file <- vapply(seq_len(nrow(cells)), function(i) {
+  file.path(combo_dir(study, list(rho = RHO, scenario = cells$scenario[i],
+                                  n = cells$n[i])),
+            paste0("res_sim_", RUN, ".RDS"))
+}, character(1))
+cells$found <- file.exists(cells$file)
+
+#' One run's per-unit estimates and pseudo-outcomes, in long form
+read_cell <- function(scenario, n, file) {
+  sim_res <- readRDS(file)
+  d <- sim_res$data
+  units <- tibble(scenario = scenario, n = n, unit = seq_len(nrow(d)),
+                  W = d$W, Y = d$Y, X1 = d$X1, X2 = d$X2, X3 = d$X3,
+                  X4 = d$X4, X5 = d$X5, p0 = sim_res$truth$p0,
+                  tau_true = sim_res$truth$tau)
+
+  taus <- lapply(intersect(names(sim_res), CATE_MODELS),
+                 function(m) sim_res[[m]]$tau)
+  names(taus) <- intersect(names(sim_res), CATE_MODELS)
+  t_src <- c(t_random_forest = "nuisances_rf", t_superlearner = "nuisances_sl")
+  for (m in names(t_src)) {
+    nuis <- sim_res[[t_src[[m]]]]
+    if (!is.null(nuis$po) && !is.null(nuis$Y.hat)) {
+      taus[[m]] <- t_learner_tau(nuis, d$Y, d$W)
+    }
+  }
+  est <- bind_rows(lapply(names(taus), function(m) {
+    mutate(units, model = m, tau_hat = taus[[m]])
+  }))
+
+  pos <- bind_rows(lapply(names(PO_SOURCES), function(m) {
+    po <- sim_res[[PO_SOURCES[[m]][1]]][[PO_SOURCES[[m]][2]]]
+    if (is.null(po) || is.null(taus[[m]])) return(NULL)
+    mutate(units, model = m, po = po, tau_hat = taus[[m]])
+  }))
+
+  list(est = est, po = pos)
+}
+
+loaded <- pmap(cells[cells$found, c("scenario", "n", "file")], read_cell)
+
+label_cells <- function(df) {
+  df %>%
+    mutate(model = factor(MODEL_LABELS[model], levels = MODEL_LABELS[MODEL_ORDER]),
+           scenario_lab = factor(scenario_labels[as.character(scenario)],
+                                 levels = scenario_labels),
+           n_lab = factor(paste("n =", n), levels = paste("n =", N_LEVELS))) %>%
+    droplevels()
+}
+
+est <- bind_rows(map(loaded, "est")) %>%
+  mutate(bias = tau_hat - tau_true) %>%
+  label_cells()
+po <- bind_rows(map(loaded, "po")) %>% label_cells()
+```
+
+```{r missing-cells, results="asis"}
+if (!all(cells$found)) {
+  miss <- cells[!cells$found, ]
+  cat("**Not found, left out:** ",
+      paste0("scenario ", miss$scenario, ", n = ", miss$n, collapse = "; "),
+      " (looked for `res_sim_", RUN, ".RDS` under `", study$res_path, "`).\n",
+      sep = "")
+}
+```
+
+```{r plot-helpers, include=FALSE}
+house_style <- function() {
+  list(scale_colour_manual(values = MODEL_COLOURS, drop = FALSE),
+       drf_theme(),
+       theme(legend.position = "bottom"))
+}
+
+# points are many (up to 1000 per panel), so faint
+PT_ALPHA <- 0.35
+
+# the truth as a black layer on top of a model's points. In scenarios 1, 2 and
+# 4 tau depends on X4 alone, so it draws as a curve; in scenario 3 it also
+# depends on X3 and X5, so it is a band
+truth_layer <- function(df) {
+  geom_point(data = distinct(df, scenario_lab, n_lab, unit, X4, tau_true),
+             aes(x = X4, y = tau_true), colour = "black", size = 0.5,
+             inherit.aes = FALSE)
+}
+```
+
+## This run's metrics
+
+`R/metrics.R::cate_metrics()` on the run shown, i.e. the numbers
+`bin_corr_results.qmd` averages. Where `bin_corr_metrics.RDS` is in the
+results folder, *MSE percentile* places this run's MSE among all runs of its
+cell for that model (50 = a typical run, high = a bad one).
+
+```{r run-metrics}
+run_metrics <- est %>%
+  group_by(scenario, scenario_lab, n, model) %>%
+  summarise(cate_metrics(tau_hat, tau_true, first(scenario)), .groups = "drop")
+
+metrics_file <- file.path(study$res_path, "bin_corr_metrics.RDS")
+if (file.exists(metrics_file)) {
+  all_mse <- readRDS(metrics_file) %>%
+    filter(rho == RHO, scenario %in% SCENARIOS) %>%
+    mutate(model = factor(MODEL_LABELS[model], levels = MODEL_LABELS[MODEL_ORDER])) %>%
+    select(scenario, n, model, run, mse)
+  pctile <- all_mse %>%
+    group_by(scenario, n, model) %>%
+    summarise(mse_pctile = if (RUN %in% run) {
+      100 * mean(mse <= mse[run == RUN], na.rm = TRUE)
+    } else NA_real_, .groups = "drop")
+  run_metrics <- left_join(run_metrics, pctile, by = c("scenario", "n", "model"))
+} else {
+  run_metrics$mse_pctile <- NA_real_
+}
+
+run_metrics %>%
+  arrange(scenario, n, mse) %>%
+  select(scenario_lab, n, model, bias, ate_bias, rmse, corr, sign_acc, mse_pctile) %>%
+  kable(digits = 3,
+        col.names = c("Scenario", "n", "Model", "Bias", "ATE bias", "RMSE",
+                      "Correlation", "Sign accuracy", "MSE percentile"))
+```
+
+## Estimated CATE across the population
+
+Each model's estimates (coloured) against X4, with the true CATE in black and
+0 dashed. One y scale per scenario, so the models and sample sizes compare
+directly. In scenario 3 the truth also depends on X3 and X5, so it is a band
+rather than a curve.
+
+```{r cate-x4, results="asis", fig.height=14}
+for (s in levels(est$scenario_lab)) {
+  df <- filter(est, scenario_lab == s)
+  cat("\n\n### ", s, "\n\n", sep = "")
+  p <- ggplot(df, aes(x = X4, y = tau_hat, colour = model)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(alpha = PT_ALPHA, size = 0.8) +
+    truth_layer(df) +
+    facet_grid(rows = vars(model), cols = vars(n_lab)) +
+    house_style() +
+    theme(legend.position = "none") +
+    labs(title = paste0("Estimated CATE, ", s, " (run ", RUN, ", ρ = ", RHO, ")"),
+         x = "X4", y = "CATE (risk difference)")
+  print(p)
+}
+```
+
+## Estimated against true CATE
+
+Scenarios 2–4; the dashed line is estimate = truth. Scenario 1's truth is a
+single value, so its spread is all in the panels above. A cloud flatter than
+the diagonal is shrinkage towards the ATE; one shifted off it is bias in the
+ATE.
+
+```{r cate-vs-true, results="asis", fig.height=14}
+for (s in setdiff(levels(est$scenario_lab), scenario_labels[["1"]])) {
+  df <- filter(est, scenario_lab == s)
+  cat("\n\n### ", s, "\n\n", sep = "")
+  p <- ggplot(df, aes(x = tau_true, y = tau_hat, colour = model)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    geom_point(alpha = PT_ALPHA, size = 0.8) +
+    facet_grid(rows = vars(model), cols = vars(n_lab)) +
+    house_style() +
+    theme(legend.position = "none") +
+    labs(title = paste0("Estimated vs true CATE, ", s),
+         x = "True CATE", y = "Estimated CATE")
+  print(p)
+}
+```
+
+## Pointwise bias across the population
+
+Unit bias (estimate − truth) with a loess smooth per model, all models in one
+panel per cell, so where in the population each one goes wrong reads off
+together. Points are left out here; the smooth is the systematic part, and the
+spread around it is in the next section.
+
+```{r bias-x4, fig.height=11}
+ggplot(est, aes(x = X4, y = bias, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE, linewidth = 0.7) +
+  facet_grid(rows = vars(scenario_lab), cols = vars(n_lab), scales = "free_y") +
+  house_style() +
+  labs(title = "Smoothed pointwise bias against X4", x = "X4",
+       y = "Bias (estimate − truth)", colour = "Model")
+```
+
+Against the control risk $m_0(x)$ instead: estimates pulled towards the
+prognosis, rather than the effect modifiers, show up here.
+
+```{r bias-p0, fig.height=11}
+ggplot(est, aes(x = p0, y = bias, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE, linewidth = 0.7) +
+  facet_grid(rows = vars(scenario_lab), cols = vars(n_lab), scales = "free_y") +
+  house_style() +
+  labs(title = "Smoothed pointwise bias against the control risk",
+       x = "Control risk m0(x)", y = "Bias (estimate − truth)", colour = "Model")
+```
+
+## Distribution of pointwise bias
+
+The spread of the unit biases within the run, per model. A box off 0 is
+ATE-level bias; a tall box is unit-level error the run's mean bias hides.
+
+```{r bias-box, fig.height=11}
+ggplot(est, aes(x = n_lab, y = bias, colour = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.size = 0.4) +
+  facet_wrap(~scenario_lab, ncol = 1, scales = "free_y") +
+  house_style() +
+  labs(title = "Unit bias within the run", x = "Sample size",
+       y = "Bias (estimate − truth)", colour = "Model")
+```
+
+## DR pseudo-outcomes
+
+What the DR learners' second stage regresses on X: the pseudo-outcome (faint
+points), the resulting DR estimate (coloured) and the true CATE (black). With a
+binary Y and W.hat near 0.5 the residual term (Y − Ŷ)(W − Ŵ) / (Ŵ(1 − Ŵ)) puts
+each pseudo-outcome of order ±1 from the truth, against an HTE of a few
+hundredths, so the second stage is smoothing a very noisy target. The y axis is cut to the central 98% of the pseudo-outcomes.
+
+```{r pseudo-outcomes, results="asis", fig.height=10}
+for (s in levels(po$scenario_lab)) {
+  df <- filter(po, scenario_lab == s)
+  lims <- quantile(df$po, c(0.01, 0.99), na.rm = TRUE)
+  cat("\n\n### ", s, "\n\n", sep = "")
+  p <- ggplot(df, aes(x = X4)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(aes(y = po), colour = "grey60", alpha = 0.25, size = 0.6) +
+    geom_point(aes(y = tau_hat, colour = model), size = 0.8) +
+    truth_layer(df) +
+    facet_grid(rows = vars(model), cols = vars(n_lab)) +
+    coord_cartesian(ylim = lims) +
+    house_style() +
+    theme(legend.position = "none") +
+    labs(title = paste0("DR pseudo-outcomes and estimates, ", s),
+         x = "X4", y = "Pseudo-outcome / CATE")
+  print(p)
+}
+```
