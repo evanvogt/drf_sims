@@ -1,0 +1,362 @@
+---
+title: "Competing risks: signal-to-noise check"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+params:
+  res_path: ""
+  fig_dir: ""
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+<!--
+Reads snr_metrics.RDS and snr_ratios.RDS (snr_metrics.R). From competing_risk/snr/:
+  quarto render snr_results.qmd
+The params point it at another results / figure folder, e.g. for a mock run:
+  quarto render snr_results.qmd -P res_path:<dir> -P fig_dir:<dir>
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 11,
+  fig.height = 7
+)
+```
+
+```{r libraries, include=FALSE}
+library(here)
+library(knitr)
+source(here("R", "figures.R"))
+```
+
+## Does the DR-learner close the gap on the causal forest with more signal?
+
+In the main competing-risk study the DR-learners lose to the causal forest on
+pseudo-values almost everywhere. Every scenario × event cell there has
+SD(τ)/SD(noise) of at most 0.29 (`results_processing/thesis_figures/rel_eff_snr.R`).
+This check moves away from the baseline (scenario 7, ρ = 0.5, censoring on,
+n = 500) one factor at a time: a larger X3 effect (`hte_mult`, more signal at
+n = 500) and a larger n (more data at the baseline signal). 100 runs per cell.
+Full design in `README.md`.
+
+The four n = 500 cells of a run share W, X and U, so the `hte_mult` comparison
+is paired. The n cells are not. Every arm targets RMTL and is scored against
+`tau_RMTL1` / `tau_RMTL2`. The semi-oracle twins (`*_semi`) use their parent's
+outcome models with the true propensity 0.5.
+
+```{r data}
+res_path <- if (nzchar(params$res_path)) {
+  params$res_path
+} else {
+  file.path(dirname(here()), "results", "competing_risk_snr")
+}
+figdir <- if (nzchar(params$fig_dir)) {
+  params$fig_dir
+} else {
+  file.path(dirname(here()), "results", "all_figures", "competing_risk_snr")
+}
+dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
+
+metrics <- readRDS(file.path(res_path, "snr_metrics.RDS"))
+ratios <- readRDS(file.path(res_path, "snr_ratios.RDS"))
+
+CF_ARM <- "pseudo_cf_whole_oob"
+# display order; each semi-oracle twin shares its parent's colour
+ARMS <- c("pseudo_cf_whole_oob", "pseudo_dr_whole_oob",
+          "pseudo_dr_whole_oob_semi", "rsf_dr_oob", "rsf_dr_oob_semi")
+SEMI_PAIRS <- c(pseudo_dr_whole_oob = "pseudo_dr_whole_oob_semi",
+                rsf_dr_oob = "rsf_dr_oob_semi")
+ARM_BASE <- setNames(ARMS, ARMS)
+ARM_BASE[SEMI_PAIRS] <- names(SEMI_PAIRS)
+BASE_LABELS <- SURV_ARM_LABELS[c(CF_ARM, names(SEMI_PAIRS))]
+ARM_LABELS <- c(BASE_LABELS,
+                setNames(paste(BASE_LABELS[names(SEMI_PAIRS)], "(e = 0.5)"),
+                         SEMI_PAIRS))[ARMS]
+# named, so a figure without the CF keeps the DR arms' colours
+ARM_COLOURS <- setNames(
+  as.character(paletteer::paletteer_d("rcartocolor::Safe")[seq_along(BASE_LABELS)]),
+  BASE_LABELS
+)
+PROPENSITY_LABELS <- c("Estimated", "True (0.5)")
+
+# the design (README.md): population SNR at rho = 0.5, Event 1 / Event 2. The
+# n cells all sit at the baseline's SNR
+HTE_LEVELS <- c(1, 1.5, 2, 3)
+N_LEVELS <- c(500, 1000, 2000, 4000)
+SNR_E1 <- c(0.29, 0.43, 0.57, 0.79)
+SNR_E2 <- c(0.13, 0.17, 0.20, 0.23)
+
+# both factors go on one numeric x, hte_mult at 1-4 and n at 11-14, so a
+# single facet_grid() can show them side by side with free x and one y per row
+X_BREAKS <- c(seq_along(HTE_LEVELS), 10 + seq_along(N_LEVELS))
+X_LABELS <- c(sprintf("×%s\n%.2f / %.2f", HTE_LEVELS, SNR_E1, SNR_E2),
+              format(N_LEVELS, big.mark = ","))
+PANEL_LABELS <- c(
+  hte = "More signal: HTE multiplier at n = 500\n(SNR Event 1 / Event 2)",
+  n = "More data: n at HTE ×1"
+)
+Z <- qnorm(0.975)
+```
+
+```{r helpers}
+#' Put each row on the panel(s) it belongs to. The baseline (n = 500,
+#' hte_mult 1) is in both
+on_axes <- function(df) {
+  bind_rows(
+    df %>%
+      filter(n == 500) %>%
+      mutate(panel = "hte", pos = match(hte_mult, HTE_LEVELS)),
+    df %>%
+      filter(hte_mult == 1) %>%
+      mutate(panel = "n", pos = 10 + match(n, N_LEVELS))
+  ) %>%
+    mutate(panel = factor(PANEL_LABELS[panel], levels = PANEL_LABELS))
+}
+
+#' The arm's colour group, propensity and dodged x
+add_arm <- function(df, arms) {
+  k <- length(arms)
+  df %>%
+    mutate(
+      arm = factor(ARM_LABELS[framework], levels = ARM_LABELS[arms]),
+      base = factor(BASE_LABELS[ARM_BASE[framework]], levels = BASE_LABELS),
+      propensity = factor(
+        if_else(framework %in% SEMI_PAIRS, PROPENSITY_LABELS[2],
+                PROPENSITY_LABELS[1]),
+        levels = PROPENSITY_LABELS
+      ),
+      x = pos + (match(framework, arms) - (k + 1) / 2) * 0.7 / k
+    )
+}
+
+#' Estimate +/- interval per arm and cell, the hte_mult and n panels side by
+#' side, a row per event
+#'
+#' @param est n, hte_mult, target, framework, est, lo, hi
+#' @param runs optional n, hte_mult, target, framework, value: per-run points
+#'   drawn faintly behind the estimates
+#' @param yref a dashed reference line, NA for none
+snr_plot <- function(est, ylab, title, runs = NULL, yref = NA, log_y = FALSE) {
+  arms <- intersect(ARMS, unique(est$framework))
+  est <- est %>% on_axes() %>% add_arm(arms)
+  p <- ggplot(est, aes(x, est, colour = base, shape = propensity,
+                       linetype = propensity, group = arm))
+  if (!is.na(yref)) {
+    p <- p + geom_hline(yintercept = yref, linetype = "dashed",
+                        colour = "grey50")
+  }
+  if (!is.null(runs)) {
+    set.seed(1)
+    runs <- runs %>%
+      on_axes() %>%
+      add_arm(arms) %>%
+      mutate(x = x + runif(n(), -0.3, 0.3) * 0.7 / length(arms))
+    p <- p + geom_point(data = runs, aes(y = value), shape = 16, size = 0.4,
+                        alpha = 0.15, show.legend = FALSE)
+  }
+  p <- p +
+    geom_line(linewidth = 0.4) +
+    geom_linerange(aes(ymin = lo, ymax = hi), linewidth = 0.6,
+                   linetype = "solid") +
+    geom_point(size = 2, fill = "white", stroke = 0.8) +
+    facet_grid(target ~ panel, scales = "free", space = "free_x") +
+    scale_x_continuous(breaks = X_BREAKS, labels = X_LABELS,
+                       expand = expansion(add = 0.4)) +
+    scale_colour_manual(values = ARM_COLOURS) +
+    scale_shape_manual(values = setNames(c(16, 21), PROPENSITY_LABELS)) +
+    scale_linetype_manual(values = setNames(c("solid", "dashed"),
+                                            PROPENSITY_LABELS)) +
+    drf_theme() +
+    theme(legend.position = "bottom", legend.box = "vertical",
+          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank()) +
+    labs(title = title, x = NULL, y = ylab, colour = "Arm",
+         shape = "Propensity", linetype = "Propensity")
+  if (log_y) p <- p + scale_y_log10()
+  # the paired differences carry production arms only
+  if (all(est$propensity == PROPENSITY_LABELS[1])) {
+    p <- p + guides(shape = "none", linetype = "none")
+  }
+  p
+}
+
+#' Mean +/- 95% CI (mean +/- z x MCSE) of one metric, per arm and cell
+metric_est <- function(df, col) {
+  df %>%
+    group_by(n, hte_mult, target, framework) %>%
+    summarise(
+      est = mean(.data[[col]], na.rm = TRUE),
+      mcse = sd(.data[[col]], na.rm = TRUE) / sqrt(sum(!is.na(.data[[col]]))),
+      .groups = "drop"
+    ) %>%
+    mutate(lo = est - Z * mcse, hi = est + Z * mcse)
+}
+
+#' One tab per spec, written from a results="asis" chunk. A spec is a list of
+#' tab, plot and optionally save (a file name in figdir)
+plot_tabs <- function(specs) {
+  cat("::: {.panel-tabset}\n\n")
+  for (s in specs) {
+    # knitr drops the newlines after a printed plot, so each cat() leads with
+    # blank lines or the next heading glues onto the image
+    cat("\n\n##", s$tab, "\n\n")
+    print(s$plot)
+    if (!is.null(s$save)) {
+      ggsave(s$save, plot = s$plot, path = figdir, height = 18, width = 28,
+             units = "cm")
+    }
+  }
+  cat("\n\n:::\n\n")
+}
+
+cell_order <- function(df) arrange(df, desc(n == 500), n, hte_mult)
+```
+
+## Results coverage
+
+The expected count is 100 runs per cell and arm. README route C (no treated
+unit left event-free at the horizon, so NA whole-sample pseudo-values) can cost
+about one run in the ×3 cell.
+
+```{r coverage}
+coverage <- metrics %>%
+  group_by(n, hte_mult, framework) %>%
+  summarise(runs = n_distinct(run), .groups = "drop") %>%
+  mutate(framework = factor(ARM_LABELS[framework], levels = ARM_LABELS)) %>%
+  pivot_wider(names_from = framework, values_from = runs, names_sort = TRUE) %>%
+  cell_order()
+kable(coverage, col.names = c("n", "HTE ×", names(coverage)[-(1:2)]))
+```
+
+```{r na-table}
+na_table <- metrics %>%
+  group_by(n, hte_mult, target, framework) %>%
+  summarise(runs_with_na = sum(n_na > 0, na.rm = TRUE),
+            total_na = sum(n_na, na.rm = TRUE), .groups = "drop") %>%
+  filter(total_na > 0) %>%
+  mutate(framework = ARM_LABELS[framework]) %>%
+  cell_order()
+if (nrow(na_table) > 0) {
+  kable(na_table, col.names = c("n", "HTE ×", "Event", "Arm",
+                                "Runs with an NA estimate", "Total NA estimates"))
+} else {
+  cat("No missing CATE estimates in any collected run.")
+}
+```
+
+## RMSE ratio, DR / causal forest on PV
+
+This is the comparison the study exists for. Each faint point is one run's
+RMSE of a DR arm divided by the same run's RMSE of the causal forest on
+pseudo-values (`rel_eff_snr.R`'s ratio). Below 1 (dashed), DR did better. The
+larger point is the geometric mean, exp(mean log ratio), with a 95% CI from the
+MCSE of the mean log ratio. The y axis is on a log scale.
+
+```{r ratio-plot, fig.height=8}
+run_ratios <- metrics %>%
+  filter(framework != CF_ARM) %>%
+  select(n, hte_mult, run, target, framework, rmse) %>%
+  inner_join(
+    metrics %>%
+      filter(framework == CF_ARM) %>%
+      select(n, hte_mult, run, target, rmse_cf = rmse),
+    by = c("n", "hte_mult", "run", "target")
+  ) %>%
+  mutate(value = rmse / rmse_cf) %>%
+  filter(is.finite(value), value > 0)
+
+p_ratio <- snr_plot(
+  ratios %>%
+    mutate(est = geo_mean,
+           lo = exp(log(geo_mean) - Z * mcse_log),
+           hi = exp(log(geo_mean) + Z * mcse_log)),
+  ylab = "RMSE ratio, DR / causal forest on PV",
+  title = "DR-learners against the causal forest on PV",
+  runs = run_ratios, yref = 1, log_y = TRUE
+)
+p_ratio
+ggsave("snr_ratio.png", plot = p_ratio, path = figdir, height = 18,
+       width = 28, units = "cm")
+```
+
+```{r ratio-table}
+ratios %>%
+  mutate(
+    framework = ARM_LABELS[framework],
+    median_iqr = sprintf("%.2f [%.2f, %.2f]", median, q25, q75),
+    geo_ci = sprintf("%.2f (%.2f, %.2f)", geo_mean,
+                     exp(log(geo_mean) - Z * mcse_log),
+                     exp(log(geo_mean) + Z * mcse_log))
+  ) %>%
+  select(target, framework, n, hte_mult, runs, median_iqr, geo_ci,
+         prop_dr_better) %>%
+  arrange(target, factor(framework, levels = ARM_LABELS), desc(n == 500), n,
+          hte_mult) %>%
+  kable(digits = 2,
+        col.names = c("Event", "Arm", "n", "HTE ×", "Runs",
+                      "Median [IQR]", "Geometric mean (95% CI)",
+                      "Share of runs DR better"))
+```
+
+## Absolute performance
+
+Mean ± 95% CI (1.96 × MCSE) for every arm, the causal forest included. τ
+itself grows with the HTE multiplier, so RMSE and bias are not comparable
+across the left panel's columns. The ratio above is the like-for-like
+comparison. Correlation and C-statistic are scale-free.
+
+```{r abs-plots, results="asis", fig.height=8}
+abs_specs <- list(
+  list(tab = "RMSE", col = "rmse", ylab = "Mean RMSE",
+       title = "RMSE of the CATE estimates", save = "snr_rmse.png"),
+  list(tab = "Bias", col = "bias", ylab = "Mean bias", yref = 0,
+       title = "Bias in the CATE estimates (estimate − truth)"),
+  list(tab = "Correlation", col = "corr", ylab = "Mean correlation",
+       title = "Correlation with the true CATE"),
+  list(tab = "C-statistic", col = "c_stat", ylab = "Mean C-statistic",
+       yref = 0.5, title = "C-statistic against the true CATE")
+)
+plot_tabs(lapply(abs_specs, function(s) {
+  list(
+    tab = s$tab, save = s$save,
+    plot = snr_plot(metric_est(metrics, s$col), ylab = s$ylab,
+                    title = s$title, yref = if (is.null(s$yref)) NA else s$yref)
+  )
+}))
+```
+
+## Cost of estimating the propensity
+
+These are paired per-run differences, production arm minus its semi-oracle
+twin, averaged with MCSE = sd(diff) / √pairs. A positive RMSE difference means
+estimating the propensity costs accuracy. A positive C-statistic difference
+means it helps.
+
+```{r semi-plots, results="asis", fig.height=8}
+paired_semi <- metrics %>%
+  filter(framework %in% c(names(SEMI_PAIRS), SEMI_PAIRS)) %>%
+  mutate(arm_type = if_else(framework %in% SEMI_PAIRS, "semi", "prod"),
+         framework = ARM_BASE[framework]) %>%
+  select(n, hte_mult, target, framework, run, arm_type, rmse, c_stat) %>%
+  pivot_wider(names_from = arm_type, values_from = c(rmse, c_stat)) %>%
+  mutate(rmse = rmse_prod - rmse_semi, c_stat = c_stat_prod - c_stat_semi)
+
+plot_tabs(list(
+  list(tab = "RMSE", save = "snr_semi_rmse.png",
+       plot = snr_plot(metric_est(paired_semi, "rmse"),
+                       ylab = "RMSE difference",
+                       title = "Paired difference in RMSE, estimated − true propensity",
+                       yref = 0)),
+  list(tab = "C-statistic",
+       plot = snr_plot(metric_est(paired_semi, "c_stat"),
+                       ylab = "C-statistic difference",
+                       title = "Paired difference in C-statistic, estimated − true propensity",
+                       yref = 0))
+))
+```
