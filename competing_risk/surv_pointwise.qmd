@@ -1,0 +1,374 @@
+---
+title: "Competing risks: one run, unit by unit"
+author: "Ellie Van Vogt"
+date: "`r Sys.Date()`"
+params:
+  res_path: ""
+  rho: 0.5
+  run: 1
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: true
+---
+
+<!--
+Reads one run's res_sim_<run>.RDS from each scenario x censoring cell
+(surv_analysis.R output), not surv_all.RDS, plus surv_metrics.RDS if it is
+there. From competing_risk/:
+  quarto render surv_pointwise.qmd
+Another run, rho or results folder:
+  quarto render surv_pointwise.qmd -P run:7 -P rho:0 -P res_path:<dir>
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                       fig.width = 11, fig.height = 9)
+```
+
+```{r libraries, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggplot2)
+library(here)
+library(knitr)
+source(here("competing_risk", "surv_config.R"))
+source(here("R", "metrics.R"))
+source(here("R", "figures.R"))
+```
+
+## What this shows
+
+`surv_results.qmd` summarises each run by one number per metric. This report
+takes a single run (run **`r params$run`**, ρ = **`r params$rho`**, n = 500) in
+every scenario × censoring cell and plots each estimator's CATE unit by unit,
+against the truth, across the trial population.
+
+| Scenario | Treatment effect |
+|---|---|
+| 1 | ATE on E1 only |
+| 2 | ATE on E2 only |
+| 3 | HTE on E1, no ATE on E2 |
+| 4 | HTE on E1, ATE on E2 |
+| 5 | HTE on E2, no ATE on E1 |
+| 6 | HTE on E2, ATE on E1 |
+| 7 | HTE on both |
+
+The treatment acts on the Weibull scales, with X3 (binary) the effect
+modifier; X1 (binary) and X2 (continuous) are prognostic. The true CATE
+depends on X1, X2 and X3 only, so it is plotted against X2, the one continuous
+covariate, where it draws as up to four curves (X1 × X3).
+
+**Arms.** Only each family's production fitting strategy
+(`R/figures.R::SURV_ARM_LABELS`, see `README.md`, "Crossfitting"), no
+semi-oracles.
+
+**One scale.** The arms target different estimands: IPW and CSF-cs the net
+(cause-specific) RMST difference, CSF-sh the subdistribution RMST difference,
+the pseudo-value arms the RMTL difference. Here the three RMST arms have their
+estimate *and* truth negated, so every panel reads as **time lost to the
+event** (positive = treatment makes the event take more of the 28 days). CSF-sh
+then targets exactly the RMTL difference; IPW and CSF-cs still target the net
+version, so their black truth differs from the other rows'. Each arm is scored
+against its own truth, and their bias is the negative of `surv_metrics.R`'s.
+
+A run is seeded by its run index alone, so all 14 cells share W and the
+covariates; the censoring pair and the scenarios differ in the outcome only.
+The estimates are the ones the metrics score: in-sample on the trial's own
+units (out-of-bag, or cross-fitted for the SuperLearner arms).
+
+```{r data}
+if (nzchar(params$res_path)) study$res_path <- params$res_path
+RHO <- as.numeric(params$rho)
+RUN <- as.integer(params$run)
+N <- 500
+
+ARMS <- names(SURV_ARM_LABELS)
+ARM_COLOURS <- setNames(
+  as.character(paletteer::paletteer_d("rcartocolor::Safe")[seq_along(ARMS)]),
+  unname(SURV_ARM_LABELS)
+)
+
+# the estimate's name in sim_res[[arm]] and its truth column, per event - as
+# surv_metrics.R's framework_targets / framework_truth_map, narrowed to these
+# arms and to Events 1 and 2
+TARGETS <- c(
+  setNames(rep(list(c(`Event 1` = "RMST1", `Event 2` = "RMST2")), 3),
+           c("ipw", "csf_cs", "csf_sh")),
+  setNames(rep(list(c(`Event 1` = "RMTL1", `Event 2` = "RMTL2")), 5),
+           setdiff(ARMS, c("ipw", "csf_cs", "csf_sh")))
+)
+TRUTH <- list(
+  ipw    = c(RMST1 = "tau_RMST1_cs", RMST2 = "tau_RMST2_cs"),
+  csf_cs = c(RMST1 = "tau_RMST1_cs", RMST2 = "tau_RMST2_cs"),
+  csf_sh = c(RMST1 = "tau_RMST1",    RMST2 = "tau_RMST2")
+)
+for (a in setdiff(ARMS, names(TRUTH))) {
+  TRUTH[[a]] <- c(RMTL1 = "tau_RMTL1", RMTL2 = "tau_RMTL2")
+}
+# RMST arms are negated onto the lost-time scale
+SIGN <- ifelse(ARMS %in% c("ipw", "csf_cs", "csf_sh"), -1, 1)
+names(SIGN) <- ARMS
+
+# the DR arms' saved pseudo-outcomes, by nuisance path
+PO_SOURCES <- list(
+  pseudo_dr_whole_oob = c("rf", "whole_oob"),
+  rsf_dr_oob = c("rsf", "oob"),
+  sl_dr_whole = c("sl", "whole")
+)
+
+cells <- expand.grid(scenario = 1:7, censoring = c(TRUE, FALSE))
+cells$file <- vapply(seq_len(nrow(cells)), function(i) {
+  file.path(combo_dir(study, list(rho = RHO, scenario = cells$scenario[i], n = N,
+                                  censoring = cells$censoring[i])),
+            paste0("res_sim_", RUN, ".RDS"))
+}, character(1))
+cells$found <- file.exists(cells$file)
+
+#' One run's per-unit estimates and DR pseudo-outcomes, in long form
+read_cell <- function(scenario, censoring, file) {
+  sim_res <- readRDS(file)
+  d <- sim_res$data
+  units <- tibble(scenario = scenario, censoring = censoring,
+                  unit = seq_len(nrow(d)), W = d$W, X1 = d$X1, X2 = d$X2,
+                  X3 = d$X3)
+
+  est <- bind_rows(lapply(intersect(ARMS, names(sim_res)), function(a) {
+    bind_rows(lapply(names(TARGETS[[a]]), function(ev) {
+      tgt <- TARGETS[[a]][[ev]]
+      tau <- sim_res[[a]][[tgt]]
+      if (is.null(tau)) return(NULL)
+      mutate(units, arm = a, event = ev,
+             tau_hat = SIGN[[a]] * tau,
+             tau_true = SIGN[[a]] * sim_res$truth[[TRUTH[[a]][[tgt]]]])
+    }))
+  }))
+
+  po <- bind_rows(lapply(names(PO_SOURCES), function(a) {
+    nuis <- sim_res$nuisances[[PO_SOURCES[[a]][1]]][[PO_SOURCES[[a]][2]]]
+    bind_rows(lapply(names(TARGETS[[a]]), function(ev) {
+      e <- TARGETS[[a]][[ev]]
+      if (is.null(nuis[[e]]$po) || is.null(sim_res[[a]][[e]])) return(NULL)
+      mutate(units, arm = a, event = ev, po = nuis[[e]]$po,
+             tau_hat = sim_res[[a]][[e]],
+             tau_true = sim_res$truth[[TRUTH[[a]][[e]]]])
+    }))
+  }))
+
+  list(est = est, po = po)
+}
+
+loaded <- pmap(cells[cells$found, c("scenario", "censoring", "file")], read_cell)
+
+label_cells <- function(df) {
+  df %>%
+    mutate(arm = factor(SURV_ARM_LABELS[arm], levels = unname(SURV_ARM_LABELS)),
+           scenario_lab = factor(SURV_SCENARIO_LABELS[as.character(scenario)],
+                                 levels = unname(SURV_SCENARIO_LABELS)),
+           scenario_short = factor(SURV_SCENARIO_PLOT_LABELS[as.character(scenario)],
+                                   levels = unname(SURV_SCENARIO_PLOT_LABELS)),
+           cens_lab = factor(ifelse(censoring, "Censored", "Uncensored"),
+                             levels = c("Censored", "Uncensored")),
+           event = factor(event, levels = c("Event 1", "Event 2"))) %>%
+    droplevels()
+}
+
+est <- bind_rows(map(loaded, "est")) %>%
+  mutate(bias = tau_hat - tau_true) %>%
+  label_cells()
+po <- bind_rows(map(loaded, "po")) %>% label_cells()
+```
+
+```{r missing-cells, results="asis"}
+if (!all(cells$found)) {
+  miss <- cells[!cells$found, ]
+  cat("**Not found, left out:** ",
+      paste0("scenario ", miss$scenario, ", censoring ", miss$censoring,
+             collapse = "; "),
+      " (looked for `res_sim_", RUN, ".RDS` under `", study$res_path, "`).\n",
+      sep = "")
+}
+```
+
+```{r plot-helpers, include=FALSE}
+house_style <- function() {
+  list(scale_colour_manual(values = ARM_COLOURS, drop = FALSE),
+       drf_theme(),
+       theme(legend.position = "bottom"))
+}
+
+# event x censoring across the columns
+facet_cells <- function(rows) {
+  facet_grid(rows = rows, cols = vars(event, cens_lab))
+}
+
+PT_ALPHA <- 0.35
+Y_LAB <- "CATE, time lost to the event (days)"
+```
+
+## This run's metrics
+
+`R/metrics.R::cate_metrics()` on the run shown, on the lost-time scale (so the
+RMST arms' bias has the opposite sign to `surv_metrics.R`'s). The correlation
+is `NA` where the arm's truth is constant: the net Event 1 truth in scenarios 2
+and 5, and the net Event 2 truth in scenarios 1 and 3. Where `surv_metrics.RDS`
+is in the results folder, *MSE percentile* places this run's MSE among all runs
+of its cell for that arm (50 = a typical run, high = a bad one).
+
+```{r run-metrics}
+run_metrics <- est %>%
+  group_by(scenario, scenario_short, censoring, cens_lab, event, arm) %>%
+  summarise(cate_metrics(tau_hat, tau_true, first(scenario)) %>%
+              select(bias, ate_bias, rmse, mse),
+            corr = suppressWarnings(cor(tau_hat, tau_true)), .groups = "drop")
+
+metrics_file <- file.path(study$res_path, "surv_metrics.RDS")
+if (file.exists(metrics_file)) {
+  pctile <- readRDS(metrics_file) %>%
+    filter(rho == RHO, framework %in% ARMS, target %in% c("Event 1", "Event 2")) %>%
+    group_by(scenario, censoring, framework, target) %>%
+    summarise(mse_pctile = if (RUN %in% run) {
+      100 * mean(mse <= mse[run == RUN], na.rm = TRUE)
+    } else NA_real_, .groups = "drop") %>%
+    mutate(arm = factor(SURV_ARM_LABELS[framework], levels = unname(SURV_ARM_LABELS)),
+           event = factor(target, levels = c("Event 1", "Event 2"))) %>%
+    select(scenario, censoring, arm, event, mse_pctile)
+  run_metrics <- left_join(run_metrics, pctile,
+                           by = c("scenario", "censoring", "arm", "event"))
+} else {
+  run_metrics$mse_pctile <- NA_real_
+}
+
+run_metrics %>%
+  arrange(scenario, event, censoring, rmse) %>%
+  select(scenario_short, event, cens_lab, arm, bias, ate_bias, rmse, corr,
+         mse_pctile) %>%
+  kable(digits = 3,
+        col.names = c("Scenario", "Event", "Censoring", "Arm", "Bias", "ATE bias",
+                      "RMSE", "Correlation", "MSE percentile"))
+```
+
+## Estimated CATE across the population
+
+Each arm's estimates (coloured) against X2, with its own truth in black and 0
+dashed. One y scale per scenario, so the arms compare directly. The four black
+curves are the X1 × X3 cells; the split between the X3 curves is the
+heterogeneity, the rest is prognosis.
+
+```{r cate-x2, results="asis", fig.height=16}
+for (s in levels(est$scenario_lab)) {
+  df <- filter(est, scenario_lab == s)
+  cat("\n\n### ", s, "\n\n", sep = "")
+  p <- ggplot(df, aes(x = X2, colour = arm)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(aes(y = tau_hat), alpha = PT_ALPHA, size = 0.8) +
+    geom_point(aes(y = tau_true), colour = "black", size = 0.4) +
+    facet_cells(vars(arm)) +
+    house_style() +
+    theme(legend.position = "none") +
+    labs(title = paste0("Estimated CATE, ", s, " (run ", RUN, ", ρ = ", RHO, ")"),
+         x = "X2", y = Y_LAB)
+  print(p)
+}
+```
+
+## Estimated against true CATE
+
+The dashed line is estimate = truth. A cloud flatter than the diagonal is
+shrinkage towards the ATE, one shifted off it is ATE-level bias. A vertical
+stripe is a constant truth (see the metrics table).
+
+```{r cate-vs-true, results="asis", fig.height=16}
+for (s in levels(est$scenario_lab)) {
+  df <- filter(est, scenario_lab == s)
+  cat("\n\n### ", s, "\n\n", sep = "")
+  p <- ggplot(df, aes(x = tau_true, y = tau_hat, colour = arm)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    geom_point(alpha = PT_ALPHA, size = 0.8) +
+    facet_cells(vars(arm)) +
+    house_style() +
+    theme(legend.position = "none") +
+    labs(title = paste0("Estimated vs true CATE, ", s),
+         x = "True CATE", y = "Estimated CATE")
+  print(p)
+}
+```
+
+## Pointwise bias across the population
+
+Unit bias (estimate − truth) with a loess smooth per arm, all arms in one panel
+per cell, so where in the population each one goes wrong reads off together.
+
+```{r bias-x2, fig.height=16}
+ggplot(est, aes(x = X2, y = bias, colour = arm)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE, linewidth = 0.7) +
+  facet_grid(rows = vars(scenario_short), cols = vars(event, cens_lab),
+             scales = "free_y") +
+  house_style() +
+  labs(title = "Smoothed pointwise bias against X2", x = "X2",
+       y = "Bias (estimate − truth)", colour = "Arm")
+```
+
+By the effect modifier: mean unit bias in the X3 = 0 and X3 = 1 groups. Arms
+that over-smooth the heterogeneity are biased in opposite directions in the
+two groups.
+
+```{r bias-x3, fig.height=16}
+est %>%
+  group_by(scenario_short, event, cens_lab, arm, X3) %>%
+  summarise(mean_bias = mean(bias, na.rm = TRUE), .groups = "drop") %>%
+  ggplot(aes(x = factor(X3), y = mean_bias, colour = arm)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(position = position_dodge(width = 0.6), size = 2) +
+  facet_grid(rows = vars(scenario_short), cols = vars(event, cens_lab),
+             scales = "free_y") +
+  house_style() +
+  labs(title = "Mean pointwise bias by X3", x = "X3",
+       y = "Mean bias (estimate − truth)", colour = "Arm")
+```
+
+## Distribution of pointwise bias
+
+The spread of the unit biases within the run, per arm. A box off 0 is
+ATE-level bias; a tall box is unit-level error the run's mean bias hides.
+
+```{r bias-box, fig.height=16}
+ggplot(est, aes(x = cens_lab, y = bias, colour = arm)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_boxplot(fill = "transparent", outlier.size = 0.4) +
+  facet_grid(rows = vars(scenario_short), cols = vars(event), scales = "free_y") +
+  house_style() +
+  labs(title = "Unit bias within the run", x = NULL,
+       y = "Bias (estimate − truth)", colour = "Arm")
+```
+
+## DR pseudo-outcomes
+
+What each DR-learner's second stage regresses on X: its pseudo-outcome (grey),
+the resulting estimate (coloured) and the RMTL truth (black). The
+pseudo-outcome is built on the jackknife pseudo-values, themselves noisy and
+not confined to [0, 28], so the second stage smooths a very noisy target. The
+y axis is cut to the central 98% of the pseudo-outcomes.
+
+```{r pseudo-outcomes, results="asis", fig.height=10}
+for (s in levels(po$scenario_lab)) {
+  df <- filter(po, scenario_lab == s)
+  lims <- quantile(df$po, c(0.01, 0.99), na.rm = TRUE)
+  cat("\n\n### ", s, "\n\n", sep = "")
+  p <- ggplot(df, aes(x = X2)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_point(aes(y = po), colour = "grey60", alpha = 0.25, size = 0.6) +
+    geom_point(aes(y = tau_hat, colour = arm), size = 0.8) +
+    geom_point(aes(y = tau_true), colour = "black", size = 0.4) +
+    facet_cells(vars(arm)) +
+    coord_cartesian(ylim = lims) +
+    house_style() +
+    theme(legend.position = "none") +
+    labs(title = paste0("DR pseudo-outcomes and estimates, ", s),
+         x = "X2", y = "Pseudo-outcome / CATE (RMTL difference)")
+  print(p)
+}
+```
