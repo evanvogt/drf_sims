@@ -8,13 +8,15 @@
 #   Like ss_tables.R, one set at rho = 0, one at rho = 0.5 and one of the
 #   paired rho = 0.5 - rho = 0 differences.
 # - the data-driven CI_sf (optimal_sf/, continuous only): rows
-#   scenario / n / rho, with the paired difference as a third row per n.
+#   scenario / n / rho, with the paired difference as a third row per n. And
+#   for the main text, a float (tab:optimal_sf) of its rho = 0.5 rows only,
+#   with the ratio picked as median (IQR) over runs.
 # Each cell is "mean (MCSE)". Labels and the summary come from R/figures.R,
 # the layout from R/tables.R.
 #
 # Writes to ../results/thesis_tables/:
 #   {cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.tex
-#   cts_corr_ci_sf.tex
+#   cts_corr_ci_sf.tex, cts_corr_ci_sf_main.tex
 # \input{} them into a document with
 #   \usepackage{booktabs, longtable, pdflscape, array}
 #
@@ -278,6 +280,63 @@ for (o in outcomes[1]) {  # the binary optimal_sf study was dropped
     tabcolsep = NULL
   )
   out_file <- file.path(tab_path, paste0(name, ".tex"))
+  writeLines(tex, out_file)
+  message("wrote ", out_file)
+
+  # the main-text float: the rho = 0.5 rows, with the pick as median (IQR).
+  # type = 1 quantiles stay on the ratio grid, where median() would average
+  # the two middle picks of 100 runs
+  main <- filter(metrics, rho == 0.5)
+  picks <- main %>%
+    group_by(scenario, n) %>%
+    summarise(q1 = quantile(optimal_sf, 0.25, type = 1),
+              med = quantile(optimal_sf, 0.5, type = 1),
+              q3 = quantile(optimal_sf, 0.75, type = 1),
+              .groups = "drop") %>%
+    mutate(pick = sprintf("%.2f (%.2f--%.2f)", med, q1, q3)) %>%
+    apply_labels(SS_SCENARIO_LABELS) %>%
+    mutate(n = factor(n, levels = c(500, 1000)))
+
+  main_rows <- sf_summary$rho == "0.5"
+  main_stems <- setdiff(sf_cols$stem, "pick")
+  body <- sf_summary[main_rows, c("scenario", "n")] %>%
+    left_join(select(picks, scenario, n, pick), by = c("scenario", "n"))
+  first_sc <- !duplicated(body$scenario)
+  tab <- cbind(
+    ifelse(seq_len(nrow(body)) == 1, tools::toTitleCase(sub(" outcome$", "", o$label)), ""),
+    ifelse(first_sc, as.character(body$scenario), ""),
+    as.character(body$n),
+    body$pick,
+    sapply(cells[main_stems], `[`, main_rows)
+  )
+  header <- c("Outcome", "Scenario", "$n$", "\\shortstack[r]{Ratio, median\\\\(IQR)}",
+              sf_cols$header[match(main_stems, sf_cols$stem)])
+  rows <- paste0(ifelse(first_sc & seq_along(first_sc) > 1, "\\addlinespace\n", ""),
+                 apply(tab, 1, paste, collapse = " & "), " \\\\")
+
+  main_caption <- paste0(
+    "Data-driven choice of the subsampling ratio for the half-sample bootstrap ",
+    "bands of the \\gls{dr}-random forest, targeting 90\\% coverage, correlated ",
+    "covariates ($\\rho = 0.5$) \\par \\small Ratio: the median (interquartile ",
+    "range) over runs of the ratio each run's calibration picked. Plug-in ",
+    "coverage: the calibration's mean coverage of $\\hat{\\tau}(X)$ at the ",
+    "selected ratio. Coverage of the true \\gls{cate} and length are for the ",
+    "final band ($B = 200$). Other cells: mean (Monte Carlo SE) over ",
+    runs_per_cell(main, keys), " runs per row."
+  )
+  # tabcolsep at grouped_longtable()'s 3pt, local to the float: at LaTeX's 6pt
+  # the eight columns overrun a 16cm text width by about 1cm
+  tex <- paste0(
+    "\\begin{table}[ht]\n\\centering\n\\small\n\\setlength{\\tabcolsep}{3pt}\n",
+    "\\caption[Data-driven choice of the subsampling ratio]{", main_caption, "}\n",
+    "\\label{tab:optimal_sf}\n",
+    "\\begin{tabular}{@{}lll", strrep("r", length(header) - 3), "@{}}\n",
+    "\\toprule\n",
+    paste(header, collapse = " & "), " \\\\ \\midrule\n",
+    paste(rows, collapse = "\n"), "\n",
+    "\\bottomrule\n\\end{tabular}\n\\end{table}\n"
+  )
+  out_file <- file.path(tab_path, paste0(name, "_main.tex"))
   writeLines(tex, out_file)
   message("wrote ", out_file)
 }
