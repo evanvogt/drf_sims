@@ -53,7 +53,7 @@ population quantity, so the n cells all sit at one SNR. Read them against n.
 
 ## Arms
 
-The production crossfitting arms (README "Crossfitting"), via
+The production crossfitting arms (`../ADEMP.md`, "Pseudo-values"), via
 `all_cate_surv_models(models = SNR_MODELS, estimands = c("RMTL1", "RMTL2"))`:
 
 | arm | |

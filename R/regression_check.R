@@ -2,7 +2,7 @@
 # title: old-vs-new equivalence harness for the R/ refactor
 ##########
 # The refactor moves seven near-identical copies of the CATE estimators into R/.
-# Three known bugs (A, F, G - see README.md) are fixed *afterwards*,
+# Three known bugs (A, F, G - see docs/DEVLOG.md) are fixed *afterwards*,
 # so that any number which moves during the move itself is a mistake rather than
 # an intended change. This script is what makes that distinction checkable.
 #

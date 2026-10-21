@@ -16,7 +16,7 @@ two can be read side by side. Full design in `ADEMP.md`.
 | results | `../results/single_event/scenario_<k>/500/censor_<TRUE\|FALSE>/` |
 
 Results sit in `results/single_event/`, not under `results/competing_risk/`,
-because the parent README's archive step tars and removes that whole tree.
+because `R/archive_old_results.R` tars and removes that whole tree.
 
 On the cluster, from `competing_risk/single_event/jobscripts/` (run
 `Rscript make_log_dirs.R` from the repo root first, for `logs_1/` and

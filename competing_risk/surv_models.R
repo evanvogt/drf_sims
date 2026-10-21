@@ -138,7 +138,7 @@ all_cate_surv_models <- function(
   }
 
   # ---- pseudo-value arms ----------------------------------------------------
-  # Two factors, crossed as far as they can be (see README):
+  # Two factors, crossed as far as they can be (see ADEMP.md, "Pseudo-values"):
   #   pseudo-values  "whole" (one AJ/KM fit on all n) vs "cvps" (leave-one-fold-out)
   #   fitting        "oob" (whole sample, grf-internal) vs "scf" (single crossfit)
   # cvps + oob is not a cell: the crossfit matrix is NA on each fold's own rows,
@@ -613,7 +613,7 @@ pseudo_all <- function(Y, D, horizon) {
 #' j to be in the sample being decomposed, so there is no honest out-of-fold value
 #' for the held-out rows. That is why the "cvps" arms only exist inside a fold
 #' loop, and why the DR arms keep whole-sample pseudo-values in their correction
-#' term (see the README).
+#' term (see ADEMP.md, "DR-learners").
 #'
 #' `n_na_fallback` records how often pseudoyl()/pseudomean() returned NA and the
 #' whole-sample value was substituted. That substitution leaks the held-out fold
@@ -794,7 +794,7 @@ nuisance_pseudo_rf_oob <- function(X, pseudo, W, num.threads = NULL, X_ps = NULL
 # pseudo_crossfit has no value for the held-out
 # rows (a jackknife pseudo-value for observation j needs j in the decomposed
 # sample), so the factor these arms vary is the pseudo-values used to train the
-# nuisance regressions, not the ones entering the DR correction. See the README.
+# nuisance regressions, not the ones entering the DR correction. See ADEMP.md, "DR-learners".
 nuisance_pseudo_rf_scf <- function(
   X,
   pseudo,

@@ -92,8 +92,50 @@ estimator sees all ten.
 
 The tables are `SCENARIO_SETS$continuous` and `SCENARIO_SETS$binary` plus a
 `rho` column, with binary scenario 9 on its own scale. τ(x) and m0(x) are the
-same functions at both ρ. Why the binary effect is on the risk-difference
-scale, and how its scales are set, is in `README.md`.
+same functions at both ρ.
+
+### The binary risk-difference scale
+
+**Why the risk-difference scale.** The estimand is a risk difference. With
+prognostic covariates an effect can be constant on at most one scale. On the
+logit scale the link would make X1 and X2 modify the risk difference in every
+scenario, scenario 1 would not be a null, and the heterogeneity would change
+with n as bW is recalibrated. Because τ adds to the risk, the true CATE is
+exactly `bW + g(x)`.
+
+**Why the control risk is bounded.** `m0(x) + τ(x)` must stay inside [0, 1]
+for every x. The tight end is n = 100, where the planned RD is −0.248 and every
+control risk must clear that plus the extra benefit the HTE gives some
+patients. So m0 is a logistic scaled into [0.34, 0.70] (SD 0.048), and X1 and
+X2 are only weakly prognostic.
+
+**The size of the HTE.**
+
+- `RD_SCALE[k]` is the largest scale, floored to 3 dp, that keeps every treated
+  risk inside [`RD_EPS`, 1 − `RD_EPS`] = [0.01, 0.99] at n = 100 to 1000. The
+  floor at n = 100 binds in every scenario but 4.
+- Scenario 4 is held at 0.204, below the 0.209 the bounds would allow, because
+  the binary studies were already running on it.
+- The signs are reversed so that each asymmetric scenario's larger swing goes
+  towards *less* benefit, where the ceiling leaves room; only the floor is
+  tight. With the continuous signs SD(τ) would be much smaller (at ρ = 0):
+
+  | scenario | continuous signs | reversed |
+  |---|---|---|
+  | 3 | 0.034 | 0.050 |
+  | 4 | 0.023 | 0.091 |
+  | 5 | 0.053 | 0.126 |
+  | 8 | 0.040 | 0.128 |
+  | 10 | 0.044 | 0.083 |
+
+  The price is that the opposite subgroup benefits more. It is always the
+  X3 = 0 minority (30%) that benefits least; in scenarios 5, 8 and 10 it is
+  harmed at n = 1000.
+- `R/bin_verify_hte.R` re-derives every scale. Change `p0_lo`, `p0_hi`, b0–b2,
+  `RD_EPS` or the studies' n, and the scales must be recomputed.
+
+Scenario 9's correlated scale and the two accepted floors at ρ = 0.5 are under
+"Binary floors at ρ = 0.5" below.
 
 ### Covariates: the copula
 
@@ -415,7 +457,12 @@ These are run per method on the full sample (`run_blp_whole()`,
   - `BLP_p`: two-sided, homoskedastic OLS standard errors, saved at estimation
     time.
   - `BLP_p_os`: one-sided (H1: β2 > 0), HC3 standard errors, recomputed at
-    metrics time from the saved nuisances.
+    metrics time from the saved nuisances (`blp_inputs()`).
+- Why two: β2 = 1 means τ̂ is well calibrated and β2 = 0 that it carries no
+  signal. A τ̂ that ranks units in reverse gives β2 < 0, which is not evidence
+  of heterogeneity as the test defines it but gets the same two-sided p. And
+  the residual variance is not constant (for a binary outcome it is p(1 − p)
+  by construction), so homoskedastic SEs are not the right ones.
 
 **Independence test** (coin `independence_test(τ ~ X, teststat =
 "quadratic")`, with an asymptotic χ² reference):
@@ -425,7 +472,20 @@ These are run per method on the full sample (`run_blp_whole()`,
   once per pseudo-outcome, so it is not reported for `causal_forest` (which
   shares `dr_random_forest`'s) or for the T-learners.
 
-A CATE that is constant up to rounding gives NA for both tests.
+A CATE that is constant up to rounding gives NA for both tests
+(`is_constant()`): otherwise `GenericML::BLP()` fits β2 to floating-point
+noise and `coin` returns p ≈ 0 on a constant response.
+
+The independence tests' blind spots:
+
+- The quadratic statistic is built from linear correlations, so it has almost
+  no power against an effect with no linear component: scenario 4 (cos X4), 9
+  (X4·X5) and the exp(−|X4|) part of 10. For a CATE linear in X it saturates
+  (χ² = n − 1), so the true-CATE `indep_cate` shows whether a scenario has a
+  linear component, not a power ceiling.
+- `indep_cate` applies the test to τ̂, a fitted function of X whose values are
+  not exchangeable across units even with no heterogeneity, so its scenario-1
+  rejection rate is not guaranteed to be 5%.
 
 **True-CATE tests.** The BLP (both p-values) and `indep_cate` are also run on
 the true CATE, with the true nuisances: tau = τ, μ̂0 = the true m0, ê = 0.5.
@@ -455,6 +515,11 @@ grid.
 
 **`causal_forest_inbuilt`:** a pointwise normal interval from grf's variance
 estimate, at α = 0.05.
+
+`CI_sf` is swept from 0.05 to 0.5 because the right value is not known: too
+small and the half-sample forests are noisy, too large and the halves stop
+being independent enough. The CI studies use `profile = "ci"`: no SuperLearner
+arm and no HTE tests, because the bootstrap dominates the runtime.
 
 ### Calibration (optimal_sf)
 
@@ -492,7 +557,8 @@ model) cell:
   estimator, plus the true-CATE `BLP_p`, `BLP_p_os` and `indep_cate`.
   - Each becomes a rejection rate at 0.05: type I error in scenario 1, power
     in scenarios 2–4.
-  - The number of runs with an NA p-value is reported alongside.
+  - Runs with an NA p-value (a constant τ̂, or a test that wasn't run) are left
+    out of the rate and counted in `n_na_*` columns.
 - **ATE bias relative to `dr_oracle`:** each estimator's ATE bias minus
   `dr_oracle`'s on the same run. This removes the noise the estimators share
   through a common dataset.
@@ -536,7 +602,11 @@ calibration misses, and whether that gap grows at ρ = 0.5.
 - **Within one ρ:**
   - compare estimators against `dr_oracle` on the same run;
   - compute MCSEs per scenario, never pooled, because scenarios share seeds
-    and so their errors are correlated;
+    and so their errors are correlated (per-run bias is about 0.9 correlated
+    across scenarios). Sample sizes can be treated as independent: per-run
+    errors are uncorrelated across n (|r| ≤ 0.02). Both were checked on the
+    independent-covariate design (`bin_bias_mc_checks.R`, git tag
+    `independent-ss-final`);
   - rejection rates and coverages are per-run 0/1 indicators with a binomial
     MCSE.
 - **Summary plots:** mean ± qnorm(0.975) × MCSE.

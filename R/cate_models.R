@@ -834,7 +834,7 @@ run_true_cate_tests <- function(X, Y, W, truth) {
 #' multiple_imputation rows (missing/binary, missing/continuous), which save
 #' `data` as a list of 50 imputed data.frames with no single X to test
 #' against. Same open pooling question as the estimated-CATE tests - see
-#' mi_test_table() and missing/README.md.
+#' mi_test_table() and missing/ADEMP.md.
 true_cate_test_row <- function(sim_res) {
   if (!is.data.frame(sim_res$data)) {
     return(tibble::tibble(BLP_p = NA_real_, BLP_p_os = NA_real_,
@@ -896,7 +896,7 @@ combine_mi <- function(res_list, model) {
 #' independence test's chi-square statistic and df (D2), and every p-value (a
 #' p-value combination rule).
 #'
-#' No rule is applied. Which one is still an open decision (missing/README.md),
+#' No rule is applied. Which one is still an open decision (missing/ADEMP.md),
 #' and saving the rows means it can be made at metrics time without a re-run.
 #' Until then the arm has no BLP_whole / independence_* fields, so
 #' hte_test_metrics() still reports NA for it.

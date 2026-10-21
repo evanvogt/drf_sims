@@ -50,7 +50,7 @@ metrics <- compute_metrics(
 # the methods that analyse all 500 units: for complete_cases and IPW it would
 # divide a ~350-unit MSE by a 500-unit one, so it is NA there. The bias
 # comparisons are differences, not ratios - bias_complete is often near zero,
-# so a per-run ratio is unstable (missing/README.md). rel_ate_bias and rel_bias_cate (relative to the TRUE
+# so a per-run ratio is unstable (missing/ADEMP.md). rel_ate_bias and rel_bias_cate (relative to the TRUE
 # parameter) arrive from cate_metrics() in R/metrics.R; rel_bias_cate is not
 # plotted here, since the true CATE crosses zero.
 ref_by <- setdiff(c(study$path_cols, "run", "model"), "method")
@@ -82,7 +82,7 @@ saveRDS(metrics, file.path(study$res_path, "bin_miss_metrics.RDS"))
 # (true nuisances too - see run_true_cate_tests() in R/cate_models.R), to see
 # how the tests themselves perform independent of any estimator's error.
 # multiple_imputation rows come back NA/NA - see true_cate_test_row()'s doc
-# and README.md's "still has no HTE tests, for any model" note.
+# and missing/ADEMP.md's "Open decision" section.
 true_cate_tests <- compute_run_metrics(study, all_results_df, true_cate_test_row)
 saveRDS(true_cate_tests, file.path(study$res_path, "bin_miss_true_cate_tests.RDS"))
 

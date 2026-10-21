@@ -51,7 +51,7 @@ Scenarios 2, 5 and 6 are the interesting ones: the treatment moves
 event 2, so a naive analysis of event 1 alone can show an apparent
 effect that is really just a change in who survives long enough to have one.
 Fixed at **n = 500**, censoring **on/off**, **500 runs**, horizon = 28. Full
-design in `competing_risk/README.md`.
+design in `competing_risk/ADEMP.md`.
 
 Covariates are drawn from a Gaussian copula at two latent correlations,
 **ρ = 0.5** (X1, X2, X3 and the noise X4, X5, X01–X03 correlated: the primary
@@ -61,8 +61,8 @@ at both; the runs share their seeds, so that section compares the two ρ with
 paired per-run differences.
 
 **Five estimator frameworks**, several shipping in multiple arms that vary
-how their pseudo-values/nuisances are built (see `README.md`'s
-"Crossfitting" section for the full rationale):
+how their pseudo-values/nuisances are built (see `ADEMP.md`'s
+"Methods" for the full rationale):
 
 | Family | Arms | Targets |
 |---|---|---|
@@ -94,8 +94,8 @@ heterogeneity. An estimator that tracks the real signal correctly therefore
 lands *anti-correlated* with the induced `RMTL1` estimand. A consequence:
 `tau_RMST1_cs` has zero variance in scenario 5, so `corr`/`spearman`/
 `c_stat` are genuine `NA` for the `ipw`/`csf_cs` Event 1 cells there — dropped
-by `na.rm = TRUE` below, not treated as 0. See `competing_risk/README.md`
-for the full argument.
+by `na.rm = TRUE` below, not treated as 0. See `competing_risk/ADEMP.md`,
+"What the DGM implies", for the full argument.
 
 ```{r data}
 res_path <- file.path(dirname(here()), "results", "competing_risk")

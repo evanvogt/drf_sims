@@ -36,7 +36,7 @@ source(here("model_evaluation", "me_nuisance.R")) # calculate_pseudos()
 # every set. So 0.5 is the TRUE propensity, the fixed-pi scores are oracle-pi
 # scores, and `dr` vs `dr05` isolates exactly one thing: the cost of estimating
 # a propensity that never needed estimating.
-# See README.md's "Scores" section.
+# See ADEMP.md, "Proxies".
 
 #' Influence-corrected PEHE proxy
 #'
@@ -87,7 +87,7 @@ calc_dr_risk <- function(tau_hat, tau_dr) {
 #'     makes the score scale with n. Within one (scenario, n, run) the factor is
 #'     the same for all 9 candidates, so it moves no ranking, no Spearman
 #'     correlation against true_pehe, no pick and no regret; what it does mean is
-#'     that the raw score is not comparable across sample sizes. See README.md.
+#'     that the raw score is not comparable across sample sizes. See ADEMP.md.
 #'
 #' WHAT THIS SCORE CANNOT SEE. Unlike calc_infl_score()/calc_dr_risk() it is not
 #' an estimate of PEHE, and it measures calibration rather than discrimination.

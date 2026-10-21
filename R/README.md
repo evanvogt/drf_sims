@@ -55,7 +55,7 @@ analyses use `missing` with `ci` set.
 
 `multiple_imputation` runs keep each imputation's tests unpooled, in `mi_tests`
 (`mi_test_table()`). The pooling rule is still to be decided; see
-`missing/README.md`.
+`missing/ADEMP.md`, "Open decision".
 
 ## The parameter grid contract
 
@@ -92,7 +92,7 @@ fails loudly.
 Both outcomes are one model, `E[Y | x, W] = m0(x) + W·τ(x)` (`control_mean()`
 gives `m0`). For a binary outcome `m0` is a logistic scaled into
 `[p0_lo, p0_hi]`, so the treatment effect adds on the risk-difference scale;
-`sample_size/README.md` has the design and why.
+`sample_size/ADEMP.md` has the design and why.
 
 ## Verifying a change
 

@@ -12,7 +12,7 @@
 # and rows 8001-16000 rho = 0.5. The PBS array cap is 10,000, so the jobscripts
 # split at 10000/10001 instead (cts_corr_ci_1.sh, cts_corr_ci_2.sh). A run is
 # seeded by its run index alone, so the same run at the two rhos - and at every
-# CI_sf - is a paired dataset; see sample_size/README.md.
+# CI_sf - is a paired dataset; see sample_size/ADEMP.md.
 
 library(here)
 source(here("R", "pipeline.R"))

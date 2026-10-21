@@ -31,7 +31,7 @@ scenarios 1–4. For each run, `find_optimal_sf()` (`R/bootstrap_ci.R`) refits
 `dr_random_forest` on pseudo-outcomes resampled around the run's own estimate τ̂.
 At each candidate `CI_sf` it records how often the half-sample bootstrap band covers
 τ̂, picks the ratio closest to 90%, then builds the final band at that ratio. Design
-in `sample_size/README.md`, grid in `cts_corr_ci_sf_config.R`.
+in `sample_size/ADEMP.md`, grid in `cts_corr_ci_sf_config.R`.
 
 | | |
 |---|---|
@@ -63,7 +63,7 @@ Three things to keep in mind:
   coverage is the thing to watch.
 - **Pairing.** A run is seeded by its run index alone, so run *r* at ρ = 0 and at
   ρ = 0.5 shares W, the raw latent normals, the noise and the categorical covariates
-  (`sample_size/README.md`, "Pairing"). Every ρ = 0.5 − ρ = 0 comparison is a per-run
+  (`sample_size/ADEMP.md`, "Seeding and pairing"). Every ρ = 0.5 − ρ = 0 comparison is a per-run
   difference with MCSE sd(diff)/√pairs. The level plots show each ρ's own unpaired
   MCSE.
 

@@ -20,13 +20,20 @@ has its own scale" below).
 
 | | continuous / binary | ci_example (continuous) |
 |---|---|---|
-| scenarios | 1–5 (no HTE; X4; X3 + X4 + X4·X5; cos(X4); X3) | 1, 3, 4, 5, 6 (6: X3 + X4) |
+| scenarios | 1–5 (no HTE; X4; X3 + X4 + X4·X5; cos(X4); X3) | 1–4 |
 | n | 500 | 500 |
 | covariates | copula, exchangeable latent ρ = 0.5; X01–X03 auxiliary | as main |
 | amputed covariates | `both`: X1–X5 in every scenario, effect modifiers or not (X01–X05 never) | `both` |
 | proportion incomplete | 0.3 (`mice::ampute`) | 0.3 |
 | mechanism | MAR, MNAR-Y0, MNAR-τ | MAR |
 | repetitions | 100 | 100 |
+
+**100 runs for every scenario**, unlike `sample_size/`'s 500 for scenarios
+1–4: one run here is one job per mechanism × method, so each extra run of
+scenarios 1–4 adds 99 jobs (against 16 in `sample_size/`), and 500 runs would
+add 39,600 jobs per study, the `multiple_imputation` ones (50 imputed datasets
+each) the costliest. More runs would be appended as a new block at the end of
+the grid, so existing row numbers keep their meaning.
 
 **Covariates.** A latent `Z ~ N(0, R)` over (X1, X2, X3, X4, X5, X01, X02,
 X03), R exchangeable with ρ = 0.5 (`rho` in the scenario table). X1 and X3
@@ -49,9 +56,10 @@ Correlation changes E[g] only where the CATE multiplies two modifiers
 (scenario 3's X4·X5), and the planned outcome SD / control event rate through
 Cov(X1, X2); `calibrate_bW()` accounts for both (`te_grid()` and
 `baseline_grid()` integrate over the correlated latent), so the true ATE is
-still the planned effect. Before 2026-09-28 every covariate was independent:
-imputation then had nothing to impute from, and MAR selected on X only, which
-leaves the CATE unbiased - see "What each mechanism implies".
+still the planned effect. The correlation is what makes the study informative:
+with independent covariates the imputation methods would have nothing to
+impute from, and MAR would be indistinguishable from MCAR as far as the CATE
+is concerned.
 
 Mechanisms:
 
@@ -63,30 +71,27 @@ Mechanisms:
   the treatment effect instead (same terms, treated arm only). Not run for
   scenario 1.
 
-`bW` calibrated as in the complete-data study, ignoring `U`. Since 2026-09-29
-`U` is drawn under **every** mechanism (after the covariate block, before the
-continuous error) and used only under MNAR. So within a run the three
-mechanisms share W, every covariate, the continuous error and X04/X05; the
-MAR and MNAR outcomes differ by `U`'s term alone, and the comparison across
-mechanisms is paired. Draw order: `W, Z-block, U, [err], cats`. (Before then
-`U` was drawn only under MNAR, which shifted the error and X04/X05, so MAR and
-MNAR were paired on W and X1–X5 / X01–X03 only.)
+`bW` calibrated as in the complete-data study, ignoring `U`. `U` is drawn
+under **every** mechanism (after the covariate block, before the continuous
+error) and used only under MNAR. So within a run the three mechanisms share W,
+every covariate, the continuous error and X04/X05; the MAR and MNAR outcomes
+differ by `U`'s term alone, and the comparison across mechanisms is paired.
+The amputation still differs by design. Draw order: `W, Z-block, U, [err],
+cats`.
 
-**Binary `U` has its own scale (since 2026-09-29).** A risk-difference effect
-must keep every risk inside [0.01, 0.99], so `bU` is capped by the same
-bounds as the HTE. `missing/binary` now has its own `RD_SCALE_MISS` rather
-than the main study's `RD_SCALE`, derived at n = 500 alone. That frees the
-floor room the main studies need at n = 100, and `U` spends it: `bU = 0.12`
-(was 0.08) is the largest value that leaves scenarios 2, 3, 5 and 6 their
+**Binary `U` has its own scale.** A risk-difference effect must keep every
+risk inside [0.01, 0.99], so `bU` is capped by the same bounds as the HTE.
+`missing/binary` has its own `RD_SCALE_MISS` rather than the main study's
+`RD_SCALE`, derived at n = 500 alone. That frees the floor room the main
+studies need at n = 100, and `U` spends it: `bU = 0.12` is the largest value
+that leaves scenarios 2, 3, 5 and 6 their
 `sample_size/binary` HTE, and only scenario 4, where the ceiling binds, is
 smaller (scale 0.179 against 0.204). `sU = 2` pushes `tanh(U)` towards ±1,
 which strengthens the selection at no cost to the bounds (the amputation
 standardises `U`). Both are re-derived by `R/bin_verify_hte.R`.
 The binary mechanisms remain much weaker than the continuous ones, because a
 Bernoulli outcome's own variance dominates - see the strength table below.
-
-These mechanisms replaced MAR / MNAR / MNAR-Y on 2026-09-28. The old MNAR had
-`U` in neither X nor Y, so it was MCAR; the old MNAR-Y is MNAR-τ.
+Complete cases' ATE bias under MNAR-τ is still about a fifth of the RD.
 
 ### Amputation
 
@@ -159,7 +164,7 @@ complete cases analysed with a correctly specified
   tied to prognosis costs power (U is unplanned outcome variance) and makes
   the missingness indicators prognostic, not biased. The methods whose
   imputation or weighting model conditions on Y (`regression`, `missforest`,
-  `multiple_imputation`, `IPW`, since 2026-09-29/30) open a collider path,
+  `multiple_imputation`, `IPW`) open a collider path,
   X → Y ← U → R: among the incomplete units Y is high *because of* U, so the
   model's X–Y relation is estimated where U is shifted. In continuous
   scenario 2 this is small: complete-unit CATE bias about −0.02 for
@@ -184,14 +189,13 @@ scoring against τ at covariates they never saw - while CC has no incomplete
 units to be scored on. Hence the split scoring under "Performance measures".
 By-arm imputation with the outcome brings the slope of the CATE on the truth
 to 0.90 (`multiple_imputation`), 0.91 (`regression`) and 0.95 (`missforest`),
-against 0.86 for mean imputation and 0.84 for the pre-2026-09-29 MI without Y
-and W. Under MAR, `IPW`'s complete-unit CATE bias is −0.014 against CC's
+against 0.86 for mean imputation and 0.84 for MI without Y and W. Under MAR, `IPW`'s complete-unit CATE bias is −0.014 against CC's
 −0.001: its model is misspecified, and here it has nothing to correct (numbers
 from the 2026-09-30 run).
 
-Before 2026-09-28 (independent covariates, and an "MNAR" arm with `U` in
-neither X nor Y) MAR's missing values were marginally distributed, the old
-MNAR was MCAR, and only MNAR-Y (now MNAR-τ) could bias the CATE.
+`miss_dgm_checks.R` (from the repo root, `Rscript missing/miss_dgm_checks.R`)
+reproduces these checks: the copula, the amputation, how strongly each
+mechanism selects, the pairing, and each method's signature.
 
 ## Estimands
 
@@ -208,9 +212,7 @@ therefore carries an error floor that more data does not remove (about 0.5-0.7
 RMSE in continuous scenario 2, against about 0.02 on complete units -
 `missing/miss_dgm_checks.R`), while `complete_cases` and `IPW` are scored on
 their complete units alone. That is why the performance measures are split by
-completeness (below). Until 2026-09-29 this section described the target as
-"the CATE given the observed-data covariates", which is not what the truth
-was.
+completeness (below).
 
 **MNAR-τ: two candidate targets.** Under MNAR-τ, `U` drives the missingness
 and sits in the treatment effect, so an incomplete unit's expected effect is
@@ -234,7 +236,9 @@ which one the chapter leads with can be decided with no re-run.
 
 ## Methods
 
-**continuous / binary:** handling method × estimator.
+**continuous / binary:** handling method × estimator. Every handling method is
+meant to be one a researcher could reasonably use in a secondary HTE analysis
+of an RCT.
 
 ### Missing-data handling
 
@@ -245,7 +249,7 @@ run), since each run is seeded by its run index alone.
 
 | method | what is done | analysed n |
 |---|---|---|
-| `complete_data` | no amputation; the complete-data reference | 500 |
+| `complete_data` | no amputation; the complete-data reference (it still saves the mask its run's amputation would leave, so it can be split the same way) | 500 |
 | `complete_cases` | drop units with any missing covariate | ≈ 350 |
 | `IPW` | complete cases, weighted by P̂(complete) / P̂(complete \| X01–X05, W, Y) | ≈ 350 |
 | `mean_imputation` | each missing value replaced by its column's observed mean | 500 |
@@ -275,9 +279,9 @@ Per method:
   with the X1–X5 values that drive missingness, so the model is informative
   but misspecified (ampute's pattern-wise score is not a logistic function
   of X01–X05, W and Y). Under MNAR-Y0 / MNAR-τ the model sees `U` only
-  through Y. Until 2026-09-30 the model left out Y and W, so under MNAR
-  the weights were close to constant (CV about 0.02) and IPW reproduced
-  complete cases.
+  through Y. Without Y and W the weights would be close to constant under
+  MNAR (CV about 0.02) and IPW would reproduce complete cases; with `W * Y` it
+  halves complete cases' MNAR-τ ATE bias (continuous).
   The weights reach every fit that accepts them: grf `sample.weights` in every
   forest (per-arm outcome forests, propensity forest, causal forest, stage-2
   forests) and SuperLearner `obsWeights` in every SuperLearner fit. Truth
@@ -288,9 +292,8 @@ Per method:
   `X5_missing` appended as covariates, so every estimator sees 15 covariates
   instead of 10.
 - **`regression`:** within each arm, for each incomplete covariate,
-  `lm` fits a linear model (X1 and X3 are numeric, so
-  linear too; until 2026-10-11 this went through `VIM::regressionImp`, which gives
-  identical fills) of that covariate on the *fully observed* columns among the
+  `lm` fits a linear model (X1 and X3 are numeric, so linear too) of that
+  covariate on the *fully observed* columns among the
   arm's observed units and fills in its predictions, with no residual noise.
   Under `both` the predictors are X01–X05 and Y: the auxiliaries X01–X03
   explain part of each amputed covariate (latent R² ≈ 0.375), X04/X05
@@ -298,21 +301,19 @@ Per method:
   that arm. The predictor set is fixed from the whole dataset, so both arms
   fit the same model. The other amputed covariates are not predictors (no
   chaining), and the imputations are deterministic, so this remains the
-  simple single-imputation method. Until 2026-09-30 it was one pooled model
-  on X01–X05 alone, with Y and W excluded.
+  simple single-imputation method.
 - **Imputing within arm, with the outcome.** `missforest`,
-  `multiple_imputation` (since 2026-09-29) and `regression` (since
-  2026-09-30) impute **separately in each treatment arm**, with
+  `multiple_imputation` and `regression` impute **separately in each treatment
+  arm**, with
   Y among the predictors (`impute_by_arm()`, `R/missingness.R`). An imputation
   model that leaves Y out imputes X independently of the outcome, which pulls
   every X-Y association, and so the heterogeneity, towards zero; a pooled
   model with Y but main effects only would still flatten the W×X
   interactions that are the CATE. Imputing by arm keeps both, and is the
   standard advice for imputing effect modifiers. W is constant within an arm,
-  so it is not a predictor. Until 2026-09-29 both methods excluded Y and W:
-  in continuous scenario 2 at large n that gave a slope of the CATE on the
-  truth of 0.84 for `multiple_imputation`, against 0.90 now
-  (`missing/miss_dgm_checks.R`).
+  so it is not a predictor. Excluding Y and W gives a slope of the CATE on the
+  truth of 0.84 for `multiple_imputation` in continuous scenario 2 at large n,
+  against 0.90 by arm with Y (`missing/miss_dgm_checks.R`).
 - **`missforest`:** `missForest` on each arm's covariates plus Y, binary
   columns (X1, X3, and Y for a binary outcome) as factors so they are imputed
   by classification forests and stay 0/1. Package defaults: 100 trees, `mtry`
@@ -355,6 +356,39 @@ nuisance-model error but not the imputation error.
 | `multiple_imputation` | ✓ (pooled) | ✓ (pooled) | — | — | ✓ (pooled) |
 | `none` | ✓ | ✓ | — | — | — |
 
+### Open decision: pooling the `multiple_imputation` arm's HTE tests
+
+`combine_mi()` (`R/cate_models.R`) pools only `tau` and `variance`, and keeps
+what it pooled: `tau_mi` (each imputation's CATE estimates, n × 50) and
+`variance_within` / `variance_between` (W̄ and B), for Barnard–Rubin df, the
+fraction of missing information or another rule.
+
+The per-imputation tests are saved too. Each MI arm (`causal_forest`,
+`dr_random_forest`, `dr_semi_oracle`) carries `mi_tests`, a 50-row table from
+`mi_test_table()` with the ingredients any candidate pooling rule needs:
+
+| columns | for |
+|---|---|
+| `blp_estimate`, `blp_se`, `blp_df` (β₂ and its residual df) | Rubin's rules on the BLP coefficient |
+| `blp_se_hc3` (β₂'s HC3 SE; same estimate and df) | Rubin's rules for the `BLP_p_os` version of the test |
+| `indep_{cate,po}_stat`, `indep_{cate,po}_df` (chi-square) | a statistic-pooling rule such as D2 |
+| `blp_p`, `blp_p_os`, `indep_cate_p`, `indep_po_p` | a p-value combination rule (Fisher, Stouffer, median p) |
+
+`blp_se_hc3` and `blp_p_os` are computed at estimation time here, because the
+MI arm keeps no per-imputation nuisances for `blp_inputs()` to recompute them
+from. A `NA` BLP row is `run_blp_whole()`'s degenerate-τ fallback; a failed
+independence test reads `p = 1`, `stat = 0`, `df = NA`; a constant τ̂ gives
+`NA` for both tests (`sample_size/ADEMP.md`, "Heterogeneity tests").
+
+**No pooling rule is applied yet.** The options answer slightly different
+questions and none is the obvious default. The rule will be applied at metrics
+time from `mi_tests`, with no re-run. Until then `hte_test_metrics()` reports
+`NA` for MI arms, meaning "not pooled yet", not "the test failed". The
+true-CATE tests (`true_cate_test_row()`) are `NA` for `multiple_imputation` too,
+because its `data` is a list of 50 imputed datasets. Their BLP half needs no X,
+and Y and W are never imputed, so it could be filled in from the saved results
+once the question is settled.
+
 ### ci_example
 
 `multiple_imputation` only, MAR only: amputation and imputation exactly as
@@ -381,8 +415,9 @@ imputation (at the imputed covariates). Per imputation, half-sample bootstrap si
   for `multiple_imputation`
 - `n_na` (units with no estimate)
 
-**Every point metric three ways** (`cate_metrics_split()`, `R/metrics.R`;
-since 2026-09-29), using the missingness mask each run now saves:
+**Every point metric three ways** (`cate_metrics_split()`, `R/metrics.R`),
+using the missingness mask (`miss_mask`, 500 × 5) and `retained_indices` each
+run saves:
 
 | suffix | units | use |
 |---|---|---|
@@ -397,8 +432,8 @@ since 2026-09-29), using the missingness mask each run now saves:
   `complete_cases` and `IPW`, which analyse fewer units; `rel_efficiency_iu`
   on the incomplete units.
 - `bias_diff_complete_cu` = bias_cu − bias_cu of `complete_data`: the bias the
-  missingness and the handling add. A difference, not a ratio: the old
-  `rel_bias_complete` divided by a complete-data bias that is often near zero.
+  missingness and the handling add. A difference, not a ratio: a ratio would
+  divide by a complete-data bias that is often near zero.
 
 **Comparing mechanisms.** The complete / incomplete split is the
 amputation's, so it is a different set of units under each mechanism (MAR's

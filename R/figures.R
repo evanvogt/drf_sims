@@ -130,7 +130,7 @@ SURV_CENSORING_LABELS <- c(`TRUE` = "Yes", `FALSE` = "No")
 
 # one arm per estimator family - its production fitting approach - in display
 # order. The other arms vary the pseudo-values or the fitting
-# (competing_risk/README.md, "Crossfitting") and only the secondary tables
+# (competing_risk/ADEMP.md, "Pseudo-values") and only the secondary tables
 # show them.
 SURV_ARM_LABELS <- c(
   ipw = "IPW causal forest",
@@ -278,7 +278,7 @@ summarise_metrics <- function(
 #' Per-run rho = 0.5 - rho = 0 differences of `stems`, one row per run pair
 #'
 #' For the correlated sample-size studies, where run r at rho = 0 and at
-#' rho = 0.5 shares its random draws (sample_size/README.md). The
+#' rho = 0.5 shares its random draws (sample_size/ADEMP.md). The
 #' difference is taken per run, so summarise_metrics()'s general MCSE on the
 #' result is sd(diff) / sqrt(pairs), the paired SE. Runs missing at either rho
 #' drop out of the pairs.

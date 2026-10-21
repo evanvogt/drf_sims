@@ -8,7 +8,7 @@
 # shows every metric <prefix>_miss_metrics.R computes. Figures go to
 # results/all_figures/, not results/thesis_figures/, so the two never
 # overwrite each other. For a binary outcome every effect is a risk difference
-# and the truth is on the probability scale (sample_size/README.md).
+# and the truth is on the probability scale (sample_size/ADEMP.md).
 #
 # Labels, palette, the mean +/- MCSE summary and the point-range panel all come
 # from R/figures.R. This script carries the paths, the per-run boxplot shape and
@@ -306,8 +306,8 @@ save_fig(paste0(P, "_miss_sign_acc_summary.png"), fig_path)
 
 # --- true CATE test evaluation -----------------------------------------
 # BLP and independence tests run on the true CATE and true nuisances instead
-# of an estimator's (see missing/<outcome>/README.md's "True-CATE HTE test
-# evaluation") - the ceiling each model's own BLP/indep_cate test is chasing.
+# of an estimator's (see sample_size/ADEMP.md,
+# "Heterogeneity tests") - the ceiling each model's own BLP/indep_cate test is chasing.
 # No indep_po counterpart: dr_oracle's own indep_po already covers that. Bound
 # in as an extra "model" x-axis category only where it's plotted (the BLP/
 # indep_cate panels that follow, and the new power section below) - every
@@ -367,7 +367,7 @@ bind_true_cate <- function(df, true_df, extra_cols) {
 # --- BLP test p-values ------------------------------------------------------
 # Every model carries the tests natively (PROFILES$missing in R/cate_models.R).
 # The multiple_imputation arm is NA until a pooling rule for its per-imputation
-# tests (mi_tests) is chosen - see missing/README.md.
+# tests (mi_tests) is chosen - see missing/ADEMP.md.
 BLP_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p"),
                           "BLP_p", "p-value", hline = 0.05, facet_scales = "free_x")
 save_fig(paste0(P, "_miss_blp_all.png"), fig_path)
@@ -381,7 +381,7 @@ save_fig(paste0(P, "_miss_blp_summary.png"), fig_path)
 
 # --- BLP test p-values, one-sided with HC3 SEs ------------------------------
 # BLP_p_os: H1 beta.2 > 0 with heteroskedasticity-robust SEs, recomputed at
-# metrics time - see sample_size/README.md's "HTE tests"
+# metrics time - see sample_size/ADEMP.md's "Heterogeneity tests"
 BLP_os_plot <- miss_box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p_os"),
                              "BLP_p_os", "p-value", hline = 0.05, facet_scales = "free_x") +
   labs(title = "BLP test (one-sided, HC3)")

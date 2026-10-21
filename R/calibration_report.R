@@ -3,8 +3,8 @@
 ##########
 # Prints, for every scenario and n a study generates at, the calibrated bW, the
 # true ATE and its planned and realised power, for both outcome types, plus the
-# worst-case treated risks for binary. Design: sample_size/README.md,
-# "Calibration of bW".
+# worst-case treated risks for binary. Design: sample_size/ADEMP.md,
+# "Treatment-effect calibration".
 #
 #   Rscript R/calibration_report.R
 #

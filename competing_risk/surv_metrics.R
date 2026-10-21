@@ -17,7 +17,7 @@ source(here("R", "metrics.R"))
 workers <- 2
 
 # The pseudo-value frameworks come in arms crossing two factors - see
-# surv_models.R and the README:
+# surv_models.R and ADEMP.md:
 #   whole_oob  whole-sample pseudo-values, whole-sample OOB fit (production parity)
 #   whole_scf  whole-sample pseudo-values, single crossfit (the control)
 #   cvps_scf   leave-one-fold-out pseudo-values, single crossfit

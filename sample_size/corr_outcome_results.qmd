@@ -34,7 +34,7 @@ OUT <- paste0("`", params$outcome, "/`")   # the study folder, for the prose
 copula with exchangeable latent correlation ρ, at four sample sizes (100, 250,
 500, 1000) and 500 runs each. Every marginal, τ(x) and m0(x) are
 `r OUT`'s; only the covariates' joint distribution changes. Full design
-in `sample_size/README.md`.
+in `sample_size/ADEMP.md`.
 
 ```{r scenario-table, results = "asis"}
 cat(if (is_bin) r"[| Scenario | true CATE $\tau(x)$, a risk difference |
@@ -74,8 +74,8 @@ cat(if (is_bin) r"[| | ρ = 0 | ρ = 0.5 |
 The ATE and power barely move, so a change below is not the target getting
 larger or smaller: what ρ adds is prognosis (m0) moving with the effect
 modifiers. Scenario 3's treated-risk floor at ρ = 0.5, n = 100 is below
-`RD_EPS` = 0.01, to keep `binary/`'s τ(x) (`sample_size/README.md`, "Binary outcome:
-the risk-difference scale").
+`RD_EPS` = 0.01, to keep `binary/`'s τ(x) (`sample_size/ADEMP.md`, "The binary
+risk-difference scale").
 
 **Pairing.** Both values of ρ use the same run seeds, so run *r* shares W, the
 raw latent normals and the categorical covariates across ρ. Y is coupled only
@@ -455,7 +455,7 @@ bind_true_cate <- function(df, true_df, extra_cols) {
 Best linear predictor test of heterogeneity, against the nominal 5% threshold
 (dashed line). `BLP_p` is two-sided with constant-variance SEs, as computed
 when the models were fitted; `BLP_p_os` is one-sided (H1: beta.2 > 0) with HC3
-SEs, recomputed at metrics time (see `sample_size/README.md`, "HTE tests").
+SEs, recomputed at metrics time (see `sample_size/ADEMP.md`, "Heterogeneity tests").
 
 ```{r blp-plot}
 box_plot(bind_true_cate(metrics, true_cate_raw, "BLP_p"), "BLP_p",

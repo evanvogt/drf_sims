@@ -36,7 +36,7 @@ OUT <- paste0("`", params$outcome, "/`")   # the study folder, for the prose
 scenarios 1–4. X1–X5 and X01–X03 are drawn from a Gaussian copula with
 exchangeable latent correlation ρ. τ(x) and m0(x) are the parent studies'
 functions, so only the covariates' joint distribution changes. Full design in
-`sample_size/README.md`. The grid itself is defined once, in `<prefix>_corr_ci_config.R`.
+`sample_size/ADEMP.md`. The grid itself is defined once, in `<prefix>_corr_ci_config.R`.
 
 | | |
 |---|---|
@@ -64,14 +64,14 @@ $m_0(x) = 0.34 + 0.36\,\mathrm{plogis}(b_0 + b_1 X_1 + b_2 X_2)$, as in
   modifiers X3–X5 (cor(m0, τ) is 0.39 / −0.34 / 0.06 in scenarios 2 / 3 / 4),
   so the forests have to separate prognosis from effect modification. In
   scenario 3 the lowest treated risk falls to about 0.007 at small n
-  (`sample_size/README.md`, "Binary outcome: the risk-difference scale"). At this study's n ≥ 500
+  (`sample_size/ADEMP.md`, "The binary risk-difference scale"). At this study's n ≥ 500
   |bW| is smaller, so the floor is higher.
 
 **Pairing.** A run is seeded by its run index alone. Run *r* is the same
 dataset at every `CI_sf`, and at the two values of ρ it shares W, the raw
 latent normals and the categorical covariates. Y is coupled only through
 `rbinom`'s shared uniforms, so most but not all outcomes agree across ρ
-(`sample_size/README.md`, "Pairing"). Every ρ = 0.5 − ρ = 0 comparison below is a per-run difference
+(`sample_size/ADEMP.md`, "Seeding and pairing"). Every ρ = 0.5 − ρ = 0 comparison below is a per-run difference
 with MCSE sd(diff)/√pairs. The level plots show each ρ's own (unpaired) MCSE,
 so the paired differences are where to judge whether ρ matters.]" else r"[| Scenario | CATE structure |
 |---|---|
@@ -89,8 +89,8 @@ so the paired differences are where to judge whether ρ matters.]" else r"[| Sce
 
 **Pairing.** A run is seeded by its run index alone. Run *r* is the same
 dataset at every `CI_sf`, and at the two values of ρ it shares W, the raw
-latent normals, the noise and the categorical covariates (`sample_size/README.md`,
-"Pairing"). Every ρ = 0.5 − ρ = 0 comparison below is a per-run difference
+latent normals, the noise and the categorical covariates (`sample_size/ADEMP.md`,
+"Seeding and pairing"). Every ρ = 0.5 − ρ = 0 comparison below is a per-run difference
 with MCSE sd(diff)/√pairs. The level plots show each ρ's own (unpaired) MCSE,
 so the paired differences are where to judge whether ρ matters.]")
 ```

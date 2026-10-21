@@ -7,7 +7,7 @@
 # tab:optimal_sf. Cells are "mean (MCSE)".
 #
 # - Per-unit intervals only: the query grid is extrapolation at rho = 0.5
-#   (sample_size/README.md, "The query grid").
+#   (sample_size/ADEMP.md, "Estimands").
 # - causal_forest_inbuilt never sees CI_sf, so it is printed once across the
 #   ratio columns.
 # - Simultaneous coverage is 0/1 per run (binomial MCSE); marginal coverage is a

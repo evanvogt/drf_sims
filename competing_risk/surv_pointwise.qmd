@@ -62,7 +62,7 @@ depends on X1, X2 and X3 only, so it is plotted against X2, the one continuous
 covariate, where it draws as up to four curves (X1 × X3).
 
 **Arms.** Only each family's production fitting strategy
-(`R/figures.R::SURV_ARM_LABELS`, see `README.md`, "Crossfitting"), no
+(`R/figures.R::SURV_ARM_LABELS`, see `ADEMP.md`, "Pseudo-values"), no
 semi-oracles.
 
 **One scale.** The arms target different estimands: IPW and CSF-cs the net

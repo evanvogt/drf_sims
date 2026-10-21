@@ -11,7 +11,7 @@
 # BINARY OUTCOMES ARE ON THE RISK-DIFFERENCE SCALE: P(Y = 1 | x, W) =
 # m0(x) + W * tau(x), with the control risk m0 bounded in [p0_lo, p0_hi] so the
 # treated risk stays inside [0, 1] (control_mean(), RD_SCALE). The CATE is then
-# exactly te_expr. sample_size/README.md has the reasoning.
+# exactly te_expr. sample_size/ADEMP.md has the reasoning.
 #
 # DRAW ORDER IS PART OF THE CONTRACT. Every study seeds with setup_rng_stream()
 # and reproduces runs by index, so the sequence of random draws must not

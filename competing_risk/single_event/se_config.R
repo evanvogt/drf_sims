@@ -8,8 +8,8 @@
 # Scenario varies fastest, then censoring: index 3 is scenario 3 with censoring
 # on, run 1, and index 6 the same run with censoring off.
 #
-# Results live in results/single_event/, not under results/competing_risk/: the
-# parent README's archive step tars and removes that whole tree.
+# Results live in results/single_event/, not under results/competing_risk/:
+# R/archive_old_results.R tars and removes that whole tree.
 
 library(here)
 source(here("R", "pipeline.R"))

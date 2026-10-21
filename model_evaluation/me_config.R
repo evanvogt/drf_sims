@@ -60,7 +60,7 @@ CANDIDATE_MODELS <- c("rf1", "rf2", "rf3", "net1", "net2", "net3", "SL1", "SL2",
 #   cv_shared  the candidate's own V-1 training folds, predicted on its held-out fold
 #   holdout    the candidate's held-out fold only, fit and predicted there
 #
-# No second-fold-draw arm: README.md, "Why there is no cv_indep arm".
+# No second-fold-draw arm: ADEMP.md, "Why there is no cv_indep arm".
 NUISANCE_ARMS <- c("whole", "cv_shared", "holdout")
 
 # ---- the calibration score's group counts -----------------------------------

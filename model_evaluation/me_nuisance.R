@@ -11,7 +11,7 @@
 # Two independent estimators of the same 2 nuisance targets (mu_DR, pi):
 # XGBoost with a hand-tuned CV grid, and H2O AutoML, each under the arms
 # defined in me_config.R's NUISANCE_ARMS. cv_shared reuses the candidates' own
-# folds (README.md, "Why there is no cv_indep arm").
+# folds (ADEMP.md, "Why there is no cv_indep arm").
 #
 # `holdout` fits and predicts on the fold the candidate held out: not row-level
 # honest, but fully decoupled from the candidate. One small block cannot give

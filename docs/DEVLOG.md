@@ -319,3 +319,23 @@ is in git at `c3afba0`. What they recorded that is not above:
   `$early_stop`, which crashed every local fit; the cluster's older xgboost
   (the 358 pre-2026-09-26 runs) was unaffected.
 - `missing/ci_example` always ran 50 imputations, despite an old header saying 20.
+
+## History moved out of the ADEMPs (2026-10-21)
+
+The study READMEs' design sections were merged into each folder's `ADEMP.md`,
+and dated notes were dropped from both; the full text is in git at `6ad6472`.
+What they recorded that is not above:
+
+- `competing_risk/`: under the pre-2026-10-01 DGM, `jobscripts/failed_ids.txt`
+  listed 169 of 7,000 indices. Route C fires only when nobody is observed past
+  the horizon, which happened with censoring on in scenarios 1, 3, 4, 6 and 7,
+  so those cells' summaries were conditional on someone surviving to 28.
+- `competing_risk/surv_metrics.RDS` written before 2026-10-06 has placeholders
+  (0, 0, 0.5) for scenario 1's Pearson, Spearman and C-statistic; rerunning
+  `surv_metrics.R` fixes it, no simulation rerun needed.
+- `missing/`: before 2026-09-29 `U` was drawn only under MNAR, which shifted
+  the continuous error and X04/X05, so MAR and MNAR runs were paired on W and
+  X1–X5 / X01–X03 only. The ADEMP also described the estimand as "the CATE
+  given the observed-data covariates", which is not what the truth was.
+- `missing/`'s `regression` imputation went through `VIM::regressionImp` until
+  2026-10-11; the `lm` replacement gives identical fills.

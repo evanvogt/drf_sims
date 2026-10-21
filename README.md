@@ -13,9 +13,9 @@ interval rather than a point estimate is needed.
 
 ## Where each result in the thesis comes from
 
-Keyed by topic. Every study folder has a README with its design, and an
-`ADEMP.md` where the design is written out in full (aims, data-generating
-mechanisms, estimands, methods, performance measures).
+Keyed by topic. Every study folder has an `ADEMP.md` with its design and the
+reasons for it (aims, data-generating mechanisms, estimands, methods,
+performance measures), and a README for running it.
 
 | question | study (code) | what it produces |
 |---|---|---|
@@ -167,7 +167,7 @@ outcome the treatment effect is on the **risk-difference** scale, the scale of
 the estimand, with the control risk bounded in [0.34, 0.70] (a 40% event rate).
 The binary modifiers are the continuous ones with X4 and X5 through `tanh`,
 signs reversed, and scaled per scenario to the largest effect the risk bounds
-allow. See `sample_size/README.md`.
+allow. See `sample_size/ADEMP.md`.
 
 ## Methods
 
@@ -181,7 +181,7 @@ allow. See `sample_size/README.md`.
 
 Competing risks adds IPW-transformed RMST, cause-specific and subdistribution
 causal survival forests, and pseudo-value approaches — see
-`competing_risk/README.md`.
+`competing_risk/ADEMP.md`.
 
 `crossfitting/` compared double crossfitting (fitting nuisances over all
 `C(V,2)` fold pairs, 45 fits at `V = 10` rather than 10) against cheaper

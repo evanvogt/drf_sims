@@ -19,7 +19,7 @@
 # paired. The n cells are not.
 #
 # Results live in results/competing_risk_snr/, not under results/competing_risk/:
-# the parent README's archive step tars and removes that whole tree.
+# R/archive_old_results.R tars and removes that whole tree.
 
 library(here)
 source(here("R", "pipeline.R"))

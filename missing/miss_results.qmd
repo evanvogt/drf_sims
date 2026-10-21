@@ -56,14 +56,14 @@ sample-size axis in any figure below:
 | runs | 100 |
 
 **Scenario numbering is the main study's.** Scenario *k* here is scenario *k*
-in `sample_size/`; this study runs 1–5. Full design in `missing/README.md`.
+in `sample_size/`; this study runs 1–5. Full design in `missing/ADEMP.md`.
 
 ```{r binary-scale, results = "asis"}
 if (params$outcome == "binary") cat(
   "The outcome is binary, so every effect below is a **risk difference**, and the",
   "truth is on the probability scale. The DGM puts the treatment effect on that",
   "scale directly — control risk bounded in [0.34, 0.70], `P(Y = 1) = m0(x) + W·τ(x)`",
-  "— so X1 and X2 are purely prognostic (see `sample_size/README.md`). The oracle",
+  "— so X1 and X2 are purely prognostic (see `sample_size/ADEMP.md`). The oracle",
   "formula from `get_binary_oracle_info()` returns the risk itself.\n")
 ```
 
@@ -104,7 +104,7 @@ the covariate matrix still carries `NA`s.
 
 Every model carries the BLP and independence tests. The `multiple_imputation`
 arm's are saved per imputation but not yet pooled, so it is `NA` in the three
-test sections below until a pooling rule is chosen (see `missing/README.md`).
+test sections below until a pooling rule is chosen (see `missing/ADEMP.md`).
 
 ```{r data}
 # paths
@@ -446,7 +446,7 @@ Best linear predictor test of heterogeneity, against the nominal 5% significance
 threshold (dashed line) — where the CATE truly varies, low p-values indicate the
 model detects it; in the Null scenario, p-values should sit uniform on [0, 1].
 Two versions of the p-value for the BLP's beta.2 (see
-`sample_size/README.md`, "HTE tests"): `BLP_p` is two-sided with
+`sample_size/ADEMP.md`, "Heterogeneity tests"): `BLP_p` is two-sided with
 constant-variance SEs, as computed when the models were fitted; `BLP_p_os` is
 one-sided (H1: beta.2 > 0) with HC3 SEs, recomputed at metrics time from the
 saved nuisances.

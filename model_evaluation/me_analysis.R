@@ -66,7 +66,7 @@ X <- design$X
 
 # k-folds for the candidates' single crossfit. The only fold draw: the scoring
 # arms that need folds (cv_shared, holdout) derive them from this one in
-# me_strategies.R (README.md, "Why there is no cv_indep arm").
+# me_strategies.R (ADEMP.md, "Why there is no cv_indep arm").
 kfolds <- split_folds(Y, k = n_folds)
 
 fold_indices <- kfolds$fold_indices

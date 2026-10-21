@@ -7,7 +7,7 @@
 # ME_RHO, the same set sample_size/ uses as its primary arm. tau(x)
 # and m0(x) are unchanged; only the covariates' joint distribution moves, and
 # with it bW, the ATE and SD(tau) wherever g multiplies two modifiers
-# (scenario 3 here, X4*X5) - see sample_size/README.md. This study
+# (scenario 3 here, X4*X5) - see sample_size/ADEMP.md. This study
 # only ever runs 4 of the scenarios, see me_config.R.
 #
 # Only rho = 0.5 is run, so it is a constant here rather than a grid column:

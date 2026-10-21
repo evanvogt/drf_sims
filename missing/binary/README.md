@@ -1,8 +1,8 @@
 # Missing covariates — binary outcome
 
 The `missing/continuous` design with a binary outcome, on the sample-size studies'
-risk-difference DGM (`sample_size/README.md`, "Binary outcome: the risk-difference scale").
-See `missing/README.md` for the mechanisms and handling methods.
+risk-difference DGM (`sample_size/ADEMP.md`, "The binary risk-difference scale").
+See `missing/ADEMP.md` for the mechanisms and handling methods.
 
 | | |
 |---|---|
@@ -82,12 +82,12 @@ MNAR treated-risk floor and ceiling (shared by MNAR-Y0 and MNAR-tau).
 independence tests run on the true CATE and true nuisances (`truth$tau`,
 `truth$p0`, `W.hat = 0.5`) instead of an estimator's fitted ones, one
 `BLP_p`/`BLP_p_os`/`indep_cate` row per (scenario, n, type, prop, mechanism, method,
-run). See `sample_size/README.md`'s "True-CATE tests" for what
-it means and why every scenario-1 true-CATE test is `NA`, and its "HTE tests"
-for the test columns themselves (`BLP_p_os` is the one-sided, HC3 BLP).
+run). See `sample_size/ADEMP.md`'s "Heterogeneity tests" for what it
+means, why every scenario-1 true-CATE test is `NA`, and the test columns
+themselves (`BLP_p_os` is the one-sided, HC3 BLP).
 `method == "multiple_imputation"` rows are `NA`/`NA` too: `data` is a list of
 50 imputed data.frames there, with no single covariate matrix to test against
-(see "Open decision" in `missing/README.md`).
+(see "Open decision" in `missing/ADEMP.md`).
 
 ## Running it
 
@@ -101,7 +101,7 @@ qsub missing/binary/jobscripts/bin_miss_metrics.sh
 
 Every model's HTE tests are written by the simulation itself
 (`PROFILES$missing`), and the MI arm saves its per-imputation tests
-(`mi_tests`, see `missing/README.md`).
+(`mi_tests`, see `missing/ADEMP.md`).
 
 Then, for the figures:
 

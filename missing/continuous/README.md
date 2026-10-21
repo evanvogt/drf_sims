@@ -1,6 +1,6 @@
 # Missing covariates — continuous outcome
 
-The main missing-data design. See `missing/README.md` for the mechanisms and
+The main missing-data design. See `missing/ADEMP.md` for the mechanisms and
 handling methods.
 
 | | |
@@ -12,8 +12,8 @@ handling methods.
 ## Calibration
 
 The `continuous_missing` table shares `sample_size/`'s baseline (`b0 = 0.4`,
-`b1 = −0.5`, `b2 = 1`) and its `bW` calibration (`sample_size/README.md`,
-"Calibration of bW"): every trial is planned for 80% power under homogeneity.
+`b1 = −0.5`, `b2 = 1`) and its `bW` calibration (`sample_size/ADEMP.md`,
+"Treatment-effect calibration"): every trial is planned for 80% power under homogeneity.
 With correlated covariates the planned SD carries Cov(X1, X2), which moves the
 planned effect to −0.27, and scenario 3's `bW` moves further because
 E[X4·X5] = 0.5. The MNAR `U` term is heterogeneity the plan knows nothing
@@ -57,7 +57,7 @@ script fits each and Rubin-combines with `combine_mi()`; only
 those arms also keeps each imputation's CATE estimates (`tau_mi`, n × 50) and
 the Rubin variance's two components (`variance_within`, `variance_between`),
 and saves `mi_tests`, the 50 imputations' HTE tests, unpooled: the
-pooling rule is still to be decided (`missing/README.md`), so the arm's
+pooling rule is still to be decided (`missing/ADEMP.md`, "Open decision"), so the arm's
 `BLP_p`/`indep_*` metrics stay `NA` until it is.
 
 **The row-dropping methods drop rows from the truth too.** `complete_cases` and
@@ -66,8 +66,8 @@ pooling rule is still to be decided (`missing/README.md`), so the arm's
 
 **`cts_miss_true_cate_tests.RDS` runs the BLP and independence tests on the
 true CATE and true nuisances instead of an estimator's** (`truth$tau`,
-`truth$p0`, `W.hat = 0.5` — see `sample_size/README.md`'s "True-CATE
-tests"; its "HTE tests" describes the test columns, including the
+`truth$p0`, `W.hat = 0.5` — see `sample_size/ADEMP.md`'s "Heterogeneity
+tests", which also describes the test columns, including the
 one-sided, HC3 `BLP_p_os`), one row per (scenario, n, type, prop, mechanism,
 method, run), no per-model dimension. Every scenario-1 true-CATE test is `NA`:
 the true CATE is constant there. `method == "multiple_imputation"` rows are `NA`/`NA`

@@ -256,7 +256,7 @@ phi_fake_cal <- rnorm(n_fake)
 report(
   abs(calc_cal_score(c(tau_hat_fake, tau_hat_fake), c(phi_fake_cal, phi_fake_cal), 5) -
         2 * calc_cal_score(tau_hat_fake, phi_fake_cal, 5)) < 1e-10,
-  "the score scales with n (duplicating the data doubles it) - intended, see README"
+  "the score scales with n (duplicating the data doubles it) - intended, see ADEMP.md"
 )
 
 cal_by_k <- vapply(CAL_QUANTILES, function(k) {

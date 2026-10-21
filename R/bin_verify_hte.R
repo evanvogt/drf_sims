@@ -2,7 +2,7 @@
 # title: binary DGMs - check the risk-difference scenarios are what they claim
 ##########
 # Checks the binary risk-difference DGMs, P(Y = 1 | x, W) = m0(x) + W tau(x)
-# (sample_size/README.md), and re-derives RD_SCALE. Stops at the first failure;
+# (sample_size/ADEMP.md), and re-derives RD_SCALE. Stops at the first failure;
 # writes nothing.
 #   1. oracle formula and generator truth agree
 #   2. tau depends on the described modifiers only (scenario 1 is an exact null)
@@ -301,7 +301,7 @@ for (rho in CORR_RHOS) {
 # hte_mult = 1 it must be binary_corr_0.5 exactly; past it, the oracle formula
 # must still reproduce the generator, every risk must lie inside the
 # thresholds, and the clamp must stay a corner of the population (the share
-# clamped and the ATE drift that README.md reports).
+# clamped and the ATE drift that sample_size/snr/README.md reports).
 
 SNR_N <- 500
 SNR_MULTS <- c(1, 1.5, 2, 3)

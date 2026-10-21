@@ -46,7 +46,7 @@ differ expensively.
 Four scenarios crossed with three sample sizes, 100 replicates each — **1200
 array jobs**. Scenarios are indices into `R/dgm_scenarios.R`'s
 `set = "continuous_corr_0.5"`: `continuous/`'s scenario table with the
-covariates correlated at latent ρ = 0.5 (`sample_size/README.md`).
+covariates correlated at latent ρ = 0.5 (`sample_size/ADEMP.md`).
 They are the main four scenarios, 1–4, under the labels the other studies'
 reports give them (`R/figures.R`).
 
