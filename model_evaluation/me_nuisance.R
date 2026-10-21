@@ -9,14 +9,9 @@
 # floor (cf_testing.R, cf_results.R, ...)
 #
 # Two independent estimators of the same 2 nuisance targets (mu_DR, pi):
-# XGBoost with a hand-tuned CV grid, and H2O AutoML. Each runs
-# under a set of ARMS differing in one thing only: what data the nuisance sees
-# relative to the data the candidate it is scoring was trained on. The arm
-# names and what they mean live in me_config.R's NUISANCE_ARMS.
-#
-# cv_shared reuses the candidates' own folds. Row i's own data never enters the
-# model predicting row i under a shared draw either, so an independent fold
-# draw would add nothing (README.md, "Why there is no cv_indep arm").
+# XGBoost with a hand-tuned CV grid, and H2O AutoML, each under the ARMS
+# defined in me_config.R's NUISANCE_ARMS. cv_shared reuses the candidates' own
+# folds (README.md, "Why there is no cv_indep arm").
 #
 # `holdout` fits AND predicts on the fold the candidate held out: not row-level
 # honest, but fully decoupled from the candidate. One small block cannot give

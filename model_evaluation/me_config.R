@@ -6,7 +6,9 @@
 # The array index handed to me_analysis.R is a row number of `grid`, so `grid`
 # must never be filtered or reordered after construction. The same applies to
 # me_strategies.R, which is why study_strat below reuses this exact grid
-# rather than one narrowed to the runs that completed.
+# rather than one narrowed to the runs that completed. The other constants
+# shared by the me_*.R scripts are declared here once for the same reason: a
+# silent disagreement would show only as the wrong number of score columns.
 #
 # Scenarios are the main four every study reports (1 null, 2 simple, 3 complex,
 # 4 non-linear; R/dgm_scenarios.R's SCENARIO NUMBERING): enough to ask whether
@@ -42,17 +44,12 @@ study <- study_config(
 
 # The 9 candidate CATE-learner configurations, as returned by
 # run_all_candidate_models() (me_models.R) and saved as top-level keys of
-# each run's results (me_analysis.R). Declared once here so me_models.R and
-# me_metrics.R cannot disagree about the model list - the same reason the
-# grid above is declared once rather than re-typed in every script.
+# each run's results (me_analysis.R).
 CANDIDATE_MODELS <- c("rf1", "rf2", "rf3", "net1", "net2", "net3", "SL1", "SL2", "SL3")
 
 # ---- the nuisance-fitting arms ---------------------------------------------
 # The four ways me_strategies.R estimates the evaluation nuisances, keyed under
-# nuisances$<pipeline>$<arm> in each run's results. Declared once here for the
-# same reason as CANDIDATE_MODELS: me_strategies.R writes these names and
-# me_testing.R asserts against them, and a silent disagreement would show up
-# only as the wrong number of score columns out of me_metrics.R.
+# nuisances$<pipeline>$<arm> in each run's results.
 #
 # What varies across arms is what data the nuisance sees RELATIVE TO the data
 # the candidate it is scoring was trained on. The 9 candidates are fit once,
@@ -63,17 +60,12 @@ CANDIDATE_MODELS <- c("rf1", "rf2", "rf3", "net1", "net2", "net3", "SL1", "SL2",
 #   cv_shared  the candidate's own V-1 training folds, predicted on its held-out fold
 #   holdout    the candidate's held-out fold only, fit AND predicted there
 #
-# There is no second-fold-draw arm (cv_indep): row-level honesty holds with the
-# shared draw, and a second draw cost a full nuisance pipeline per replicate.
-# See README.md, "Why there is no cv_indep arm".
+# No second-fold-draw arm: README.md, "Why there is no cv_indep arm".
 NUISANCE_ARMS <- c("whole", "cv_shared", "holdout")
 
 # ---- the calibration score's group counts -----------------------------------
 # How many tau_hat quantile groups the DR calibration score (calc_cal_score(),
-# me_metrics.R) splits the evaluation rows into. Declared here for the same
-# reason as NUISANCE_ARMS: me_metrics.R emits one column family per K and
-# me_testing.R asserts the resulting column count, and a disagreement would
-# surface only as the wrong number of score columns.
+# me_metrics.R) splits the evaluation rows into; one column family per K.
 #
 # BOTH values are carried rather than one being chosen, because the right K is
 # a trade this study can measure instead of assume. At n = 250, K = 5 puts 50
@@ -98,9 +90,8 @@ HOLDOUT_MIN_BLOCK <- 40L
 # unchanged - the whole point of R/pipeline.R taking the study as an argument.
 
 # me_strategies.R: a second pass over `study`'s results, adding the cv_shared
-# and holdout arms. Same 1200-row grid, because the array index must keep
-# meaning the same row of the same grid. Written to a PARALLEL tree, not back
-# into study$res_path, so me_strategies_verify.R can diff the two.
+# and holdout arms, into a parallel tree (me_strategies.R's header). Same grid,
+# so the array index keeps meaning the same row.
 study_strat <- study_config(
   name     = "model_evaluation_strategies",
   prefix   = "me_strat",
@@ -111,14 +102,9 @@ study_strat <- study_config(
   failed_file = here("model_evaluation", "jobscripts", "failed_ids_strat.txt")
 )
 
-# me_split.R: the 80:20 arm. The only arm that refits the candidates - one fit
-# on the 80% instead of a 10-fold crossfit - so it cannot share a results tree
-# with anything above: its tau_hat exists only on the 20%, and its true_pehe
-# has to be computed on those same rows to be a matched reference.
-#
-# n = 250 is excluded: a 50-row evaluation set is too thin to rank 9 models.
-# The grid is filtered HERE, at construction, never afterwards - filtering a
-# built grid renumbers every array index (bug D; see grid_indices()).
+# me_split.R: the 80:20 arm, in its own tree and without n = 250 (me_split.R's
+# header). n is restricted HERE, at construction, never afterwards - filtering
+# a built grid renumbers every array index (bug D; see grid_indices()).
 study_split <- study_config(
   name     = "model_evaluation_split",
   prefix   = "me_split",

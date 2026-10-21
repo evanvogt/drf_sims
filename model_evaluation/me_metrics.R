@@ -41,9 +41,7 @@ source(here("model_evaluation", "me_nuisance.R")) # calculate_pseudos()
 #' Influence-corrected PEHE proxy
 #'
 #' @param pi estimated propensity, or the scalar 0.5 for the oracle-pi twin.
-#'   Every operation here is vectorised arithmetic, so a length-1 pi recycles
-#'   to give exactly the same answer as rep(0.5, n) - me_testing.R checks this
-#'   rather than leaving it to be assumed.
+#'   A length-1 pi recycles, giving the same answer as rep(0.5, n).
 #' @param tau the surrogate diff_tau is measured against. Called twice below:
 #'   with the T-learner plug-in mu1_DR - mu0_DR (inflt/inflt05), the IF score
 #'   the thesis reports, and with df$phi/df$phi05, the DR pseudo-outcome
