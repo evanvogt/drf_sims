@@ -12,7 +12,7 @@
 #   1b. the per-arm outcome models never see the other arm's outcomes
 #   2. every arm returns complete tau / tau_test of the right length
 #   3. scenario 1 (no heterogeneity) behaves
-#   4. test-set plumbing - test predictions track the test truth. NOT an
+#   4. test-set plumbing - test predictions track the test truth. Not an
 #      optimism check: scoring is against the known true CATE, not the labels
 #      the models were fit to, so there is no optimism to detect.
 

@@ -12,7 +12,7 @@
 # WHY THE DERIVED TREES ARE CHECKED WITHOUT WRITING. study_strat's grid is all
 # 1200 rows, because the array index has to keep meaning the same row of the
 # same grid as me_analysis.R's. But 2 of those runs have no source file - they
-# failed repeatedly in the main study and are deliberately excluded - so
+# failed repeatedly in the main study and are excluded - so
 # check_failed() will report them missing forever. Writing that to
 # failed_ids_strat.txt would queue them for resubmission, where
 # me_strategies.R would find no input and exit 0, and they would be queued

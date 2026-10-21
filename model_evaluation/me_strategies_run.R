@@ -45,7 +45,7 @@ ids <- NULL
 
 # ---- reachable-missing helper -----------------------------------------------
 # A study_strat row only counts as missing if its (scenario, n, run) key is
-# not ALSO missing from `study` (i.e. it has a me_analysis.R source file to
+# not also missing from `study` (i.e. it has a me_analysis.R source file to
 # read). See the header note above.
 reachable_missing <- function() {
   missing_idx <- check_failed(study_strat, write = FALSE)

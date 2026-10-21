@@ -144,7 +144,7 @@ results <- list(
   alpha = alpha
 )
 
-# the data and the nuisance matrices are deliberately not saved, same as
+# the data and the nuisance matrices are not saved, same as
 # cf_analysis.R - the replicate is reproducible from run via setup_rng_stream
 
 # Save results

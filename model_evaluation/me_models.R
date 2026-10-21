@@ -401,8 +401,8 @@ fit_tau_SL <- function(X, fold_list, fold_indices, po, hyper_list) {
 #' The 9 candidate configurations, keyed by name
 #'
 #' Extracted from run_all_candidate_models() so the single-split entry point
-#' below cannot drift from the crossfit one. The two differ in HOW each
-#' candidate is fit, and must not differ in WHAT is being fit - the 80:20 arm
+#' below cannot drift from the crossfit one. The two differ in how each
+#' candidate is fit, and must not differ in what is being fit - the 80:20 arm
 #' is a comparison of fitting strategies, so a hyperparameter that disagreed
 #' between the two would confound exactly the thing it is measuring.
 #'
@@ -429,7 +429,7 @@ candidate_hyperparams <- function(p) {
         "SL.glmnet", "SL.xgboost", "SL.cforest", "SL.earth", "SL.gam", "SL.mean"
       )
     ),
-    # deliberately weak: SL.nnet's defaults (2 hidden units, no weight decay)
+    # a weak baseline: SL.nnet's defaults (2 hidden units, no weight decay)
     # are unstable on a noisy pseudo-outcome. Kept so the set has a candidate a
     # good proxy should avoid - which is what regret measures.
     SL3 = create_SL_hyperparams(
@@ -480,7 +480,7 @@ run_all_candidate_models <- function(Y, W, X, fold_indices, fold_list) {
 # candidate is still a DR-learner, still built from leave-one-fold-out
 # nuisances feeding a stage-2 regression, still with the hyperparameters
 # candidate_hyperparams() defines. What changes is that the crossfit happens
-# WITHIN the 80% - producing pseudo-outcomes for the training rows only - and
+# within the 80% - producing pseudo-outcomes for the training rows only - and
 # stage 2 is then fit once on all of them and predicted on the untouched 20%,
 # rather than fold-wise back onto the training rows themselves. A fold-wise
 # stage 2 has nowhere to send its predictions here; the 20% is not one of its

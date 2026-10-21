@@ -6,8 +6,7 @@
 # other's todo list.
 #
 # The grid here must stay byte-for-byte identical to the one inline in
-# cf_ci_analysis.R - that script is what qsub calls on the cluster and is
-# deliberately left untouched.
+# cf_ci_analysis.R, which qsub calls on the cluster and keeps its own copy.
 
 library(here)
 source(here("R", "pipeline.R"))

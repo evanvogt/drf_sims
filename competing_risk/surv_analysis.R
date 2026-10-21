@@ -42,7 +42,7 @@ library(here)
 path <- here()
 
 # Functions
-# R/cate_models.R is sourced BEFORE surv_models.R so that this study's own
+# R/cate_models.R is sourced before surv_models.R so that this study's own
 # definitions win where they still exist. It supplies the shared crossfitting
 # machinery this study now shares with the rest of the repo:
 # t_learner_rf, stage2_whole_rf, stage_2_sl, pretest_superlearner

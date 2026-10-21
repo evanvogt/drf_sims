@@ -4,8 +4,8 @@
 # A diagnostic, not part of the study pipeline; the companion to
 # cts_val_investigation.R. That script compares the archived and current
 # results, re-scores the current runs, and tests oracle subgroups without any
-# estimator. This one refits the estimators, changing ONE thing at a time
-# between the current design and the August one, on the SAME participants.
+# estimator. This one refits the estimators, changing one thing at a time
+# between the current design and the August one, on the same participants.
 #
 # Why "the same participants" is possible. The rows of a generated trial are
 # iid, so the first n1 rows of a trial of n have exactly the distribution of a

@@ -76,7 +76,7 @@ qsub as_rerun.sh
 qsub as_collect.sh           # as_collect.R then as_summary.R
 ```
 
-Resources are generous on purpose: memory is one of the things being
+Resources are generous because memory is one of the things being
 measured, and the laptop that will run the real analysis has 15 GB.
 
 ## Carrying the times over to the laptop

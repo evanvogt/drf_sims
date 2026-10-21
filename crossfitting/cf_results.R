@@ -142,7 +142,7 @@ ggsave("cf_rel_bias_cate_summary.png", plot = rel_bias_cate_sum_plot, path = fig
        width = 21, height = 15, units = "cm")
 
 # --- generalisation gap: test MSE minus train MSE, per run ------------------
-# NOT an optimism measure. Every arm is scored against the known true CATE, not
+# Not an optimism measure. Every arm is scored against the known true CATE, not
 # against the pseudo-outcomes it was fit to, so there is no optimism to detect -
 # an in-sample prediction is contaminated by the unit's own noisy pseudo-outcome
 # and so scores worse against truth, not better. This plot shows how far each

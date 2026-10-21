@@ -107,7 +107,7 @@ truth_individual <- function(shape1, shape2, scale1_1, scale1_0, scale2_1, scale
   CIF2_1 <- Vectorize(function(t) integrate(f2_1, 0, t)$value)
   CIF2_0 <- Vectorize(function(t) integrate(f2_0, 0, t)$value)
   
-  # cause-specific hazard estimands (actually sub-distribution but everyone calls it cause-specific UGH)
+  # cause-specific hazard estimands (strictly sub-distribution, though usually called cause-specific)
   # RMTL - expected time from event i to the event horizon
   RMTL1_1 <- integrate(function(u) CIF1_1(u), 0, horizon)$value
   RMTL1_0 <- integrate(function(u) CIF1_0(u), 0, horizon)$value

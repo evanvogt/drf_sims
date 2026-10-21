@@ -254,7 +254,7 @@ all_cate_surv_models <- function(
   if (want("sl_t_split")) {
     message("SuperLearner T-learner (split pseudo-obs)...")
     # pseudo_whole is passed for its NA fallback only - see pseudo_sl_t_split. It
-    # does NOT make this a "whole pseudo-values" arm: the training pseudo-values
+    # does not make this a "whole pseudo-values" arm: the training pseudo-values
     # are still computed on the training folds, and results$sl_t_split$n_na_fallback
     # counts how many rows had to borrow from the whole-sample vector.
     results$sl_t_split <- pseudo_sl_t_split(
@@ -313,7 +313,7 @@ all_cate_surv_models <- function(
     })
   }
 
-  # Last of the fitted arms on purpose: rfsrc() draws its seed from R's RNG, so
+  # Keep this the last fitted arm: rfsrc() draws its seed from R's RNG, so
   # placing it here leaves every arm above on the stream it had before.
   if (want("rsf_dr_oob") || want("rsf_dr_scf") || want("rsf_dr_oob_semi")) {
     message("Random survival forest DR-learner (oob, scf)...")
@@ -790,10 +790,10 @@ nuisance_pseudo_rf_oob <- function(X, pseudo, W, num.threads = NULL, X_ps = NULL
 # matrix (cvps_scf); the is.matrix() branch is the only difference between those
 # two arms.
 #
-# `pseudo_whole` stays the outcome in the correction term for BOTH arms. This is
-# deliberate, not an oversight: pseudo_crossfit has no value for the held-out
+# `pseudo_whole` stays the outcome in the correction term for both arms:
+# pseudo_crossfit has no value for the held-out
 # rows (a jackknife pseudo-value for observation j needs j in the decomposed
-# sample), so the factor these arms vary is the pseudo-values used to TRAIN the
+# sample), so the factor these arms vary is the pseudo-values used to train the
 # nuisance regressions, not the ones entering the DR correction. See the README.
 nuisance_pseudo_rf_scf <- function(
   X,
@@ -870,7 +870,7 @@ nuisance_pseudo_rf_scf <- function(
   )
 }
 
-# Leave-one-fold-out RF stage 2 on a po VECTOR, for the scf arms. R/cate_models.R
+# Leave-one-fold-out RF stage 2 on a po vector, for the scf arms. R/cate_models.R
 # has only the whole-sample OOB one (stage2_whole_rf), which the whole_oob arm uses.
 stage_2_rf_scf <- function(X, po, fold_indices, fold_list, num.threads = NULL) {
   n_obs <- nrow(X)
@@ -936,7 +936,7 @@ rsf_fit <- function(X, Y, D, horizon) {
 #' For family "surv-CR", predicted / predicted.oob is the package's "expected
 #' number of life years lost due to cause j": sum_{q<T} CIF_j(t_q) (t_{q+1} -
 #' t_q) over time.interest (src/survival.c, getMortality), the step-function CIF
-#' integrated from the first event time to the LAST one, t_T. That upper limit
+#' integrated from the first event time to the last one, t_T. That upper limit
 #' cannot be set - ntime only snaps to observed event times - so the piece from
 #' t_T to the horizon, (horizon - t_T) * CIF_j(t_T), is added here. Nothing is
 #' missing below t_1, where the CIF is 0. The package's own get.rmst() is not
@@ -1275,7 +1275,7 @@ pseudo_sl_t_split <- function(
       # One treatment arm's fit. `keep` is the backstop for the two cases
       # fill_na cannot cover: no pseudo_whole passed at all, and the rare one
       # where the whole-sample vector is itself NA on that row (pseudoyl fails
-      # on the GLOBAL max-time observation too). Either way no NA reaches
+      # on the global max-time observation too). Either way no NA reaches
       # SuperLearner, which is what aborted 195 of the 225 runs.
       fit_arm <- function(pseudo_train, w) {
         in_arm <- W_train == w
@@ -1299,7 +1299,7 @@ pseudo_sl_t_split <- function(
 
         # Same failsafe as R/cate_models.R::nuisance_sl: when every learner ends
         # up with zero weight SuperLearner returns all-zero predictions, which
-        # are not an estimate of anything. Testing for EXACT zeros is safe even
+        # are not an estimate of anything. Testing for exact zeros is safe even
         # for RMTL2, where the treated arm's pseudo-values genuinely sit near
         # zero - a real fit does not return floating-point 0 on every row.
         # anyNA is folded in so a stray NA falls back rather than propagating

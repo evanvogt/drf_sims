@@ -325,7 +325,7 @@ arm <- function(family, variant, tau, tau_test, time_nuisance, time_stage2,
 #'   half-sample bootstraps in R/bootstrap_ci.R - see
 #'   crossfitting/confidence_intervals/cf_ci_analysis.R, which calls this with
 #'   sl_lib = NULL and bootstraps all 8 RF/CF arms). $nuisances is large; every
-#'   caller picks the fields it saves, and cf_analysis.R deliberately saves none
+#'   caller picks the fields it saves, and cf_analysis.R saves none
 #'   of them, keeping the production per-run files small.
 run_all_crossfit_variants <- function(data, X_test, n_folds = 10, sl_lib = NULL,
                                       num.threads = NULL, truth_test = NULL) {

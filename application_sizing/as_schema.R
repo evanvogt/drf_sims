@@ -6,7 +6,7 @@
 # events outcomes) and a two-arm trial (continuous outcomes). Sourced by
 # as_mock.R.
 #
-# These are for TIMING AND MEMORY ONLY. What drives run time is n, the number
+# These are for timing and memory only. What drives run time is n, the number
 # and type of covariates, how much is missing and the outcome type, so that is
 # all the schemas pin down. Arm sizes are rounded to the nearest 50, domains are
 # D1-D5 and the event-time profile is pooled over domains. Nothing here is

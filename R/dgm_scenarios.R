@@ -60,7 +60,7 @@ TE_10 <- c(
   "bW + b3 * X3 + b4 * exp(-abs(X4))"
 )
 
-# oracle formulas. Every oracle formula in this file returns the outcome MEAN
+# oracle formulas. Every oracle formula in this file returns the outcome mean
 # E[Y | X, W] - the linear predictor here, the risk in ORACLE_RD - so the model
 # code applies no link.
 ORACLE_10 <- c(
@@ -76,7 +76,7 @@ ORACLE_10 <- c(
   "b0 + b1*X$X1 + b2*X$X2 + W*(bW + b3*X$X3 + b4*exp(-abs(X$X4)))"
 )
 
-# binary treatment effects, on the RISK-DIFFERENCE scale: TE_10's shapes with X4
+# binary treatment effects, on the risk-difference scale: TE_10's shapes with X4
 # and X5 entering through tanh - bounded, monotone and close to linear within
 # +-1 SD - so every treated risk stays in [0, 1] without changing the
 # covariates' distributions. cos(X4) and exp(-|X4|) are bounded already.
@@ -109,17 +109,17 @@ ORACLE_RD <- paste0(RD_CONTROL, c(
   " + W*(bW + b3*X$X3 + b4*exp(-abs(X$X4)))"
 ))
 
-# The binary modifiers are the continuous ones with the SIGNS REVERSED, scaled
+# The binary modifiers are the continuous ones with the signs reversed, scaled
 # onto the risk-difference scale: b = -RD_SCALE[k] * (continuous b). Each
 # RD_SCALE[k] is the largest value, floored to 3 dp, that keeps every treated
 # risk inside [RD_EPS, 1 - RD_EPS] at the binary studies' n:
 #   - at n = 100, where the planned RD (-0.248) is largest: the floor, which
 #     binds in every scenario but 4
 #   - at n = 1000, where it is smallest: the ceiling
-# EXCEPT scenario 4, frozen at 0.204 (the bounds would now allow 0.209) because
+# Except scenario 4, frozen at 0.204 (the bounds would now allow 0.209) because
 # the binary studies were already running on it.
 # Reversing the signs points each asymmetric scenario's larger swing towards
-# LESS benefit, where the bounds leave room - with the continuous signs,
+# less benefit, where the bounds leave room - with the continuous signs,
 # scenarios 3, 4, 5, 8 and 10 would have to be much smaller. The price is that
 # the opposite subgroup benefits more than in the continuous table.
 # R/bin_verify_hte.R re-derives RD_SCALE from the tables and fails if it
@@ -254,7 +254,7 @@ SCENARIO_SETS$binary <- transform(
 
 # The binary missing-data table: the binary table's scenarios 1-6, as scenario
 # k of continuous_missing is scenario k of continuous, with the same correlated
-# covariates, but with its OWN scale RD_SCALE_MISS (the same as RD_SCALE except
+# covariates, but with its own scale RD_SCALE_MISS (the same as RD_SCALE except
 # scenario 4 - see above). Under MNAR-tau the unobserved U enters the treatment
 # effect as bU * tanh(U), under MNAR-Y0 the control risk: bounded, so every
 # risk stays inside [RD_EPS, 1 - RD_EPS] (RD_SCALE_MISS allows for it - the
@@ -318,7 +318,7 @@ SCENARIO_SETS <- c(SCENARIO_SETS, unlist(lapply(CORR_RHOS, function(rho) {
 # SNR check scales the effect modifiers by hte_mult (generate_scenario_data(),
 # get_oracle_info()), and past about x2.5 (x1.25 in scenario 4) the worst-case
 # treated risk leaves [RD_EPS, 1 - RD_EPS]. Rather than shrink the scale, this
-# set CLAMPS the treated risk into [risk_lo, risk_hi], and the truth is the
+# set clamps the treated risk into [risk_lo, risk_hi], and the truth is the
 # clamped risk difference (truth_at(), and the oracle formula through
 # get_oracle_info()). The control risk m0 lies in [p0_lo, p0_hi], inside the
 # thresholds, so only the treated risk is ever clamped. Where it is, tau(x) is
@@ -625,7 +625,7 @@ baseline_grid <- function(params) {
 #' Control-arm outcome mean m0(x) = E[Y | x, W = 0]
 #'
 #' Continuous: the linear predictor b0 + b1 X1 + b2 X2. Binary: that predictor
-#' through a logistic scaled into [p0_lo, p0_hi] - the control RISK. Bounding it
+#' through a logistic scaled into [p0_lo, p0_hi] - the control risk. Bounding it
 #' is what lets the treatment effect add on the risk-difference scale: m0 + tau
 #' stays inside [0, 1] however X1 and X2 fall, provided tau stays inside
 #' [-p0_lo, 1 - p0_hi] (see RD_SCALE and treated_risk_bounds()).
@@ -683,7 +683,7 @@ TARGET_POWER <- 0.80
 #'
 #' Continuous outcomes: -delta gives TARGET_POWER in an unadjusted two-sample
 #' t-test with n / 2 per arm, using the outcome SD with no heterogeneity:
-#' sqrt(b1^2 p(1 - p) + b2^2 s2^2 + s_err^2). Var(g) is left out on purpose, so
+#' sqrt(b1^2 p(1 - p) + b2^2 s2^2 + s_err^2). Var(g) is left out, so
 #' realised power falls below TARGET_POWER as heterogeneity grows (61-80%
 #' across scenarios 1-10), just as a real trial planned under homogeneity would.
 #'

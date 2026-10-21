@@ -325,7 +325,7 @@ get_te_vims_superlearner <- function(X, po, tau, fold_indices, sl_lib,
 # the surrogate is a squared-error regression in both arms.
 #
 # Adapted from SHAP_CATE-main/FUNCTIONS/functions.R::cvboost3(), with four
-# deliberate departures, all for runtime - this runs six times per array job
+# departures, all for runtime - this runs six times per array job
 # across 4400 jobs:
 #   - 3 learning rates x 3 depths (9 combos), not 8 x 3 (24)
 #   - 5-fold CV and at most 2000 rounds, not 10-fold and 10000

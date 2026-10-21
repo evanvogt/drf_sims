@@ -18,7 +18,7 @@ library(tibble)
 #'   jobscripts/bin_corr_rerun.sh. update_rerun_script() uses it to find the
 #'   last two.
 #' @param res_path directory holding this study's results
-#' @param grid THE parameter grid. One row per array job, in array-index order,
+#' @param grid the parameter grid. One row per array job, in array-index order,
 #'   and it must include a `run` column. Never filter this after the fact - the
 #'   PBS array index is a row number, so filtering renumbers every job.
 #' @param path_cols the grid columns that form the results subdirectory path,
@@ -254,14 +254,14 @@ parse_select <- function(line) {
 #'
 #' @param n_failed number of indices in study$failed_file
 #' @param cpu_add cores added to the base ncpus; rounded up to a whole core.
-#'   ompthreads is deliberately not raised with it: the R-level parallelism is
+#'   ompthreads is not raised with it: the R-level parallelism is
 #'   fixed by the trailing args on the Rscript line (workers x grf_threads =
 #'   base ncpus), which this does not touch, so the extra core is headroom
 #'   rather than a thread nobody spawns.
 #' @param mem_factor,time_factor multipliers on the base mem and walltime. Both
 #'   results are rounded up - PBS wants whole gb and whole seconds.
 #' @param max_walltime ceiling on the *computed* walltime. Applied before the
-#'   max() against the current value, so a deliberately longer setting already
+#'   max() against the current value, so a longer hand-set value already
 #'   in the script is never cut back to it. A value that is not HH:MM:SS warns
 #'   and disables the cap rather than stopping the run.
 #' @param throttle the %N concurrency limit written into -J

@@ -9,7 +9,7 @@
 #
 #   1. the pilot's 8 RF/CF arms, nuisances bit-identical to an RNG replay
 #   2. (full) sl_lib = NULL and a real library agree bit-for-bit on those arms,
-#      so the pilot's arms ARE the production study's
+#      so the pilot's arms are the production study's
 #   3. cf_half_boot's matrix path (double crossfit) gives well-formed bands
 #   4. cf_half_boot's vector path (single crossfit) gives well-formed bands
 #   5. simultaneous_band's na.rm is inert without NAs; oob_bands masks exactly
@@ -186,7 +186,7 @@ report(length(keep) == n && is.logical(keep) && sum(keep) == floor(n / 2),
       sprintf("oob_half_sample draws exactly floor(n/2) = %d rows", floor(n / 2)))
 report(length(unique(which(keep))) == sum(keep), "oob_half_sample draws without replacement")
 
-# oob_half_predict must give in-half rows their OUT-OF-BAG prediction, not an
+# oob_half_predict must give in-half rows their out-of-bag prediction, not an
 # in-sample one. Both are numerically valid calls, so a slip here would produce a
 # systematically too-narrow band and no error at all - hence the explicit
 # comparison against the wrong version.

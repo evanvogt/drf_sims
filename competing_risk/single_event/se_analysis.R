@@ -27,7 +27,7 @@ library(SuperLearner)
 library(here)
 
 # Functions
-# R/cate_models.R is sourced BEFORE competing_risk/surv_models.R, as in
+# R/cate_models.R is sourced before competing_risk/surv_models.R, as in
 # surv_analysis.R, so the parent study's definitions win where both exist.
 # se_models.R reuses the parent's arms and adds the single-event pieces.
 source(here("R", "utils.R"))

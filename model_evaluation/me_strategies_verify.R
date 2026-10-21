@@ -5,7 +5,7 @@
 # through untouched: the 9 candidates' fits, the data, the truth, and
 # fold_info. Everything downstream depends on that carry-through being exact -
 # if it is not, the three-arm comparison is not comparing three ways of
-# scoring THE SAME candidate fits, and the whole point of doing this as a
+# scoring the same candidate fits, and the whole point of doing this as a
 # second pass is lost. `whole` is recomputed rather than carried
 # (me_strategies.R's header), so it is checked for completeness like the other
 # two arms, not for identity with the main tree.
@@ -15,7 +15,7 @@
 # saved objects. Running it over every one of the ~360 file pairs is minutes of
 # pure I/O, and it is a strictly stronger statement than any assertion against
 # an aggregated me_metrics.RDS, which could hide a compensating difference.
-# me_testing.R checks that the SCORING is right; this checks that the INPUT to
+# me_testing.R checks that the scoring is right; this checks that the input to
 # it was not disturbed.
 #
 #   Rscript me_strategies_verify.R

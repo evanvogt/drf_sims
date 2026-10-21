@@ -145,12 +145,12 @@ run_combo <- function(args) {
 message("Reading surv_all.RDS...")
 all_results_df <- readRDS(file.path(study$res_path, "surv_all.RDS"))
 
-# Bundle each combo's own slice into its own list element BEFORE handing it to
+# Bundle each combo's own slice into its own list element before handing it to
 # future_map(): future_map(.x, .f) ships .x[[i]] to worker i, so mapping over
 # this pre-sliced list means each worker only receives its own ~1/28th of the
 # collected data. Writing future_map(seq_len(nrow(all_results_df)), function(i)
 # all_results_df$results[[i]] ...) instead would make every worker export the
-# ENTIRE all_results_df as a captured global (its results list-column holds
+# entire all_results_df as a captured global (its results list-column holds
 # every run's data) - the opposite of what parallelising here is for.
 combo_args <- pmap(
   list(all_results_df$results, all_results_df$rho, all_results_df$scenario,

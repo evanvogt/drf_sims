@@ -37,7 +37,7 @@ than a grid column.
 9 candidate models the way true PEHE would — doesn't need every CATE structure.
 The four are the main four every other study reports: 1 null, 2 simple (−X4),
 3 complex (2·X3 + 0.5·X4 − 0.5·X4·X5), 4 non-linear (cos X4). The grid lists
-them as `c(1, 4, 2, 3)`, not `1:4`, on purpose: see `me_config.R`'s header.
+them as `c(1, 4, 2, 3)`, not `1:4`, to keep array indices: see `me_config.R`'s header.
 
 **100 runs.** Each replicate is far more expensive than a `sample_size/` one —
 9 single-crossfit candidate fits, *plus* two independent nuisance-evaluation
@@ -83,7 +83,7 @@ replicate; the fold-based scoring arms reuse it.
 | `net3` | elastic net | `alpha = 0.5` | the candidate's own glmnet |
 | `SL1` | SuperLearner | **the production `dr_superlearner`**: `sl_libraries(n)$Y` per arm, `$tau` at stage 2, pretested (`R/sl_library.R`) | `sl_libraries(n)$W` = mean + glm |
 | `SL2` | SuperLearner | `glmnet, xgboost, cforest, earth, gam, mean` | mean + glm, as SL1 |
-| `SL3` | SuperLearner | `svm, nnet, mean` — deliberately weak | mean + glm, as SL1 |
+| `SL3` | SuperLearner | `svm, nnet, mean` — a weak baseline | mean + glm, as SL1 |
 
 `p = ncol(X)` = 10 in every scenario (X1–X5, X01–X05); `rf2`/`rf3`'s `mtry` is
 scaled to `p`.
@@ -117,7 +117,7 @@ and it keeps the three `net*` candidates apart: lasso, ridge and elastic net at
 `lambda.min` on 10 covariates give near-identical τ, and near-ties make top-1
 selection a coin toss.
 
-**`SL3` is deliberately weak.** `SL.nnet`'s defaults (2 hidden units, no
+**`SL3` is a weak baseline.** `SL.nnet`'s defaults (2 hidden units, no
 weight decay) are unstable on a noisy pseudo-outcome. It is kept so the set
 has a candidate a good proxy should avoid, which is what regret measures.
 

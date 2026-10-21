@@ -1,7 +1,7 @@
 ##########
 # title: nuisance-evaluation pipelines - model evaluation study
 ##########
-# A second, INDEPENDENT nuisance-estimation pipeline used only to score the 9
+# A second, independent nuisance-estimation pipeline used only to score the 9
 # candidate models from me_models.R against each other and against true PEHE
 # - not to fit them. No other study in this repo needs this concept, so it
 # doesn't map onto config/dgms/models/analysis/check/collect/metrics and gets
@@ -9,11 +9,11 @@
 # floor (cf_testing.R, cf_results.R, ...)
 #
 # Two independent estimators of the same 2 nuisance targets (mu_DR, pi):
-# XGBoost with a hand-tuned CV grid, and H2O AutoML, each under the ARMS
+# XGBoost with a hand-tuned CV grid, and H2O AutoML, each under the arms
 # defined in me_config.R's NUISANCE_ARMS. cv_shared reuses the candidates' own
 # folds (README.md, "Why there is no cv_indep arm").
 #
-# `holdout` fits AND predicts on the fold the candidate held out: not row-level
+# `holdout` fits and predicts on the fold the candidate held out: not row-level
 # honest, but fully decoupled from the candidate. One small block cannot give
 # both properties.
 #
@@ -213,7 +213,7 @@ predict_nuisance_xgb <- function(models, pred_matrices) {
 
 #' Fit-and-predict-on-the-same-block XGBoost nuisance estimation
 #'
-#' The `holdout` arm. The blocks are the candidate's OWN folds, from holdout_blocks(), not a
+#' The `holdout` arm. The blocks are the candidate's own folds, from holdout_blocks(), not a
 #' fresh draw: the point of the arm is that the nuisance sees only data the
 #' candidate never saw. What it gives up in exchange is row-level honesty -
 #' every row's own Y is in the model that predicts it, so mu_DR interpolates
@@ -587,7 +587,7 @@ run_automl_whole_dataset <- function(
 
 #' Every AutoML nuisance arm the caller asks for
 #'
-#' The cluster is started once for ALL arms and shut down once at the end -
+#' The cluster is started once for all arms and shut down once at the end -
 #' not per arm. Each h2o.init() is a JVM launch, and the arm list is now three
 #' or four long rather than two.
 #'

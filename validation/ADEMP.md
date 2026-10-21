@@ -185,7 +185,7 @@ Forms of the top-covariate test, each `lm` in chunk 2:
 - `p_cts_adj` conditions on the other covariates, so it should not flag a
   proxy of a modifier that `p_cts` does flag.
 - In scenario 4, `p_cts`, `p_cts_adj` and `p_split` have no power against X4
-  even when it is nominated. This is kept on purpose; `p_dd` and `p_proj` are
+  even when it is nominated. They are kept as the contrast: `p_dd` and `p_proj` are
   the forms that can see it.
 
 **Standard errors.** Every interaction test is run twice

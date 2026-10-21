@@ -162,11 +162,11 @@ ggsave("cf_ci_width_summary.png", plot = width_sum_plot, path = fig_path,
        width = 21, height = 15, units = "cm")
 
 # --- interval method comparison (OOB arms only) -----------------------------
-# The one place all three interval methods exist for the SAME arm, and the
+# The one place all three interval methods exist for the same arm, and the
 # pilot's sharpest question: does an expensive bootstrap buy anything over the
 # variance grf hands back for free?
 #
-# Read the two panels together, not separately. grf_normal is a POINTWISE
+# Read the two panels together, not separately. grf_normal is a pointwise
 # interval - it is not built to control simultaneous coverage and is expected to
 # score near zero on it, so a fair reading of it is the marginal panel. The two
 # bootstrap bands are both simultaneous and come off identical refits, differing

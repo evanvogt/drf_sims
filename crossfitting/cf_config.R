@@ -4,7 +4,7 @@
 # Sourced by study.R check (and, indirectly, R/study_registry.R). The grid here
 # must stay byte-for-byte identical to the one inline in cf_analysis.R (same
 # columns, same order, same values) - cf_analysis.R is what qsub calls on the
-# cluster and is deliberately left untouched, so the array index it uses and
+# cluster and keeps its own copy, so the array index it uses and
 # the row number this file hands out must keep meaning the same thing.
 
 library(here)

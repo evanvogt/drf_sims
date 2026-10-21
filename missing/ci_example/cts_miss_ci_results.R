@@ -3,12 +3,12 @@
 ##########
 # The diagnostic counterpart to results_processing/thesis_figures/miss_cts_ci.R:
 # that script picks the panels the chapter prints, this one shows every metric
-# cts_miss_ci_metrics.R computes. Figures go to results/all_figures/, NOT
+# cts_miss_ci_metrics.R computes. Figures go to results/all_figures/, not
 # results/thesis_figures/, so the two never overwrite each other.
 #
 # The factor structure differs from the other two missing-data studies:
 # mechanism and method are single-valued (MAR, multiple_imputation), and what
-# varies is scenario x model x STRATEGY - the three ways combine_mi_ci()
+# varies is scenario x model x strategy - the three ways combine_mi_ci()
 # (R/bootstrap_ci.R) pools the per-imputation bootstrap intervals. Four
 # estimators only (CI_MODELS - no SuperLearner arm).
 
@@ -109,7 +109,7 @@ save_fig("cts_miss_ci_mar_cov_iu_summary.png", fig_path)
 # --- simultaneous coverage --------------------------------------------------
 # whether the band covers every unit at once - what the half-sample bootstrap is
 # constructed to control. Evaluated per-unit on the sample's own covariates, so
-# NOT comparable to the grid-based simultaneous coverage confidence_intervals/
+# Not comparable to the grid-based simultaneous coverage confidence_intervals/
 # now reports (see this study's README).
 sim_cov_plot <- ci_box_plot(metrics, "simultaneous_coverage",
                             "Simultaneous coverage", hline = 0.95)
@@ -130,7 +130,7 @@ save_fig("cts_miss_ci_len_summary.png", fig_path)
 
 # --- bias -------------------------------------------------------------------
 # NOTE for every point-metric section below: the three strategies share one
-# model_res$tau, so bias/MSE/RMSE/MAE/correlation/sign accuracy are IDENTICAL
+# model_res$tau, so bias/MSE/RMSE/MAE/correlation/sign accuracy are identical
 # across strategies within a model. The triplicate points are the same number
 # three times, not three disagreeing estimates - only the interval metrics above
 # actually distinguish the pooling rules.

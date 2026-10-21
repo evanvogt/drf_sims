@@ -67,7 +67,7 @@ all_cate_se_models <- function(
   )
   results$sl_t_whole <- list(RMST = t_from_dr(nuis_sl, ps, W))
 
-  # Last of the fitted arms on purpose: rfsrc() draws its seed from R's RNG, so
+  # Keep this the last fitted arm: rfsrc() draws its seed from R's RNG, so
   # placing it here leaves every arm above on the stream it had before.
   message("Random survival forest DR- and T-learner (oob, scf)...")
   nuis_rsf <- list(

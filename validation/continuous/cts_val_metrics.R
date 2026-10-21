@@ -4,7 +4,7 @@
 # get_results() (R/pipeline.R) already attaches the grouping columns
 # (rho, scenario, n, interim_prop, run) to every collected run.
 #
-# This does NOT reuse R/metrics.R::compute_metrics() - that function's
+# This does not reuse R/metrics.R::compute_metrics() - that function's
 # contract (per_model(model_res, true_tau, model, sim_res, keys)) assumes one
 # flat set of model results and a sim_res$truth$tau per run. A cts_val run
 # instead saves results1/results2/validations (two fitted chunks, already

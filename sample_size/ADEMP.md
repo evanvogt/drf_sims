@@ -128,7 +128,7 @@ have 80% power to detect at that n, planned as if the effect were homogeneous
   - The planned SD is
     `sqrt(b1²·p(1 − p) + b2²·s2² + 2·b1·b2·Cov(X1, X2) + s_err²)`.
   - The covariance term (`cov_X1X2()`) is zero at ρ = 0. Var(g) is left out
-    of the plan on purpose.
+    of the plan, as in a trial planned under homogeneity.
   - bW is rounded to 2 dp.
 - **Binary:**
   - The power calculation is a two-proportion test with n/2 per arm, at the
@@ -172,7 +172,7 @@ The table covers scenarios 1–4. `R/calibration_report.R` prints all ten.
   exceptions. At ρ = 0.5, E[g] rises in scenarios 3 and 8 and bW falls, so the
   lowest treated risk over the covariate support at n = 100 is 0.007 and
   0.003 respectively.
-- Both are inside [0, 1] but below `RD_EPS`. They are accepted on purpose, to
+- Both are inside [0, 1] but below `RD_EPS`. They are accepted to
   keep the HTE at `RD_SCALE`'s size. Scales of 0.049 and 0.127 would restore
   the floors, at the cost of a smaller HTE.
 - Under `RD_SCALE`, scenario 9's floor would be −0.004, which the generator

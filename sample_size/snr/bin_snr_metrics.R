@@ -5,7 +5,7 @@
 # ratio to causal_forest (below 1 = better), as in competing_risk/snr/.
 #
 # The SNR on x is SD(tau) / sqrt(E[p(1 - p)]), as in rel_eff_snr.R, but from the
-# CLAMPED truth over one seeded draw of POP_N covariates (te_moments() knows
+# clamped truth over one seeded draw of POP_N covariates (te_moments() knows
 # nothing of the clamp). bW is calibrated at SNR_CALIB_N, so n does not enter.
 #
 # Writes to the results folder:

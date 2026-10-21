@@ -2,11 +2,11 @@
 # title: old-vs-new equivalence harness for the R/ refactor
 ##########
 # The refactor moves seven near-identical copies of the CATE estimators into R/.
-# Three known bugs (A, F, G - see README.md) are fixed *afterwards*, deliberately,
+# Three known bugs (A, F, G - see README.md) are fixed *afterwards*,
 # so that any number which moves during the move itself is a mistake rather than
 # an intended change. This script is what makes that distinction checkable.
 #
-#   Rscript R/regression_check.R baseline          # capture, BEFORE any change
+#   Rscript R/regression_check.R baseline          # capture, before any change
 #   Rscript R/regression_check.R verify            # compare, after each step
 #   Rscript R/regression_check.R baseline continuous binary   # a subset
 #   Rscript R/regression_check.R list              # show the study ids
@@ -16,7 +16,7 @@
 # would silently give the second one's definition to both.
 #
 # Scope and limits:
-#   - This proves the refactored code reproduces the CURRENT code on THIS machine.
+#   - This proves the refactored code reproduces the current code on this machine.
 #     It is not a claim about the cluster's numbers - the baseline is local, and
 #     R 4.5.3 here vs 4.3.2 there will differ. Re-capture if you change machine.
 #   - plan(sequential) throughout. furrr with seed = TRUE is documented to give
@@ -177,7 +177,7 @@ STUDIES <- list(
         type = "both", prop = 0.3, mech = "MAR",
         method = "multiple_imputation", n_imp = 3))
       fmla <- get_continuous_oracle_info(3, gen$bW)
-      # combine_mi() in this study reads `alpha` as a FREE VARIABLE - it is not
+      # combine_mi() in this study reads `alpha` as a free variable - it is not
       # one of its arguments - and works only because cts_miss_ci_analysis.R
       # happens to define alpha at top level. Reproduce that here so the
       # baseline captures the behaviour the study actually ran with.
@@ -191,7 +191,7 @@ STUDIES <- list(
     }
   ),
 
-  # Was DEFERRED because all_cate_surv_models aborted with "missing data is
+  # Was deferred because all_cate_surv_models aborted with "missing data is
   # currently not supported" from SuperLearner, so there was nothing to capture.
   # That is fixed: the NA came from the unguarded pseudoyl() in
   # pseudo_sl_t_split, which was also the one call site here that never called
@@ -267,7 +267,7 @@ STUDIES <- list(
   )
 )
 
-# a deliberately small library - the sweep has to stay fast. SL.mean is included
+# a small library - the sweep has to stay fast. SL.mean is included
 # because it is the one algorithm that never fails, so pretest_superlearner always
 # returns a non-empty library and the SuperLearner arms actually produce estimates.
 SL_LIB <- c("SL.mean", "SL.glm")
@@ -283,7 +283,7 @@ tau_fields <- function(res) {
   out
 }
 
-# The estimates alone would not notice a change in the shape of what gets SAVED -
+# The estimates alone would not notice a change in the shape of what gets saved -
 # results$nuisances_rf goes to disk and the collect/metrics scripts index it by
 # name. Fingerprint the structure (field names, in order) and the matrices
 # themselves, so an accidental addition or drop during the refactor is a failure

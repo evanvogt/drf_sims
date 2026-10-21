@@ -145,7 +145,7 @@ introduce_missingness <- function(data, type, prop, mech, U = NULL) {
 
   # mice::ampute (3.19.0 locally; the cluster ran 3.17.0, ampute.continuous()) has an edge case: a pattern with
   # exactly one candidate whose weighted sum score is 0 gets the response
-  # indicator R <- 0, a scalar, which recycles over EVERY row - so that
+  # indicator R <- 0, a scalar, which recycles over every row - so that
   # pattern's variables go missing for the whole dataset, and rows turn up with
   # missingness patterns that were never specified (all-missing, unions of
   # patterns). That hit 6 of 40 MAR draws at n = 120; at the studies' n = 500
@@ -356,7 +356,7 @@ generate_and_process_data <- function(scenario, n, set, return_truth = TRUE,
 #' Under MNAR-Y0 / MNAR-tau the amputation selects on U alone, so the units
 #' left complete have lower U than average and the incomplete ones higher.
 #' Under MNAR-tau U's term is in the treatment effect, so the CATE given the
-#' covariates AND whether a unit is complete is tau(X) plus one of these two
+#' covariates and whether a unit is complete is tau(X) plus one of these two
 #' constants - the secondary truth cate_metrics_split() scores against
 #' (missing/ADEMP.md, "Estimands"). They are population constants of the DGM,
 #' estimated once here by a large simulation; the amputation depends on U

@@ -15,7 +15,7 @@
 #           horizons, RMTL for discharge only
 #   cts     two-arm: the 3 continuous outcomes, one cate_methods() fit each
 #   ci      one outcome, cate_methods() with the half-sample bootstrap on top
-#   sf      one outcome, find_optimal_sf() at ONE sample.fraction (`sf`); a
+#   sf      one outcome, find_optimal_sf() at one sample.fraction (`sf`); a
 #           full calibration is the sum over the 10 values
 #
 # `handling` on the analysis tasks is the shape of the analysed data, not the

@@ -41,10 +41,10 @@ split_folds <- function(Y, k = 10) {
 #' no RNG and can run from a saved fold_info.
 #'
 #' Where a fold is too small to fit the two nuisance targets in (mu_DR and pi,
-#' both fit on the whole block), adjacent folds are POOLED. At n = 250,
+#' both fit on the whole block), adjacent folds are pooled. At n = 250,
 #' V = 10 that is 25-row folds pooled into 5 blocks of 50. The cost of
 #' pooling, worth stating: a pooled block is only half-decoupled from any
-#' single candidate fold model, since the partner fold WAS in that model's
+#' single candidate fold model, since the partner fold was in that model's
 #' training set. The alternative - a 25-row block - is not estimable at all,
 #' so this is the lesser problem.
 #'

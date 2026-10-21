@@ -138,7 +138,7 @@ check(mb[, 1] >= RD_EPS - ROUNDING & mb[, 2] <= 1 - RD_EPS + ROUNDING,
 # 0.204, so it stays there - it must be feasible, not the largest.
 
 cts <- resolve_set("continuous")
-FROZEN <- 4   # scenarios whose RD_SCALE is feasible but deliberately below k_max
+FROZEN <- 4   # scenarios held below their feasible k_max (RD_SCALE in R/dgm_scenarios.R)
 
 unit_scale <- function(s, rho = NULL) {
   unit <- tbl[tbl$scenario == s, ]

@@ -54,12 +54,12 @@ cate_metrics <- function(est, true, scenario) {
 #' cate_metrics() on all analysed units, the complete units, and the incomplete ones
 #'
 #' For the missing-data studies. The truth is tau at the
-#' UNAMPUTED covariates, which no method can recover for a unit whose effect
+#' unamputed covariates, which no method can recover for a unit whose effect
 #' modifiers are missing: an imputation arm carries an error floor on its
 #' incomplete units that the row-dropping arms (complete_cases, IPW), scored on
 #' their complete units only, never face. So every metric comes three ways:
 #'   (no suffix)  all analysed units; ~350 units for complete_cases
-#'                and IPW, 500 for the rest, so NOT comparable across the two
+#'                and IPW, 500 for the rest, so not comparable across the two
 #'   _cu          complete units only: the subset every method has, so the
 #'                comparison across methods, including the row-dropping ones
 #'   _iu          incomplete units only; NA for complete_cases and IPW
@@ -69,7 +69,7 @@ cate_metrics <- function(est, true, scenario) {
 #'
 #' MNAR-tau's secondary truth. With `r_shift`, the metrics are also scored
 #' against tau_R = tau + r_shift[complete or incomplete]: the CATE given the
-#' covariates AND whether the unit is complete, which under MNAR-tau differs
+#' covariates and whether the unit is complete, which under MNAR-tau differs
 #' from tau because U, which drives missingness, is in the treatment effect.
 #' Columns bias_r, ate_bias_r, rmse_r, rmse_r_cu, rmse_r_iu. See
 #' missing/ADEMP.md, "Estimands", for which of the two truths is primary.
@@ -285,7 +285,7 @@ interval_metrics_split <- function(lb, ub, true, miss_mask, retained) {
 #' estimator itself is biased.
 #'
 #' No internal na.rm, matching interval_metrics() - one NA in `be_reference`
-#' or the bounds makes the whole row NA. mean_ci_length is deliberately not
+#' or the bounds makes the whole row NA. mean_ci_length is not
 #' recomputed here: lb/ub are whatever the caller already scored with
 #' interval_metrics(), so it would be a byte-for-byte duplicate column -
 #' callers bind_cols() this alongside that call's result on the same row.
@@ -412,7 +412,7 @@ be_reference_for <- function(be_ref, keys, model, path_cols) {
 #' @param per_model function(model_res, true_tau, model, sim_res, keys) returning
 #'   a tibble of that model's metric columns. `keys` is the one-row data frame of
 #'   grouping values, so `keys$scenario` is available to cate_metrics(). The
-#'   callback may return SEVERAL rows and may include its own `model` column,
+#'   callback may return several rows and may include its own `model` column,
 #'   which is how the CI studies add the "causal_forest_inbuilt" row alongside
 #'   the bootstrap one.
 #' @param augment optional function(sim_res) returning sim_res with extra

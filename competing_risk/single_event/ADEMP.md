@@ -36,7 +36,7 @@ The same as `competing_risk/` at ρ = 0, and drawn by the same code
 Every estimator sees the 8 covariates X1, X2, X3, X01–X05. There is no ρ
 factor. ρ = 0 is the parent's sensitivity analysis (its primary is ρ = 0.5,
 since 2026-10-06), so this study pairs with the parent's sensitivity runs,
-not its primary ones. That was kept deliberately rather than rerunning here at
+not its primary ones. This avoids rerunning the study at
 ρ = 0.5.
 
 ### Event time

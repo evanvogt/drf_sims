@@ -18,7 +18,7 @@
 # main study, so the four n = 500 cells of a run share W, X and U and are
 # paired. The n cells are not.
 #
-# Results live in results/competing_risk_snr/, NOT under results/competing_risk/:
+# Results live in results/competing_risk_snr/, not under results/competing_risk/:
 # the parent README's archive step tars and removes that whole tree.
 
 library(here)

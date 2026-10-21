@@ -78,7 +78,7 @@ results <- list(
   run = run
 )
 
-# the data and the nuisance matrices are deliberately not saved - the replicate is
+# the data and the nuisance matrices are not saved - the replicate is
 # reproducible from run via setup_rng_stream, and keeping the per-run files small
 # is what lets the collect job run without the 15gb the other studies need
 

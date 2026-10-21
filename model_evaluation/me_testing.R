@@ -93,7 +93,7 @@ fake_nuisance_df <- function() fake_nuisance_df_n(n_fake)
 # derives its columns from whatever the nuisance list carries, which is what
 # lets one scoring function serve the main study (1 arm), the strategies
 # tree (3) and the split tree (1) - so the check that matters is that it
-# picks up EVERY arm it is handed, not that it produces some fixed number.
+# picks up every arm it is handed, not that it produces some fixed number.
 fake_pipelines <- c("xgb", "automl")
 fake_nuis <- setNames(lapply(fake_pipelines, function(p) {
   setNames(lapply(NUISANCE_ARMS, function(a) fake_nuisance_df()), NUISANCE_ARMS)
@@ -242,7 +242,7 @@ report(
           cal_const)
 )
 
-# weights are COUNTS, not proportions - sum(w) is n. Guards against a later
+# weights are counts, not proportions - sum(w) is n. Guards against a later
 # "fix" that divides by n and silently rescales every calibration column.
 g_fake <- ceiling(5 * rank(tau_hat_fake, ties.method = "first") / n_fake)
 report(
@@ -431,7 +431,7 @@ report_if(
 
 if (full && models_ok) {
   model_seed <- sample.int(2^31 - 1, 1)
-  # Every arm me_strategies.R will actually run, on the CANDIDATES' folds -
+  # Every arm me_strategies.R will actually run, on the candidates' folds -
   # cv_shared and holdout both derive from kfolds4, which is the point of
   # them. `whole` stands in for the carried-through arm.
   hold4 <- holdout_blocks(kfolds4$fold_indices)
@@ -499,7 +499,7 @@ if (full && models_ok) {
 cat("\n=== 5. nuisance arms: block derivation and filters ===\n")
 # Structural only - no fitting, so this runs everywhere.
 
-# holdout_blocks() must POOL at n=250 (25-row folds) and leave n=500/1000
+# holdout_blocks() must pool at n=250 (25-row folds) and leave n=500/1000
 # alone (50/100-row folds). The pooled blocks must be unions of whole
 # candidate folds, or they are not "the data the candidate never saw".
 for (nn in c(250, 500, 1000)) {
@@ -600,7 +600,7 @@ cat("\n=== 6. me_strategies.R assembly, on a synthetic res_sim object ===\n")
 # needs a Java runtime, and nothing about the merge depends on which
 # estimator produced the data.frames.
 
-# the study's smallest n, deliberately: the holdout arm is tightest here
+# the study's smallest n, where the holdout arm is tightest here
 # (25-row candidate folds, pooled to 5 blocks of 50, and mu_DR/pi then fit on
 # just the 50 rows inside a block). Testing at some smaller convenience size
 # would exercise a configuration the study never runs

@@ -6,7 +6,7 @@
 # The diagnostic counterpart to results_processing/thesis_figures/miss_cts.R /
 # miss_bin.R: those pick the two or three panels the chapter prints, this one
 # shows every metric <prefix>_miss_metrics.R computes. Figures go to
-# results/all_figures/, NOT results/thesis_figures/, so the two never
+# results/all_figures/, not results/thesis_figures/, so the two never
 # overwrite each other. For a binary outcome every effect is a risk difference
 # and the truth is on the probability scale (sample_size/README.md).
 #
@@ -142,7 +142,7 @@ mae_sum_plot <- point_range_plot(metrics_summary, "mae", "MAE",
 save_fig(paste0(P, "_miss_mae_summary.png"), fig_path)
 
 # --- complete vs incomplete units -------------------------------------------
-# The truth is tau at the UNAMPUTED covariates, so on an incomplete unit every
+# The truth is tau at the unamputed covariates, so on an incomplete unit every
 # imputation method carries an error floor no amount of data removes, while
 # complete_cases and IPW are scored on their complete units alone. The
 # comparison across all methods is therefore on the complete units (_cu), the
@@ -221,7 +221,7 @@ save_fig(paste0(P, "_miss_bias_diff_cu_summary.png"), fig_path)
 # --- relative ATE bias (vs true) ---------------------------------------------
 # (mean(est) - mean(true)) / mean(true): the ATE's bias as a fraction of the
 # true ATE - the standard parameter-level "relative bias" from the simulation
-# literature. This is a BIAS FRACTION, not an arm-to-arm ratio, so 0 (not 1) is
+# literature. This is a bias fraction, not an arm-to-arm ratio, so 0 (not 1) is
 # the reference line, same convention as the plain bias/ATE bias panels.
 if ("rel_ate_bias" %in% names(metrics)) {
   rel_ate_bias_plot <- miss_box_plot(metrics, "rel_ate_bias",
@@ -316,7 +316,7 @@ save_fig(paste0(P, "_miss_sign_acc_summary.png"), fig_path)
 #
 # BLP never touches X (run_blp_whole() takes Y, W, Y0.hat, W.hat, tau only),
 # so it is identical across `method` for the same run - that flatness is
-# expected, not a bug. indep_cate DOES depend on X, which genuinely differs by
+# expected, not a bug. indep_cate does depend on X, which genuinely differs by
 # handling method, so its true-CATE series varies by method for real: it shows
 # whether a method's reshaping of X alone (CATE held fixed at the truth) helps
 # or hurts the independence test's power.

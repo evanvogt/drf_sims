@@ -32,7 +32,7 @@ study <- study_config(
   prefix   = "me",
   res_path = file.path(dirname(here()), "results", "correlated", "model_evaluation"),
   grid = expand.grid(
-    scenario = c(1, 4, 2, 3), # order is deliberate - see the header
+    scenario = c(1, 4, 2, 3), # order fixes array indices - see the header
     n = c(250, 500, 1000),
     run = c(1:100),
     stringsAsFactors = FALSE
@@ -51,14 +51,14 @@ CANDIDATE_MODELS <- c("rf1", "rf2", "rf3", "net1", "net2", "net3", "SL1", "SL2",
 # The four ways me_strategies.R estimates the evaluation nuisances, keyed under
 # nuisances$<pipeline>$<arm> in each run's results.
 #
-# What varies across arms is what data the nuisance sees RELATIVE TO the data
+# What varies across arms is what data the nuisance sees relative to the data
 # the candidate it is scoring was trained on. The 9 candidates are fit once,
 # by me_analysis.R, single-crossfit over fold_info at V=10; every arm below
 # scores those same fits.
 #
 #   whole      all n rows, fit and predicted (no split at all) - me_analysis.R
 #   cv_shared  the candidate's own V-1 training folds, predicted on its held-out fold
-#   holdout    the candidate's held-out fold only, fit AND predicted there
+#   holdout    the candidate's held-out fold only, fit and predicted there
 #
 # No second-fold-draw arm: README.md, "Why there is no cv_indep arm".
 NUISANCE_ARMS <- c("whole", "cv_shared", "holdout")
@@ -67,7 +67,7 @@ NUISANCE_ARMS <- c("whole", "cv_shared", "holdout")
 # How many tau_hat quantile groups the DR calibration score (calc_cal_score(),
 # me_metrics.R) splits the evaluation rows into; one column family per K.
 #
-# BOTH values are carried rather than one being chosen, because the right K is
+# Both values are carried rather than one being chosen, because the right K is
 # a trade this study can measure instead of assume. At n = 250, K = 5 puts 50
 # rows in each group - enough for a stable GATE^DR - while K = 10 puts 25,
 # which resolves miscalibration more finely but estimates each group's mean
@@ -77,9 +77,9 @@ CAL_QUANTILES <- c(5L, 10L)
 
 # Blocks smaller than this are not worth handing to a 36-point XGBoost CV grid
 # or a 20-model AutoML run: the `holdout` arm fits mu_DR/pi on nothing but the
-# rows WITHIN one block, so a 25-row block leaves very little to fit on. At
+# rows within one block, so a 25-row block leaves very little to fit on. At
 # n = 250 the V = 10 candidate folds are 25 rows, so the arm pools adjacent
-# fold PAIRS into 5 blocks of 50 (see holdout_blocks() in me_utils.R).
+# fold pairs into 5 blocks of 50 (see holdout_blocks() in me_utils.R).
 # Pooling rather than a fresh 5-fold draw is what keeps a block tied to the
 # candidate split without refitting any candidate.
 HOLDOUT_MIN_BLOCK <- 40L
@@ -103,7 +103,7 @@ study_strat <- study_config(
 )
 
 # me_split.R: the 80:20 arm, in its own tree and without n = 250 (me_split.R's
-# header). n is restricted HERE, at construction, never afterwards - filtering
+# header). n is restricted here, at construction, never afterwards - filtering
 # a built grid renumbers every array index (bug D; see grid_indices()).
 study_split <- study_config(
   name     = "model_evaluation_split",

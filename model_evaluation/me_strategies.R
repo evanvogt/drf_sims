@@ -45,7 +45,7 @@ src_file <- file.path(
 )
 
 # The 2 permanently-failed runs have no source file. Exit 0 rather than
-# erroring: they are a known, deliberate exclusion, and a non-zero exit would
+# erroring: they are a known exclusion, and a non-zero exit would
 # put them in this pass's failed_ids list to be resubmitted forever.
 if (!file.exists(src_file)) {
   message(
@@ -66,7 +66,7 @@ stopifnot(
 )
 
 # ---- the arms --------------------------------------------------------------
-# cv_shared uses the CANDIDATES' fold assignment - the point of the arm is
+# cv_shared uses the candidates' fold assignment - the point of the arm is
 # that the nuisance for row i trains on exactly the rows the candidate's
 # fold-model for row i trained on. holdout inverts that: it sees only the
 # fold the candidate held out. Both are derived from fold_info; neither
@@ -80,7 +80,7 @@ arms <- list(
   holdout   = nuisance_arm_spec("holdout", hold_folds)
 )
 
-# model_seed is keyed off the ARRAY INDEX, which is unique per
+# model_seed is keyed off the array index, which is unique per
 # (scenario, n, run) because the grid rows are - so this pass is reproducible
 # without having to reconstruct where in me_analysis.R's stream its own
 # model_seed was drawn.
@@ -108,7 +108,7 @@ nuisances <- lapply(new_nuis, function(pipeline) {
 })
 
 # ---- propensity diagnostics ------------------------------------------------
-# On the RAW pi, before calculate_pseudos()'s trimming to [0.05, 0.95]. The
+# On the raw pi, before calculate_pseudos()'s trimming to [0.05, 0.95]. The
 # holdout arm fits pi on 25-100 rows and predicts the rows it was fit on, so
 # its predictions sit much closer to 0/1 than the cv_shared arm's do;
 # n_extreme is how many rows per arm the trimming moved. Untrimmed, exact 0/1

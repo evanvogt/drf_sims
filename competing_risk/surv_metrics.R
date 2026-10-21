@@ -29,7 +29,7 @@ workers <- 2
 # propensity 0.5), scored against the same RMTL truth.
 #
 # NOTE: frameworks_run below is intersect(names(sim_res), frameworks), so a
-# framework missing from ANY of these three lists is dropped silently rather than
+# framework missing from any of these three lists is dropped silently rather than
 # erroring. Add to all three together.
 pseudo_arms <- c("whole_oob", "whole_scf", "cvps_scf")
 
@@ -130,7 +130,7 @@ score_combo <- function(args) {
 message("Reading surv_all.RDS...")
 all_results_df <- readRDS(file.path(study$res_path, "surv_all.RDS"))
 
-# Bundle each combo's own slice into its own list element BEFORE handing it to
+# Bundle each combo's own slice into its own list element before handing it to
 # future_map(), which ships .x[[i]] to the worker scoring it - mapping over row
 # indices instead would make every worker export the whole of all_results_df as
 # a captured global (see surv_nuisance_extract.R). Each run is also cut down to

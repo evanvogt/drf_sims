@@ -47,7 +47,7 @@ scenario <- param$scenario
 n <- param$n
 run <- param$run
 
-# folds for the crossfit WITHIN the 80%. Still 10: the training set here is
+# folds for the crossfit within the 80%. Still 10: the training set here is
 # 0.8n, so at the smallest n this arm runs (500) a fold is 40 rows and the
 # stage-1 models train on 360 - no reason to shrink V, for the same reason
 # me_analysis.R doesn't.
@@ -135,7 +135,7 @@ results <- c(model_list, list(
   # Traceability, under names compute_metrics() ignores (it takes only
   # intersect(names(sim_res), models)). The row indices are enough to
   # reconstruct everything against the source tree, so the full Y/W/X are
-  # deliberately NOT duplicated here - they already exist, unchanged, in
+  # not duplicated here - they already exist, unchanged, in
   # results/model_evaluation, and this arm reads rather than regenerates them.
   split_info = list(
     train = train, test = test, n_folds = n_folds,

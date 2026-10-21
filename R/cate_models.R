@@ -10,7 +10,7 @@
 #   ci       list(boot=, sf=, alpha=) turns on the half-sample bootstrap.
 #   profile  which post-estimation extras run - see PROFILES.
 #
-# Every oracle formula in R/dgm_scenarios.R returns the outcome MEAN (the risk,
+# Every oracle formula in R/dgm_scenarios.R returns the outcome mean (the risk,
 # for a binary outcome), so the oracle arm applies no link.
 #
 # Crossfitting strategy, chosen by crossfitting/'s comparison of alternatives:
@@ -658,7 +658,7 @@ run_dr_superlearner <- function(X, Y, W, nuisances, fold_indices, fold_list,
 #' Both tests below are meaningless for a constant CATE, and neither fails
 #' cleanly on one. coin::independence_test() only warns ("zero diagonal
 #' elements") and returns a huge statistic with p ~ 0 - a spurious rejection.
-#' GenericML::BLP() errors only when tau is EXACTLY constant (see
+#' GenericML::BLP() errors only when tau is exactly constant (see
 #' run_blp_whole()). A
 #' true CATE can be constant up to rounding instead: truth_at() computes tau as
 #' (p0 + bW) - p0, which leaves noise of ~1e-17 in scenario 1, and BLP then fits

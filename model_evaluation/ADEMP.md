@@ -90,7 +90,7 @@ Each candidate is a single-crossfit DR-learner (V = 10, `scf_scf`):
 | `net3` | glmnet | elastic net (`alpha = 0.5`) | own glmnet |
 | `SL1` | SuperLearner | production `dr_superlearner` (`sl_libraries(n)`) | mean + glm |
 | `SL2` | SuperLearner | glmnet, xgboost, cforest, earth, gam, mean | mean + glm |
-| `SL3` | SuperLearner | svm, nnet, mean (deliberately weak) | mean + glm |
+| `SL3` | SuperLearner | svm, nnet, mean (a weak baseline) | mean + glm |
 
 `p = 10`. In the split tree the candidates are refit on the 80% training
 split, still crossfit within it and with the same hyperparameters, and predict

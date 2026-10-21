@@ -93,7 +93,7 @@ parent draws `cause` before C.
 
 The parent's primary analysis is ρ = 0.5 and ρ = 0 is its sensitivity
 analysis, so this study pairs with the parent's sensitivity runs.
-That was a deliberate choice, to avoid rerunning this study at ρ = 0.5.
+This avoids rerunning the study at ρ = 0.5.
 Against the parent's primary (ρ = 0.5) results a comparison is side by side,
 not paired.
 

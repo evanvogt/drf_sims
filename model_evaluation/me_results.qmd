@@ -76,7 +76,7 @@ the `SL*` candidates use the production mean + glm propensity.
 | `net3` | elastic net | `alpha = 0.5` |
 | `SL1` | SuperLearner | the production `dr_superlearner` (`sl_libraries(n)`, per nuisance) |
 | `SL2` | SuperLearner | `glmnet, xgboost, cforest, earth, gam, mean` |
-| `SL3` | SuperLearner | `svm, nnet, mean` (deliberately weak) |
+| `SL3` | SuperLearner | `svm, nnet, mean` (a weak baseline) |
 
 ### The proxy scores
 

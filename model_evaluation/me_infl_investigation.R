@@ -4,7 +4,7 @@
 #   Rscript me_infl_investigation.R
 #
 # The proxy scores on this study's own DGM (scenarios 1-4,
-# continuous_corr_0.5 - me_dgms.R) with ORACLE nuisances: mu0/mu1 are the true
+# continuous_corr_0.5 - me_dgms.R) with oracle nuisances: mu0/mu1 are the true
 # p0/p1 and pi is the true 0.5, so any gap between a score and true_pehe is
 # the score's own bias, not nuisance error. N_BIG is large enough that Monte
 # Carlo noise is negligible; bW is calibrated at CALIB_N, a study n, so the
@@ -20,7 +20,7 @@
 # surrogates (inflt, infl) and DR risk, and me_infl_investigation.qmd reads
 # them from me_strat_metrics.RDS.
 #
-# me_metrics.R is deliberately NOT sourced: when <prefix>_all.RDS exists (on
+# me_metrics.R is not sourced: when <prefix>_all.RDS exists (on
 # the cluster) sourcing it recomputes and overwrites <prefix>_metrics.RDS.
 # calc_infl_score()/calc_dr_risk() are copied from it below instead.
 

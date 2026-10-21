@@ -81,7 +81,7 @@ model_list <- run_all_candidate_models(Y, W, X, fold_indices, fold_list)
 # nuisance-evaluation pipelines, used only to score the candidates above.
 # Only the `whole` arm here; me_strategies.R fits all three arms, so this one
 # is superseded there.
-# model_seed is drawn AFTER data generation, the fold draw, and
+# model_seed is drawn after data generation, the fold draw, and
 # candidate-model fitting - keep it in this exact position, since draw order
 # from setup_rng_stream() is part of the reproducibility contract (see
 # R/dgm_scenarios.R's header for the same principle applied to the DGM
@@ -95,7 +95,7 @@ nuisances <- run_nuisance_arms(
 )
 
 # save fitted models, nuisances, data and truth. The 9 candidate models are
-# spliced into the TOP LEVEL of results (not nested under a "models" key) -
+# spliced into the top level of results (not nested under a "models" key) -
 # me_metrics.R's use of R/metrics.R::compute_metrics() depends on this, see
 # its header comment.
 results <- c(model_list, list(

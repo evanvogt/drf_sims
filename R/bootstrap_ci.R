@@ -50,7 +50,7 @@ half_sample <- function(fold_list, fold_membership, fold_sizes, n_obs) {
 #' @param tau the point estimates the interval is centred on
 #' @param na.rm whether to skip NA roots. FALSE (the default) is the behaviour
 #'   every fold-structured caller wants, since those fill every cell. The OOB
-#'   bootstraps' "out-of-half only" band deliberately masks the in-half cells,
+#'   bootstraps' "out-of-half only" band masks the in-half cells,
 #'   which leaves each unit ~B/2 roots and makes the column max a supremum over
 #'   ~n/2 rather than n units - a smaller sup, so a smaller S_star. That is a
 #'   property of the construction, not of this function.
@@ -326,7 +326,7 @@ cf_oob_half_boot <- function(X, Y, W, nuisances, tau, CI_boot = 200, CI_sf = 0.5
 #'             over the per-imputation maxima
 #'   *_hybrid  one variance and one critical value from the stacked draws
 #'
-#' `alpha` is an argument here. In the original it was a FREE VARIABLE read from
+#' `alpha` is an argument here. In the original it was a free variable read from
 #' the global environment, which happened to work only because the analysis
 #' script defined `alpha` at top level - the function would have silently used
 #' the wrong level, or failed, in any other caller.

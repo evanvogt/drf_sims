@@ -74,7 +74,7 @@ cat(if (is_bin) r"[| | ρ = 0 | ρ = 0.5 |
 The ATE and power barely move, so a change below is not the target getting
 larger or smaller: what ρ adds is prognosis (m0) moving with the effect
 modifiers. Scenario 3's treated-risk floor at ρ = 0.5, n = 100 is below
-`RD_EPS` = 0.01 on purpose, to keep `binary/`'s τ(x) (`sample_size/README.md`, "Binary outcome:
+`RD_EPS` = 0.01, to keep `binary/`'s τ(x) (`sample_size/README.md`, "Binary outcome:
 the risk-difference scale").
 
 **Pairing.** Both values of ρ use the same run seeds, so run *r* shares W, the

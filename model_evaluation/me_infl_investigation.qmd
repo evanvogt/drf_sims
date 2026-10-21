@@ -458,7 +458,7 @@ From `me_infl_investigation.R`: N = 2·10⁶ draws per scenario,
 With oracle nuisances the T-learner surrogate μ₁ − μ₀ is the true τ, so "IF,
 true tau" is the noise-free version of the T-learner score. A correct PEHE
 estimator lies on the diagonal, and a correct ranking is at least monotone in
-true PEHE. The One-step score uses a deliberately biased surrogate,
+true PEHE. The One-step score uses a surrogate biased by construction,
 τ + 0.3·X2, so its gap from the diagonal is the second-order remainder the
 correction leaves behind.
 

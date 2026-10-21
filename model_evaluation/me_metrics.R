@@ -2,11 +2,11 @@
 # title: metrics for the model evaluation study
 ##########
 # Uses R/metrics.R::compute_metrics(). me_analysis.R saves the 9 candidates as
-# TOP-LEVEL keys of each run's results (rf1..SL3), so compute_metrics() finds
+# top-level keys of each run's results (rf1..SL3), so compute_metrics() finds
 # them by name, and its per_model() callback gets the whole run, so it can
 # reach sim_res$nuisances/sim_res$data while scoring one candidate at a time.
 #
-# The score columns are DERIVED from whatever arms the nuisance list carries,
+# The score columns are derived from whatever arms the nuisance list carries,
 # never enumerated here - which is what lets the same me_per_model() serve all
 # three result trees without an edit. With true_pehe, mu1_mse and 10 score
 # types (see me_score_types() below) x 2 pipelines x however many arms:
@@ -28,8 +28,8 @@ source(here("model_evaluation", "me_nuisance.R")) # calculate_pseudos()
 
 # ---- the propensity axis ----------------------------------------------------
 # Every score below comes in two versions: one using the nuisance pipeline's
-# ESTIMATED propensity, trimmed to [0.05, 0.95] (df$pi_trim, df$phi - see
-# arm_scores() and DEVLOG bug S), and one with the propensity FIXED at
+# estimated propensity, trimmed to [0.05, 0.95] (df$pi_trim, df$phi - see
+# arm_scores() and DEVLOG bug S), and one with the propensity fixed at
 # 0.5 (the literal 0.5 passed to calc_infl_score, df$phi05). The fixed version
 # is not an approximation here - R/dgm_scenarios.R assigns treatment with
 # `W <- rbinom(n, 1, 0.5)`, a fair coin independent of X, in every scenario of
@@ -65,7 +65,7 @@ calc_dr_risk <- function(tau_hat, tau_dr) {
 
 #' DR calibration score
 #'
-#' Splits the evaluation rows into k_groups quantile groups of the CANDIDATE's
+#' Splits the evaluation rows into k_groups quantile groups of the candidate's
 #' own tau_hat, and asks whether the group average treatment effect the
 #' candidate implies matches the one the DR scores imply:
 #'
@@ -76,18 +76,18 @@ calc_dr_risk <- function(tau_hat, tau_dr) {
 #' A loss, lower is better, like every other column - so me_results.qmd's
 #' ranking/regret machinery needs no special case for it.
 #'
-#' TWO DELIBERATE DEPARTURES from the obvious formula, both easy to "fix" back:
+#' Two departures from the obvious formula, both easy to "fix" back:
 #'
-#'  1. ABSOLUTE, not signed. The signed sum sum_k |G_k| (GATE_k^hat - GATE_k^DR)
+#'  1. Absolute, not signed. The signed sum sum_k |G_k| (GATE_k^hat - GATE_k^DR)
 #'     telescopes to sum_i (tau_hat_i - phi_i) = n (mean(tau_hat) - mean(phi)):
 #'     every group boundary cancels and what is left is an ATE-bias measure that
 #'     cannot see miscalibration at all. Over- and under-estimation in different
 #'     groups must not be allowed to net out, which is what the |.| is for.
-#'  2. WEIGHTS ARE GROUP COUNTS, NOT PROPORTIONS - sum(w) is n, not 1. That
+#'  2. Weights are group counts, not proportions - sum(w) is n, not 1. That
 #'     makes the score scale with n. Within one (scenario, n, run) the factor is
 #'     the same for all 9 candidates, so it moves no ranking, no Spearman
 #'     correlation against true_pehe, no pick and no regret; what it does mean is
-#'     that the raw score is not comparable ACROSS sample sizes. See README.md.
+#'     that the raw score is not comparable across sample sizes. See README.md.
 #'
 #' WHAT THIS SCORE CANNOT SEE. Unlike calc_infl_score()/calc_dr_risk() it is not
 #' an estimate of PEHE, and it measures calibration rather than discrimination.
@@ -105,7 +105,7 @@ calc_dr_risk <- function(tau_hat, tau_dr) {
 calc_cal_score <- function(tau_hat, phi, k_groups) {
   n <- length(tau_hat)
 
-  # Grouped by RANK, not by cut(tau_hat, quantile(tau_hat, ...)). Cut points
+  # Grouped by rank, not by cut(tau_hat, quantile(tau_hat, ...)). Cut points
   # collapse to fewer than k_groups groups - or emit NA rows - as soon as
   # tau_hat is constant or heavily tied, and this study produces exactly that:
   # scenario 1 has no heterogeneity, and a fully-shrunk net* candidate predicts
@@ -150,7 +150,7 @@ me_score_types <- function(k_groups = CAL_QUANTILES) {
 #' Names must match me_score_types() exactly and in order; me_testing.R checks
 #' that they do, which is what keeps the two definitions from drifting apart.
 arm_scores <- function(tau_hat, df, Y, W, k_groups = CAL_QUANTILES) {
-  # The pseudo-outcomes are RECOMPUTED from the saved predictions with
+  # The pseudo-outcomes are recomputed from the saved predictions with
   # calculate_pseudos(), not read from the file, so every tree scores with
   # the trimmed propensity (DEVLOG bug S) whether it was fit before the
   # trimming or after - no refit needed.
@@ -222,7 +222,7 @@ me_per_model <- function(model_res, true_tau, model, sim_res, keys) {
   )
 
   for (pipeline in names(sim_res$nuisances)) { # xgb, automl
-    # whatever arms this tree carries - see the table above. Deliberately not
+    # whatever arms this tree carries - see the table above. Not
     # checked against NUISANCE_ARMS: the same function has to score the main
     # tree's whole-only and the split tree's single arm too.
     for (fold_type in names(sim_res$nuisances[[pipeline]])) {

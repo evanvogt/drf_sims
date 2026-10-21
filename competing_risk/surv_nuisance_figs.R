@@ -27,7 +27,7 @@ source(here("competing_risk/surv_config.R"))
 
 # rcartocolor::Safe as a fill scale, to match drf_scale()'s colour version -
 # not added to R/figures.R since every other helper there uses colour, not
-# fill (distribution_plot() etc. use fill = "transparent" on purpose).
+# fill (distribution_plot() etc. use fill = "transparent").
 nuisance_fill_scale <- function() scale_fill_paletteer_d("rcartocolor::Safe")
 
 NUISANCE_ARM_LABELS <- c(
