@@ -1,31 +1,16 @@
 ##########
 # title: figures for the thesis chapter - competing risks
 ##########
-# The competing-risks study (competing_risk/), one figure per metric - CATE
-# bias, RMSE and Pearson correlation with the true CATE - each at the primary
-# rho = 0.5 (*_rho05_*), the sensitivity rho = 0 (*_rho0_*) and as the paired
-# rho = 0.5 - rho = 0 difference (*_rhodiff_*). In each, censoring on x, the
-# model in colour, the event in rows and the scenario in columns. The tables
-# are thesis_tables/surv_tables.R.
+# Thesis figures for the competing-risks study: CATE bias, RMSE and Pearson,
+# each at rho = 0.5, rho = 0 and their paired difference; censoring on x, model
+# by colour, event by row, scenario by column. One arm per estimator family, as
+# in thesis_tables/surv_tables.R's main table.
 #
-# - One arm per estimator family, its production fitting approach
-#   (SURV_ARM_LABELS in R/figures.R), the same rows as the main table.
-# - The arms are not all scored against the same truth (ADEMP.md,
-#   "Estimands"): ipw and csf_cs censor the competing event and are scored
-#   against the net (cause-specific) RMST CATE, the rest on the subdistribution
-#   scale (csf_sh's subdistribution RMST, the pseudo-value arms' RMTL). Shape
-#   marks which. It is a property of the arm, so it carries into the Combined
-#   row, where every arm targets the same all-cause RMST.
-# - Combined (RMSTc) is in for now. csf_sh has no Combined estimate.
-# - Pearson is NA where the arm's truth is constant - the net RMST CATE of
-#   event 1 in scenarios 2 and 5 and of event 2 in 1 and 3 - so those points
-#   are left out.
-# - The differences: run r at rho = 0 and at rho = 0.5 shares its seed
-#   (competing_risk/surv_config.R), so each metric is differenced per run
-#   (paired_rho_diff()) and its MCSE is sd(diff) / sqrt(pairs).
-#
-# Labels, palette, summaries and figure sizing come from R/figures.R. This
-# script carries only the paths and this study's filters.
+# - Arms target different truths (ADEMP.md, "Estimands"); shape marks the
+#   net-RMST arms (ipw, csf_cs) against the subdistribution-scale ones.
+# - Combined (RMSTc) is in for now; csf_sh has none.
+# - Pearson is NA where the arm's truth is constant, so those points are absent.
+# - Differences are per run (shared seed across rho), MCSE sd(diff) / sqrt(pairs).
 #
 # Writes to ../results/thesis_figures/surv/:
 #   surv_{rho05,rho0,rhodiff}_{bias,rmse,corr}.png

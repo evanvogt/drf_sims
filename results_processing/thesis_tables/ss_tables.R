@@ -1,42 +1,21 @@
 ##########
 # title: LaTeX tables for the thesis chapter - sample size, both outcomes
 ##########
-# The correlated-covariate studies (sample_size/), per outcome: the
-# rho = 0 and rho = 0.5 levels, and the paired rho = 0.5 - rho = 0
-# differences. Each as one table for the reported scenarios 1-4 and one for
-# the supplementary 5-10, each estimation metric as "mean (MCSE)". The
-# independent-covariate studies (sample_size/continuous/, binary/) are no
-# longer tabulated. The HTE tests have their own tables, ss_test_tables.R.
-# Labels and the summary come from R/figures.R, the table layout from
-# R/tables.R.
+# Appendix tables for the correlated sample-size studies, per outcome: rho = 0,
+# rho = 0.5 and the paired difference, each for scenarios 1-4 (main) and 5-10
+# (supp), cells "mean (MCSE)". The HTE tests are in ss_test_tables.R.
+#
+# - Runs share draws across rho, so differences are per run, MCSE
+#   sd(diff) / sqrt(pairs); Pearson and sign accuracy get a third decimal there.
+# - Bias is the CATE bias (mean of est - true), not an ATE estimate.
+# - No relative bias: the true ATE is recalibrated per n, so it has no common
+#   scale across n.
+# - Pearson, not Spearman: the true CATE is mostly ties in scenarios 5 and 7.
+#   Pearson is undefined in scenario 1 and prints as a dash.
 #
 # Writes to ../results/thesis_tables/:
-#   {cts,bin}_corr_rho0_ss_main.tex, {cts,bin}_corr_rho0_ss_supp.tex,
-#   {cts,bin}_corr_rho05_ss_main.tex, {cts,bin}_corr_rho05_ss_supp.tex,
-#   {cts,bin}_corr_rhodiff_ss_main.tex, {cts,bin}_corr_rhodiff_ss_supp.tex
-# \input{} them into a document with
-#   \usepackage{booktabs, longtable, pdflscape, array}
-#
-# The differences: run r at rho = 0 and at rho = 0.5 shares its random draws
-# (sample_size/README.md, "Pairing"), so each metric is
-# differenced per run (paired_rho_diff() in R/figures.R) and its MCSE is
-# sd(diff) / sqrt(pairs), as in sample_size/corr_outcome_results.qmd's
-# paired_diff(). Runs missing at either rho drop out of the pairs. Pearson
-# and sign accuracy get a third decimal there: their differences are
-# hundredths.
-#
-# Metric choices:
-# - Bias is the CATE bias, `bias` (mean of est - true over units), as in the
-#   figures. `ate_bias` is the same number unless a run has NA estimates, but
-#   it is not an ATE estimate: that would need AIPW with the CATE models'
-#   propensity scores, which not every model estimates.
-# - No relative bias. The true ATE is recalibrated per n for 80% power and
-#   shrinks with n, so the bias rows are not on a common scale across n.
-# - MSE, not RMSE, and Pearson, not Spearman: the missing-data chapter's
-#   tables report Pearson too (miss_tables.R), and in scenarios 5 and 7 the
-#   true CATE is mostly ties, which muddies Spearman's ranks.
-# - Pearson is undefined in scenario 1 (stored as 0, R/metrics.R), so it is
-#   set to NA and prints as a dash.
+#   {cts,bin}_corr_{rho0,rho05,rhodiff}_ss_{main,supp}.tex
+# \input{} with \usepackage{booktabs, longtable, pdflscape, array}.
 
 library(here)
 source(here("R", "figures.R"))

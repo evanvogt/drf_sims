@@ -1,33 +1,16 @@
 ##########
 # title: extract nuisance / pseudo-value diagnostics - competing risk
 ##########
-# sim_res$nuisances holds, per replicate, the propensity score (W.hat), the
-# fitted pseudo-value regressions (pseudo.hat / pseudo0.hat / pseudo.hat.cf)
-# and the AIPW/DR pseudo-outcome (po) for every pseudo-value DR-learner arm -
-# see surv_models.R's nuis_dr/nuis_sl (results$nuisances <- list(rf =, sl =)).
-# Nothing in the pipeline looks at these: surv_metrics.R only scores the final
-# tau vectors. This script reduces surv_all.RDS (already collected by
-# study.R collect) down to two much smaller objects a plotting script can work
-# with:
-#
+# Reduces surv_all.RDS to two small objects for plotting the saved nuisances
+# (W.hat, pseudo.hat*, po) of every pseudo-value DR-learner arm, which nothing
+# else in the pipeline reads:
 #   nuisance_run_summary.RDS   one row per (rho, scenario, censoring, run, arm,
-#                              estimand, quantity), covering all runs - cheap
-#                              enough to keep every one of them.
-#   nuisance_indiv_sample.RDS  individual-level (one row per person), but only
-#                              for a random sample of N_RUNS_SAMPLE runs per
-#                              combo - enough to see the within-run shape
-#                              (propensity overlap, heavy tails) without
-#                              holding tens of millions of rows in memory at
-#                              once.
+#                              estimand, quantity), all runs
+#   nuisance_indiv_sample.RDS  one row per person, for N_RUNS_SAMPLE runs per
+#                              combo
 #
-# Needs surv_all.RDS, which only exists on the HPC (it embeds every run's raw
-# data/truth/pseudos/tau vectors for all scenarios x censoring x runs -
-# surv_collect.sh puts the serialized size at ~729MB, more once unserialized)
-# - not meant to run on the local Windows machine. See .claude/CLAUDE.md.
-#
-# Parallelised across (rho, scenario, censoring) combos (28 of them) via
-# future/furrr, one combo per task - see the note above future_map() below for
-# why it's combos rather than individual runs that get mapped over.
+# HPC only: surv_all.RDS is ~729MB serialised. Parallelised over the 28
+# (rho, scenario, censoring) combos (see the note above future_map()).
 
 library(here)
 library(dplyr)

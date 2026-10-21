@@ -1,54 +1,22 @@
 ##########
 # title: run competing-risk simulations inside one RStudio session
 ##########
-# The no-queue alternative to `qsub jobscripts/surv_1.sh` / `surv_2.sh`. Same grid, same
-# results, but run directly inside an interactive session rather than
-# waiting on array-job scheduling.
-#
-# ---- how to run it ----------------------------------------------------------
-#   request an RStudio session with 8 cores and 64gb, then
+# The no-queue alternative to `qsub jobscripts/surv_1.sh` / `surv_2.sh`: same
+# grid, same results, in an interactive session (8 cores, 64gb):
 #   source(here::here("competing_risk", "surv_run.R"))
 #
-# Each grid row runs as its own Rscript subprocess, executing exactly the
-# command surv_1.sh runs for one array index:
+# Each row runs as its own `Rscript surv_analysis.R <i>` subprocess, exactly as
+# the array does, so no RNG, plan() or thread state carries between rows.
 #
-#   Rscript surv_analysis.R <i>
+# workers = 4: each row uses 2 cores (surv_analysis.R's default workers, as
+# surv_1.sh's ncpus=2), so 4 rows fill 8 cores.
 #
-# so a row produced here and a row produced by the array are the same
-# calculation. surv_analysis.R is not modified, is called with the same
-# single argument, and gets the same fresh process a compute node gives it -
-# no RNG stream, plan() or OMP_NUM_THREADS state carried over from the row
-# before.
+# By default it targets every row without a results file. The grid is 14,000
+# rows, so pick a subset below (e.g. grid_indices(study, rho = 0.5), which
+# selects rows without filtering the grid). Re-sourcing resumes.
 #
-# ---- workers = 4, not 8 ------------------------------------------------------
-# surv_analysis.R defaults its own internal `workers` to 2 (the
-# plan(multisession, workers = workers) it uses for data generation), and
-# this script calls it with the index alone, so every row gets that default -
-# along with grf_threads = 1, so each of those 2 processes uses one core.
-# jobscripts/surv_1.sh matches it with ncpus=2 per array task.
-# 8 concurrent rows here would therefore ask for 8 x 2 = 16 cores against the
-# 8 the session actually has - a 2x oversubscription that measures contention
-# rather than running faster. 4 rows x 2 cores each is the true 8-core budget.
-# Memory is not the constraint (surv_1.sh asks mem=2gb per task; 4 rows is
-# ~8GB against a 64GB session).
-#
-# ---- default target is every row without a results file ---------------------
-# As cts_val_run.R/me_strategies_run.R. The full
-# grid is 14,000 rows, far more than one session gets through, so pick a
-# subset below - e.g. ids <- grid_indices(study, rho = 0.5) - and let the array
-# do the bulk. grid_indices() selects rows by row number without filtering
-# study$grid (R/pipeline.R: filtering the grid itself renumbers every row).
-#
-# Rows whose results file already exists are skipped (intersected with
-# check_failed()), so a session that is interrupted - or hits its walltime -
-# is resumed by sourcing this file again.
-#
-# ---- what it deliberately does not do ---------------------------------------
-# It never writes jobscripts/failed_ids.txt and never edits surv_rerun.sh.
-# Those belong to the queue path and are study.R check's to write; writing
-# them from here would leave a resubmission list pointing at rows this
-# script has already retried itself. Failed rows are reported and picked up
-# by the next source() instead.
+# It never writes failed_ids.txt or edits surv_rerun.sh (study.R check's job),
+# so a resubmission list never points at rows this script already retried.
 
 library(future)
 library(here)

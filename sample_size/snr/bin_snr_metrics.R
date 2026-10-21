@@ -1,28 +1,19 @@
 ##########
 # title: metrics - correlated binary SNR check
 ##########
-# As ../binary/bin_corr_metrics.R (cate_metrics() + hte_test_metrics(), with the
-# T-learner derived from dr_random_forest's stage 1), for the arms in
-# SNR_MODELS. Then the comparison the study exists for, as
-# competing_risk/snr/snr_metrics.R: each run's RMSE of every other arm divided
-# by the same run's causal_forest RMSE, rel_eff_snr.R's ratio. Below 1, the
-# arm did better.
+# As ../binary/bin_corr_metrics.R for the SNR_MODELS arms, plus each run's RMSE
+# ratio to causal_forest (below 1 = better), as in competing_risk/snr/.
 #
-# The x axis of that comparison is the population SNR of each cell,
-# SD(tau) / sqrt(E[p(1 - p)]) as rel_eff_snr.R defines it, but from the
-# CLAMPED truth (truth_at() on the binary_snr set) over one seeded draw of
-# POP_N rho = 0.5 covariates - te_moments() knows nothing of the clamp. n does
-# not enter: bW is calibrated at SNR_CALIB_N in every cell.
+# The SNR on x is SD(tau) / sqrt(E[p(1 - p)]), as in rel_eff_snr.R, but from the
+# CLAMPED truth over one seeded draw of POP_N covariates (te_moments() knows
+# nothing of the clamp). bW is calibrated at SNR_CALIB_N, so n does not enter.
 #
 # Writes to the results folder:
 #   bin_snr_population.RDS  per (scenario, hte_mult): bW, ATE, SD(tau),
-#                           SD(noise), SNR and the share of treated risks
-#                           clamped
+#                           SD(noise), SNR and the share clamped
 #   bin_snr_metrics.RDS     one row per (scenario, n, hte_mult, run, model)
-#   bin_snr_ratios.RDS      per (scenario, n, hte_mult, model): the run-level
-#                           RMSE ratios summarised - median and IQR, and the
-#                           geometric mean exp(mean log ratio) with the MCSE
-#                           of the mean log ratio
+#   bin_snr_ratios.RDS      RMSE ratios per (scenario, n, hte_mult, model):
+#                           median, IQR, geometric mean, MCSE of the mean log
 #
 #   Rscript bin_snr_metrics.R [results dir]   # default: study$res_path
 

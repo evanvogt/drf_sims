@@ -1,40 +1,20 @@
 ##########
 # title: candidate CATE-learner fitting - model evaluation study
 ##########
-# The 9 candidate configurations this study compares: 3 random-forest
-# hyperparameter sets, 3 elastic-net (glmnet) sets, 3 SuperLearner library
-# sets. Each is fit as its own single-crossfit ("scf_scf") DR-learner:
-# leave-one-fold-out nuisances feeding a stage-2 regression crossfit over the
-# SAME folds, following crossfitting/'s comparison (crossfitting/README.md).
+# The 9 candidate configurations: 3 random-forest, 3 elastic-net (glmnet) and
+# 3 SuperLearner sets, each fit as a single-crossfit ("scf_scf") DR-learner.
+# All 9 share that scheme, even though rf1-3 could use OOB, because mixing
+# schemes would confound learner choice with crossfitting in the ranking
+# (crossfitting/README.md).
 #
-# Single crossfitting for all 9, even though rf1-3 (ranger) could take OOB
-# predictions: net1-3 and SL1-3 have no honest OOB analogue
-# (crossfitting/README.md's "DR-learner, SuperLearner" section), and mixing
-# schemes would confound learner choice with crossfitting scheme in the ranking.
+# Nuisances, as in R/cate_models.R: a per-arm (T-learner) outcome model in every
+# candidate (an S-learner would make glmnet's Y1.hat - Y0.hat constant);
+# propensity from the candidate's own learner for rf* and net*, and mean + glm
+# (sl_libraries(n)$W) for SL1-3.
 #
-# NUISANCES, in line with R/cate_models.R's DR-learners:
-#
-#   outcome     a T-learner in every candidate: one model per arm, fit on X
-#               with that arm's training rows only and predicting every
-#               held-out row (control arm first). An S-learner on cbind(W, X)
-#               would make glmnet's Y1.hat - Y0.hat a constant.
-#   propensity  rf* and net* keep their own learner (ranger / glmnet at the
-#               candidate's alpha). SL1-3 all use the production propensity
-#               library, sl_libraries(n)$W = mean + glm (R/sl_library.R): every
-#               study is an RCT at P(W = 1) = 0.5, and a flexible learner only
-#               fits noise that the DR weight 1/(e(1 - e)) amplifies.
-#
-# SL1 IS the production dr_superlearner: each fold is R/cate_models.R's
-# sl_split_fit() and stage 2 is its stage_2_sl(), with sl_libraries(n) - the
-# per-nuisance libraries, pretest and mean fallbacks every other study uses -
-# on this study's fold_indices (the same scf_scf scheme nuisance_sl uses).
-# SL2 and SL3 keep their own single library for the outcome and stage 2.
-# net*/rf*/SL2/SL3 are this study's own code path (e.g. fit_glmnet wraps a
-# single learner via create.Learner("SL.glmnet", ...) inside SuperLearner(),
-# which R/cate_models.R doesn't have).
-#
-# scatter_folds() (R/utils.R) reassembles the single-crossfit predictions, as
-# in R/cate_models.R::nuisance_sl.
+# SL1 IS the production dr_superlearner (sl_split_fit() + stage_2_sl() with
+# sl_libraries(n)) on this study's folds. SL2, SL3, net* and rf* are this
+# study's own code path.
 
 require(future.apply)
 require(ranger)

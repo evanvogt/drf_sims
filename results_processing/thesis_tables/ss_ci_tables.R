@@ -1,45 +1,25 @@
 ##########
 # title: LaTeX tables of the CI studies - sample size, both outcomes
 ##########
-# The correlated-covariate CI studies (sample_size/
-# confidence_intervals/), per outcome, for the appendix:
-# - the CI_sf sweep (continuous/, binary/): one table per interval metric,
-#   rows scenario / n / model, the ten subsampling ratios across the columns.
-#   Like ss_tables.R, one set at rho = 0, one at rho = 0.5 and one of the
-#   paired rho = 0.5 - rho = 0 differences.
-# - the data-driven CI_sf (optimal_sf/, continuous only): rows
-#   scenario / n / rho, with the paired difference as a third row per n. And
-#   for the main text, a float (tab:optimal_sf) of its rho = 0.5 rows only,
-#   with the ratio picked as median (IQR) over runs.
-# Each cell is "mean (MCSE)". Labels and the summary come from R/figures.R,
-# the layout from R/tables.R.
+# Appendix tables for the correlated CI studies (sample_size/confidence_intervals/):
+# the CI_sf sweep per outcome (rho = 0, rho = 0.5 and their paired difference)
+# and the data-driven CI_sf (optimal_sf/, continuous), plus the main-text float
+# tab:optimal_sf. Cells are "mean (MCSE)".
+#
+# - Per-unit intervals only: the query grid is extrapolation at rho = 0.5
+#   (sample_size/README.md, "The query grid").
+# - causal_forest_inbuilt never sees CI_sf, so it is printed once across the
+#   ratio columns.
+# - Simultaneous coverage is 0/1 per run (binomial MCSE); marginal coverage is a
+#   within-run proportion (general MCSE). Differences are per run, MCSE
+#   sd(diff) / sqrt(pairs).
+# - optimal_sf bands are 90%, the sweep's 95%.
+# - A study with missing or incomplete metrics is skipped with a message.
 #
 # Writes to ../results/thesis_tables/:
 #   {cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.tex
 #   cts_corr_ci_sf.tex, cts_corr_ci_sf_main.tex
-# \input{} them into a document with
-#   \usepackage{booktabs, longtable, pdflscape, array}
-#
-# - Only the per-unit intervals: the half-sample bootstrap band of each
-#   model, and the causal forest's own variance-based interval
-#   (causal_forest_inbuilt). The query-grid rows (*_grid) are left out; the
-#   grid is extrapolation at rho = 0.5 (sample_size/README.md, "The
-#   query grid"), so the per-unit band is the primary comparison.
-# - The inbuilt interval comes from the full-sample causal forest, which is
-#   fit before any bootstrap and never sees CI_sf (R/cate_models.R), so it is
-#   the same at every ratio. ci_sweep_table() prints it once, spanning the
-#   ratio columns.
-# - Simultaneous coverage is 0/1 per run, so its levels get the binomial MCSE.
-#   Marginal coverage is a proportion over units within a run, so it gets the
-#   general one. The differences are taken per run (paired_rho_diff() in
-#   R/figures.R): run r shares its random draws at the two rhos, and at every
-#   CI_sf, so the MCSE of a difference is sd(diff) / sqrt(pairs).
-# - The optimal_sf bands are 90% bands (alpha = 0.1 in its analysis scripts),
-#   the sweep's 95%. Its plug-in coverage is the calibration's own coverage
-#   of the run's estimate at the pick, its true-tau coverage the metric the
-#   sweep reports.
-# - A study whose metrics are missing, or do not yet cover every cell of its
-#   design, is skipped with a message rather than tabulated in part.
+# \input{} with \usepackage{booktabs, longtable, pdflscape, array}.
 
 library(here)
 source(here("R", "figures.R"))

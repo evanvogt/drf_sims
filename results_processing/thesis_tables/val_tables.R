@@ -1,53 +1,25 @@
 ##########
 # title: LaTeX tables for the thesis appendix - interim-analysis validation
 ##########
-# The interim-analysis validation study (validation/continuous/), scenarios 1-4
-# at rho = 0.5, the appendix counterpart of thesis_figures/validation.R: three
-# CATE estimators fit on the first `interim_prop` of a trial of 1000, and what
-# they find there tested on the rest.
+# Appendix tables for the interim-analysis validation study
+# (validation/continuous/, scenarios 1-4, rho = 0.5), the counterpart of
+# thesis_figures/validation.R.
 #
-# Tables:
-#   - val_sg_top.tex, val_sg_bottom.tex: how often the top / bottom 10%
-#     responder subgroup validates in stage 2 - p < 0.05 with the W x subgroup
-#     estimate in the direction stage 1 implied (the sign of ref1), the
-#     figure's val_sg_direction - at all 11 interim points. Rows scenario /
-#     estimator, one table per subgroup so the cells keep their MCSE.
-#     Landscape;
-#   - val_sg_counts.tex: at the landmark interim points, per subgroup, the
-#     number of runs significant in stage 1's direction, significant the other
-#     way, and whose true stage 2 contrast (true2) has the sign stage 1 implied
-#     - whether stage 1's claim was right, significant or not. Counts out of
-#     Runs. Rows scenario / estimator / interim point;
-#   - val_nom_tevim.tex, val_nom_shap.tex: which covariate stage 1 ranks most
-#     important (x_top, the one the top-covariate tests are run on), grouped:
-#     X4 | X3, X5 | X1, X2 (prognostic) | X01-X03 (noise correlated with the
-#     modifiers) | X04, X05 (independent noise, the dummies of one three-level
-#     categorical). At the landmarks, rows scenario / estimator / interim
-#     point, one table per importance measure. A group that modifies the
-#     effect in that scenario is bold: X4 in scenarios 2-4, X3 and X5 in
-#     scenario 3 only (te_uses(), as the figures read it);
-#   - val_sg_se.tex: the subgroup tests' rejection rate (p < 0.05, either
-#     direction) under classical and HC3 standard errors, at the landmarks.
-#     Rows scenario / subgroup / estimator.
+# - A subgroup validates if p < 0.05 in stage 2 with the estimate in the
+#   direction stage 1 implied (the sign of ref1).
+# - HC3 standard errors everywhere but val_sg_se, which compares the two. Every
+#   proportion is one 0/1 per run, so it takes the binomial MCSE.
+# - A subgroup test exists only when stage 1's tree predicts someone into the
+#   subgroup in stage 2; runs without one drop from that cell. Under HC3 a
+#   leverage-1 row can also lose the p-value, and a message counts those.
+# - In the nomination tables a covariate group is bold where it modifies the
+#   effect in that scenario (te_uses()).
 #
-# HC3 standard errors everywhere but val_sg_se. Every proportion is over runs,
-# one 0/1 per run, so it gets the binomial MCSE, as the figures' ribbons do.
+# Writes to ../results/thesis_tables/: val_sg_top, val_sg_bottom,
+# val_sg_counts, val_nom_tevim, val_nom_shap, val_sg_se (.tex). \input{} with
+# \usepackage{booktabs, longtable, pdflscape, array}.
 #
-# Runs: a subgroup test exists only where stage 1's tree predicts at least one
-# stage 2 participant into the subgroup (interaction_test(),
-# validation/val_common.R); the runs without one are dropped from that cell,
-# as in the figure. Under HC3 a test can also lack a p-value (a leverage-1
-# row) though its subgroup is not empty - a message says how many runs that
-# drops besides, since the captions only name the empty subgroups.
-#
-# Writes to ../results/thesis_tables/:
-#   val_sg_top.tex, val_sg_bottom.tex, val_sg_counts.tex,
-#   val_nom_tevim.tex, val_nom_shap.tex, val_sg_se.tex
-# \input{} them into a document with
-#   \usepackage{booktabs, longtable, pdflscape, array}
-#
-# Optional arguments, for a smoke run on mock metrics:
-#   Rscript val_tables.R [metrics.RDS] [table dir]
+#   Rscript val_tables.R [metrics.RDS] [table dir]   # mock smoke run
 
 library(here)
 source(here("R", "figures.R"))

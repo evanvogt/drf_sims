@@ -1,37 +1,20 @@
 ##########
 # title: figures for the thesis chapter - missing covariates, MI intervals
 ##########
-# The MI confidence-interval example (missing/ci_example/): how to build a CATE
-# interval after multiple imputation, continuous outcome only. One cell of the
-# missing-data design - n = 500, 30% missing in both covariate types, MAR,
-# multiple imputation - so what varies is scenario x estimator x the strategy
-# combine_mi_ci() (R/bootstrap_ci.R) uses to pool the per-imputation bootstrap
-# intervals. A separate script from missing.R, as ss_ci.R is from
-# sample_size.R: different metrics file, metrics and design.
+# Thesis figure for the MI confidence-interval example (missing/ci_example/,
+# continuous, MAR, n = 500): marginal coverage, simultaneous coverage and
+# interval length by combine_mi_ci() pooling strategy, scenarios 1-4, on all,
+# complete and incomplete units.
 #
-# One figure, three rows sharing the x axis: marginal coverage, simultaneous
-# coverage and mean interval length, each by pooling strategy on x, estimator
-# by colour, units by shape, scenario across. Notes:
-#   - every metric is scored on all units, the complete units (no amputed
-#     covariate) and the incomplete units (interval_metrics_split() in
-#     R/metrics.R). An incomplete unit's interval is aimed at tau at its
-#     unamputed covariates, which the data cannot pin down. MI keeps every
-#     unit, so every estimator has all three;
-#   - simultaneous coverage is 0/1 per run, so it gets the binomial MCSE,
-#     marginal coverage and length the general one (summarise_metrics());
-#   - every panel has its own y scale, as the scenarios differ
-#     (point_range_plot(independent_y = TRUE), as facet_grid() can only free
-#     y per row). The metric names are the row strips, on the left where a y
-#     title would be. Coverage panels have the nominal 0.95 dashed, which
-#     their scale always takes in;
-#   - each estimator keeps the colour it has in the other thesis figures (Safe,
-#     by its place in MODEL_LABELS, as ss_ci.R), although only four of them
-#     (CI_MODELS) have intervals.
+# - An incomplete unit's interval targets tau at its unamputed covariates, which
+#   the data cannot pin down.
+# - Simultaneous coverage is 0/1 per run (binomial MCSE); the others take the
+#   general MCSE.
+# - Every panel has its own y scale; coverage panels include the nominal 0.95.
+# - Estimators keep their colours from the other figures, though only four have
+#   intervals.
 #
-# The scenarios are the main study's 1-4 (missing/ci_example/README.md), so
-# they take the sample-size chapter's labels, as missing.R does.
-#
-# Writes to ../results/thesis_figures/miss_cts_ci/miss_cts_ci_all.png
+# Writes ../results/thesis_figures/miss_cts_ci/miss_cts_ci_all.png
 
 library(here)
 source(here("R", "figures.R"))

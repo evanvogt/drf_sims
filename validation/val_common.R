@@ -1,33 +1,19 @@
 ##########
 # title: shared machinery for the interim-analysis validation studies
 ##########
-# Everything the continuous/ and binary/ arms do identically: splitting one
-# trial at the interim, fitting the three estimators and both importance
-# measures on a chunk, the TE-VIM / TreeSHAP / interaction-test helpers, and the
-# four chunk-1-vs-chunk-2 comparisons. Each arm's <prefix>_val_models.R sources
-# this and fixes the outcome family; its <prefix>_val_analysis.R is the array
-# entry point.
+# What the continuous/ and binary/ arms share: splitting a trial at the
+# interim, fitting the three estimators and both importance measures on a
+# chunk, and the four chunk-1-vs-chunk-2 comparisons. Each arm's
+# <prefix>_val_models.R sources this; <prefix>_val_analysis.R is the entry point.
 #
-# Two arguments carry the outcome-family difference between the arms:
-#   family  the DR SuperLearner's outcome-model family (fit_val_methods)
-#   robust  HC3 standard errors in the interaction tests (interaction_test,
-#           interaction_test_adj, chunk_validations) - see coef_test
-# chunk_validations_se() runs chunk_validations() with classical and HC3 SEs
-# and stacks the two under an `se` column. Every interaction test saves its W:v
-# estimate and SE next to its p-value, plus two reference contrasts, ref1 and
-# true2 (see "Reference contrasts" below), whose signs say whether a
-# replication went the right way.
+# The arms differ through two arguments: `family` (the DR SuperLearner's
+# outcome family) and `robust` (HC3 SEs in the interaction tests).
+# chunk_validations_se() stacks classical and HC3 results under an `se` column.
 #
-# The question is whether subgroups/variance/variable importance found on one
-# chunk replicate on the next, not which estimator is best, so the oracle and
-# semi-oracle arms are not run. The three estimators come from R/cate_models.R,
-# so the causal forest uses the shared Y.hat.cf nuisance (Y on X alone) - a
-# deliberate choice, see continuous/README.md's Notes.
-#
-# The two forest estimators (and their TE-VIM refits below) are whole-sample
-# OOB, not fold-crossfit - see R/cate_models.R's crossfitting-strategy note.
-# n_folds is used by the DR SuperLearner alone: its nuisances, its stage 2 and
-# its TE-VIM refits all share one set of folds.
+# The question is replication, not which estimator is best, so there are no
+# oracle arms. The causal forest uses the shared Y.hat.cf nuisance
+# (continuous/README.md, Notes). The forests and their TE-VIM refits are
+# whole-sample OOB; n_folds is used by the DR SuperLearner alone.
 
 library(xgboost)
 library(SHAPforxgboost)

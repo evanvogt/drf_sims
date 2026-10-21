@@ -1,62 +1,24 @@
 ##########
 # title: figures for the thesis chapter - model evaluation
 ##########
-# The model-evaluation study (model_evaluation/), the strategies tree: 9
-# candidate CATE learners per run, each scored by proxy losses built from an
-# independent nuisance pipeline, and selected by the proxy's argmin. The
-# exploratory version of these figures is model_evaluation/me_results.qmd. The
-# selection and reference derivations are model_evaluation/me_selection.R's,
-# shared with the appendix tables (thesis_tables/me_tables.R).
+# Thesis figures for the model-evaluation strategies tree: 9 candidate CATE
+# learners per run, picked by each proxy's argmin. Proxies are DR risk and the
+# IF score (inflt), with estimated or fixed (0.5) propensity, x 3 fold regimes
+# x 2 nuisance pipelines; calibration scores are left out. Selection and
+# references come from model_evaluation/me_selection.R, shared with
+# thesis_tables/me_tables.R.
 #
-# Proxies: the four PEHE proxies, DR risk and the influence-corrected score
-# (IF, me_metrics.R's inflt: the T-learner plug-in as its surrogate), each
-# with the pipeline's estimated propensity or with it fixed at the true 0.5
-# (the `05` score types, model_evaluation/me_metrics.R), crossed with
-# the three fold regimes (CV = cv_shared, holdout, whole) and the two nuisance
-# pipelines (XGBoost, AutoML). The calibration scores are left out.
+# - Hit and regret are per (scenario, n, run, proxy), shown as the mean with a
+#   95% Monte Carlo interval (binomial MCSE for hit). The best fixed choice is
+#   picked with hindsight, so it is an optimistic bound on any fixed rule.
+# - The rank figures' denominator is every run with a true PEHE: an unranked
+#   run is a grey share rather than dropping out, so grey means a failure.
+# - The axis figure averages within run first, so its MCSE counts runs.
 #
-# Per (scenario, n, run, proxy):
-#   - hit, whether the proxy's pick is the candidate with the lowest true PEHE;
-#   - regret, the pick's true PEHE minus the lowest true PEHE in the run.
-# Mean over runs with a 95% Monte Carlo interval (binomial MCSE for hit).
+# Writes to ../results/thesis_figures/model_eval/: me_top1, me_regret,
+# me_axis_regret, me_rankings, me_candidate_ranks (.png).
 #
-# Regret reference lines, per (scenario, n):
-#   - random pick, the expected regret of a uniformly random candidate;
-#   - best fixed choice, the single candidate with the lowest mean regret,
-#     chosen with hindsight from the truth, so an optimistic bound on any
-#     fixed rule.
-# Top-1 accuracy's reference is random-pick accuracy, 1 / 9.
-#
-# The rankings figure is the distribution of the pick's true rank (1 = best of
-# the 9) over runs, for the fixed-π proxies only, as in me_results.qmd. Its
-# denominator is every run with a true PEHE, not just the runs the proxy
-# ranked: a run whose proxy score was undefined is a grey "Not ranked" share
-# of the bar, rather than dropping out and inflating the proxy's share of good
-# ranks. The fixed-pi proxies never needed the estimated propensity, and since
-# its trimming (DEVLOG bug S) no proxy should be unranked, so grey means
-# something new has failed.
-#
-# The candidate-ranks figure (appendix) is the same distribution for each of
-# the 9 candidates' own true rank, on the same colours: its rank-1 share is how
-# often that candidate is the true best, and the rest of the bar is where it
-# sits otherwise. Same denominator, so grey is a run without that candidate's
-# true PEHE.
-#
-# The design-axis figure marginalises regret over the other axes: each level
-# (DR vs IF, estimated vs fixed propensity, fold regime, pipeline) is averaged
-# within run first, then over runs, so its MCSE counts runs, not runs x the
-# proxies sharing that level (me_results.qmd pools the latter, which
-# understates it).
-#
-# Labels, palette, summaries and figure sizing come from R/figures.R. This
-# script carries only the paths and this study's filters.
-#
-# Writes to ../results/thesis_figures/model_eval/:
-#   me_top1.png, me_regret.png, me_axis_regret.png, me_rankings.png,
-#   me_candidate_ranks.png
-#
-# Optional arguments, for a smoke run on mock metrics:
-#   Rscript model_eval.R [metrics.RDS] [figure dir]
+#   Rscript model_eval.R [metrics.RDS] [figure dir]   # mock smoke run
 
 library(here)
 source(here("R", "figures.R"))

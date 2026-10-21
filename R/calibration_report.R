@@ -1,45 +1,23 @@
 ##########
 # title: bW calibration report
 ##########
-# Prints, for every scenario at every n a study generates at, the calibrated
-# bW, the true ATE, and the ATE's planned and realised power, for both outcome
-# types - and for binary outcomes the worst-case treated risks. The design is
-# in the "Calibration of bW" section of sample_size/README.md:
-# each trial is planned for TARGET_POWER under
-# homogeneity, and the true ATE equals the planned effect.
+# Prints, for every scenario and n a study generates at, the calibrated bW, the
+# true ATE and its planned and realised power, for both outcome types, plus the
+# worst-case treated risks for binary. Design: sample_size/README.md,
+# "Calibration of bW".
 #
 #   Rscript R/calibration_report.R
 #
-# Deterministic and quick - no simulation, no RNG - so it runs anywhere,
-# including the cluster. Run it there after any change to the scenario tables
-# or calibrate_bW(): bW is rounded to 2 dp, and R 4.3.2 there vs 4.5.3 here
-# could round a borderline value differently, so the bW tables should match a
-# local run exactly.
+# Deterministic, so run it on the cluster too after changing the scenario tables
+# or calibrate_bW(): bW is rounded to 2 dp and R 4.3.2 could round a borderline
+# value differently from local R.
 #
-# Continuous power is for an unadjusted two-sample t-test with n / 2 per arm:
-#   planned   the no-heterogeneity SD the calibration assumes, so it differs
-#             from TARGET_POWER only through bW's rounding
-#   realised  adds the treated arm's Var(g), pooled across the two arms, which
-#             the plan knows nothing about
-#   MNAR-Y0   adds bU^2 sU^2 on top in BOTH arms - the unobserved U's
-#             contribution to the control mean (missing-data studies only)
-#   MNAR-tau  adds bU^2 sU^2 on top in the treated arm only - U's contribution
-#             to the treatment effect (missing-data studies only)
-# The missing-data sets' covariates are correlated, so their planned SD also
-# carries 2 b1 b2 Cov(X1, X2) (calibrate_bW()).
-#
-# Binary power is for a two-proportion test with n / 2 per arm, on the true
-# marginal risks. Heterogeneity cannot lower it - each arm's variance is fixed
-# by its marginal risk - so planned and realised are one column, which differs
-# from TARGET_POWER only through bW's rounding. The effect is on the
-# risk-difference scale and the MNAR mechanisms' bU * tanh(U) has mean zero, so
-# they leave the RD and the power alone; they only widen the risk bounds (the
-# treated risk's the same under either).
-#
-# Binary floor / ceiling: the lowest and highest treated risk over the whole
-# covariate support (treated_risk_bounds()). RD_SCALE keeps them inside
-# [RD_EPS, 1 - RD_EPS], give or take bW's 3-dp rounding (5e-4);
-# R/bin_verify_hte.R checks that, and re-derives RD_SCALE.
+# Continuous power (t-test, n / 2 per arm): planned uses the no-heterogeneity
+# SD; realised adds the treated arm's Var(g); MNAR-Y0 adds bU^2 sU^2 in both
+# arms, MNAR-tau in the treated arm only. Binary power (two-proportion test on
+# the true marginal risks) cannot be lowered by heterogeneity, so planned and
+# realised are one column. The binary floor / ceiling are the extreme treated
+# risks over the covariate support (checked by R/bin_verify_hte.R).
 
 suppressPackageStartupMessages(library(here))
 suppressMessages(source(here("R", "dgm_scenarios.R")))

@@ -1,29 +1,16 @@
 ##########
 # title: figures for the thesis chapter - sample size, CI studies
 ##########
-# The correlated-covariate CI studies (sample_size/
-# confidence_intervals/), per outcome, the CI_sf sweep: one figure per
-# interval metric (marginal coverage, simultaneous coverage, mean interval
-# length) at rho = 0, at rho = 0.5 and as the paired rho = 0.5 - rho = 0
-# difference. The scenarios are across, the sample sizes down, the
-# subsampling ratio on x and the models in colour. The tables are
-# thesis_tables/ss_ci_tables.R. The data-driven CI_sf study (optimal_sf/)
-# will be added here once its results are in.
+# Thesis figures for the correlated CI_sf sweep (sample_size/confidence_intervals/),
+# per outcome: marginal coverage, simultaneous coverage and length at rho = 0,
+# rho = 0.5 and their paired difference; ratio on x, model by colour. Tables are
+# thesis_tables/ss_ci_tables.R; optimal_sf is not drawn yet.
 #
-# - Only the per-unit intervals, as the tables: the half-sample bootstrap band
-#   of each model, and the causal forest's own variance-based interval
-#   (causal_forest_inbuilt). The query-grid rows (*_grid) are left out.
-# - The inbuilt interval does not depend on CI_sf (ss_ci_tables.R), so it is
-#   drawn as a flat line across each panel, its 95% MCSE interval shaded,
-#   from its rows at the first ratio.
-# - Coverage shares one y scale across all panels; length is free per panel,
-#   as the scenarios' CATE spread differs (point_range_plot(independent_y =
-#   TRUE), as facet_grid() can only free y per row).
-# - Simultaneous coverage is 0/1 per run, so its levels get the binomial MCSE,
-#   marginal coverage the general one. Differences are per run
-#   (paired_rho_diff()), MCSE sd(diff) / sqrt(pairs).
-# - An outcome whose metrics are missing, or do not yet cover every cell of
-#   the design, is skipped with a message rather than drawn in part.
+# - Per-unit intervals only, as in the tables. causal_forest_inbuilt does not
+#   depend on CI_sf, so it is a flat line with its MCSE band.
+# - Coverage shares one y scale; length is free per panel.
+# - Simultaneous coverage takes the binomial MCSE, marginal the general one.
+# - Missing or incomplete metrics are skipped with a message.
 #
 # Writes to ../results/thesis_figures/sample_size/:
 #   {cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.png

@@ -1,45 +1,19 @@
 ##########
 # title: correlated sample-size sets - summarise SuperLearner drops and failures
 ##########
-# Every run saves the SuperLearner arm's dropped learners as results$sl_dropped
-# (R/cate_models.R::cate_methods()): one row per (fold, model, learner), model
-# being Y0 / Y1 (the per-arm outcome models), W (the propensity) or tau (stage
-# 2), with the reason. Two kinds of row land there (R/sl_library.R):
-#   pretest drops   pretest_superlearner() fits each candidate alone with 2-fold
-#                   CV and drops one that errors or predicts non-finite values
-#   "(whole fit)"   the live SuperLearner() errored, so every prediction in that
-#                   fold/model is the training mean (mark_failed_fit()); or
-#                   every ensemble weight was zero and the fit used the
-#                   lowest-CV-risk learner alone (reason "all ensemble weights
-#                   zero, ...", runs after 2026-10-09 only)
-# Nothing downstream reads it. This summarises it for both outcomes. One more
-# event is derived rather than saved: when the pretest drops every learner in a
-# library, the fit falls back to SL.mean alone; that shows here as a
-# fold/model whose drops cover the whole sl_libraries(n) library.
+# Summarises the SuperLearner drops each run saves as results$sl_dropped (one
+# row per fold, model - Y0 / Y1 / W / tau - and learner, with the reason):
+# pretest drops, whole-fit failures (predictions fall back to the training
+# mean) and all-zero-weight fits (runs after 2026-10-09 only). A fold/model
+# whose pretest dropped the whole library shows as an SL.mean fallback. Only in
+# the PBS logs, not the results: all-zero-prediction fallbacks, learners
+# weighted 0 after failing the live CV, and ensemble weights.
 #
-# NOT RECOVERABLE from the saved results - only in the PBS logs, as warnings:
-# the all-zero-prediction fallback to the mean (sl_split_fit()), learners that
-# pass the pretest but error inside the live 10-fold CV (weighted 0 by
-# SuperLearner), and the kept learners' pretest warnings. Ensemble weights are
-# not saved either.
-#
-# Reads the collected <prefix>_all.RDS, as the metrics scripts do. If it isn't
-# there, reads the per-run files directly (get_results()), so this also runs
-# before *_corr_collect.R.
-#
-# Writes <res_path>/<prefix>_sl_failures.RDS for each outcome, a list of:
-#   runs       one row per run: folds, SL fits, and counts of pretest drops,
-#              whole-fit failures and SL.mean fallbacks
-#   drops      sl_dropped itself, one row per (run, fold, model, learner), with
-#              reason_class
-#   fallbacks  one row per (run, fold, model) whose pretest dropped every learner
-#   cells      per (rho, scenario, n): runs and fits affected, by event
-#   learners   per (rho, scenario, n, model, learner): fits dropped, runs affected
-#   reasons    per (model, learner, reason): fits, runs, and where it happened
-# and prints the cells, learners and reasons tables. Run from
-# sample_size/:
-#   Rscript corr_sl_failures.R                 # both outcomes
-#   Rscript corr_sl_failures.R binary          # or just one
+# Reads <prefix>_all.RDS, or the per-run files if it isn't collected yet.
+# Writes <res_path>/<prefix>_sl_failures.RDS (runs, drops, fallbacks, cells,
+# learners, reasons) and prints the last three. From sample_size/:
+#   Rscript corr_sl_failures.R            # both outcomes
+#   Rscript corr_sl_failures.R binary     # or just one
 
 suppressPackageStartupMessages({
   library(here)

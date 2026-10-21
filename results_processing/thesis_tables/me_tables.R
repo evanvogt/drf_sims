@@ -1,68 +1,24 @@
 ##########
 # title: LaTeX tables for the thesis appendix - model evaluation
 ##########
-# The model-evaluation study's strategies tree (model_evaluation/), the
-# appendix counterpart of thesis_figures/model_eval.R: the same 24 proxies (DR
-# and IF, estimated or fixed propensity, three fold regimes, two machines),
-# the same per-run selection and the same references, from
-# model_evaluation/me_selection.R. Labels follow the figures' legends.
+# Appendix tables for the model-evaluation strategies tree, the counterpart of
+# thesis_figures/model_eval.R: the same 24 proxies, per-run selection and
+# references (model_evaluation/me_selection.R). Cells are "mean (MCSE)" over
+# runs of top-1 accuracy, the pick's true rank, or regret.
 #
-# Measures, per (scenario, n, run, proxy), each "mean (MCSE)" over runs:
-#   - top-1 selection accuracy, whether the pick is the truly best candidate
-#     (binomial MCSE, as in the figure);
-#   - the pick's true rank among the 9 candidates, 1 = best;
-#   - regret, the pick's true PEHE minus the lowest in the run.
+# - The best fixed choice is the candidate with the lowest mean regret, used for
+#   all three measures.
+# - Design-axis levels are averaged within run, then over runs, so top-1 there
+#   is a proportion and takes the general MCSE, not the binomial one.
+# - Run counts are read off the data: a proxy whose nuisance failed in a run
+#   drops out of that run, so a short count flags a failure (me_runs.tex).
 #
-# Tables:
-#   - one per measure, rows scenario / n / score type, columns fold regime x
-#     machine, with a random-pick and a best-fixed-choice row under each n
-#     (me_proxy_table(), R/tables.R). The best fixed choice is the candidate
-#     with the lowest mean regret, used for all three measures;
-#   - one design-axis table, each axis level averaged over the other axes
-#     within run, then over runs, as the axis figure does (me_axis_runs()).
-#     Top-1 averaged within a run is a proportion, so there it takes the
-#     general MCSE, not the binomial one;
-#   - one fixed-choice table, rows scenario / n / candidate: each candidate's
-#     true PEHE and the three measures if it were always deployed
-#     (me_candidates()), the best fixed choice in bold. Its bold rows are the
-#     proxy tables' best-fixed-choice rows;
-#   - one completed-runs table, the proxy tables' layout with each cell the
-#     number of runs that proxy was scored in, and an "All runs" row (the runs
-#     with a true PEHE) under each n;
-#   - two on the IF score. The population check (me_if_population), from
-#     model_evaluation/me_infl_investigation.R's population.RDS: five
-#     constructed candidates scored with oracle nuisances on one very large
-#     sample, rows in order of true PEHE within each scenario and each score's
-#     rank in parentheses. And selection by its two surrogates
-#     (me_if_selection), CV arm, XGBoost, pi fixed at 0.5: regret under DR,
-#     IF with the pseudo-outcome and IF with the T-learner surrogate, a random
-#     pick's, and the T-learner IF's Spearman correlation with true PEHE and
-#     with mu1_mse, the MSE against the true mu1 that it tracks at pi = 0.5.
+# Writes to ../results/thesis_tables/: me_top1, me_rank, me_regret, me_axis,
+# me_fixed, me_runs, me_if_population, me_if_selection (.tex). me_if_population
+# needs model_evaluation/me_infl_investigation.R's population.RDS and is skipped
+# without it. \input{} with \usepackage{booktabs, longtable, pdflscape, array}.
 #
-# Run counts are read off the data, not the design. A proxy whose scoring
-# nuisance failed in a run is NA for every candidate there, and me_selection()
-# drops that (run, proxy), so a failure shows only as a short count. Before
-# the scoring propensity was trimmed (DEVLOG bug S) that was AutoML's
-# estimated-pi proxies, mostly holdout; on metrics computed since, every count
-# should be full, and this is the check that it is. Each caption gives its own
-# table's counts, and the proxy tables name any short proxies and point to the
-# completed-runs table.
-#
-# All eight are portrait, within the thesis's 17cm text width. Regret's
-# decimals are read off its MCSEs (mcse_digits() below): its scale changes
-# with the scenario and n, and the results were not to hand when this was
-# written.
-#
-# Writes to ../results/thesis_tables/:
-#   me_top1.tex, me_rank.tex, me_regret.tex, me_axis.tex, me_fixed.tex,
-#   me_runs.tex, me_if_population.tex, me_if_selection.tex
-# \input{} them into a document with
-#   \usepackage{booktabs, longtable, pdflscape, array}
-# me_if_population.tex is skipped, with a message, when population.RDS is
-# missing (run `Rscript me_infl_investigation.R` in model_evaluation/).
-#
-# Optional arguments, for a smoke run on mock metrics:
-#   Rscript me_tables.R [metrics.RDS] [table dir] [population.RDS]
+#   Rscript me_tables.R [metrics.RDS] [table dir] [population.RDS]   # mock smoke run
 
 library(here)
 source(here("R", "figures.R"))

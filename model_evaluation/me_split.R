@@ -1,37 +1,18 @@
 ##########
 # title: the 80:20 single-split arm - model evaluation study
 ##########
-# The one arm that refits the candidates, and the only one where that is the
-# point rather than a cost. Every other arm scores me_analysis.R's crossfit
-# candidate fits, whose training data covers all n rows - so no matter where
-# the evaluation nuisance is fit, the candidate has already seen those rows.
-# This arm breaks that: the 9 candidates see only the 80%, the nuisance sees
-# only the 20%, and neither can borrow information from the other's rows.
+# The 80:20 arm: the 9 candidates are refit on 80% and the nuisance sees only
+# the other 20%, so neither borrows from the other's rows. Every other arm
+# scores me_analysis.R's crossfit fits, which have seen all n rows.
 #
-# WHY IT IS A SEPARATE STUDY TREE rather than a fifth column beside the arms
-# in me_strategies.R. Three things change at once and all three have to move
-# together:
+# A separate tree, not a column beside the other arms: tau_hat, the evaluation
+# rows and true_pehe all live on the 20%, so one table would compare scores over
+# different rows against differently computed truths. n = 250 is excluded: a
+# 50-row evaluation set is too thin to rank 9 models.
 #
-#   - tau_hat exists only on the 20%, not on all n rows
-#   - the evaluation rows are that 20%, not the full sample
-#   - true_pehe therefore has to be computed on those same 20% rows, or the
-#     reference the proxy scores are compared against is not matched to them
-#
-# Reporting it as another column of the same table would silently compare
-# scores computed over different row sets against differently-computed
-# truths. It is a different workflow, and it gets its own tree and its own
-# metrics run.
-#
-# n = 250 is excluded (see me_config.R's study_split): a 50-row evaluation set
-# is too thin to rank 9 models against each other.
-#
-# NOTE ON METRICS. This script stores `data` and `truth` ALREADY RESTRICTED to
-# the 20%, which is what lets R/metrics.R::compute_metrics() and
-# me_metrics.R's me_per_model() run against this tree completely unchanged:
-# tau_hat, Y, W, the nuisance data.frame and true_tau are then all the same
-# length, and every formula in me_per_model() is length-agnostic. The full
-# vectors and the split indices are kept alongside under separate names for
-# traceability.
+# `data` and `truth` are stored already restricted to the 20%, so
+# compute_metrics() and me_per_model() run unchanged; the full vectors and
+# split indices are kept under separate names.
 
 library(dplyr)
 library(future)

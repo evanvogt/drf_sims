@@ -1,30 +1,20 @@
 ##########
 # title: appendix figures - the true CATE structure of the DGMs
 ##########
-# What heterogeneity each DGM puts into a trial population, at the primary
-# rho = 0.5 covariates: continuous_corr_0.5 and binary_corr_0.5 scenarios 1-4,
-# and the competing-risks study's 7 scenarios. The truths come from
-# results_processing/dgm_population.R, shared with
-# thesis_tables/dgm_tables.R; no simulation output is read.
-#
-# Continuous / binary tau is drawn as tau(x) - ATE, which does not depend on n
-# (dgm_population.R). The binary effect modifiers are the continuous ones with
-# the sign reversed and scaled by RD_SCALE (R/dgm_scenarios.R), so the binary
-# row mirrors the continuous one, and X4 enters through tanh in scenarios 2-3.
+# Appendix figures of the true CATE each DGM puts into a trial population at
+# rho = 0.5 (dgm_population.R; no simulation output is read). Continuous /
+# binary tau is drawn as tau(x) - ATE. The binary modifiers are the continuous
+# ones with the sign reversed and scaled by RD_SCALE, so the binary row mirrors
+# the continuous one.
 #
 # Writes to ../results/thesis_figures/dgm/:
-#   dgm_cate_x4.png           tau - ATE against X4, coloured by X3: the shape
-#                             of tau, and in scenario 3 the X5 spread
-#   dgm_cate_dist.png         the distribution of tau - ATE in the population
-#   dgm_cate_sc3_surface.png  scenario 3's tau - ATE over (X4, X5) by X3, with
-#                             the population's (X4, X5) density contours
-#   dgm_m0_cate.png           the control mean (risk) against tau - ATE, with
-#                             their correlation
-#   dgm_surv_cate.png         competing risks: the RMTL CATE of each event by
-#                             X3, the spread within an X3 group from X1 and X2
+#   dgm_cate_x4.png           tau - ATE against X4, coloured by X3
+#   dgm_cate_dist.png         the distribution of tau - ATE
+#   dgm_cate_sc3_surface.png  scenario 3's tau - ATE over (X4, X5) by X3
+#   dgm_m0_cate.png           the control mean (risk) against tau - ATE
+#   dgm_surv_cate.png         competing risks: the RMTL CATE of each event by X3
 #
-# Local, a few minutes (the competing-risk truth is numerical integration):
-#   cd results_processing/thesis_figures; Rscript dgm.R
+#   cd results_processing/thesis_figures; Rscript dgm.R   # a few minutes
 
 library(here)
 library(patchwork)

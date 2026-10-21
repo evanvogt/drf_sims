@@ -1,35 +1,15 @@
 ##########
 # title: nuisance-arm pass over existing results - model evaluation study
 ##########
-# A SECOND PASS over me_analysis.R's replicates: this reads each one, fits all
-# three nuisance arms (`whole`, `cv_shared`, `holdout`), and writes the result
-# to a parallel tree.
+# A second pass over me_analysis.R's replicates: reads each one, fits the three
+# nuisance arms (`whole`, `cv_shared`, `holdout`) and writes a parallel tree.
+# Only the main tree's candidates, data, truth and fold_info are read; `whole`
+# is recomputed so all arms come from the current pipelines (DEVLOG bug R).
 #
-# `whole` is recomputed here, not copied from the main tree, so all three arms
-# come from the current scoring pipelines (DEVLOG bug R) without refitting a
-# candidate. The main tree's own `nuisances` are not read: only its
-# candidates, data, truth and fold_info are.
-#
-# WHY A SECOND PASS. Everything these arms consume is already saved in each
-# res_sim_<run>.RDS (me_analysis.R's results list): data$Y/W/X, truth,
-# fold_info, and each candidate's tau. So:
-#
-#   - the DGM is never re-run. Y/W/X are read, not regenerated. That also
-#     sidesteps replaying the RNG stream, which matters because split_folds()
-#     consumes it and R/dgm_scenarios.R's header makes draw order a contract.
-#   - the 9 candidates are never refit. tau passes through unchanged, so all
-#     three arms score the IDENTICAL candidate fits. That is the whole point:
-#     the comparison is controlled, differing in the nuisance and nothing
-#     else. (me_split.R is the one arm that does refit, by design.)
-#   - fold_info is read from disk, never re-derived. Re-deriving it would mean
-#     reproducing caret::createFolds() at exactly the right point in the RNG
-#     stream, which is a contract this script has no reason to depend on.
-#
-# WHY A PARALLEL TREE rather than rewriting res_sim_*.RDS in place: those
-# files are the only copy of a finished run. The per-run objects are plain
-# vectors and data.frames (me_collect.R's header), so duplicating them is
-# cheap, and it means me_strategies_verify.R can diff old against new rather
-# than having to trust that an in-place edit was inert.
+# A second pass because nothing is regenerated: no DGM re-run or fold re-draw
+# (so no RNG replay) and no candidate refit, so all three arms score the
+# identical fits. A parallel tree because res_sim_*.RDS is the only copy of a
+# finished run, and me_strategies_verify.R can diff old against new.
 
 library(dplyr)
 library(xgboost)

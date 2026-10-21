@@ -1,31 +1,21 @@
 ##########
 # title: correlated binary SNR check - the one definition of its parameter grid
 ##########
-# Sourced by bin_snr_analysis.R, study.R (check, collect) and
-# bin_snr_metrics.R. The array index handed to bin_snr_analysis.R is a row
-# number of `grid`, so `grid` must never be filtered or reordered after
-# construction.
+# The one grid definition: the array index is a row number of `grid`, so never
+# filter or reorder it. Sourced by bin_snr_analysis.R, study.R and
+# bin_snr_metrics.R.
 #
-# One factor at a time from a baseline (n = 500, hte_mult = 1), not
-# factorial, as competing_risk/snr/. Run varies fastest, so each cell is a
-# contiguous block of 100:
+# One factor at a time from n = 500, hte_mult = 1, run varying fastest:
 #   rows    1-100   n = 500, scenario 1, hte_mult 1
-#   rows  101-1300  n = 500, scenarios 2-4 x hte_mult 1, 1.5, 2, 3
-#                   (hte_mult varies faster than scenario)
-#   rows 1301-2500  n = 1000, 2000, 4000 x scenarios 1-4, hte_mult 1
-#                   (scenario varies faster than n)
-# Rows 1-1300 are jobscripts/bin_snr_1.sh, 1301-2500 bin_snr_2.sh. Index 101 is
-# scenario 2 x1 run 1 (the main study's DGM), 1201 scenario 4 x3 run 1, 2101
-# n = 4000 scenario 1 run 1.
+#   rows  101-1300  n = 500, scenarios 2-4 x hte_mult 1, 1.5, 2, 3 (hte_mult faster)
+#   rows 1301-2500  n = 1000, 2000, 4000 x scenarios 1-4 (scenario faster)
+# Rows 1-1300 are jobscripts/bin_snr_1.sh, 1301-2500 bin_snr_2.sh.
 #
-# Every cell is binary_corr_0.5 (R/dgm_scenarios.R) as the "binary_snr" set,
-# which clamps the treated risk to [RD_EPS, 1 - RD_EPS] once hte_mult pushes
-# it out, with bW calibrated at SNR_CALIB_N whatever the n, so the ATE is the
-# same in every cell (see README.md). A run is seeded by its run index alone,
-# so the n = 500 cells of a run share W and X. The n cells are not paired.
-#
-# Results live in results/correlated/binary_snr/, beside the main study's
-# results/correlated/binary/ rather than inside it.
+# Every cell is the binary_snr set (binary_corr_0.5 with the treated risk
+# clamped to [RD_EPS, 1 - RD_EPS]), bW calibrated at SNR_CALIB_N so the ATE is
+# the same in every cell (README.md). Runs are seeded by run index, so the
+# n = 500 cells share W and X; the n cells are not paired. Results go to
+# results/correlated/binary_snr/.
 
 library(here)
 source(here("R", "pipeline.R"))

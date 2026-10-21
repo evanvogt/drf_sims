@@ -1,55 +1,25 @@
 ##########
 # title: figures for the thesis - DR learners vs causal forest by signal-to-noise
 ##########
-# How the DR learners' CATE accuracy compares with causal forest's as the
-# heterogeneity grows relative to the outcome noise, at the primary rho = 0.5
-# covariates of the three correlated DGMs. Each point is one run's
-#   RMSE(DR) / RMSE(causal forest)
-# (below 1, DR did better), on a log scale, against the DGM's
-#   SD(tau) / SD(noise).
-# The larger outlined point is each group's median.
+# DR learners vs causal forest as heterogeneity grows relative to noise, at
+# rho = 0.5. Each point is one run's RMSE(DR) / RMSE(causal forest) (log scale,
+# below 1 = DR better) against the DGM's SD(tau) / SD(noise); the outlined
+# point is the group median. Rows: continuous / binary (sample_size/, scenarios
+# 1-4, 5-10 in *_supp) and competing risks (pseudo-value arms vs the causal
+# forest on the same pseudo-values, both events).
 #
-# The pairs, by DR learner family (the facet rows):
-#   continuous / binary   DR-RandomForest and DR-SuperLearner vs Causal forest
-#                         (sample_size/, scenarios 1-4 in the main
-#                         figure, 5-10 in *_supp - those have 100 runs, not 500)
-#   competing risks       DR-RF on PV, DR-SuperLearner on PV and DR-RSF vs
-#                         Causal forest on PV (competing_risk/, all 7
-#                         scenarios, Event 1 and Event 2): the comparator fits
-#                         the same pseudo-values against the same
-#                         subdistribution RMTL truth
+# x comes from the DGM code alone, over dgm_population.R's population.
+# SD(noise) is the noise given (X, W): s_err (continuous), sqrt(E[p(1 - p)])
+# (binary, so it moves slightly with n through bW), and sqrt(E[Var(days lost to
+# event k | X, W)]) (competing risks, without censoring). The n or censoring
+# settings are offset slightly on x so they don't overlap.
 #
-# The x axis comes from the DGM code alone, over the rho = 0.5 population of
-# results_processing/dgm_population.R (dgm_covariates()):
-#   SD(tau)     continuous / binary: exact, te_moments(). Competing risks: the
-#               RMTL CATE of the event over the population's first
-#               DGM_N_POP_SURV draws
-#   SD(noise)   the irreducible noise given (X, W), averaged over both arms:
-#               continuous   s_err
-#               binary       sqrt(E[p(1 - p)]), p the risk in either arm. It
-#                            moves with n through the calibrated bW, so the
-#                            binary x differs slightly by n
-#               competing    sqrt(E[Var(L_k | X, W)]), L_k = (h - T)+ 1(D = k)
-#               risks        the days lost to event k by the horizon h. No
-#                            censoring: both censoring settings share an x
-# The four n (or the two censoring settings) would otherwise sit on top of each
-# other at one x, so each is drawn shifted by a small fixed offset (X_OFFSET of
-# the panel's x range). Each scenario's medians carry its number; in competing
-# risks the event is the median's shape, and x is on a log scale (most of its
-# scenario x event cells sit below 0.05).
+# Writes to ../results/thesis_figures/rel_eff/: rel_eff_snr.png,
+# rel_eff_snr_supp.png and one figure per outcome. An outcome with no metrics
+# file is skipped with a message.
 #
-# Writes to ../results/thesis_figures/rel_eff/:
-#   rel_eff_snr.png        continuous | binary (scenarios 1-4) | competing risks
-#   rel_eff_snr_supp.png   continuous | binary, scenarios 5-10
-#   rel_eff_snr_{cts,bin}{,_supp}.png, rel_eff_snr_surv.png   one outcome each
-# An outcome whose metrics file is missing is skipped with a message, and so is
-# any combined figure that needs it.
-#
-# Local, about a minute (the competing-risk moments are numerical integration):
-#   cd results_processing/thesis_figures; Rscript rel_eff_snr.R
-# Optional arguments [results root] [figure dir], for a smoke run on mock
-# metrics; the results root is the folder holding correlated/ and
-# competing_risk/.
+#   cd results_processing/thesis_figures; Rscript rel_eff_snr.R   # ~1 min
+#   Rscript rel_eff_snr.R [results root] [figure dir]             # mock smoke run
 
 library(here)
 library(patchwork)

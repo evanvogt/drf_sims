@@ -1,45 +1,21 @@
 ##########
 # title: figures for the thesis chapter - missing covariates
 ##########
-# The main chapter's missing-data figures, continuous and binary outcomes. Both
-# metrics compare each handling method with the complete-data arm (no
-# amputation), same scenario, mechanism, estimator and run:
-#   - bias difference, bias - complete-data bias, per run and averaged over
-#     runs: the bias the missingness and its handling add. 0 is no change.
-#     The same measure as bias_diff_complete/_cu in missing/*/*_miss_metrics.R
-#     and missing/miss_results.qmd, extended to the incomplete units;
-#   - relative efficiency, MSE / complete-data MSE (rel_efficiency/_cu/_iu from
-#     *_miss_metrics.R, a per-run ratio averaged over runs, as in the
-#     appendix tables). 1 is no loss.
-# Each is drawn on the mechanism x scenario grid with handling method on x, for
-# each outcome (prefix cts / bin):
-#   - one figure per estimator, units by colour
-#     (<prefix>_miss_<metric>_<model>.png);
-#   - one figure with every estimator, estimator by colour and units by shape
-#     (<prefix>_miss_<metric>_all_models.png).
-# The complete-data arm is 0 and 1 by construction, so it is not plotted. The
-# binary outcome's CATE is a risk difference, so its bias difference is on that
-# scale.
+# Main-chapter missing-data figures, continuous and binary, scenarios 1-4. Each
+# handling method is compared with the complete-data arm (same scenario,
+# mechanism, estimator and run): bias difference (0 = no change) and relative
+# efficiency, MSE / complete-data MSE (1 = no loss), on all, complete and
+# incomplete units, as in the appendix tables.
 #
-# Every metric is scored on all units, and separately on the complete units (no
-# amputed covariate) and the incomplete units (cate_metrics_split() in
-# R/metrics.R) - the same three columns as the appendix tables. The
-# complete-data arm is split by the amputation its run would have had, so each
-# set of units is compared with the same units in the reference. Notes:
-#   - the truth is the primary one, tau(X), under MNAR-tau too;
-#   - complete case and IPW drop the incomplete units, so they have only a
-#     complete-unit point (*_miss_metrics.R leaves their all-unit metrics NA:
-#     a ~350-unit MSE over a 500-unit one is not a like-for-like ratio);
-#   - not every estimator has every handling method in the metrics files (in
-#     the continuous results MIA is causal forest and DR-RandomForest only, and
-#     MI is not DR-oracle or DR-SuperLearner), so those slots are empty;
-#   - scenario 1 has no MNAR-tau arm (missing/*/*_miss_config.R), so that panel
-#     is empty.
+# - Complete case and IPW have only a complete-unit point (their all-unit ratio
+#   would compare ~350 units with 500).
+# - Empty slots are real: not every estimator has every handling method, and
+#   scenario 1 has no MNAR-tau arm.
+# - The truth is tau(X), under MNAR-tau too; the binary bias is on the
+#   risk-difference scale.
 #
-# The main scenarios only, 1-4. These are the main study's scenarios 1-4
-# (TE_MISS in R/dgm_scenarios.R), so they take the sample-size chapter's labels.
-# Labels, palette, summaries and figure sizing come from R/figures.R. This
-# script carries only the paths and this study's filters.
+# Writes, per outcome prefix (cts, bin): <prefix>_miss_<metric>_<model>.png
+# (units by colour) and <prefix>_miss_<metric>_all_models.png.
 
 library(here)
 source(here("R", "figures.R"))

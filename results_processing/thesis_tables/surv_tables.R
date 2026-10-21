@@ -1,49 +1,25 @@
 ##########
 # title: LaTeX tables for the thesis chapter - competing risks
 ##########
-# The competing-risks study (competing_risk/), two kinds of table, each at the
-# primary rho = 0.5 and the sensitivity rho = 0:
-#   main       one arm per estimator family (the production arm), so the
-#              families - and so the ways of handling the competing event -
-#              compare across a row block
-#   secondary  one table per family that ships in several arms (the
-#              pseudo-value construction x fitting comparison, ADEMP.md "Aims"):
-#              each arm's raw values, then the paired differences between arms
-#              that differ by one factor
-# Rows are scenario / censoring / arm, the columns CATE bias, RMSE and Pearson
-# for Event 1 then Event 2, each cell "mean (MCSE)". The scenario, censoring
-# and main-table arm labels (SURV_*) and the summary come from R/figures.R,
-# shared with thesis_figures/surv.R; the secondary tables' arm labels are
-# inline below. The layout is R/tables.R's surv_metrics_table().
+# Appendix tables for the competing-risks study at rho = 0.5 and rho = 0: a main
+# table with each estimator family's production arm, and one secondary table
+# per family with several arms (raw values, then paired differences between
+# arms that differ by one factor). Cells are "mean (MCSE)" of CATE bias, RMSE
+# and Pearson, Event 1 then Event 2.
 #
-# Writes to ../results/thesis_tables/, for <rho> in rho05, rho0:
-#   surv_main_<rho>.tex
-#   surv_<family>_<rho>.tex   family in pseudo_cf, pseudo_dr, rsf_dr, sl_t, sl_dr
-# \input{} them into a document with
-#   \usepackage{booktabs, longtable, pdflscape, array}
+# - Arms target different truths (ADEMP.md, "Estimands"): ipw and csf_cs the net
+#   RMST CATE (daggered), csf_sh the subdistribution RMST, the pseudo-value arms
+#   the RMTL.
+# - RMSE is the per-run RMSE averaged over runs, in days.
+# - Pearson is NA (a dash) where the arm's truth is constant. Scenario 1 is not
+#   null here, so a metrics file from before 2026-10-06 (placeholder 0) is refused.
+# - Every arm fits the same data, so differences are per run, MCSE
+#   sd(diff) / sqrt(pairs).
+# - "Combined" (RMSTc) is left out.
 #
-# Metric choices:
-# - Bias is the CATE bias, `bias` (mean of est - true over units), as in
-#   ss_tables.R. `ate_bias` is the same number unless a run has NA estimates.
-# - RMSE, the per-run root mean squared error averaged over runs (so not the
-#   square root of the mean MSE), in days.
-# - Pearson. Scenario 1 is not null here (its CATE varies with X1 and X2), so
-#   its correlation is a real measurement, from a surv_metrics.R run since
-#   2026-10-06; an older metrics file has a placeholder 0 there and is refused.
-#   Pearson is NA, and prints as a dash, where the arm's truth is constant:
-#   the net RMST CATE of event 1 in scenarios 2 and 5 and of event 2 in 1 and 3
-#   (ipw and csf_cs only).
-# - "Combined" (RMSTc) is left out, as in surv_results.qmd.
-#
-# The arms are not all scored against the same truth (ADEMP.md, "Estimands"):
-# ipw and csf_cs against the net (cause-specific) RMST CATE, csf_sh against the
-# subdistribution RMST CATE (= -RMTL CATE), every pseudo-value arm against the
-# RMTL CATE. The main table marks the net-RMST rows with a dagger.
-#
-# The paired differences: every arm of a run is fitted to the same data, so
-# each metric is differenced per run and target, and its MCSE is
-# sd(diff) / sqrt(pairs), as paired_rho_diff() does across rho. Runs missing
-# from either arm drop out of the pairs.
+# Writes to ../results/thesis_tables/: surv_main_<rho>.tex and
+# surv_<family>_<rho>.tex, <rho> in rho05, rho0. \input{} with
+# \usepackage{booktabs, longtable, pdflscape, array}.
 
 library(here)
 source(here("R", "figures.R"))

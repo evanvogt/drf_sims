@@ -1,61 +1,26 @@
 ##########
 # title: verification checks for the interim-analysis validation study
 ##########
-# Run this before submitting validation/continuous/jobscripts/cts_val_1.sh:
-#
+# Run before submitting jobscripts/cts_val_1.sh:
 #   Rscript validation/continuous/cts_val_testing.R
 #   Rscript validation/continuous/cts_val_testing.R full   # adds check 9
+# On the cluster, check 9's timing also sizes the jobscript's walltime.
 #
-# Checks 1-8 are cheap and exercise the helpers directly. Check 9 runs one real
-# replicate end to end and is worth the wait on the cluster, where it also tells
-# you whether the jobscript's walltime is right before 4400 jobs go out.
-#
-# Checks, in order:
-#   1. xgboost and SHAPforxgboost load. They are used nowhere else in this repo,
-#      so a missing install here is the one thing that stops the array dead.
-#      Also sandwich, for the HC3 interaction tests
-#   2. the grid is 4400 rows - rho 0.5 only, scenarios 1-4, 11 interim
-#      proportions - and - the reason cts_val_config.R rounds - none of those
-#      proportions stringifies to a float artefact, since
-#      as.character(interim_prop) becomes a directory name. Also that each
-#      scenario generates a trial of 1000, and its in-sample Var(tau)
-#   3. interaction_pval returns the W:v interaction, not the intercept. This is
-#      the bottom_pval bug: the old code read coefficient row 1 instead of the
-#      interaction, so the check is against both rows, not just the right one.
-#      Also that interaction_pval_adj does not flag a proxy of the real
-#      modifier, which the marginal test does under correlated covariates
-#   4. interaction_pval returns NA on a covariate with no contrast, the case
-#      where rpart predicted no bottom10 leaf into chunk 2 and the old
-#      positional index would have read whatever row happened to be there
-#   5. get_shap_vims returns one column per covariate IN X's column order.
-#      shap.values() sorts its output by importance, and chunk_validations()
-#      ranks te_vims and shap_vims by position, so an unreindexed return would
-#      scramble every rank silently rather than erroring
-#   6. run_all_cate_methods runs all three estimators, including the DR
-#      SuperLearner, and attaches both te_vims and shap_vims to each, over the
-#      same covariates, so the rank comparison in chunk_validations() has
-#      matching rows to line up. Also prints how long one 250-row chunk took,
-#      step by step; most of it should be the DR SuperLearner's TE-VIM refits
-#   7. the data-driven top-covariate tests (shared with binary/): on a planted
-#      cos(x) modifier, data_driven_split() finds a middle-vs-tails split with
-#      two cuts and p_dd / p_proj detect it where the linear p_cts does not; a
-#      binary covariate with P = 0.7 gets a real median split (it used to be all
-#      0, so p_split was NA) and is its own data-driven split; and a flat chunk
-#      1 tau gives NA for both rather than a test of nothing
-#      Check 3 also covers interaction_test()'s est/se/p (summary.lm's own row)
-#      and the reference contrasts tau_slope() / tau_slope_adj()
-#   8. chunk_validations_se() on check 6's fit: its classical rows are
-#      chunk_validations(robust = FALSE)'s, its hc3 rows robust = TRUE's. And
-#      the est_/se_/ref1_/true2_ columns: where they sit, the same est/ref1/true2
-#      under both kinds, true2 filled once the truth is attached, and the sign
-#      conventions (ref1_top >= 0, ref1_bottom <= 0, ref1_dd >= 0)
-#   9. (full only) one replicate end to end, with cts_val_1.sh's "1 1"
-#      arguments: results land in a directory named by the un-mangled
-#      interim_prop, the one trial is split n1 / n - n1, validations carries
-#      all four comparisons with both standard-error kinds,
-#      and bottom is a plausible p-value rather than the near-zero intercept
-#      p-value the old code produced. Row 1 is the null (scenario 1), so every
-#      true2_* there is 0
+#   1. xgboost, SHAPforxgboost and sandwich load (used nowhere else in the repo)
+#   2. the 4400-row grid; no interim_prop stringifies to a float artefact (it
+#      becomes a directory name); trial size and Var(tau)
+#   3. interaction_pval returns the W:v row, not the intercept (the old
+#      bottom_pval bug); interaction_pval_adj ignores a proxy of the modifier;
+#      interaction_test()'s est/se/p and the tau_slope() contrasts
+#   4. interaction_pval is NA for a covariate with no contrast
+#   5. get_shap_vims keeps X's column order (shap.values() sorts by importance)
+#   6. run_all_cate_methods fits all three estimators with both importance
+#      measures over the same covariates; prints step timings
+#   7. the data-driven top-covariate tests on a planted cos(x) modifier, a
+#      binary covariate and a flat tau
+#   8. chunk_validations_se(): classical and HC3 rows, the est_/se_/ref1_/true2_
+#      columns and their sign conventions
+#   9. (full) one replicate end to end with cts_val_1.sh's "1 1" arguments
 
 library(dplyr)
 library(furrr)

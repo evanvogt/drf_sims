@@ -1,39 +1,17 @@
 ##########
 # title: run the interim-analysis validation grid inside one RStudio session
 ##########
-# The no-queue alternative to `qsub jobscripts/cts_val_1.sh`. Same 4400 rows and
-# the same results, but 8 at a time inside an interactive session rather than
-# 4400 short array jobs waiting to be scheduled.
-#
-# ---- how to run it ----------------------------------------------------------
-#   request an RStudio session with 8 cores and 64gb, then
+# The no-queue alternative to `qsub jobscripts/cts_val_1.sh`: same rows, same
+# results, 8 at a time in an interactive session (8 cores, 64gb):
 #   source(here::here("validation", "continuous", "cts_val_run.R"))
 #
-# Each grid row runs as its own Rscript subprocess, executing exactly the
-# command cts_val_1.sh runs for one array index:
+# Each row runs as its own `Rscript cts_val_analysis.R <i> 1 1` subprocess,
+# exactly as the array does, so no RNG, plan() or thread state carries between
+# rows. Rows with a results file are skipped, so re-sourcing resumes. Size a
+# session from cts_val_testing.R full's replicate time: 4400 x that / 8.
 #
-#   Rscript cts_val_analysis.R <i> 1 1
-#
-# so a row produced here and a row produced by the array are the same
-# calculation. cts_val_analysis.R is not modified, is called with the same
-# arguments, and gets the same fresh process a compute node gives it - no RNG
-# kind, plan() or OMP_NUM_THREADS state carried over from the row before. The
-# price is one R startup and package load per row, a small fraction of a row,
-# and worth paying to keep the two paths interchangeable.
-#
-# Rows whose results file already exists are skipped, so a session that is
-# interrupted - or that hits its walltime - is resumed by sourcing this file
-# again. Before the DR SuperLearner was added a row took ~3 min and a full grid
-# ~7 hours here; with its TE-VIM refits a row is unmeasured but much longer, so
-# read cts_val_testing.R full's replicate time before sizing a session -
-# 4400 x <that> / 8 is the wall time.
-#
-# ---- what it deliberately does not do ---------------------------------------
-# It never writes jobscripts/failed_ids.txt and never edits cts_val_rerun.sh.
-# Those belong to the queue path and are study.R check's to write; writing
-# them from here would leave a resubmission list pointing at rows this script
-# has already retried itself. Failed rows are reported and picked up by the
-# next source() instead.
+# It never writes failed_ids.txt or edits cts_val_rerun.sh (study.R check's
+# job), so a resubmission list never points at rows this script already retried.
 
 library(future)
 library(here)

@@ -1,36 +1,19 @@
 ##########
 # title: LaTeX tables of the HTE tests - sample size, both outcomes
 ##########
-# Rejection rates of the four heterogeneity tests, as "rate (MCSE)", with
-# sample size across the columns so each test's power reads left to right.
-# The correlated-covariate studies (sample_size/), per outcome: the
-# rho = 0 and rho = 0.5 rates, and the paired rho = 0.5 - rho = 0
-# differences, as ss_tables.R does for the estimation metrics. Each as one
-# table for the reported scenarios 1-4 and one for the supplementary 5-10.
+# Rejection rates of the four HTE tests, "rate (MCSE)", with n across the
+# columns, for the correlated sample-size studies: rho = 0, rho = 0.5 and the
+# paired difference, scenarios 1-4 (main) and 5-10 (supp).
+#
+# - Rejection is p < HTE_ALPHA, 0/1 per run (binomial MCSE). NA p-values are left
+#   out of the denominator, and out of a pair.
+# - "True CATE" is each test on the true CATE and nuisances: the ceiling the
+#   models chase. It has no PO independence test and is undefined in scenario 1.
+# - Rows with no defined cell are dropped.
 #
 # Writes to ../results/thesis_tables/:
-#   {cts,bin}_corr_rho0_ss_tests_main.tex, {cts,bin}_corr_rho0_ss_tests_supp.tex,
-#   {cts,bin}_corr_rho05_ss_tests_main.tex, {cts,bin}_corr_rho05_ss_tests_supp.tex,
-#   {cts,bin}_corr_rhodiff_ss_tests_main.tex, {cts,bin}_corr_rhodiff_ss_tests_supp.tex
-# \input{} them into a document with
-#   \usepackage{booktabs, longtable, pdflscape, array}
-#
-# - Rejection is p < HTE_ALPHA (R/figures.R, shared with the figures), 0/1 per
-#   run, so the rates' MCSE is the binomial one. Runs with an NA p-value (a
-#   constant CATE estimate, or a test not run) are left out of the
-#   denominator, as in the figures.
-# - The differences are taken per run (paired_rho_diff() in R/figures.R): run r
-#   shares its random draws at the two rhos, so each cell is the mean of a
-#   -1/0/1 difference and its MCSE is sd(diff) / sqrt(pairs). A run with an NA
-#   p-value at either rho drops out of the pair.
-# - "True CATE" is each test run on the true CATE and nuisances
-#   ({cts,bin}_corr_true_cate_tests.RDS, from *_corr_metrics.R): the ceiling
-#   the models' own tests are chasing. It has no PO independence test (the
-#   DR-oracle's is already the true pseudo-outcome's), and in scenario 1 the
-#   true CATE is constant, so none of its tests are defined there.
-# - A row with no defined cell is dropped: the PO independence test for the
-#   causal forest and T-learners (they share another estimator's
-#   pseudo-outcome, R/metrics.R), and the True CATE in scenario 1.
+#   {cts,bin}_corr_{rho0,rho05,rhodiff}_ss_tests_{main,supp}.tex
+# \input{} with \usepackage{booktabs, longtable, pdflscape, array}.
 
 library(here)
 source(here("R", "figures.R"))

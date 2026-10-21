@@ -1,40 +1,22 @@
 ##########
 # title: figures for the thesis chapter - interim-analysis validation
 ##########
-# The interim-analysis validation study (validation/continuous/), scenarios 1-4
-# at rho = 0.5: three CATE estimators fit on the first `interim_prop` of a
-# trial of 1000, and what they find there tested on the rest. The exploratory,
-# one-scenario-per-render version of these figures is
-# validation/val_results.qmd. HC3 standard errors throughout.
+# Thesis figures for the interim-analysis validation study (validation/continuous/,
+# scenarios 1-4, rho = 0.5), stage 1's share of the trial on x. Means over runs
+# with a 95% Monte Carlo ribbon; HC3 standard errors. The exploratory version is
+# validation/val_results.qmd.
 #
-# Every figure has stage 1's share of the trial on x and the scenarios across,
-# and shows the mean over runs with a 95% Monte Carlo ribbon (binomial MCSE for
-# a proportion of runs, sd / sqrt(runs) for a mean contrast):
-#   - val_sg_direction.png: how often the top / bottom 10% responder subgroup
-#     validates in stage 2, i.e. p < 0.05 with the W x subgroup estimate in the
-#     direction stage 1 implied (the qmd's prop_sig_ref1). Dashed line in the
-#     null: alpha / 2, the one-sided false-positive rate;
-#   - val_sg_shrinkage.png: DR-RandomForest only, the subgroup contrast stage 1
-#     claimed (ref1) against its true value in stage 2 (true2) - a winner's
-#     curse is ref1 above true2;
-#   - val_topvar.png: whether stage 1's most important covariate (x_top) is a
-#     true modifier (top row) and whether it interacts with treatment in stage 2
-#     by the spline-projection test (bottom row), per estimator and importance
-#     measure. Dashed line in the null: the nominal 5%.
+#   val_sg_direction  top / bottom 10% subgroup validates in stage 2 (p < 0.05,
+#                     in stage 1's direction); null line alpha / 2
+#   val_sg_shrinkage  DR-RandomForest's claimed contrast (ref1) against its true
+#                     stage 2 value (true2): winner's curse is ref1 > true2
+#   val_topvar        is stage 1's top covariate a true modifier, and does it
+#                     interact in stage 2 (spline projection)? null line 5%
 #
-# Labels, palette, theme and figure sizing come from R/figures.R. This script
-# carries only the paths and this study's filters.
+# Each is saved as <stem>.png (each panel its own y axis: compare by the labels,
+# not the heights) and <stem>_shared_y.png, in ../results/thesis_figures/validation/.
 #
-# Each figure is saved twice. In <stem>.png every panel has its own y axis
-# (ggh4x::facet_grid2(independent = "y")), so compare levels across panels by
-# the axis labels, not by height. In <stem>_shared_y.png the scenarios in a row
-# share one y axis, for comparing heights between scenarios.
-#
-# Writes to ../results/thesis_figures/validation/: val_sg_direction,
-# val_sg_shrinkage and val_topvar, each as .png and _shared_y.png.
-#
-# Optional arguments, for a smoke run on mock metrics:
-#   Rscript validation.R [metrics.RDS] [figure dir]
+#   Rscript validation.R [metrics.RDS] [figure dir]   # mock smoke run
 
 library(here)
 library(ggh4x)

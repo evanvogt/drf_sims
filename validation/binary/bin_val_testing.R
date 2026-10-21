@@ -1,39 +1,20 @@
 ##########
 # title: verification checks for the interim-analysis validation study, binary
 ##########
-# Run this before submitting validation/binary/jobscripts/bin_val_1.sh:
-#
+# Run before submitting jobscripts/bin_val_1.sh:
 #   Rscript validation/binary/bin_val_testing.R
 #   Rscript validation/binary/bin_val_testing.R full   # adds check 8
+# The shared helpers are checked by continuous/cts_val_testing.R; this covers
+# the binary-specific parts.
 #
-# The helpers shared with continuous/ (TE-VIMs, TreeSHAP column order,
-# interaction_pval's name-based indexing, the data-driven top-covariate tests)
-# are checked by continuous/cts_val_testing.R; this covers what is
-# binary-specific, and what a binary array needs before 4400 jobs go out.
-#
-# Checks, in order:
-#   1. the packages a row needs load, including sandwich for the HC3 tests
-#   2. the grid is 4400 rows - rho 0.5 only, scenarios 1-4, 11 interim
-#      proportions, none of which stringifies to a float artefact
-#      (as.character() is a directory name)
-#   3. robust = TRUE gives HC3 p-values: they match a hand-computed sandwich
-#      t-test, differ from the classical ones, are not small under a null, and
-#      still return NA for a v with no contrast
-#   4. the binary DGM, for each of scenarios 1-4: a trial of 1000 generates
-#      (every risk inside [0, 1]), Y is 0/1, tau is a risk difference, and its
-#      in-sample Var(tau) is printed. Scenario 2's tau is driven by X4 alone
-#   5. split_trial(): one trial of 1000 splits n1 / 1000 - n1, and a run's chunk
-#      1 at 0.25 is the first rows of its chunk 1 at 0.30 (nested, paired)
-#   6. run_all_cate_methods on one 250-row binary chunk: all three estimators,
-#      both measures, finite crossfit tau and TE-VIMs, and a step-by-step timing
-#   7. chunk_validations_se() on check 6's fit: one row per standard-error kind,
-#      each chunk_validations()'s own, and a binary Y's p_dd / p_proj plausible.
-#      With the truth attached: the est_/true2_ columns, true2 a risk
-#      difference, and ref1_top >= 0 / ref1_bottom <= 0
-#   8. (full only) one replicate end to end with bin_val_1.sh's "1 1"
-#      arguments: the results path, the split, all four comparisons over all
-#      three estimators and both standard-error kinds, plausible p-values. Row 1
-#      is the null (scenario 1), so every true2_* there is 0
+#   1. the packages a row needs load, sandwich included
+#   2. the 4400-row grid; no interim_prop stringifies to a float artefact
+#   3. robust = TRUE gives HC3 p-values (matches a hand-computed sandwich test)
+#   4. the binary DGM, scenarios 1-4: risks in [0, 1], tau a risk difference
+#   5. split_trial(): n1 / n - n1, nested across interim_prop
+#   6. run_all_cate_methods on a 250-row binary chunk, with timings
+#   7. chunk_validations_se() on check 6's fit, with the est_/true2_ columns
+#   8. (full) one replicate end to end with bin_val_1.sh's "1 1" arguments
 
 library(dplyr)
 library(furrr)

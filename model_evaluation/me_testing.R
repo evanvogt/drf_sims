@@ -1,45 +1,20 @@
 ##########
 # title: verification checks for the model evaluation study
 ##########
-# Run this before submitting anything to the HPC:
-#
+# Run before submitting anything to the HPC:
 #   Rscript model_evaluation/me_testing.R       # quick: no real nuisance fitting
 #   Rscript model_evaluation/me_testing.R full  # adds real XGBoost-CV/H2O AutoML (slow)
 #
-# Checks, in order:
-#   1. me_per_model()'s scoring matches a direct calc_infl_score()/
-#      calc_dr_risk()/calc_cal_score() call on the same synthetic fixture,
-#      plus calc_cal_score()'s own properties: exactly 0 under
-#      perfect calibration, K non-empty groups even when tau_hat is constant,
-#      count (not proportion) weights, and the n-scaling those imply.
-#   2. the DGM/design-matrix plumbing - Y, W first; covariates all numeric.
-#   3. scenario 1 (no heterogeneity) behaves, same check continuous/ and
-#      crossfitting/ both use for this scenario.
-#   4. the real pipeline's structure: all 9 candidate models present and
-#      correctly sized (always); in "full" mode, both nuisance pipelines
-#      present with the expected arms and columns, plus one real call to
-#      me_per_model() on real output.
-#   5. the nuisance ARMS fitted by me_strategies.R - holdout_blocks()'s
-#      pooling rule, the train/test filters each arm actually uses,
-#      single_split(), and that the XGBoost outcome matrices are per arm
-#      (T-learner) with no W feature. Structural, on synthetic data, no
-#      fitting.
-#   6. me_strategies.R's assembly logic against a synthetic res_sim-shaped
-#      object, XGBoost only: all three arms fitted for real at n = 250, plus a
-#      printed cor(mu1_DR - mu0_DR, true tau) diagnostic. Local machines have
-#      no model_evaluation results to run the real round-trip against
-#      (results/ carries every other study but not this one), and H2O is the
-#      slow half - so this exercises the read/compute/order/write contract
-#      without either.
+#   1. me_per_model()'s scoring matches direct calls; calc_cal_score()'s properties
+#   2. the DGM / design-matrix plumbing
+#   3. scenario 1 (no heterogeneity) behaves
+#   4. all 9 candidates present and sized; in full, both nuisance pipelines too
+#   5. the nuisance arms' fold rules, and per-arm (T-learner) outcome matrices
+#   6. me_strategies.R's assembly on a synthetic res_sim object, XGBoost only
 #
-# WHAT DOES NOT RUN HERE. `full` mode is slow and SL2 fails on this machine
-# for a documented local package-version reason (see README.md), so it is not
-# a useful local signal. Run it on the cluster instead:
-#
-#   qsub model_evaluation/jobscripts/me_testing.sh
-#
-# and prove me_strategies.R's pass-through separately, over the real results,
-# with me_strategies_verify.R.
+# full mode fails locally (SL2, README.md's "Known local-environment
+# limitation"): run it on the cluster (qsub model_evaluation/jobscripts/me_testing.sh)
+# and check the pass-through with me_strategies_verify.R.
 
 library(dplyr)
 library(future)

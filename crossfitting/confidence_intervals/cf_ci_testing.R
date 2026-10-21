@@ -1,38 +1,24 @@
 ##########
 # title: verification checks for the crossfitting CI pilot
 ##########
-# Run this before submitting crossfitting/confidence_intervals/jobscripts/cf_ci_1.sh:
-#
+# Run before submitting jobscripts/cf_ci_1.sh:
 #   Rscript crossfitting/confidence_intervals/cf_ci_testing.R
 #   Rscript crossfitting/confidence_intervals/cf_ci_testing.R full   # adds check 2
+# Separate from cf_testing.R: it exercises the bootstrap, which the production
+# study never touches.
 #
-# Kept separate from cf_testing.R since it exercises the bootstrap machinery,
-# which the production study never touches. Checks, in order:
-#   1. the pilot's orchestrator call (run_all_crossfit_variants with
-#      sl_lib = NULL) produces the 8 RF/CF arms, and its nuisances are
-#      bit-identical to an independent replay of the same RNG stream
-#   2. (full only) sl_lib = NULL and sl_lib = <library> agree bit-for-bit on all
-#      8 RF/CF arms. The SuperLearner block is strictly after them and gated on
-#      sl_lib, so this holds by construction - the point of checking is that the
-#      pilot's saved arms ARE the production study's, not a different draw
-#   3. cf_half_boot's matrix path (double-crossfit nuisances) still resolves
-#      single = FALSE and produces well-formed bands - historical behaviour
-#   4. cf_half_boot's vector path (single-crossfit nuisances) resolves
-#      single = TRUE and produces well-formed bands
-#   5. simultaneous_band's new na.rm argument is inert on an NA-free matrix, and
-#      oob_bands masks exactly the in-half cells - the two OOB bands must come
-#      off one set of roots, differing only by the mask
-#   6. oob_half_sample draws floor(n/2) distinct rows; oob_half_predict really
-#      takes the OOB branch for in-half rows rather than silently predicting
-#      them in-sample, which is the one way this could degrade into a too-narrow
-#      band without erroring
-#   7. every one of the 8 arms has a well-formed band: finite, hb_lb <= tau <=
-#      hb_ub for most units, non-degenerate width - and the 4 OOB arms also have
-#      a well-formed, distinct hb_out_* band. No target-coverage check: coverage
-#      from this method is already known (confidence_intervals/) to run below
-#      nominal, so that is the pilot's research question, not a pass/fail gate
-#   8. the OOB arms' var_oob is finite and positive and normal_interval turns it
-#      into a well-formed band; the 4 crossfit arms carry no var_oob
+#   1. the pilot's 8 RF/CF arms, nuisances bit-identical to an RNG replay
+#   2. (full) sl_lib = NULL and a real library agree bit-for-bit on those arms,
+#      so the pilot's arms ARE the production study's
+#   3. cf_half_boot's matrix path (double crossfit) gives well-formed bands
+#   4. cf_half_boot's vector path (single crossfit) gives well-formed bands
+#   5. simultaneous_band's na.rm is inert without NAs; oob_bands masks exactly
+#      the in-half cells
+#   6. oob_half_predict really predicts in-half rows OOB (otherwise bands would
+#      be too narrow without erroring)
+#   7. every arm's band is well-formed. No coverage gate: sub-nominal coverage
+#      is the pilot's research question
+#   8. the OOB arms' var_oob gives a well-formed normal interval
 
 library(dplyr)
 library(furrr)

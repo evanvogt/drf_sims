@@ -1,50 +1,21 @@
 ##########
 # title: run the me_strategies nuisance-arm pass inside one RStudio session
 ##########
-# The no-queue alternative to `qsub jobscripts/me_strategies.sh`. Same 1200
-# grid rows and the same results, but 6 at a time inside an interactive
-# session rather than 1200 array jobs waiting to be scheduled.
-#
-# ---- how to run it ----------------------------------------------------------
-#   request an RStudio session with 8 cores and 64gb, then
+# The no-queue alternative to `qsub jobscripts/me_strategies.sh`: same rows,
+# same results, 6 at a time in an interactive session (8 cores, 64gb):
 #   source(here::here("model_evaluation", "me_strategies_run.R"))
 #
-# Each grid row runs as its own Rscript subprocess, executing exactly the
-# command me_strategies.sh runs for one array index:
+# Each row runs as its own `Rscript me_strategies.R <i> 1` subprocess, exactly
+# as the array does, so no RNG, plan() or thread state carries between rows.
 #
-#   Rscript me_strategies.R <i> 1
+# workers = 6: me_strategies.R hardcodes each row's H2O heap at 10G, so 8 rows
+# could ask for 80GB of a 64GB session.
 #
-# so a row produced here and a row produced by the array are the same
-# calculation. me_strategies.R is not modified, is called with the same
-# arguments, and gets the same fresh process a compute node gives it - no RNG
-# kind, plan() or OMP_NUM_THREADS state carried over from the row before.
+# Rows whose source run is missing from the main tree are excluded
+# (reachable_missing(), as in me_check.R), so they are never reported missing.
 #
-# ---- workers = 6, not 8 ------------------------------------------------------
-# me_strategies.R hardcodes each row's H2O JVM heap to max_mem_size = "10G"
-# (me_strategies.R:49) - not exposed as a CLI arg, so it cannot be lowered
-# from here without editing that script. That cap is also why the PBS array
-# job (me_strategies.sh) throttles to 4 concurrent tasks despite requesting
-# only 2 cores each. 8 concurrent rows on a 64GB session could ask for up to
-# 8 x 10G = 80GB of heap alone, before the R/XGBoost processes or the OS; 6
-# x 10G = 60GB leaves headroom. Each row still gets a single core
-# (n_cores = 1) - only the number running at once is capped below 8.
-#
-# ---- the 2 permanently-missing rows ------------------------------------------
-# 2 of the 360 grid rows failed repeatedly in the main study and have no
-# me_analysis.R source file (see me_check.R's header). me_strategies.R exits
-# 0 for them without writing a result - there is nothing for it to read. A
-# plain "which study_strat rows are missing a results file" check would
-# therefore report those 2 rows missing forever, so this script uses
-# reachable_missing() below (the same logic me_check.R uses) to exclude rows
-# that are missing only because their source run is itself missing. A
-# complete pass reports 358/358, not 358/360.
-#
-# ---- what it deliberately does not do ---------------------------------------
-# It never writes jobscripts/failed_ids_strat.txt and never edits
-# me_strat_rerun.sh. Those belong to the queue path and are me_check.R's to
-# write; writing them from here would leave a resubmission list pointing at
-# rows this script has already retried itself. Failed rows are reported and
-# picked up by the next source() instead.
+# It never writes failed_ids_strat.txt or edits me_strat_rerun.sh (me_check.R's
+# job), so a resubmission list never points at rows this script already retried.
 
 library(future)
 library(here)

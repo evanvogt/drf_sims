@@ -1,51 +1,27 @@
 ##########
 # title: SuperLearner libraries, learner wrappers and the library pretest
 ##########
-# Every SuperLearner call in the simulations draws its library from here, so the
-# learners are chosen in one place. Depends only on SuperLearner and the learner
-# packages (glmnet, gam, earth, ranger); sources nothing else from R/.
+# Every SuperLearner call in the simulations takes its library from here.
+# Depends only on SuperLearner and the learner packages; sources nothing from R/.
 #
-# ONE LIBRARY PER NUISANCE. The DR-learner fits three different regressions,
-# and one shared library suits none of them:
-#   W    the propensity. Every study is an RCT with P(W = 1) = 0.5, so flexible
-#        learners only fit noise, which the 1 / (e(1 - e)) weight then
-#        amplifies. mean + glm keeps the efficiency gain from estimating a known
-#        propensity without the variance.
-#   Y    the outcome model, fit SEPARATELY IN EACH ARM (a T-learner) on X alone,
-#        so each fit sees about half the training rows: ~37 per arm at n = 100
-#        (4 folds), ~100 at n = 250, ~225 at n = 500, ~450 at n = 1000. The
-#        library is sized to that: at n <= 100 no glm or gam (11+ parameters on
-#        ~37 rows, ~15 events for a binary outcome), glm and gam from n = 250,
-#        earth from n = 500.
-#   tau  the stage-2 regression of the pseudo-outcome on X. Chosen without
-#        reference to the DGMs' HTE shapes: learners from each function class
-#        (constant, linear, penalised linear, penalised pairwise interactions,
-#        additive smooth, adaptive splines, tree ensemble), regularised because
-#        the pseudo-outcome is noisy - in an RCT its residual is doubled, so its
-#        variance is about 4x. The interaction lasso and earth join at n >= 250.
-#        Each lasso comes at BOTH lambda.min and lambda.1se, and SuperLearner's
-#        CV weighs them: fixing either in advance is a tuning choice, and
-#        making it from how the scenarios came out would be tuning to the DGM.
-#        (lambda.1se alone shrank the strong linear effect of scenario 2 and
-#        cost ~3-4x in MSE at n >= 500; with both, CV put 55-67% of the weight
-#        on lambda.min there. Where there is no heterogeneity lambda.1se
-#        shrinks to a constant, i.e. to SL.mean, so it costs nothing.) A
-#        10-learner version with ridge, a second gam and BART did worse than
-#        the old library at n = 500, from noisier ensemble weights.
+# ONE LIBRARY PER NUISANCE:
+#   W    propensity: mean + glm. Every study is an RCT at P(W = 1) = 0.5, so a
+#        flexible learner only fits noise that the 1 / (e(1 - e)) weight amplifies.
+#   Y    outcome, fit per arm (T-learner), so each fit sees about half the
+#        training rows (~37 at n = 100). glm and gam join at n = 250, earth at 500.
+#   tau  stage 2: regularised learners from each function class, chosen without
+#        reference to the DGMs (the pseudo-outcome's variance is ~4x). Each
+#        lasso comes at both lambda.min and lambda.1se and CV weighs them, since
+#        fixing one would be tuning to the DGM (lambda.1se alone cost ~3-4x MSE
+#        in scenario 2 at n >= 500).
 #
-# CUSTOM WRAPPERS AND WORKERS. SuperLearner looks learners up by name with
-# get(name, envir = env). The studies fit inside future_map() on multisession
-# workers, where a wrapper defined in the parent's global environment does not
-# exist and a name given as a string is not detected as a global. So the
-# wrappers live in SL_ENV, which every call here passes as `env =`; code that
-# references SL_ENV by symbol makes future export it. Its parent is the
-# SuperLearner namespace, so the built-in SL.* and screen.All resolve through
-# it too.
+# WORKERS. SuperLearner finds learners with get(name, envir = env), and a
+# wrapper in the parent's global environment does not exist on a multisession
+# worker. So the wrappers live in SL_ENV (parent: the SuperLearner namespace),
+# passed as `env =` everywhere here.
 #
-# PREDICTION. SL.glmnet.int and SL.glmnet.int.1se expand X into interactions,
-# so predict() on them would be handed the unexpanded columns. Fit with
-# sl_fit_predict(), which predicts through SuperLearner's own newX at fit time;
-# their predict methods stop() rather than mispredict.
+# PREDICTION. SL.glmnet.int(.1se) expand X into interactions, so fit them with
+# sl_fit_predict(), which predicts via newX at fit time; their predict methods stop().
 
 library(SuperLearner)
 

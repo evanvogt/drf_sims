@@ -1,45 +1,25 @@
 ##########
 # title: binary DGMs - check the risk-difference scenarios are what they claim
 ##########
-# Every binary set generates P(Y = 1 | x, W) = m0(x) + W * tau(x): the treatment
-# effect on the RISK-DIFFERENCE scale, with the control risk m0 bounded in
-# [p0_lo, p0_hi] (R/dgm_scenarios.R; the design is in
-# sample_size/README.md). This script
-# checks the properties that design exists for, and re-derives RD_SCALE:
-#   1. the oracle formula and the generator's truth agree (they are separate
-#      columns of the scenario table and could drift)
-#   2. tau depends on the described modifiers only: moving X1 and X2 leaves it
-#      unchanged, so scenario 1 is an exact null and the HTE is what te_expr says
-#   3. SD(tau) is the same at every n - only the ATE moves - and the ATE and
-#      power are the planned ones
-#   4. every treated risk stays inside [RD_EPS, 1 - RD_EPS] at every n, and
-#      under the missing study's MNAR mechanisms (MNAR-Y0 and MNAR-tau share the bound)
-#   5. each RD_SCALE[k] is the largest scale check 4 allows at the binary
-#      studies' n, floored to 3 dp - except scenario 4, frozen below it (see
-#      RD_SCALE in R/dgm_scenarios.R)
-#   6. missing/binary's own RD_SCALE_MISS and BU_MISS: BU_MISS
-#      is the largest bU, to 2 dp, that leaves every floor-bound scenario its
-#      RD_SCALE at n = 500, and RD_SCALE_MISS[k] = min(RD_SCALE[k], the largest
-#      scale feasible at n = 500 with that bU)
-#   7. sample_size/'s binary_corr_<rho> sets (scenarios 1-10):
-#      binary's coefficients exactly, so
-#      tau(x) is binary/'s, except scenario 9, scaled by RD_SCALE_CORR - which
-#      is re-derived as the largest scale feasible at rho = 0.5, floored to
-#      3 dp; oracle vs generator; SD(tau) the same at every n; the planned RD
-#      and 80% power; rho = 0 reproduces binary's bW; every treated risk inside
-#      the bounds except binary_corr_0.5 scenario 3's and 8's floors (0.007 and
-#      0.003 at n = 100), which only have to stay above 0 - the exceptions
-#      R/dgm_scenarios.R documents
-#   8. sample_size/snr/'s binary_snr set:
-#      binary_corr_0.5 exactly at hte_mult = 1; the clamped oracle formula vs
-#      the generator, and every risk inside [RD_EPS, 1 - RD_EPS], at each
-#      hte_mult; the share clamped and the ATE drift stay small
+# Checks the binary risk-difference DGMs, P(Y = 1 | x, W) = m0(x) + W tau(x)
+# (sample_size/README.md), and re-derives RD_SCALE. Stops at the first failure;
+# writes nothing.
+#   1. oracle formula and generator truth agree
+#   2. tau depends on the described modifiers only (scenario 1 is an exact null)
+#   3. SD(tau) is the same at every n; the ATE and power are as planned
+#   4. every treated risk is inside [RD_EPS, 1 - RD_EPS], also under MNAR
+#   5. RD_SCALE[k] is the largest scale check 4 allows, floored to 3 dp (bar the
+#      frozen scenario 4)
+#   6. missing/binary's RD_SCALE_MISS and BU_MISS
+#   7. the binary_corr_<rho> sets: RD_SCALE_CORR (scenario 9), checks 1-4, rho = 0
+#      reproduces binary's bW; at rho = 0.5 scenarios 3 and 8 may dip below
+#      RD_EPS but stay above 0
+#   8. the binary_snr set: binary_corr_0.5 at hte_mult = 1, clamped risks in
+#      bounds at every hte_mult, small clamp share and ATE drift
+# The "binary" set is the table the correlated and missing sets build on, so
+# checks 1-5 pin what they inherit.
 #
-# The "binary" set is the coefficient table the correlated and missing-data
-# sets build on, so checks 1-5 pin what those studies inherit.
-#
-# Writes nothing, and stops at the first failed check. Run from the repo root:
-#   Rscript R/bin_verify_hte.R
+#   Rscript R/bin_verify_hte.R   # from the repo root
 
 source(here::here("R", "dgm_scenarios.R"))
 

@@ -1,46 +1,23 @@
 ##########
 # title: LaTeX tables for the thesis appendix - missing covariates, both outcomes
 ##########
-# The main scenarios (1-4), one estimation table per estimator: rows are
-# mechanism / scenario / handling method, the columns relative efficiency and
-# CATE bias difference, each on all units, the complete units and the
-# incomplete units, each cell "mean (MCSE)". The HTE tests get one table per
-# test, the estimators across the columns plus a True CATE column. Labels and
-# the summary come from R/figures.R, the layout from R/tables.R
-# (miss_metrics_table(), miss_latex_table()).
+# Appendix tables for the missing-data studies, scenarios 1-4: one estimation
+# table per estimator (relative efficiency and CATE bias difference against the
+# complete-data arm, same run, on all / complete / incomplete units) and one
+# per HTE test. Measures as in missing/ADEMP.md, "Performance measures".
 #
-# Writes to ../results/thesis_tables/, for each outcome prefix (cts, bin):
-#   <prefix>_miss_<model>.tex       one per estimator, e.g. cts_miss_dr_random_forest.tex
-#   <prefix>_miss_tests_<test>.tex  one per HTE test
-# \input{} them into a document with
-#   \usepackage{booktabs, longtable, pdflscape, array}
+# - The complete-data arm is split by the amputation its run would have had, so
+#   each unit set is compared with the same units.
+# - Complete case and IPW drop the incomplete units, so they have complete-unit
+#   columns only.
+# - Bias is the CATE bias (mean of est - true over units).
+# - No relative bias (it blows up where the true CATE is near 0) and no Pearson
+#   (the complete units' narrower CATE range lowers it even with no missingness).
+# - The truth is tau(X), under MNAR-tau too.
 #
-# Metric choices (missing/ADEMP.md, "Performance measures"):
-# - Relative efficiency (MSE over the complete-data arm's MSE) and CATE bias
-#   difference (CATE bias minus the complete-data arm's), same run and
-#   estimator, as in the chapter's figures (thesis_figures/missing.R). The
-#   complete-data arm is 1 and 0 by construction, so its rows are left out.
-# - Each on three sets of units (cate_metrics_split() in R/metrics.R): all
-#   units is what an analyst gets, the complete / incomplete split says where
-#   the loss is. The complete-data arm is split by the amputation its run would
-#   have had, so each set is compared with the same units in the reference.
-#   Complete case and IPW drop the incomplete units, so they have only the
-#   complete-unit columns: their all-unit versions would compare ~350 units
-#   with 500, and are NA in the metrics file.
-# - Bias is the CATE bias, mean of est - true over units, not an ATE bias:
-#   that would need AIPW with the CATE models' propensity scores, which not
-#   every model estimates.
-# - No relative bias: the bias difference is the comparison instead.
-#   `rel_bias_cate_cu` averages (est - true) / true per unit and blows up
-#   wherever the true CATE is near 0, and `rel_ate_bias_cu` is relative to the
-#   ATE.
-# - No Pearson correlation. Split by units it would mislead: the complete
-#   units' narrower range of true CATE lowers it under MAR even in the
-#   complete-data arm.
-# - The truth is the primary one, tau(X), under MNAR-tau too.
-# - A handling method an estimator is not fitted for has no row in that
-#   estimator's table: no DR-oracle or DR-SuperLearner under multiple
-#   imputation, only the two grf estimators under inbuilt missingness handling.
+# Writes to ../results/thesis_tables/, for prefix cts and bin:
+# <prefix>_miss_<model>.tex and <prefix>_miss_tests_<test>.tex. \input{} with
+# \usepackage{booktabs, longtable, pdflscape, array}.
 
 library(here)
 source(here("R", "figures.R"))

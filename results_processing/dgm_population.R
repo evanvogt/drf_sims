@@ -1,30 +1,17 @@
 ##########
 # title: the DGMs' true CATE over a trial population - appendix figures and tables
 ##########
-# The derivation shared by results_processing/thesis_figures/dgm.R and
-# results_processing/thesis_tables/dgm_tables.R, so that a figure and a table
-# cell come from the same draws. Reads no simulation output: every truth is
-# the DGM code's own. Analysis only: display labels and layout stay with the
-# calling script.
+# The DGMs' true CATE over a trial population, shared by thesis_figures/dgm.R
+# and thesis_tables/dgm_tables.R so a figure and a table use the same draws.
+# Reads no simulation output. rho = 0.5 only: continuous_corr_0.5 and
+# binary_corr_0.5 scenarios 1-4, and competing risks' 7 scenarios (RMTL CATE,
+# both events).
 #
-# Scope - the primary rho = 0.5 covariates only:
-#   continuous / binary   continuous_corr_0.5 and binary_corr_0.5
-#                         (R/dgm_scenarios.R), the chapter's scenarios 1-4
-#   competing risks       survival_scenario_params (competing_risk/surv_dgm.R),
-#                         all 7 scenarios, the subdistribution RMTL CATE of
-#                         event 1 and event 2
-# The single-event study runs at rho = 0 only, so it is not here.
-#
-# Continuous / binary tau is reported as tau(x) - ATE = g(x) - E[g], g the
-# heterogeneity term (te = bW + g, R/dgm_scenarios.R). It does not depend on n:
-# calibrate_bW() moves bW, and with it tau's location, but not g. The ATE at
-# each n is in cate_summary(). Competing-risk tau is not calibrated to n, so it
-# is tau itself, in days.
-#
-# One copula draw serves all three outcome types: the competing-risk DGM draws
-# its covariates from the same copula with the same marginals (X1 ~ Bern(0.4),
-# X3 ~ Bern(0.7), X2, X4, X5 ~ N(0, 1)). Its population is the draw's first
-# DGM_N_POP_SURV rows.
+# Continuous / binary tau is reported as tau(x) - ATE, which does not depend on
+# n (calibrate_bW() moves only the location); the ATE per n is in
+# cate_summary(). Competing-risk tau is not calibrated, so it is reported as it
+# is, in days. One copula draw serves all three outcomes; competing risks use
+# its first DGM_N_POP_SURV rows.
 #
 # Source R/figures.R first (it loads dplyr and tidyr).
 
