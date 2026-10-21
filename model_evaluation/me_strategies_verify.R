@@ -6,9 +6,9 @@
 # fold_info. Everything downstream depends on that carry-through being exact -
 # if it is not, the three-arm comparison is not comparing three ways of
 # scoring THE SAME candidate fits, and the whole point of doing this as a
-# second pass is lost. Since 2026-10-14 `whole` is recomputed rather than
-# carried (me_strategies.R's header), so it is checked for completeness like
-# the other two arms, not for identity with the main tree.
+# second pass is lost. `whole` is recomputed rather than carried
+# (me_strategies.R's header), so it is checked for completeness like the other
+# two arms, not for identity with the main tree.
 #
 # WHY THIS IS NOT A me_testing.R CHECK. Proving the carry-through needs no
 # model fits, no fixtures and no recomputation - it is identical() on two

@@ -38,8 +38,8 @@
 # treatment effect (MNAR-tau). MAR draws U but does not use it.
 #
 # SCENARIO NUMBERING: 1 null, 2 simple, 3 complex, 4 non-linear, then the other
-# six. Results saved before 2026-09-26 use the old numbers; old -> new is
-#   1 -> 1, 3 -> 2, 8 -> 3, 9 -> 4, 2 -> 5, 4 -> 6, 5 -> 7, 6 -> 8, 7 -> 9, 10 -> 10
+# six. Results saved before 2026-09-26 use the old numbers (docs/DEVLOG.md,
+# "Scenario renumbering").
 
 library(dplyr)
 

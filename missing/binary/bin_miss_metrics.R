@@ -50,8 +50,7 @@ metrics <- compute_metrics(
 # the methods that analyse all 500 units: for complete_cases and IPW it would
 # divide a ~350-unit MSE by a 500-unit one, so it is NA there. The bias
 # comparisons are differences, not ratios - bias_complete is often near zero,
-# which made the old per-run ratio rel_bias_complete unstable (see
-# missing/README.md). rel_ate_bias and rel_bias_cate (relative to the TRUE
+# so a per-run ratio is unstable (missing/README.md). rel_ate_bias and rel_bias_cate (relative to the TRUE
 # parameter) arrive from cate_metrics() in R/metrics.R; rel_bias_cate is not
 # plotted here, since the true CATE crosses zero.
 ref_by <- setdiff(c(study$path_cols, "run", "model"), "method")

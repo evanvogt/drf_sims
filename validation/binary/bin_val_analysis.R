@@ -86,7 +86,7 @@ results2$truth <- chunks$truth2
 # column. With a binary Y each test is a linear probability model - linear in
 # the risk, the scale the treatment effect is on - whose errors are
 # heteroskedastic by construction, so HC3 is the primary kind and the classical
-# one is kept for comparison. HC3 only until 2026-10-11.
+# one is kept for comparison.
 validations <- chunk_validations_se(results1, results2, data1, data2)
 
 results <- list(results1 = results1, results2 = results2, validations = validations)

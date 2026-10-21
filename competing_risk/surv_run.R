@@ -33,9 +33,7 @@
 # ~8GB against a 64GB session).
 #
 # ---- default target is every row without a results file ---------------------
-# As cts_val_run.R/me_strategies_run.R. (Until 2026-10-01 it defaulted to runs
-# 101-500, to backfill the widened grid; the retune and the rho factor made
-# every earlier result obsolete, so that backfill no longer exists.) The full
+# As cts_val_run.R/me_strategies_run.R. The full
 # grid is 14,000 rows, far more than one session gets through, so pick a
 # subset below - e.g. ids <- grid_indices(study, rho = 0.5) - and let the array
 # do the bulk. grid_indices() selects rows by row number without filtering

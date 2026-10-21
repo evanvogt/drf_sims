@@ -5,13 +5,10 @@
 # three nuisance arms (`whole`, `cv_shared`, `holdout`), and writes the result
 # to a parallel tree.
 #
-# `whole` IS RECOMPUTED HERE, NOT CARRIED THROUGH (since 2026-10-14). Until
-# then this pass copied me_analysis.R's `whole` arm and added the other two.
-# When the scoring pipelines moved to per-arm outcome models (me_nuisance.R's
-# header, DEVLOG bug R), every arm in the main tree became stale - and
-# recomputing `whole` here is what lets all three be refreshed without
-# refitting a single candidate. The main tree's own `nuisances` are therefore
-# superseded and not read: only its candidates, data, truth and fold_info are.
+# `whole` is recomputed here, not copied from the main tree, so all three arms
+# come from the current scoring pipelines (DEVLOG bug R) without refitting a
+# candidate. The main tree's own `nuisances` are not read: only its
+# candidates, data, truth and fold_info are.
 #
 # WHY A SECOND PASS. Everything these arms consume is already saved in each
 # res_sim_<run>.RDS (me_analysis.R's results list): data$Y/W/X, truth,

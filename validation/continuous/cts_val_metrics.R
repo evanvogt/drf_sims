@@ -2,8 +2,7 @@
 # title: metrics for the interim-analysis validation study
 ##########
 # get_results() (R/pipeline.R) already attaches the grouping columns
-# (rho, scenario, n, interim_prop, run) to every collected run, replacing the
-# hand-rolled four-level nested loops this used to take.
+# (rho, scenario, n, interim_prop, run) to every collected run.
 #
 # This does NOT reuse R/metrics.R::compute_metrics() - that function's
 # contract (per_model(model_res, true_tau, model, sim_res, keys)) assumes one
@@ -44,7 +43,7 @@ flatten_validations <- function(all_results_df, extractor) {
 # ---- subgroup persistence: p-values for the top/bottom-10% responder groups,
 # one row per standard-error kind (se: classical / hc3 - chunk_validations_se()).
 # top/bottom become top_pval/bottom_pval; every other column is carried as it is
-# - since 2026-10-12 that includes est_/se_/ref1_/true2_<top|bottom>
+# - including est_/se_/ref1_/true2_<top|bottom>
 subgroups_metrics <- flatten_validations(all_results_df, function(val, key) {
   map_dfr(names(val$subgroups), function(model) {
     sg <- val$subgroups[[model]] %>%
@@ -77,7 +76,7 @@ var_imp_metrics <- flatten_validations(all_results_df, function(val, key) {
 # ---- does chunk 1's most important covariate still interact in chunk 2
 # one row per se x measure; carries p_cts, p_cts_adj, p_split and the
 # data-driven p_dd (with dd_cuts, dd_prop) and p_proj through as they are, and
-# since 2026-10-12 each form's est_/se_/ref1_/true2_<form>
+# each form's est_/se_/ref1_/true2_<form>
 top_var_metrics <- flatten_validations(all_results_df, function(val, key) {
   map_dfr(names(val$top_var_tests), function(model) {
     tv <- val$top_var_tests[[model]]

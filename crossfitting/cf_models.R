@@ -1,8 +1,7 @@
 ##########
 # title: crossfitting comparison - CATE model variants
 ##########
-# Compares double crossfitting (the procedure this study used to use throughout)
-# against standard crossfitting with the final model fit either on the whole
+# Compares double crossfitting against standard crossfitting with the final model fit either on the whole
 # dataset or through a second crossfitting pass, and - for forests - against
 # out-of-bag predictions with no sample splitting at all.
 #

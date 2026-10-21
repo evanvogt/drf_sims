@@ -186,7 +186,7 @@ report(interaction_pval_adj(Y_adj, W_t, X_adj, "Xproxy") > 0.01,
 report(interaction_pval_adj(Y_adj, W_t, X_adj, "Xmod") < 0.01,
        "interaction_pval_adj still detects the real modifier")
 
-# the estimate and SE saved alongside the p-value (2026-10-12): the classical
+# the estimate and SE saved alongside the p-value: the classical
 # triple is summary.lm's own W:v row, and the p-value is the one above
 tr_t <- interaction_test(Y_t, W_t, v_t)
 report(identical(unname(tr_t), unname(co_t[4, c(1, 2, 4)])) &&
@@ -364,7 +364,7 @@ report(identical(v_se$var_imps, v_hc$var_imps) &&
          identical(v_se$variances, v_cl$variances),
        "variances and var_imps do not depend on the standard errors")
 
-# the estimates and reference contrasts (2026-10-12). The truth is attached
+# the estimates and reference contrasts. The truth is attached
 # here as the analysis scripts attach it, so true2_* is filled
 fit_tt <- fit_t
 fit_tt$truth <- gen_t$truth

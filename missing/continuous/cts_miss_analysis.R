@@ -26,12 +26,10 @@ grf_threads <- if (length(args) >= 3 && !is.na(args[3])) args[3] else 1
 
 n_folds <- 10
 
-# The grid lives in cts_miss_config.R and is NEVER filtered here. It used to be
-# (`filter(method == "complete_data")`), which renumbered every row, so index i
-# meant one thing here and another in cts_miss_check.R - a failed_ids.txt would
-# have resubmitted the wrong parameters. To run one arm, select indices instead:
+# The grid lives in cts_miss_config.R and is NEVER filtered here: filtering
+# renumbers the rows, so index i would mean different things here and in
+# cts_miss_check.R (bug D). To run one arm, submit selected indices:
 #   idx <- grid_indices(study, method = "complete_data")
-# and submit those, leaving the numbering intact.
 param <- study$grid[i, ]
 print(param)
 

@@ -350,8 +350,7 @@ save_fig <- function(
 #' @param y_lab axis label
 #' @param facet_rows,facet_cols character vectors of column names to facet by
 #'   (NULL to skip that dimension), passed to facet_grid() via vars().
-#'   Default to the mechanism/scenario grid this function
-#'   originally hardcoded, so existing callers are unaffected.
+#'   Default to the mechanism/scenario grid.
 #' @param facet_scales passed to facet_grid
 #' @param independent_y TRUE gives every panel its own y scale, not just every
 #'   row - ggh4x::facet_grid2(independent = "y") in place of facet_grid(), so

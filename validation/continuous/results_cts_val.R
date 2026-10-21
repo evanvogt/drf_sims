@@ -53,8 +53,7 @@ tidy_subgroups <- metrics$subgroups %>%
 
 interim_breaks <- sort(unique(tidy_subgroups$interim_prop))
 
-# Distribution of subgroup p-values, both subgroups. bottom_pval is meaningful
-# for the first time here - it used to be the intercept's p-value.
+# Distribution of subgroup p-values, both subgroups.
 ggplot(tidy_subgroups, aes(x = pval, colour = interim_prop, group = interim_prop)) +
   stat_ecdf(geom = "step", na.rm = TRUE) +
   geom_vline(xintercept = 0.05, linetype = "dashed") +

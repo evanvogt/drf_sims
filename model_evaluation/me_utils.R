@@ -1,19 +1,8 @@
 ###############
 # title: data-processing helpers - model evaluation study
 ###############
-# setup_rng_seed() (the old local RNG-stream reimplementation) and
-# generate_data() (the old benchtm call) are gone: setup_rng_stream() now
-# comes from R/utils.R (statement-for-statement identical to the old
-# setup_rng_seed(), just named consistently with every other study), and
-# data generation comes from me_dgms.R.
-#
-# prepare_design_matrix()/split_folds() are otherwise unchanged from the
-# original sim_utils.R. Both select columns by name, not position, so they
-# were already robust to the DGM swap - confirmed empirically, not just by
-# inspection: running R/dgm_scenarios.R's output through this exact
-# model.matrix()/preProcess() logic reproduces the covariate columns exactly,
-# since every covariate the new DGM emits is already numeric (no factors
-# left to expand).
+# RNG streams come from R/utils.R and data from me_dgms.R. Both helpers here
+# select columns by name, not position.
 
 # Function to process data
 prepare_design_matrix <- function(data) {

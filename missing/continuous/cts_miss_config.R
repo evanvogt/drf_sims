@@ -1,31 +1,13 @@
 ##########
 # title: missing-covariate continuous study - the one parameter grid
 ##########
-# This file is where bugs B, C and D stop being possible.
-#
-# B  cts_miss_collect.R used mechanism = c("MAR", "AUX", "AUX-Y") while the DGM,
-#    the analysis script and the check script all used "MNAR"/"MNAR-Y". Two of
-#    the three mechanisms were collected from directories that never existed.
-#    There is now one spelling: MNAR.
-#
-# C  cts_miss_metrics.R built its relative-efficiency reference from
-#    method == "complete_data", but the collect grid omitted that method, so the
-#    join found nothing and rel_efficiency was NA everywhere. "complete_data" is
-#    in the grid below, so collect picks it up and the reference exists.
-#
-# D  cts_miss_analysis.R appended `filter(method == "complete_data")` AFTER
-#    expand.grid, which renumbered every row. Array index i then meant one thing
-#    to the analysis script and another to the check and rerun scripts, so a
-#    failed_ids.txt would have resubmitted the wrong parameter rows. The grid is
-#    now built once and never filtered; to run a subset, select on the VALUES
-#    and keep the row numbers (see cts_miss_analysis.R).
-#
-# "complete_data" is the reference arm: no missingness is introduced at all, so
-# the other methods can be scored against complete-data performance.
-#
-# Mechanisms MAR / MNAR-Y0 / MNAR-tau since 2026-09-28 (R/dgm_scenarios.R,
-# MISS_MECHS). They took the old MAR / MNAR / MNAR-Y slots, so the row layout
-# is unchanged: the old MNAR (MCAR in effect) is gone, MNAR-Y is now MNAR-tau.
+# Every script reads the grid from here, which rules out bugs B-D
+# (docs/DEVLOG.md):
+#   - one spelling of each mechanism (R/dgm_scenarios.R's MISS_MECHS)
+#   - "complete_data" stays in the grid: it is the reference arm, with no
+#     missingness introduced, that the other methods are scored against
+#   - the grid is never filtered after construction; to run a subset, select
+#     indices with grid_indices() so row numbers keep their meaning
 
 library(here)
 source(here("R", "pipeline.R"))
@@ -50,14 +32,8 @@ grid <- expand.grid(
 # numbers are handed out.
 grid <- grid[!(grid$scenario == 1 & grid$mechanism == "MNAR-tau"), ]
 
-# Scenario 2 was added after rows 1-9900 had run (as scenario 6, before the
-# 2026-09-26 renumbering - see R/dgm_scenarios.R). It is appended as a second
-# block rather than added to `scenario` above, so its rows are one contiguous
-# range, 9901-12600, for jobscripts/cts_miss_extra.sh. The renumbering did
-# reorder rows 1-9900 (old scenarios 1, 2, 4, 5 are now 1, 5, 3, 4), so a row
-# index no longer means what it did before 2026-09-26 - harmless, since every
-# pre-renumbering result is archived and the study re-runs from empty
-# (R/archive_old_results.R).
+# Scenario 2 is appended as its own block, not added to `scenario` above, so its
+# rows are one contiguous range, 9901-12600, for jobscripts/cts_miss_extra.sh.
 grid <- rbind(grid, expand.grid(
   scenario  = 2,
   n         = c(500),

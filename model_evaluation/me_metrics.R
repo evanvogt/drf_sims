@@ -1,27 +1,10 @@
 ##########
 # title: metrics for the model evaluation study
 ##########
-# Reuses R/metrics.R::compute_metrics() rather than a bespoke aggregator.
-# This works because me_analysis.R saves the 9 candidate models as TOP-LEVEL
-# keys of each run's results (rf1..SL3), exactly like continuous saves
-# causal_forest/dr_random_forest/etc. - so compute_metrics()'s
-# intersect(names(sim_res), models) finds them directly, and its per_model()
-# callback receives the full per-run result, so it can reach
-# sim_res$nuisances/sim_res$data while scoring one candidate at a time.
-#
-# The proxy-score formulas (calc_infl_score, calc_dr_risk) are unchanged from
-# the old metric_utils.R - only the orchestration moved, from one vectorized
-# pass over all 9 models inside calc_metrics(), to compute_metrics()'s own
-# per-(run, model) loop calling me_per_model() once per model. Same numbers;
-# me_testing.R's regression check confirms this.
-#
-# extract_surrogate()/calc_scores_for_config()/fix_automl() from the old
-# metric_utils.R are gone: fix_automl() guarded against a "p1"-named 5th
-# column that predict_automl_models() (me_nuisance.R) never actually
-# produces - confirmed by reading it directly, it always names that column
-# "pi" - and extract_surrogate()'s cv/infold/whole-wide surrogate matrix is
-# unnecessary once scoring pulls df$pi/df$phi directly from one fold-type's
-# data.frame at a time.
+# Uses R/metrics.R::compute_metrics(). me_analysis.R saves the 9 candidates as
+# TOP-LEVEL keys of each run's results (rf1..SL3), so compute_metrics() finds
+# them by name, and its per_model() callback gets the whole run, so it can
+# reach sim_res$nuisances/sim_res$data while scoring one candidate at a time.
 #
 # The score columns are DERIVED from whatever arms the nuisance list carries,
 # never enumerated here - which is what lets the same me_per_model() serve all
@@ -32,17 +15,11 @@
 #   strategies  whole, cv_shared, holdout                    -> 2 + 10x3x2 = 62
 #   split       split                                        -> 2 + 10x1x2 = 22
 #
-# The split tree works unchanged for a second reason too: me_split.R stores
-# `data` and `truth` ALREADY RESTRICTED to its 20% evaluation rows, so
-# tau_hat, Y, W, the nuisance data.frame and true_tau are all the same length
-# there, and every formula below is length-agnostic. Scoring an 80:20 arm on
-# its holdout therefore needed no per_model variant, only a results object
-# assembled with the restriction already applied.
+# The split tree also needs no variant because me_split.R stores `data` and
+# `truth` already restricted to its 20% evaluation rows, and every formula
+# below is length-agnostic.
 #
-# Note: compute_metrics() always does true_tau <- sim_res$truth$tau - there
-# is no equivalent of the old calc_metrics(..., truth_avail = FALSE) branch.
-# me_analysis.R only ever runs against dgm_scenarios.R-generated data (which
-# always carries truth), so this is a real but low-risk scope reduction.
+# compute_metrics() requires sim_res$truth$tau, which simulated data always has.
 
 library(here)
 source(here("model_evaluation/me_config.R"))
@@ -59,13 +36,9 @@ source(here("model_evaluation", "me_nuisance.R")) # calculate_pseudos()
 # every set. So 0.5 is the TRUE propensity, the fixed-pi scores are oracle-pi
 # scores, and `dr` vs `dr05` isolates exactly one thing: the cost of estimating
 # a propensity that never needed estimating.
-#
-# Nothing had to be rerun to add them. phi05 has been in
-# me_nuisance.R::calculate_pseudos() since this study's first commit, so every
-# completed replicate already carries it, and calc_infl_score() already took pi
-# as an argument. See README.md's "Scores" section.
+# See README.md's "Scores" section.
 
-#' Influence-corrected PEHE proxy - unchanged from metric_utils.R
+#' Influence-corrected PEHE proxy
 #'
 #' @param pi estimated propensity, or the scalar 0.5 for the oracle-pi twin.
 #'   Every operation here is vectorised arithmetic, so a length-1 pi recycles
@@ -87,7 +60,7 @@ calc_infl_score <- function(tau_hat, tau, pi, Y, W) {
   mean(pehe_infl)
 }
 
-#' DR risk proxy (MSE against the AIPW pseudo-outcome) - unchanged from metric_utils.R
+#' DR risk proxy (MSE against the AIPW pseudo-outcome)
 calc_dr_risk <- function(tau_hat, tau_dr) {
   mean((tau_hat - tau_dr)^2)
 }
@@ -204,7 +177,7 @@ arm_scores <- function(tau_hat, df, Y, W, k_groups = CAL_QUANTILES) {
   }
 
   # the T-learner plug-in CATE from the scoring pipeline's per-arm outcome
-  # models (per arm since 2026-10-14, see README.md), the same models phi is
+  # models, the same models phi is
   # built from, without phi's residual correction
   tau_t <- df$mu1_DR - df$mu0_DR
 

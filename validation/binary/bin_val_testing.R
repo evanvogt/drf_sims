@@ -205,7 +205,7 @@ for (model in names(v_se$subgroups)) {
          sprintf("%s: top_var_tests has 4 rows and plausible p_dd / p_proj", model))
 }
 
-# the estimates and reference contrasts (2026-10-12), with the chunk's truth
+# the estimates and reference contrasts, with the chunk's truth
 # attached as bin_val_analysis.R attaches it. On a binary Y est is a
 # risk-difference interaction and true2 a risk difference, so both are inside
 # [-1, 1]; ref1_top / ref1_bottom keep their signs

@@ -5,34 +5,19 @@
 # hyperparameter sets, 3 elastic-net (glmnet) sets, 3 SuperLearner library
 # sets. Each is fit as its own single-crossfit ("scf_scf") DR-learner:
 # leave-one-fold-out nuisances feeding a stage-2 regression crossfit over the
-# SAME folds - not the double-crossfit-over-fold-pairs scheme this file used
-# to implement.
+# SAME folds, following crossfitting/'s comparison (crossfitting/README.md).
 #
-# Brought in line with crossfitting/'s comparison of alternatives against
-# double crossfitting (fitting nuisances over all C(V,2) fold pairs - 45 fits
-# at V=10 rather than 10), which is why R/cate_models.R's production
-# estimators moved off it: forests to whole-sample OOB, causal forest to
-# grf's own internal cross-fitting, SuperLearner to scf_scf (nuisance_sl /
-# stage_2_sl). See crossfitting/README.md and R/cate_models.R's header.
+# Single crossfitting for all 9, even though rf1-3 (ranger) could take OOB
+# predictions: net1-3 and SL1-3 have no honest OOB analogue
+# (crossfitting/README.md's "DR-learner, SuperLearner" section), and mixing
+# schemes would confound learner choice with crossfitting scheme in the ranking.
 #
-# Single crossfitting throughout here, not a per-learner OOB/scf split, even
-# though rf1-3 (ranger) could take OOB predictions natively. net1-3 and SL1-3
-# have no OOB analogue - glmnet has no bagging, and SuperLearner's internal CV
-# selects ensemble weights rather than producing an honest prediction of a
-# training row (crossfitting/README.md's "DR-learner, SuperLearner" section
-# states this directly) - and this study's question ("do cheap proxy losses
-# rank 9 candidate models the way true PEHE would?") needs all 9 candidates on
-# one shared honesty regime, or the ranking confounds learner choice with
-# crossfitting scheme.
-#
-# NUISANCES (since 2026-10-08, before the correlated rerun), in line with
-# R/cate_models.R's DR-learners:
+# NUISANCES, in line with R/cate_models.R's DR-learners:
 #
 #   outcome     a T-learner in every candidate: one model per arm, fit on X
 #               with that arm's training rows only and predicting every
-#               held-out row (control arm first). Until then each candidate
-#               fit one S-learner on cbind(W, X) and read it at W = 0 and 1,
-#               which made glmnet's Y1.hat - Y0.hat a constant.
+#               held-out row (control arm first). An S-learner on cbind(W, X)
+#               would make glmnet's Y1.hat - Y0.hat a constant.
 #   propensity  rf* and net* keep their own learner (ranger / glmnet at the
 #               candidate's alpha). SL1-3 all use the production propensity
 #               library, sl_libraries(n)$W = mean + glm (R/sl_library.R): every
@@ -48,10 +33,8 @@
 # single learner via create.Learner("SL.glmnet", ...) inside SuperLearner(),
 # which R/cate_models.R doesn't have).
 #
-# scatter_folds() is sourced from R/utils.R rather than duplicated locally -
-# it is the single-crossfit reassembly helper R/cate_models.R::nuisance_sl
-# uses, replacing this file's former use of collate_predictions() (the
-# double-crossfit n x V matrix assembler, still used by crossfitting/).
+# scatter_folds() (R/utils.R) reassembles the single-crossfit predictions, as
+# in R/cate_models.R::nuisance_sl.
 
 require(future.apply)
 require(ranger)
@@ -445,23 +428,15 @@ fit_tau_SL <- function(X, fold_list, fold_indices, po, hyper_list) {
 #'
 #' @param p ncol(X)
 candidate_hyperparams <- function(p) {
-  # rf2/rf3's mtry is scaled to ncol(X) rather than fixed at 30/10. Those
-  # fixed values came from the old benchtm-based prototype, which had a much
-  # wider covariate set than R/dgm_scenarios.R produces (10 columns in every
-  # scenario) - left as literals they make ranger error out
-  # ("mtry can not be larger than number of variables in data"), which is
-  # how this was actually found (me_testing.R full, check 4). rf2 uses every
-  # covariate each split (the high-mtry extreme, well-defined at any p);
-  # rf3 uses about half, paired with its original shallower max.depth = 3 -
-  # keeping the three RF configs meaningfully separated (~sqrt(p) < p/2 < p)
-  # regardless of how many covariates a given scenario produces.
+  # rf2/rf3's mtry is scaled to p, so ranger never sees mtry > p and the three
+  # configs stay separated (~sqrt(p) < p/2 < p) at any covariate count.
   list(
     rf1 = list(), # ranger defaults (mtry = floor(sqrt(p)))
     rf2 = create_rf_hyperparams(mtry = p, max.depth = 5),
     rf3 = create_rf_hyperparams(mtry = max(2, ceiling(p / 2)), max.depth = 3),
 
     net1 = create_net_hyperparams(alpha = 1), # lasso
-    # interaction lasso (replaced ridge, alpha = 0, on 2026-10-08): the only
+    # interaction lasso: the only
     # linear-family candidate that can represent a product effect (scenario 3, X4*X5)
     net2 = create_net_hyperparams(alpha = 1, interactions = TRUE),
     net3 = create_net_hyperparams(alpha = 0.5), # elastic net
@@ -493,8 +468,7 @@ candidate_family <- function(nm) {
 
 #' Fit all 9 candidate CATE-learner configurations
 #'
-#' Replaces the old sim_eval.R's list2env()/.GlobalEnv/grep()/assign() dance
-#' with an ordinary named list. Names here must match CANDIDATE_MODELS in
+#' Names here must match CANDIDATE_MODELS in
 #' me_config.R exactly - me_metrics.R relies on it via
 #' R/metrics.R::compute_metrics()'s intersect(names(sim_res), models).
 #'

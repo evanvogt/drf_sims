@@ -9,14 +9,11 @@
 # Correlated covariates only, at rho = 0.5 - the correlated studies' primary arm
 # (sample_size/, R/dgm_scenarios.R's CORRELATED COVARIATES). rho is a
 # path column with the same "rho_" prefix those studies use, so results sit
-# under rho_0.5/ and a rho = 0 arm would be a one-value change to the grid. (It
-# briefly ran both rhos, 2026-10-09; the rho_0/ results from then are outside
-# this grid and are neither checked nor collected.)
+# under rho_0.5/ and a rho = 0 arm would be a one-value change to the grid.
 #
 # Scenarios 1-4 (null, simple, complex, non-linear - R/dgm_scenarios.R,
-# DESC_10): 4 x 11 x 100 = 4400 rows. Scenarios 2-4 since 2026-10-11 and the
-# null since 2026-10-12, where every significant interaction test is a type I
-# error. Adding it reordered the grid: row 1 is now scenario 1 at 0.25, run 1.
+# DESC_10): 4 x 11 x 100 = 4400 rows. In the null every significant interaction
+# test is a type I error.
 
 library(here)
 source(here("R", "pipeline.R"))

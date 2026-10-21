@@ -304,3 +304,18 @@ removed after commit `e7b1d59`.
 `scf_oob_t`, `oob_oob_s` and `oob_oob_manual` removed. The CI pilot replaced a
 `run_crossfit_structured_arms()` orchestrator that trimmed nuisance fits and so
 drew different `dcf`/`cf_dcf` values from the production study.
+
+## History moved out of code comments (2026-10-21)
+
+Dated "since/until/used to" notes were removed from the R code; the full text
+is in git at `c3afba0`. What they recorded that is not above:
+
+- `competing_risk/surv_models.R::pseudo_sl_t_split` was the only arm that
+  crashed runs: 225 of 1400 array indices on the pre-2026-10-01 DGM, 195 from NA
+  pseudo-values reaching `SuperLearner()`, 25 from SL.glmnet failing on a
+  near-constant treated-arm RMTL2 (3 distinct values on index 67) and leaving a
+  NULL fit. Traced by `surv_failed_diagnose.R` (tag `diagnostics-2026-10`).
+- `model_evaluation/me_nuisance.R`: xgboost 3.x moved `best_iteration` under
+  `$early_stop`, which crashed every local fit; the cluster's older xgboost
+  (the 358 pre-2026-09-26 runs) was unaffected.
+- `missing/ci_example` always ran 50 imputations, despite an old header saying 20.

@@ -7,8 +7,8 @@
 #   1. covariates: prevalences and correlations of the copula
 #   2. amputation: proportion incomplete, missing rate per covariate, patterns
 #   3. selection: how well incompleteness is predicted from X1-X5, from the
-#      always-observed X01-X05, from the IPW model (X01-X05 + W * Y, since
-#      2026-09-30), and from Y in each arm; the IPW weights' spread; how far
+#      always-observed X01-X05, from the IPW model (X01-X05 + W * Y),
+#      and from Y in each arm; the IPW weights' spread; how far
 #      the missing X4 values sit from the observed; E[U_term | complete /
 #      incomplete] and U's share of Var(Y)
 #   4. pairing: within a run, MAR and MNAR-Y0 share W, X, err and cats, and

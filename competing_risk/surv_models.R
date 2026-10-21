@@ -17,8 +17,7 @@ library(randomForestSRC)
 source(here::here("R", "sl_library.R"))
 
 # Per-nuisance libraries. surv_analysis.R passes sl_libraries(n); this default
-# is the full, n > 100 set. Until the library change it was the single
-# vector c("SL.glm", "SL.glmnet", "SL.ranger", "SL.gam") for every nuisance.
+# is the full, n > 100 set.
 DEFAULT_SL_LIBRARY <- sl_libraries(Inf)
 
 # num.threads is grf's thread count, forwarded to every grf fit and predict()
@@ -43,7 +42,7 @@ DEFAULT_SL_LIBRARY <- sl_libraries(Inf)
 # The grf causal forests take a propensity fit on X and X_ps (ps_oob) in place
 # of their own. The sl_t_* T-learners have no propensity.
 #
-# The *_semi arms (since 2026-10-10) are semi-oracle twins of the three
+# The *_semi arms are semi-oracle twins of the three
 # production DR-learners: the same outcome models, with the true propensity
 # TRUE_PS in the pseudo-outcome (po_semi) in place of the estimated W.hat. They
 # reuse their parent's nuisances, so each pair differs in the propensity alone
@@ -756,9 +755,7 @@ pseudo_cf_scf <- function(X, pseudo, W, fold_indices, fold_list, num.threads = N
 # R/cate_models.R::nuisance_rf, and the production-parity arm. No sample
 # splitting: t_learner_rf (one forest per arm; own-arm predictions OOB) supplies
 # both counterfactuals, and two more whole-sample forests supply W.hat and
-# pseudo.hat.cf, all taken out-of-bag. Until the move to per-arm outcome models
-# this was the S-learner "oob_oob_s" (one forest on cbind(W, X), read through
-# grf's X.orig).
+# pseudo.hat.cf, all taken out-of-bag.
 #
 # `pseudo` is the whole-sample pseudo-value vector, and it is also the outcome in
 # the DR correction term - there is no separate `pseudo_whole` argument here
@@ -873,9 +870,8 @@ nuisance_pseudo_rf_scf <- function(
   )
 }
 
-# Leave-one-fold-out second stage on a po VECTOR. R/cate_models.R no longer has a
-# fold-wise RF stage 2 to borrow (it moved to whole-sample OOB, stage2_whole_rf),
-# so the scf arms keep this local one. The whole_oob arm uses stage2_whole_rf.
+# Leave-one-fold-out RF stage 2 on a po VECTOR, for the scf arms. R/cate_models.R
+# has only the whole-sample OOB one (stage2_whole_rf), which the whole_oob arm uses.
 stage_2_rf_scf <- function(X, po, fold_indices, fold_list, num.threads = NULL) {
   n_obs <- nrow(X)
 
@@ -1118,8 +1114,7 @@ compute_split_pseudomean <- function(Y_km, D_km, Y_val, D_val, horizon) {
   )
 }
 
-# One pseudoyl() call per validation unit returns both causes; this used to
-# make two identical calls, one per cause.
+# One pseudoyl() call per validation unit returns both causes.
 compute_split_pseudoyl <- function(Y_km, D_km, Y_val, D_val, horizon) {
   n_km <- length(Y_km)
   ps <- vapply(
@@ -1206,33 +1201,15 @@ pseudo_sl_t_standard <- function(
 # 3-way split: training (V-2 folds), KM set (fold k+1 mod n_folds), validation (fold k)
 # Training pseudo-obs: leave-one-out on training set; validation pseudo-obs: computed via KM set
 #
-# This function used to take down the whole run, and was the ONLY arm that did:
-# 225 of the 1400 array indices never produced a res_sim_*.RDS, and
-# surv_failed_diagnose.R (git tag diagnostics-2026-10) traced every reproducible one of them to here, by two
-# routes. It was the only SuperLearner call site in this study that both passed
-# `sl_library` unvalidated AND computed its pseudo-values with an unguarded
-# pseudoyl(), so it was missing both of the guards the rest of the file has:
-#
-#   * NA pseudo-values (195 of the 225). pseudoyl()/pseudomean() return NA for
-#     whoever holds the maximum observed time in the sample being decomposed -
-#     the pseudo::ci.omit bug written up in README "Known issues". The NA went
-#     straight into SuperLearner(), which refuses it:
-#       "missing data is currently not supported. Check Y, X, and newX"
-#     Now guarded with the same is.na() -> pseudo_whole substitution
-#     pseudo_crossfit() has used all along, and counted the same way - see
-#     n_na_fallback below.
-#
-#   * a degenerate library (25 of the 225). Where the treatment effect on the
-#     event 1 is strong (bW_1 = -0.7, scenarios 1/3/4/6/7, under the
-#     pre-2026-10-01 parameters), nearly
-#     every treated subject has the cause-1 event before the horizon, so the
-#     treated arm's RMTL2 pseudo-values collapse onto a handful of distinct
-#     values - 3 across 195 rows on array index 67. SL.glmnet then dies inside
-#     SuperLearner's own CV ("y is constant; gaussian glmnet fails at
-#     standardization step"), leaving NULL in $fitLibrary, and predict()'s
-#     default onlySL = FALSE predicted from that NULL fit:
-#       "no applicable method for 'predict' applied to an object of class NULL"
-#     Now pretested, exactly as pseudo_sl_t_standard() already was.
+# Two guards, each against a run-killing crash (docs/DEVLOG.md, competing_risk):
+#   * NA pseudo-values. pseudoyl()/pseudomean() return NA for whoever holds the
+#     maximum observed time (the pseudo::ci.omit bug, README "Known issues"),
+#     and SuperLearner() refuses NA. Filled from pseudo_whole as in
+#     pseudo_crossfit(), counted in n_na_fallback.
+#   * a degenerate library. With a strong cause-1 effect the treated arm's RMTL2
+#     pseudo-values collapse onto a few values and SL.glmnet dies inside
+#     SuperLearner's CV, leaving a NULL fit. Pretested, as in
+#     pseudo_sl_t_standard().
 #
 # @param pseudo_whole whole-sample pseudo-values from pseudo_all(), used only to
 #   fill NAs. Passed in rather than recomputed: all_cate_surv_models() already
@@ -1311,8 +1288,7 @@ pseudo_sl_t_split <- function(
         # predicted at newX during the fit (sl_fit_predict), from the weighted
         # learners only, so a candidate that survives pretest's 2-fold CV and
         # then fails in the live 5-fold one cannot reintroduce the NULL-fit
-        # crash above. (This was predict(onlySL = TRUE) before the fit moved to
-        # sl_fit_predict.)
+        # crash above.
         pred <- sl_fit_predict(
           y[keep],
           x[keep, , drop = FALSE],
@@ -1433,9 +1409,7 @@ nuisance_pseudo_sl <- function(
         ),
         cvControl = list(V = 5)
       )
-      # binomial, as it is pretested and as R/cate_models.R::nuisance_sl fits
-      # it. Until the library change this fit took SuperLearner's default
-      # gaussian family (NNLS), after a binomial pretest.
+      # binomial, as it is pretested and as R/cate_models.R::nuisance_sl fits it
       XW_train <- as.data.frame(X_W[in_train, , drop = FALSE])
       sl_W <- sl_fit_predict(
         W_train,
@@ -1503,10 +1477,8 @@ nuisance_pseudo_sl <- function(
   )
 }
 
-# Stage 2 is R/cate_models.R::stage_2_sl, whose is.vector(po) branch handles the
-# vector `po` these nuisances now return and routes it through
-# pretest_superlearner. The local matrix-branch copy this study used to carry is
-# gone with the double crossfitting that produced the matrix.
+# Stage 2 is R/cate_models.R::stage_2_sl, whose is.vector(po) branch takes the
+# vector `po` these nuisances return and pretests the library.
 #
 # X is coerced to a data.frame here because stage_2_sl indexes it straight into
 # SuperLearner(), which warns ("X is not a data frame") and can silently drop
@@ -1533,13 +1505,10 @@ pseudo_dr_sl <- function(
 # Validation pseudo-obs are split pseudo-obs (independent of training), per Algorithm 2
 #
 # Nuisances as nuisance_pseudo_sl: one outcome model per arm (T-learner,
-# pretested) and a pretested binomial propensity, trimmed by trim_ps. Until
-# 2026-10-01 the outcome model was an S-learner on cbind(W, X), the propensity
-# was untrimmed, and it was refit once per estimand on identical data; it is
-# now fit once per fold. The all-zero failsafes use isTRUE() so that an NA
-# training pseudo-value (pseudoyl's max-time bug) still flows through to NA in
-# po rather than erroring here - surv_dr_split_na_diagnose.R (git tag
-# diagnostics-2026-10) relied on that.
+# pretested) and a pretested binomial propensity, trimmed by trim_ps, fit once
+# per fold. The all-zero failsafes use isTRUE() so that an NA training
+# pseudo-value (pseudoyl's max-time bug) flows through to NA in po rather than
+# erroring here.
 nuisance_pseudo_sl_split <- function(
   X,
   Y,

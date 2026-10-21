@@ -5,11 +5,7 @@
 # while streaming the per-run files, so the metrics tibble is built in one pass
 # and the large nested intermediate the other studies write is never materialised.
 #
-# cate_metrics() itself now comes from R/metrics.R, the same shared definition
-# every other study uses - this used to be its own local copy here (predating
-# the shared version, and missing rel_ate_bias/rel_bias_cate as a result). Both
-# versions use the same (estimate - truth) bias convention, so this is a
-# straight swap with no sign change.
+# cate_metrics() comes from R/metrics.R, as in every other study.
 
 require(dplyr)
 require(tibble)

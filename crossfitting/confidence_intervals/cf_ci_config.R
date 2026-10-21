@@ -1,11 +1,9 @@
 ##########
 # title: crossfitting CI pilot - the one definition of its parameter grid
 ##########
-# Sourced by study.R check. Kept separate from crossfitting/cf_config.R so a
-# re-run of one study never clobbers the other's todo list, matching the
-# previous check script's intent. This used to need a differently-named
-# failed_file (failed_ci_ids.txt); it no longer does, because the two studies
-# have separate jobscripts directories and so separate failed_ids.txt files.
+# Sourced by study.R check. Kept separate from crossfitting/cf_config.R, with
+# its own jobscripts/failed_ids.txt, so a re-run of one study never clobbers the
+# other's todo list.
 #
 # The grid here must stay byte-for-byte identical to the one inline in
 # cf_ci_analysis.R - that script is what qsub calls on the cluster and is

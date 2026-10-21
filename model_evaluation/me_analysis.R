@@ -1,7 +1,7 @@
 ##########
 # title: script for running the model evaluation study - one replicate per run
 ##########
-# Replaces the old sim_eval.R. Structure mirrors sample_size/continuous/cts_corr_analysis.R
+# Structure mirrors sample_size/continuous/cts_corr_analysis.R
 # (grid comes from the study config, never re-typed here; setup_rng_stream();
 # save raw ingredients only, no metrics computed inline - see me_metrics.R).
 #
@@ -66,9 +66,7 @@ X <- design$X
 
 # k-folds for the candidates' single crossfit. The only fold draw: the scoring
 # arms that need folds (cv_shared, holdout) derive them from this one in
-# me_strategies.R. A second, independent draw for the scoring nuisance (the
-# cv_indep arm) was removed before the 2026-10-08 rerun - see me_config.R's
-# NUISANCE_ARMS.
+# me_strategies.R (README.md, "Why there is no cv_indep arm").
 kfolds <- split_folds(Y, k = n_folds)
 
 fold_indices <- kfolds$fold_indices
@@ -81,8 +79,8 @@ on.exit(plan(metaplan), add = TRUE)
 model_list <- run_all_candidate_models(Y, W, X, fold_indices, fold_list)
 
 # nuisance-evaluation pipelines, used only to score the candidates above.
-# Only the `whole` arm here. me_strategies.R fits all three arms (whole
-# included, since 2026-10-14), so this one is superseded there.
+# Only the `whole` arm here; me_strategies.R fits all three arms, so this one
+# is superseded there.
 # model_seed is drawn AFTER data generation, the fold draw, and
 # candidate-model fitting - keep it in this exact position, since draw order
 # from setup_rng_stream() is part of the reproducibility contract (see

@@ -8,15 +8,11 @@
 #
 # Checks, in order:
 #   1. me_per_model()'s scoring matches a direct calc_infl_score()/
-#      calc_dr_risk()/calc_cal_score() call on the same synthetic fixture -
-#      i.e. moving the scoring loop from inside the old calc_metrics() to
-#      compute_metrics()'s outer loop (see me_metrics.R) didn't change any
-#      number - plus calc_cal_score()'s own properties: exactly 0 under
+#      calc_dr_risk()/calc_cal_score() call on the same synthetic fixture,
+#      plus calc_cal_score()'s own properties: exactly 0 under
 #      perfect calibration, K non-empty groups even when tau_hat is constant,
 #      count (not proportion) weights, and the n-scaling those imply.
-#   2. the DGM/design-matrix plumbing - Y, W first; covariates all numeric
-#      (R/dgm_scenarios.R's output needs no factor expansion, unlike the old
-#      benchtm-based data).
+#   2. the DGM/design-matrix plumbing - Y, W first; covariates all numeric.
 #   3. scenario 1 (no heterogeneity) behaves, same check continuous/ and
 #      crossfitting/ both use for this scenario.
 #   4. the real pipeline's structure: all 9 candidate models present and
@@ -353,15 +349,10 @@ W4 <- design4$W
 X4 <- design4$X
 kfolds4 <- split_folds(Y4, k = n_folds_test)
 
-# Caught rather than allowed to abort the script. SL2's SuperLearner library
-# includes SL.xgboost, whose bundled wrapper predates the installed xgboost's
-# renamed API, and predict.SuperLearner() then crashes on the NULL fit that
-# failure left behind (README.md's "Known local-environment limitation").
-# Uncaught, that took the whole file down at this point - so sections 5 and 6
-# below, which need neither the candidates nor H2O, could never run on a local
-# machine, and this folder had no usable local verification at all. The
-# failure is still reported as a failure; it just no longer hides everything
-# after it.
+# Caught, and reported as a failure, so sections 5 and 6 (which need neither
+# the candidates nor H2O) still run locally: SL2's SL.xgboost wrapper fails
+# against the installed xgboost (README.md's "Known local-environment
+# limitation").
 t0 <- Sys.time()
 model_list <- tryCatch(
   run_all_candidate_models(Y4, W4, X4, kfolds4$fold_indices, kfolds4$fold_list),
@@ -383,19 +374,6 @@ report(
     }
   )
 )
-
-# The check that used to sit here asserted
-#
-#   !identical(kfolds4$fold_indices, nuis_folds4$fold_indices)
-#   "candidate and scoring-pipeline fold draws are independent"
-#
-# and has been DELETED rather than updated, because it asserts precisely the
-# property that has been retired. me_analysis.R's second independent fold
-# draw was justified as preserving honesty; it does not - row-level honesty
-# holds under a shared draw too, and an independent draw only cuts the two
-# training sets' overlap from 100% to (V-1)/V = 90%. The draw, and the
-# cv_indep arm it fed, are gone (me_config.R's NUISANCE_ARMS); `cv_shared`
-# uses the candidates' own folds deliberately.
 
 report(
   is.null(kfolds4$fold_pairs),
@@ -609,8 +587,7 @@ report(
           100 * SPLIT_TRAIN_FRAC, 100 * length(sp_t$train) / 500)
 )
 
-# The scoring outcome models are per arm (T-learner) since 2026-10-14 -
-# me_nuisance.R's header. Asserted on the training matrices themselves: each
+# The scoring outcome models are per arm (T-learner). Asserted on the training matrices themselves: each
 # outcome matrix holds exactly one treatment arm's training rows, with their
 # own Y as the label, and W is not a feature of either.
 X_t <- data.frame(X1 = rnorm(200), X2 = rnorm(200))
@@ -659,9 +636,8 @@ gen_asm <- generate_me_scenario_data(scenario = 6, n = n_asm)
 design_asm <- prepare_design_matrix(gen_asm$dataset)
 folds_asm <- split_folds(design_asm$Y, k = 10L)
 
-# me_strategies.R fits all three arms since 2026-10-14 (`whole` is no longer
-# carried through from me_analysis.R - see its header), so the fixture needs
-# only what it reads from the source run: data and fold_info.
+# me_strategies.R fits all three arms itself, so the fixture needs only what it
+# reads from the source run: data and fold_info.
 #
 # run_nuisance_arms() returns list(<pipeline> = list(<arm> = df)), so the arms
 # sit one level below the pipeline even when only one pipeline was asked for.

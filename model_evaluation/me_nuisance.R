@@ -14,47 +14,17 @@
 # relative to the data the candidate it is scoring was trained on. The arm
 # names and what they mean live in me_config.R's NUISANCE_ARMS.
 #
-# WHAT CHANGED, AND WHY THE OLD RATIONALE IS GONE. This file used to document
-# the fold_indices passed in as "an INDEPENDENT draw from the one used to fit
-# the 9 candidates", on the grounds that sharing one split would fit a
-# candidate's tau_hat and this pipeline's nuisance at the same row on the
-# identical training set, correlating their errors. That claim does not
-# survive the arithmetic:
+# cv_shared reuses the candidates' own folds. Row i's own data never enters the
+# model predicting row i under a shared draw either, so an independent fold
+# draw would add nothing (README.md, "Why there is no cv_indep arm").
 #
-#   - Row-level honesty - whether row i's own (Y_i, W_i) entered the model
-#     predicting at row i - holds under BOTH a shared and an independent draw.
-#     Neither lets a nuisance see the row it predicts. The second draw buys
-#     nothing on the axis it was justified by.
-#   - What it does change is the overlap of the two training sets for row i,
-#     from 100% down to (V-1)/V = 90%. It removes a tenth of the dependence.
+# `holdout` fits AND predicts on the fold the candidate held out: not row-level
+# honest, but fully decoupled from the candidate. One small block cannot give
+# both properties.
 #
-# crossfitting/README.md makes the general version of this point ("Re-
-# randomising the stage-2 split cannot remove that dependence"), which is why
-# scf_scf_new is an arm to be TESTED there rather than the default. The
-# independent draw was kept for a while as a `cv_indep` arm, beside
-# `cv_shared` (the candidates' own folds), and removed before the 2026-10-08
-# rerun - see me_config.R's NUISANCE_ARMS.
-#
-# The `holdout` arm restores the `infold` (resubstitution) branch that was
-# removed from this file: fit AND predict on the fold the candidate held out.
-# It is deliberately not row-level honest - it is the arm that is fully
-# decoupled from the candidate instead, and the two properties cannot both be
-# had from a single small block. See the comments above the two holdout
-# functions for what the removal took out and which part of it must NOT come
-# back.
-#
-# OUTCOME MODELS ARE PER ARM (T-learner), since 2026-10-14. mu0_DR is fit on
-# the W = 0 rows and mu1_DR on the W = 1 rows of each training set, in both
-# pipelines and every arm - the same structure me_models.R gave the 9
-# candidates on 2026-10-08, which this file was missed by. Before it, both
-# pipelines fit ONE outcome model on (W, X) and read it at W = 0 and 1 (an
-# S-learner). The change is for CONSISTENCY - the candidates and the
-# nuisances that score them now share one outcome-model structure - not
-# because the S-learner was shown to be worse: on a local XGBoost check
-# (n = 500, scenarios 2-4, two seeds) cor(mu1_DR - mu0_DR, tau) was about the
-# same under both (0.73-0.96), and a little lower per arm in scenario 4.
-# Every score in a result tree written before this change is S-learner scored
-# and not comparable with one written after (docs/DEVLOG.md, bug R).
+# Outcome models are per arm (T-learner): mu0_DR on the W = 0 rows and mu1_DR on
+# the W = 1 rows of each training set, in both pipelines and every arm, matching
+# the candidates (DEVLOG bug R).
 require(h2o)
 require(xgboost)
 
@@ -68,13 +38,10 @@ unlist_order <- function(reslist) {
 
 #' The AIPW pseudo-outcomes from one arm's nuisance predictions
 #'
-#' PROPENSITY TRIMMED TO [0.05, 0.95] (trim_ps(), R/utils.R) since 2026-10-14,
-#' as the 9 candidates' own propensities always were (me_models.R) and as
-#' every other study's are. Untrimmed, AutoML's propensity hit exactly 0 or 1
-#' on some rows, mostly where it predicted rows it was fit on (about a quarter
-#' of holdout runs, 5% of whole, 0.5% of cv_shared), which made phi NaN or
-#' +-Inf and the estimated-pi scores undefined for the whole run (DEVLOG bug S). The truth is 0.5, so trimming only moves an estimate that is
-#' already wrong toward it. `pi` keeps the raw prediction (me_strategies.R's
+#' Propensity trimmed to [0.05, 0.95] (trim_ps(), R/utils.R), as the 9
+#' candidates' and every other study's are. Untrimmed, AutoML's propensity can
+#' hit exactly 0 or 1, making phi NaN or +-Inf (DEVLOG bug S). The truth is
+#' 0.5, so trimming only moves an estimate that is already wrong toward it. `pi` keeps the raw prediction (me_strategies.R's
 #' pi_diagnostics read it); `pi_trim` is what phi and the IF score use.
 #'
 #' Row-wise and idempotent on its own output: `pi` is never overwritten, so
@@ -186,23 +153,9 @@ run_xgb_cv <- function(grid, train_data) {
     }
     log_col <- params$evaluation_log[[error_col]]
 
-    # WHERE best_iteration LIVES DEPENDS ON THE xgboost VERSION. Up to
-    # xgboost 2.x it is a top-level element of the xgb.cv() result, which is
-    # what this code originally read. xgboost 3.x moved it into an
-    # `early_stop` sub-list, so `params$best_iteration` is integer(0) there -
-    # for EVERY fit, at every data size, not just small ones. That made
-    # data.frame() error with "arguments imply differing number of rows: 0, 1"
-    # and would take a whole array task down.
-    #
-    # Local R has xgboost 3.2.1.1; the cluster's R/4.3.2 module has an older
-    # one (the 358 runs of the pre-2026-09-26 study prove it, since they went
-    # through this exact line). So this is the same class of local/cluster version mismatch as
-    # SL2's - see README.md - and the fix has to work under both.
-    #
-    # The which.min() fallback is a genuine equivalent, not a degradation:
-    # early stopping selects the minimum of the very column being scanned
-    # here, and the two agree exactly where both are available. So this
-    # changes no number the cluster already produced.
+    # best_iteration is top-level in xgboost <= 2 (the cluster) and under
+    # $early_stop in xgboost >= 3 (local), so read both. which.min() of the log
+    # is an exact equivalent: early stopping picks the minimum of this column.
     best_it <- params$early_stop$best_iteration   # xgboost >= 3
     if (length(best_it) != 1L || is.na(best_it)) {
       best_it <- params$best_iteration            # xgboost <= 2
@@ -265,13 +218,7 @@ predict_nuisance_xgb <- function(models, pred_matrices) {
 
 #' Fit-and-predict-on-the-same-block XGBoost nuisance estimation
 #'
-#' The `holdout` arm. This is the `infold` branch that used to live inside
-#' run_xgb_cross_validation() behind a `method` argument and was removed; the
-#' note left behind said a future re-add "can restore the branch above
-#' unchanged", and that is what this is. XGBoost's version had no companion
-#' bug (AutoML's did - see run_automl_holdout()).
-#'
-#' The blocks are the candidate's OWN folds, from holdout_blocks(), not a
+#' The `holdout` arm. The blocks are the candidate's OWN folds, from holdout_blocks(), not a
 #' fresh draw: the point of the arm is that the nuisance sees only data the
 #' candidate never saw. What it gives up in exchange is row-level honesty -
 #' every row's own Y is in the model that predicts it, so mu_DR interpolates
@@ -388,11 +335,6 @@ run_xgb_whole_dataset <- function(X, Y, W, param_grids) {
 }
 
 #' Every XGBoost nuisance arm the caller asks for
-#'
-#' Fixes a bug found while porting: the old sim_eval.R called this without
-#' n_cores, so XGBoost's own nthread grid parameter silently defaulted to 1
-#' regardless of the n_cores the script set elsewhere. run_nuisance_arms()
-#' below now always passes it through explicitly.
 #'
 #' @param arms named list of arm specs - see nuisance_arm_spec(). Names become
 #'   the names of the returned list, and therefore the arm half of
@@ -537,24 +479,9 @@ predict_automl_models <- function(models, pred_data) {
 #' The AutoML half of the `holdout` arm - see run_xgb_holdout() for what the
 #' arm is for and what it trades away.
 #'
-#' THE PART OF THE OLD `infold` BRANCH THAT IS DELIBERATELY NOT RESTORED. The
-#' removed code was not just the train/test filter below; it shipped with a
-#' W-recoding line:
-#'
-#'   W_final <- if (method == "infold") as.numeric(W) - 1 else W
-#'   result <- calculate_pseudos(result, Y, W_final)
-#'
-#' prepare_h2o_data()'s `WX <- cbind(W = as.factor(W), X)` turns W into a
-#' factor for H2O's classification target, and as.numeric() on a 2-level
-#' factor gives 1/2 rather than 0/1 - so the line reads as an attempt to undo
-#' that. But `W` in THIS function's scope is the caller's original numeric
-#' vector; it is never itself converted to a factor. as.numeric(W) - 1 would
-#' therefore take a plain 0/1 vector to -1/0, and calculate_pseudos()'s mu_DR
-#' and phi both assume W in {0,1}. The old note flagged this as unverified
-#' rather than fixed, because the pipeline had never completed a run; it has
-#' now, and the reading holds. The filter comes back, the recoding does not -
-#' W is passed through to calculate_pseudos() unchanged, exactly as the cv and
-#' whole arms already do.
+#' W goes to calculate_pseudos() unchanged, as in the other arms. Don't "undo"
+#' H2O's factor with as.numeric(W) - 1: prepare_h2o_data() factors only its own
+#' copy, so W here is still 0/1 and that would make it -1/0.
 run_automl_holdout <- function(
   X,
   Y,
@@ -683,12 +610,6 @@ run_all_automl_nuisance <- function(
 ) {
   # Setup H2O cluster
   setup_h2o_cluster(n_cores = n_cores, mem = mem, model_seed = model_seed)
-  # was on.exit(h2o_shutdown_check, add = TRUE) - missing parens meant the
-  # cleanup handler was registered but never actually called on exit, so the
-  # "always shut the cluster down, even on error" safety net never fired.
-  # The explicit h2o.shutdown() this function used to end with on its happy
-  # path is now redundant (h2o_shutdown_check()'s own tryCatch makes it safe
-  # to call twice, but there's no need to) and has been removed.
   on.exit(h2o_shutdown_check(), add = TRUE)
 
   lapply(arms, function(spec) {

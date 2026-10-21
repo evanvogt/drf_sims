@@ -5,8 +5,7 @@
 # names this study's slice of them: the continuous_corr_<rho> sets that
 # sample_size/continuous/cts_corr_dgms.R also names - continuous/'s
 # scenarios with X1-X5 and X01-X03 drawn from a Gaussian copula with
-# exchangeable latent correlation rho. It replaces the standalone fork that
-# used to live in cts_dgm_validation.R.
+# exchangeable latent correlation rho.
 
 source(here::here("R", "dgm_scenarios.R"))
 

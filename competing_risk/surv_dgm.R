@@ -31,9 +31,9 @@ survival_scenario_params <- data.frame(
   event_horizon = 28,
   
   # Baseline Weibull parameters for event 1
-  # (25 rather than 15 since 2026-10-01: at 15 nearly everyone had an event by
-  # the horizon, and the competition between the events swamped the X3 effects
-  # on the RMTL scale - see ADEMP.md)
+  # (25, not 15: at 15 nearly everyone has an event by the horizon and the
+  # competition between the events swamps the X3 effects on the RMTL scale -
+  # see ADEMP.md)
   shape1 = 2,
   scale1_base = 25,
   
@@ -151,8 +151,7 @@ truth_individual <- function(shape1, shape2, scale1_1, scale1_0, scale2_1, scale
 #' The copula draws X1-X5 and X01-X03 (exchangeable correlation rho among all
 #' eight), and the study keeps all of them, so the covariate set is
 #' sample_size/'s: X1-X5, X01-X05. Only X1-X3 enter the hazards; X4/X5 are noise
-#' here. Until 2026-10-10 X4/X5 were drawn and dropped - adding them consumed no
-#' extra draws, so W, Y, D and the truth of every run are unchanged. X04/X05, the
+#' here. X04/X05, the
 #' categorical pair, are independent of everything. Marginals:
 #' X1 ~ Bernoulli(0.4), X2 ~ N(0, 1), X3 ~ Bernoulli(0.7), X4, X5, X01-X03 ~ N(0, 1).
 #'

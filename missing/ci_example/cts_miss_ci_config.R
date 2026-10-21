@@ -3,12 +3,10 @@
 ##########
 # A single cell of the missing-data design (MAR, multiple imputation), run over
 # the four main scenarios (1-4), asking how to build a CATE interval after
-# imputation. Until 2026-10-01 it ran 1 and 3-6 (the old 1-5, renumbered
-# 2026-09-26 in R/dgm_scenarios.R), which left out scenario 2.
+# imputation.
 #
-# The grid is arranged by (scenario, run) rather than left in expand.grid order.
-# That was already true in cts_miss_ci_analysis.R and it is preserved here,
-# because the PBS array index is a row number: reordering renumbers every job.
+# The grid is arranged by (scenario, run) rather than left in expand.grid order,
+# and must stay so: the PBS array index is a row number.
 
 library(here)
 source(here("R", "pipeline.R"))

@@ -88,7 +88,7 @@ results2$truth <- chunks$truth2
 # leaves out the prognostic X1/X2 and the within-group spread of tau, so its
 # residual variance differs across the W x v cells - and the 10% responder
 # subgroups are exactly the small cells a pooled variance misweights. HC3 is
-# the primary kind. Classical only until 2026-10-08, HC3 only until 2026-10-11.
+# the primary kind.
 validations <- chunk_validations_se(results1, results2, data1, data2)
 
 results <- list(results1 = results1, results2 = results2, validations = validations)

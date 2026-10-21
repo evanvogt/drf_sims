@@ -128,7 +128,7 @@ check(sprintf("simultaneous_band covers a fresh vector %.3f of the time (want 0.
 
 # ---- 4. the three MI strategies use the same margin --------------------------------
 # With one imputation the hybrid band must equal simultaneous_band() on its draws.
-# It did not until 2026-10-11 (sqrt(lambda * S) instead of sqrt(lambda) * S).
+# Guards against the margin sqrt(lambda * S) in place of sqrt(lambda) * S.
 tau <- rnorm(n_u)
 one <- combine_mi_ci(list(list(causal_forest = list(tau = tau, draws = draws))),
                      "causal_forest", alpha = 0.05)
