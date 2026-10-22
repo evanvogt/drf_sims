@@ -17,13 +17,21 @@
 #   sd(diff) / sqrt(pairs).
 # - "Combined" (RMSTc) is left out.
 #
-# Writes to ../results/thesis_tables/: surv_main_<rho>.tex and
+# Also the true CATEs the arms are scored against (surv_truth.tex): population
+# mean (SD) of the RMTL and net RMST CATE per scenario, at both rho. Computed
+# from the DGM, not read from the results, so it is written even without a
+# metrics file; the grid truth takes a minute or two.
+#
+# Writes to ../results/thesis_tables/: surv_truth.tex, surv_main_<rho>.tex and
 # surv_<family>_<rho>.tex, <rho> in rho05, rho0. \input{} with
-# \usepackage{booktabs, longtable, pdflscape, array}.
+# \usepackage{booktabs, longtable, pdflscape, array}; surv_truth.tex also uses
+# the thesis's glossaries entries cate, rmtl and rmst.
 
 library(here)
 source(here("R", "figures.R"))
 source(here("R", "tables.R"))
+# DGM_SEED, DGM_N_POP(_SURV), dgm_params(); sources competing_risk/surv_dgm.R
+source(here("results_processing", "dgm_population.R"))
 
 # paths
 path <- here()
@@ -149,6 +157,102 @@ CENSORING_NOTE <- paste0(
   "censoring at 180; no: administrative only."
 )
 
+write_table <- function(tex, out) {
+  out_file <- file.path(tab_path, paste0(out, ".tex"))
+  writeLines(tex, out_file)
+  message("wrote ", out_file)
+}
+
+# ---- true CATEs ----------------------------------------------------------------
+# surv_truth_grid() per scenario, interpolated to a copula draw per rho, as
+# surv_dgm_check.R does. The draw at each rho uses the same seed, so the two
+# are paired, and at rho = 0.5 it is dgm_covariates()'s first DGM_N_POP_SURV
+# rows, so the RMTL columns match dgm_tables.R's dgm_surv.tex.
+
+TRUTH_COLS <- c(tau_RMTL1 = "RMTL1_0", tau_RMTL2 = "RMTL2_0",
+                tau_RMST1_cs = "RMST1_cs_0", tau_RMST2_cs = "RMST2_cs_0")
+
+truth_covariates <- function(rho) {
+  p <- dgm_params("continuous", 1)
+  p$rho <- rho
+  set.seed(DGM_SEED)
+  cv <- correlated_covariates(DGM_N_POP, p)
+  lapply(cv[c("X1", "X2", "X3")], `[`, seq_len(DGM_N_POP_SURV))
+}
+
+#' "mean (SD)" with $-$ for minus, as fmt_mcse(); "0" where the CATE is
+#' identically 0 (no effect on that cause's hazard)
+fmt_truth <- function(v) {
+  if (all(v == 0)) "0" else fmt_mcse(mean(v), sd(v), 2)
+}
+
+oplan <- future::plan(future::multisession,
+                      workers = min(6, max(1, parallelly::availableCores() - 1)))
+truth_grids <- lapply(survival_scenario_params$scenario, function(s) {
+  surv_truth_grid(survival_scenario_params[survival_scenario_params$scenario == s, ])
+})
+future::plan(oplan)
+
+truth_cells <- bind_rows(lapply(RHOS, function(r) {
+  cv <- truth_covariates(r$rho)
+  bind_rows(lapply(seq_along(truth_grids), function(s) {
+    tibble(
+      scenario = s,
+      rho = r$rho,
+      !!!lapply(setNames(names(TRUTH_COLS), names(TRUTH_COLS)), function(cl) {
+        fmt_truth(surv_truth_at_draws(truth_grids[[s]], cl, cv$X1, cv$X2, cv$X3))
+      })
+    )
+  }))
+})) %>%
+  arrange(scenario)  # stable: RHOS order within a scenario
+
+# control-arm levels, the same in every scenario; at the primary rho
+cv <- truth_covariates(RHOS[[1]]$rho)
+ctrl <- sapply(TRUTH_COLS, function(cl) {
+  sprintf("%.1f", mean(surv_truth_at_draws(truth_grids[[1]], cl, cv$X1, cv$X2, cv$X3)))
+})
+
+# scenario printed on its first row only, a line space between scenarios
+truth_rows <- paste0(
+  ifelse(duplicated(truth_cells$scenario), "", truth_cells$scenario), " & ",
+  truth_cells$rho, " & ",
+  do.call(paste, c(truth_cells[names(TRUTH_COLS)], sep = " & ")),
+  " \\\\",
+  ifelse(duplicated(truth_cells$scenario) &
+           truth_cells$scenario < max(truth_cells$scenario), " \\addlinespace", "")
+)
+
+c(
+  "\\begin{table}[h]",
+  "\\small",
+  paste0(
+    "\\caption[True CATEs in the competing-risks simulation study]{True ",
+    "\\glspl{cate} in the competing-risks simulation study: mean (SD) over ",
+    format(DGM_N_POP_SURV, big.mark = ",", scientific = FALSE), " covariate ",
+    "draws per $\\rho$, in days, at $t^* = 28$. $\\rho$: the covariates' ",
+    "correlation, 0.5 in the primary analysis and 0 in the sensitivity ",
+    "analysis. \\gls{rmtl}: positive when treatment brings the event forward. ",
+    "Net \\gls{rmst}: negative when treatment brings the event forward. ",
+    "Control-arm values ($\\rho = ", RHOS[[1]]$rho, "$): \\gls{rmtl} ",
+    ctrl[["tau_RMTL1"]], " (event 1) and ", ctrl[["tau_RMTL2"]], " (event 2); ",
+    "net \\gls{rmst} ", ctrl[["tau_RMST1_cs"]], " and ", ctrl[["tau_RMST2_cs"]],
+    ".}"
+  ),
+  "\\label{tab:surv_truth}",
+  "\\begin{tabular}{@{}llllll@{}}",
+  "\\toprule",
+  paste0(" & & \\multicolumn{2}{l}{\\gls{rmtl}} & \\multicolumn{2}{l}{Net ",
+         "\\gls{rmst}} \\\\ \\cmidrule(lr){3-4} \\cmidrule(lr){5-6}"),
+  "Scenario & $\\rho$ & Event 1 & Event 2 & Event 1 & Event 2 \\\\ \\midrule",
+  truth_rows,
+  "\\bottomrule",
+  "\\end{tabular}",
+  "\\end{table}"
+) %>%
+  paste(collapse = "\n") %>%
+  write_table("surv_truth")
+
 # ---- data --------------------------------------------------------------------
 
 metrics <- readRDS(file.path(res_path, "surv_metrics.RDS"))
@@ -203,12 +307,6 @@ paired_arm_diff <- function(metrics, arm, ref, stems,
 summarise_surv <- function(df) {
   summarise_metrics(df, group_cols, cols = setNames(stems, stems),
                     count_na = character())
-}
-
-write_table <- function(tex, out) {
-  out_file <- file.path(tab_path, paste0(out, ".tex"))
-  writeLines(tex, out_file)
-  message("wrote ", out_file)
 }
 
 # ---- tables ------------------------------------------------------------------
