@@ -149,6 +149,40 @@ SURV_ARM_LABELS <- c(
 # "Estimands".
 SURV_NET_ARMS <- c("ipw", "csf_cs")
 
+# the crossfitting comparison (crossfitting/), shared by
+# thesis_figures/crossfitting.R and thesis_tables/cf_tables.R. Same DGM as the
+# sample-size studies, so their scenario names, in order of complexity.
+CF_SCENARIO_LABELS <- c(
+  `1` = "Null",
+  `6` = "Two variables",
+  `8` = "Single effects + interaction",
+  `4` = "Non-linear"
+)
+
+CF_FAMILY_LABELS <- c(
+  dr_rf = "DR-RandomForest",
+  dr_sl = "DR-SuperLearner",
+  causal_forest = "Causal forest"
+)
+
+# one row per arm id (crossfitting/cf_models.R), in display order within each
+# family. `procedure` is shared across families, so one colour means the same
+# procedure in every panel. `reference` is the double-crossfit status quo each
+# family is compared against; `production` the arm R/cate_models.R uses.
+CF_ARMS <- tibble::tribble(
+  ~arm,          ~family,         ~nuisances,           ~final,               ~procedure,                         ~reference, ~production,
+  "dcf",         "dr_rf",         "Double CF",          "Crossfit",           "Double CF",                        TRUE,       FALSE,
+  "scf_scf",     "dr_rf",         "Single CF",          "Crossfit",           "Single CF, crossfit final model",  FALSE,      FALSE,
+  "scf_oob",     "dr_rf",         "Single CF",          "Whole sample, OOB",  "Single CF, OOB final model",       FALSE,      FALSE,
+  "oob_oob",     "dr_rf",         "Whole sample, OOB",  "Whole sample, OOB",  "Whole-sample OOB",                 FALSE,      TRUE,
+  "sl_dcf",      "dr_sl",         "Double CF",          "Crossfit",           "Double CF",                        TRUE,       FALSE,
+  "sl_scf_scf",  "dr_sl",         "Single CF",          "Crossfit",           "Single CF, crossfit final model",  FALSE,      TRUE,
+  "cf_dcf",      "causal_forest", "Double CF",          "Fold-wise",          "Double CF",                        TRUE,       FALSE,
+  "cf_scf",      "causal_forest", "Single CF",          "Fold-wise",          "Single CF, crossfit final model",  FALSE,      FALSE,
+  "cf_full_oob", "causal_forest", "Single CF",          "Whole sample, OOB",  "Single CF, OOB final model",       FALSE,      FALSE,
+  "cf_default",  "causal_forest", "grf internal (OOB)", "Whole sample, OOB",  "Whole-sample OOB",                 FALSE,      TRUE
+)
+
 #' Recode a column to its display labels and make it an ordered factor
 #'
 #' Levels follow the order of `labels`, so the legend order is controlled in one
