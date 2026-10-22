@@ -7,8 +7,9 @@
 # in thesis_tables/surv_tables.R's main table.
 #
 # - Arms target different truths (ADEMP.md, "Estimands"); shape marks the
-#   net-RMST arms (ipw, csf_cs) against the subdistribution-scale ones.
-# - Combined (RMSTc) is in for now; csf_sh has none.
+#   net-RMST arms (ipw, csf_cs) against the RMTL-scale ones.
+# - Combined (RMSTc) is in every figure but the rho = 0.5 bias and RMSE ones
+#   (EVENTS_ONLY); csf_sh has none.
 # - Pearson is NA where the arm's truth is constant, so those points are absent.
 # - Differences are per run (shared seed across rho), MCSE sd(diff) / sqrt(pairs).
 #
@@ -29,7 +30,10 @@ RHOS <- c(rho05 = 0.5, rho0 = 0)
 
 TARGETS <- c("Event 1", "Event 2", "Combined")
 
-ESTIMAND_LABELS <- c(net = "Cause-specific", sub = "Subdistribution")
+# figures shown without the Combined row, by "<view>_<metric>"
+EVENTS_ONLY <- c("rho05_bias", "rho05_rmse")
+
+ESTIMAND_LABELS <- c(net = "Net RMST", sub = "RMTL")
 ESTIMAND_SHAPES <- setNames(c(17, 16), ESTIMAND_LABELS)
 
 # second line of a difference figure's y labels
@@ -38,6 +42,7 @@ DIFF_LAB <- "ρ = 0.5 − ρ = 0"
 # seven scenario columns, so wider than save_fig()'s standard 21cm
 FIG_WIDTH <- 33
 FIG_HEIGHT <- 20
+EVENTS_ONLY_HEIGHT <- 15  # two event rows rather than three
 
 # per metric: the levels' and the differences' y labels, and the levels'
 # reference line (the differences' is 0 throughout)
@@ -53,7 +58,6 @@ FIGURES <- list(
 # ---- data --------------------------------------------------------------------
 
 metrics <- readRDS(file.path(res_path, "surv_metrics.RDS"))
-metrics <- filter(metrics, framework != "sl_t_whole")
 if (!"rho" %in% names(metrics)) {
   stop("surv_metrics.RDS has no rho column: it predates the 2026-10-01 grid. ",
        "Rerun study.R collect and surv_metrics.R on the current results.",
@@ -120,6 +124,8 @@ surv_figure <- function(summary, metric, view) {
   # NA Pearson (a constant truth) has a NaN mean; leave it out rather than give
   # it a dodge slot
   keep <- filter(summary, is.finite(.data[[paste0("mean_", metric)]]))
+  events_only <- paste0(view, "_", metric) %in% EVENTS_ONLY
+  if (events_only) keep <- filter(keep, target != "Combined")
 
   fig <- point_range_plot(
     keep,
@@ -149,7 +155,7 @@ surv_figure <- function(summary, metric, view) {
     paste0("surv_", view, "_", metric, ".png"),
     fig_path,
     width = FIG_WIDTH,
-    height = FIG_HEIGHT,
+    height = if (events_only) EVENTS_ONLY_HEIGHT else FIG_HEIGHT,
     plot = fig
   )
   fig
