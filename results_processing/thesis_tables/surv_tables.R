@@ -2,7 +2,8 @@
 # title: LaTeX tables for the thesis chapter - competing risks
 ##########
 # Appendix tables for the competing-risks study at rho = 0.5 and rho = 0: a main
-# table with each estimator family's production arm, and one secondary table
+# table with each estimator family's production arm (each DR-learner followed
+# by its semi-oracle twin), and one secondary table
 # per family with several arms (raw values, then paired differences between
 # arms that differ by one factor). Cells are "mean (MCSE)" of CATE bias, RMSE
 # and Pearson, Event 1 then Event 2.
@@ -24,7 +25,7 @@
 #
 # Writes to ../results/thesis_tables/: surv_truth.tex, surv_main_<rho>.tex and
 # surv_<family>_<rho>.tex, <rho> in rho05, rho0. \input{} with
-# \usepackage{booktabs, longtable, pdflscape, array}; surv_truth.tex also uses
+# \usepackage{booktabs, longtable, array}; surv_truth.tex also uses
 # the thesis's glossaries entries cate, rmtl and rmst.
 
 library(here)
@@ -51,9 +52,25 @@ RHOS <- list(
 )
 
 # the main table's rows: the production arm of each family, in row order, the
-# net-RMST arms daggered
+# net-RMST arms daggered, and each DR-learner followed by its semi-oracle twin
+# (true propensity 0.5 in the pseudo-outcome). Labels must be distinct: they
+# become factor levels.
+SEMI_ARMS <- c(
+  pseudo_dr_whole_oob = "pseudo_dr_whole_oob_semi",
+  rsf_dr_oob = "rsf_dr_oob_semi",
+  sl_dr_whole = "sl_dr_whole_semi"
+)
+SEMI_LABELS <- c(
+  pseudo_dr_whole_oob_semi = "\\quad DR-RF semi-oracle",
+  rsf_dr_oob_semi = "\\quad DR-RSF semi-oracle",
+  sl_dr_whole_semi = "\\quad DR-SL semi-oracle"
+)
+
 MAIN_ARMS <- SURV_ARM_LABELS
 MAIN_ARMS[SURV_NET_ARMS] <- paste0(MAIN_ARMS[SURV_NET_ARMS], "$^\\dagger$")
+MAIN_ARMS <- unlist(unname(lapply(names(MAIN_ARMS), function(a) {
+  c(MAIN_ARMS[a], if (a %in% names(SEMI_ARMS)) SEMI_LABELS[SEMI_ARMS[[a]]])
+})))
 
 # the secondary tables: each family's arms (raw rows, in order), then the
 # contrasts (arm - ref), each between two arms that differ by one factor:
@@ -336,11 +353,15 @@ for (r in RHOS) {
         "(cause-specific) RMST CATE, CSF subdistribution against the ",
         "subdistribution RMST CATE ($-$RMTL), and the others against the RMTL ",
         "CATE, so the sign of the bias and the scale of the errors differ ",
-        "between those three groups. Bias is the CATE bias, the mean of the ",
+        "between those three groups. Semi-oracle rows: the DR-learner above ",
+        "with the true propensity 0.5 in place of the estimated one in the ",
+        "pseudo-outcome (same outcome models), scored against the RMTL CATE. ",
+        "Bias is the CATE bias, the mean of the ",
         "estimated minus true CATE over units. ", CENSORING_NOTE,
         " --- : not defined (correlation with a constant true CATE)."
       ),
-      label = out
+      label = out,
+      landscape = FALSE
     ) %>%
     write_table(out)
 
@@ -387,7 +408,8 @@ for (r in RHOS) {
         "the mean of the estimated minus true CATE over units. ",
         CENSORING_NOTE
       ),
-      label = out
+      label = out,
+      landscape = FALSE
     ) %>%
       write_table(out)
   }
