@@ -46,23 +46,28 @@ shared module handles presentation, not analysis.
 
 Booktabs `longtable`s, written to `../results/thesis_tables/`. For the
 sample-size studies, one table for scenarios 1–4 (`*_main.tex`) and one for
-5–10 (`*_supp.tex`) per outcome; for the missing-covariate studies, the
-appendix's full grid, one table per metric per outcome:
+5–10 (`*_supp.tex`); for the missing-covariate studies, one table per
+estimator (DR-RF, CF, DR-SL) and per test, per outcome:
 
 | script | writes | rows × columns |
 |---|---|---|
-| `ss_tables.R` | `{cts,bin}_corr_{rho05,rhodiff}_ss_{main,supp}.tex` | scenario / n / model × estimation metrics |
-| `ss_test_tables.R` | `{cts,bin}_corr_{rho05,rhodiff}_ss_tests_{main,supp}.tex` | scenario / test / model × n, HTE test rejection rates at `HTE_ALPHA` (or their paired ρ difference), with a True CATE reference row |
-| `ss_ci_tables.R` | `{cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.tex`, `cts_corr_ci_sf.tex` | correlated CI studies: scenario / n / model × the 10 `CI_sf` values, one interval metric per table (the inbuilt causal-forest interval, which does not depend on `CI_sf`, spans the columns). optimal_sf: scenario / n / ρ (0, 0.5, paired Δ) × ratio picked, plug-in and true-τ coverage, length. A study with incomplete metrics is skipped |
-| `miss_tables.R` | `{cts,bin}_miss_<metric>.tex`, `{cts,bin}_miss_tests_<test>.tex` | mechanism / scenario / method × model, one metric (or HTE test, with a True CATE column) per table |
+| `ss_tables.R` | `{cts,bin}_corr_{rho05,rhodiff}_ss_{main,supp}.tex` | scenario / model × (bias, MSE, Pearson) × n, means alone; the largest MCSE of each metric is in the caption. No ρ = 0 tables: it is the ρ = 0.5 value minus the difference |
+| `ss_test_tables.R` | `corr_{rho05,rhodiff}_ss_tests_{main,supp}.tex` | scenario / test / model × (continuous, binary) × n, rejection rates at `HTE_ALPHA` (or their paired ρ difference) of the one-sided BLP and PO-independence tests, with a True CATE reference row; MCSE in the caption |
+| `ss_ci_tables.R` | `{cts,bin}_corr_rho05_ci_compact.tex`, `cts_corr_ci_sf.tex` | correlated CI studies at ρ = 0.5: scenario / n / model × (marginal and simultaneous coverage, mean length) × `CI_sf` 0.05, 0.25, 0.5, means alone, MCSE in the caption; the full grid and ρ = 0 are the figures'. optimal_sf: scenario / n / ρ (0, 0.5, paired Δ) × ratio picked, plug-in and true-τ coverage, length. A study with incomplete metrics is skipped |
+| `miss_tables.R` | `{cts,bin}_miss_<model>.tex`, `{cts,bin}_miss_tests_<test>.tex` | scenario / method × mechanism × (relative efficiency, CATE bias difference) × (complete, incomplete units), for DR-RF, CF and DR-SL only; tests (one-sided BLP, PO independence): scenario / method × mechanism × model, with a True CATE column. Means and rates alone, MCSE in the caption |
 | `surv_tables.R` | `surv_main_{rho05,rho0}.tex`, `surv_<family>_{rho05,rho0}.tex` | competing risks: scenario / censoring / arm × (event × CATE bias, RMSE, Pearson). Main: one production arm per family. Secondary, one per multi-arm family: the raw arms, then paired per-run differences between arms that differ by one factor (fitting or pseudo-values) |
 | `me_tables.R` | `me_{top1,rank,regret}.tex`, `me_axis.tex`, `me_fixed.tex`, `me_runs.tex`, `me_if_population.tex`, `me_if_selection.tex` | model evaluation (appendix), the 24 proxies of `thesis_figures/model_eval.R`: scenario / n / score type × fold regime × machine, one measure per table (top-1 accuracy, true rank of the pick, regret), with random-pick and best-fixed-choice rows spanning the columns. Axis: scenario × n / design axis / level × the three measures, each level averaged within run. Fixed: scenario / n / candidate × true PEHE and the three measures if always deployed, the best fixed choice in bold. Runs: the proxy tables' layout, each cell the runs that proxy was scored in, with an all-runs row (full everywhere since the scoring propensity is trimmed, DEVLOG bug S; a short cell means a new failure); every caption's run count is its own table's, read off the data, and the short proxies are listed on the console. IF population: `model_evaluation/me_infl_investigation.R`'s `population.RDS`, scenario / constructed candidate × true PEHE, DR, IF with the true τ, IF with the pseudo-outcome and MSE against μ₁, oracle nuisances, rows by true PEHE and each score's rank in parentheses (skipped with a message if the file is missing). IF selection: CV / XGBoost / π fixed at 0.5, scenario / n × regret under DR, both IF surrogates and a random pick, and the T-learner IF's Spearman correlation with true PEHE and with `mu1_mse`. All portrait. Selection derivation shared with the figures via `model_evaluation/me_selection.R`. Optional `[metrics.RDS] [table dir] [population.RDS]` arguments for a smoke run |
 | `cf_tables.R` | `cf_appendix.tex` | crossfitting comparison (appendix), the numbers behind `thesis_figures/crossfitting.R`: estimator family / arm (nuisances, final model; the main analyses' arm starred) × CATE RMSE on the training and test samples per scenario, mean runtime per replicate and its multiple of double crossfitting. Optional `[results root] [table dir]` arguments for a smoke run |
 | `dgm_tables.R` | `dgm_cts_bin.tex`, `dgm_surv.tex` | **no results** — the numbers behind `thesis_figures/dgm.R`, from the same draws (`../dgm_population.R`). Continuous/binary: outcome / scenario × SD(τ), 1–99% of τ − ATE, cor(m0, τ), linear R², and per n the ATE with the share of the population whose CATE has the opposite sign. Competing risks: scenario / event × mean, SD, mean by X3, X3's effect with X1, X2 held. Portrait |
 | `val_tables.R` | `val_sg_{top,bottom}.tex`, `val_sg_counts.tex`, `val_nom_{tevim,shap}.tex`, `val_sg_se.tex` | interim-analysis validation (appendix to `thesis_figures/validation.R`), HC3 unless stated. Subgroup validated in stage 1's direction: scenario / estimator × the 11 interim points, one table per subgroup, with the runs left after dropping empty stage 2 subgroups (landscape). Counts at 0.25 / 0.5 / 0.75: scenario / estimator / interim × per subgroup runs, significant same / opposite direction, true contrast in stage 1's direction. Stage 1's top covariate: scenario / estimator / interim × X4, X3+X5, X1+X2, X01–X03, X04+X05, one table per importance measure, true modifiers in bold. Classical vs HC3: scenario / subgroup / estimator × landmark × SE kind. Optional `[metrics.RDS] [table dir]` arguments for a smoke run |
 
-Each cell is `mean (MCSE)`, summarised with the figures' `summarise_metrics()`;
-the layout helpers are in `R/tables.R`. Run from
+The sample-size, CI and missing-covariate appendix tables give the mean alone
+and put the largest MCSE of each metric in the caption (`mcse_note()`,
+`binom_mcse_note()`); the other tables keep `mean (MCSE)` cells. Summaries come
+from the figures' `summarise_metrics()`; the layout helpers (`wide_table()`
+for the compact tables) are in `R/tables.R`. `ss_tables.R`, `ss_test_tables.R`,
+`ss_ci_tables.R` and `miss_tables.R` take optional `[results root] [table dir]`
+arguments for a smoke run. Run from
 `results_processing/thesis_tables/`:
 
 ```

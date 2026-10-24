@@ -23,23 +23,23 @@ library(paletteer)
 MODEL_LABELS <- c(
   dr_oracle = "DR-oracle",
   dr_semi_oracle = "DR-semi-oracle",
-  dr_random_forest = "DR-RandomForest",
-  dr_superlearner = "DR-SuperLearner",
-  causal_forest = "Causal forest",
-  t_random_forest = "T-RandomForest",
-  t_superlearner = "T-SuperLearner",
-  causal_forest_inbuilt = "Causal forest (inbuilt CI)"
+  dr_random_forest = "DR-RF",
+  dr_superlearner = "DR-SL",
+  causal_forest = "CF",
+  t_random_forest = "T-RF",
+  t_superlearner = "T-SL",
+  causal_forest_inbuilt = "CF (inbuilt CI)"
 )
 
 METHOD_LABELS <- c(
   complete_data = "Complete data",
-  complete_cases = "CC",
+  complete_cases = "Complete case",
   IPW = "IPW",
   none = "MIA",
-  missing_indicator = "MPA",
-  mean_imputation = "Single: mean",
-  missforest = "Single: forest",
-  regression = "Single: parametric",
+  missing_indicator = "MIM",
+  mean_imputation = "Mean imputation",
+  missforest = "missForest",
+  regression = "Regression imputation",
   multiple_imputation = "MI"
 )
 

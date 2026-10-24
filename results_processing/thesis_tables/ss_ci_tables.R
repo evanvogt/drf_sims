@@ -2,9 +2,11 @@
 # title: LaTeX tables of the CI studies - sample size, both outcomes
 ##########
 # Appendix tables for the correlated CI studies (sample_size/confidence_intervals/):
-# the CI_sf sweep per outcome (rho = 0, rho = 0.5 and their paired difference)
+# one compact table per outcome of the CI_sf sweep at rho = 0.5 (the full grid
+# of ratios, and the rho = 0 and paired-difference results, are the figures'),
 # and the data-driven CI_sf (optimal_sf/, continuous), plus the main-text float
-# tab:optimal_sf. Cells are "mean (MCSE)".
+# tab:optimal_sf. The sweep's cells are the mean alone, with the largest Monte
+# Carlo SEs in the caption; the data-driven ones are "mean (MCSE)".
 #
 # - Per-unit intervals only: the query grid is extrapolation at rho = 0.5
 #   (sample_size/ADEMP.md, "Estimands").
@@ -17,9 +19,12 @@
 # - A study with missing or incomplete metrics is skipped with a message.
 #
 # Writes to ../results/thesis_tables/:
-#   {cts,bin}_corr_{rho0,rho05,rhodiff}_ci_{marg,simul,len}.tex
+#   {cts,bin}_corr_rho05_ci_compact.tex
 #   cts_corr_ci_sf.tex, cts_corr_ci_sf_main.tex
 # \input{} with \usepackage{booktabs, longtable, pdflscape, array}.
+#
+#   cd results_processing/thesis_tables; Rscript ss_ci_tables.R
+#   Rscript ss_ci_tables.R [results root] [table dir]   # mock smoke run
 
 library(here)
 source(here("R", "figures.R"))
@@ -27,8 +32,10 @@ source(here("R", "tables.R"))
 
 # paths
 path <- here()
-res_root <- file.path(dirname(path), "results", "correlated", "confidence_intervals")
-tab_path <- file.path(dirname(path), "results", "thesis_tables")
+args <- commandArgs(trailingOnly = TRUE)
+results <- if (length(args) >= 1) args[1] else file.path(dirname(path), "results")
+res_root <- file.path(results, "correlated", "confidence_intervals")
+tab_path <- if (length(args) >= 2) args[2] else file.path(results, "thesis_tables")
 dir.create(tab_path, showWarnings = FALSE, recursive = TRUE)
 
 # the studies' designs (*_corr_ci_config.R, *_corr_ci_sf_config.R), to check
@@ -45,51 +52,27 @@ outcomes <- list(
        digits_len = 3)
 )
 
-# the sweep's metrics, one table each: `file` names the output, `binomial`
-# marks a per-run 0/1 indicator. `desc` opens the caption, `defn` explains
-# the metric in it.
+# the sweep's metrics, one block of columns each: `binomial` marks a per-run
+# 0/1 indicator, `name` is the metric's name in the caption's SE sentence
 ci_metrics <- tibble::tribble(
-  ~stem,       ~col,                    ~file,   ~digits, ~binomial,
-  "marg_cov",  "marginal_coverage",     "marg",  3,       FALSE,
-  "simul_cov", "simultaneous_coverage", "simul", 2,       TRUE,
-  "ci_len",    "mean_ci_length",        "len",   NA,      FALSE
-) %>%
-  mutate(
-    desc = c("Marginal coverage", "Simultaneous coverage", "Mean interval length"),
-    defn = c(
-      paste0("Marginal coverage is the share of units whose true CATE the ",
-             "interval covers. Nominal coverage is 0.95. "),
-      paste0("Simultaneous coverage is the share of runs in which the interval ",
-             "covers every unit's true CATE at once. Nominal coverage is 0.95. "),
-      "Length is averaged over units. "
-    )
-  )
+  ~stem,       ~col,                    ~header,                 ~name,                 ~digits, ~binomial,
+  "marg_cov",  "marginal_coverage",     "Marginal coverage",     "marginal coverage",   3,       FALSE,
+  "simul_cov", "simultaneous_coverage", "Simultaneous coverage", "simultaneous coverage", 2,      TRUE,
+  "ci_len",    "mean_ci_length",        "Mean length",           "length",              NA,      FALSE
+)
 
-# the one interval that does not depend on CI_sf (see the header)
-SPAN_MODELS <- MODEL_LABELS[["causal_forest_inbuilt"]]
+# the ratios the table shows; the figures carry the full grid
+SHOW_SF <- c(0.05, 0.25, 0.5)
 
-# one entry per outcome and rho table set, as ss_tables.R: `out` names the
-# output files and LaTeX labels, `label` is the caption's outcome text
-sets <- unlist(lapply(outcomes, function(o) list(
-  modifyList(o, list(
-    out = paste0(o$prefix, "_corr_rho0"),
-    label = paste0(o$label, ", correlated covariates ($\\rho = 0$)"),
-    rho = 0,
-    diff = FALSE
-  )),
+# one entry per outcome: `out` names the output file and LaTeX label, `label`
+# is the caption's outcome text
+sets <- lapply(outcomes, function(o) {
   modifyList(o, list(
     out = paste0(o$prefix, "_corr_rho05"),
     label = paste0(o$label, ", correlated covariates ($\\rho = 0.5$)"),
-    rho = 0.5,
-    diff = FALSE
-  )),
-  modifyList(o, list(
-    out = paste0(o$prefix, "_corr_rhodiff"),
-    label = paste0(o$label, ", correlated covariates, $\\rho = 0.5$ minus ",
-                   "$\\rho = 0$"),
-    diff = TRUE
+    rho = 0.5
   ))
-)), recursive = FALSE)
+})
 
 #' The design cells (rows of `design`, columns `by`) with no row in `metrics`
 missing_cells <- function(metrics, design, by) {
@@ -115,31 +98,25 @@ read_complete <- function(file, design, by, what) {
   metrics
 }
 
-sweep_caption <- function(o, m, runs) {
-  cells <- if (o$diff) {
-    paste0(
-      "per-run difference, mean (Monte Carlo SE) over ", runs, " run pairs ",
-      "per cell. A run shares its random draws at the two values of $\\rho$, ",
-      "so the SE is that of the paired difference. "
-    )
-  } else {
-    paste0("mean (Monte Carlo SE) over ", runs, " runs per cell. ")
-  }
+sweep_caption <- function(o, runs, mcse) {
   paste0(
-    m$desc, " of the CATE intervals, confidence-interval study, ", o$label,
-    ", scenarios 1--4, by the subsampling ratio of the half-sample bootstrap: ",
-    cells,
-    "Each model's interval is its 95\\% half-sample bootstrap band, ",
-    "simultaneous over units. ", m$defn,
-    "Causal forest (inbuilt CI): the pointwise 95\\% normal interval from the ",
-    "causal forest's own variance estimate, which does not depend on the ",
-    "subsampling ratio, so it is printed once."
+    "Marginal coverage, simultaneous coverage and mean length of the CATE ",
+    "intervals, confidence-interval study, ", o$label, ", scenarios 1--4, at ",
+    "three subsampling ratios of the half-sample bootstrap (the figures show ",
+    "all ten): mean over ", runs, " runs per cell. Each model's interval is ",
+    "its 95\\% half-sample bootstrap band, simultaneous over units. ", mcse,
+    " Marginal coverage is the share of units whose true CATE the interval ",
+    "covers; simultaneous coverage is the share of runs in which the interval ",
+    "covers every unit's true CATE at once. Nominal coverage is 0.95. Length ",
+    "is averaged over units. CF (inbuilt CI): the pointwise 95\\% normal ",
+    "interval from the causal forest's own variance estimate, which does not ",
+    "depend on the subsampling ratio, so it repeats across ratios."
   )
 }
 
 sf_caption <- function(o, runs) {
   paste0(
-    "Data-driven subsampling ratio, DR-RandomForest, ", o$label,
+    "Data-driven subsampling ratio, DR-RF, ", o$label,
     ", correlated covariates, scenarios 1--4: mean (Monte Carlo SE) over ",
     runs, " runs per cell. Each run picks the ratio whose 90\\% band covers ",
     "the run's own estimate closest to 90\\% of the time, and the band is ",
@@ -153,7 +130,7 @@ sf_caption <- function(o, runs) {
 
 # ---- the CI_sf sweep ----------------------------------------------------------
 
-sweep_design <- merge(DESIGN, data.frame(CI_sf = CI_SF))
+sweep_design <- merge(DESIGN[DESIGN$rho == 0.5, ], data.frame(CI_sf = CI_SF))
 
 for (o in sets) {
   metrics <- read_complete(
@@ -162,40 +139,56 @@ for (o in sets) {
   )
   if (is.null(metrics)) next
 
-  metrics <- filter(metrics, !grepl("_grid$", model))
+  metrics <- metrics %>%
+    filter(!grepl("_grid$", model), rho == o$rho, CI_sf %in% SHOW_SF)
   keys <- c("scenario", "n", "CI_sf", "model")
-  metrics <- if (o$diff) {
-    paired_rho_diff(metrics, ci_metrics$col, c(keys, "run"))
-  } else {
-    filter(metrics, rho == o$rho)
-  }
 
   metrics_summary <- summarise_metrics(
     metrics, keys,
     cols = setNames(ci_metrics$col, ci_metrics$stem),
-    binomial = if (o$diff) character() else ci_metrics$stem[ci_metrics$binomial],
+    binomial = ci_metrics$stem[ci_metrics$binomial],
     count_na = character()
   ) %>%
     apply_labels(SS_SCENARIO_LABELS) %>%
     mutate(n = factor(n, levels = c(500, 1000)))
 
-  runs <- runs_per_cell(metrics, keys)
-
-  for (i in seq_len(nrow(ci_metrics))) {
-    m <- ci_metrics[i, ]
-    digits <- if (is.na(m$digits)) o$digits_len else m$digits
-    name <- paste0(o$out, "_ci_", m$file)
-    tex <- ci_sweep_table(
-      metrics_summary, m$stem, digits,
-      span_models = SPAN_MODELS,
-      caption.short = paste0(m$desc, ", CATE intervals, ", o$label),
-      caption = sweep_caption(o, m, runs),
-      label = name
+  digits <- ifelse(is.na(ci_metrics$digits), o$digits_len, ci_metrics$digits)
+  d <- bind_rows(lapply(seq_len(nrow(ci_metrics)), function(i) {
+    transmute(
+      metrics_summary,
+      group = scenario, n, model,
+      metric = factor(ci_metrics$header[i], levels = ci_metrics$header),
+      CI_sf = formatC(CI_sf, format = "f", digits = 2),
+      cell = fmt_num(.data[[paste0("mean_", ci_metrics$stem[i])]], digits[i])
     )
-    out_file <- file.path(tab_path, paste0(name, ".tex"))
-    writeLines(tex, out_file)
-    message("wrote ", out_file)
-  }
+  }))
+
+  continuous <- !ci_metrics$binomial
+  mcse <- paste(
+    mcse_note(metrics_summary,
+              setNames(ci_metrics$name[continuous], ci_metrics$stem[continuous]),
+              digits[continuous]),
+    binom_mcse_note(
+      unique(range(count(metrics, across(all_of(keys)), name = "runs")$runs)),
+      "For simultaneous coverage the Monte Carlo SE"
+    )
+  )
+
+  name <- paste0(o$out, "_ci_compact")
+  tex <- wide_table(
+    d,
+    row_cols = c(`$n$` = "n", Model = "model"),
+    spans = "metric",
+    col = "CI_sf",
+    block = TRUE,
+    caption.short = paste0("CATE intervals, ", o$label),
+    caption = sweep_caption(o, runs_per_cell(metrics, keys), mcse),
+    label = name,
+    landscape = FALSE
+  )
+  out_file <- file.path(tab_path, paste0(name, ".tex"))
+  writeLines(tex, out_file)
+  message("wrote ", out_file)
 }
 
 # ---- the data-driven CI_sf ----------------------------------------------------

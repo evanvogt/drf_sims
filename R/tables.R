@@ -21,16 +21,21 @@ library(kableExtra)
 #' scenario) gives an em dash; a missing MCSE (one non-NA run) gives the mean
 #' alone.
 fmt_mcse <- function(mean, mcse, digits) {
-  num <- function(x) {
-    x <- round(x, digits)
-    x[!is.na(x) & x == 0] <- 0
-    sub("^-", "$-$", formatC(x, format = "f", digits = digits))
-  }
   case_when(
     is.na(mean) ~ "---",
-    is.na(mcse) ~ num(mean),
-    TRUE ~ paste0(num(mean), " (", num(mcse), ")")
+    is.na(mcse) ~ fmt_num(mean, digits),
+    TRUE ~ paste0(fmt_num(mean, digits), " (", fmt_num(mcse, digits), ")")
   )
+}
+
+#' A mean alone, as fmt_mcse() prints it: `digits` decimals, `$-$` for minus,
+#' no "-0.000", an em dash for a missing value. For tables that give the MCSEs
+#' once in the caption (mcse_note()).
+fmt_num <- function(x, digits) {
+  r <- round(x, digits)
+  r[!is.na(r) & r == 0] <- 0
+  out <- sub("^-", "$-$", formatC(r, format = "f", digits = digits))
+  ifelse(is.na(x), "---", out)
 }
 
 #' Runs per cell for a caption, read off the data rather than the design, so
@@ -171,205 +176,106 @@ col_group_headers <- function(cols) {
   setNames(c(2, groups$lengths), c(" ", groups$values))
 }
 
-#' Missing-data metrics table for one estimator: rows mechanism x scenario x
-#' method, one column per metric
+#' Wide table: rows grouped under a header, one column per (spanning header,
+#' column) pair
 #'
-#' ss_latex_table()'s layout with the missing-data studies' rows: grouped under
-#' a mechanism header, then by scenario. A row whose cells are all undefined is
-#' dropped (a handling method the estimator is not fitted for).
+#' The appendix's compact layout. A cell is a single formatted string, so the
+#' caller decides what goes in it (a mean alone, with the MCSEs given once in
+#' the caption by mcse_note()). Rows are `group` headers (pack_rows) over
+#' `row_cols`; columns are `col` (e.g. n) under up to two spanning levels.
+#' A (row, column) pair with no cell prints as an em dash, and a row with no
+#' defined cell at all is dropped.
 #'
-#' @param summary output of summarise_metrics() for one model, with
-#'   `mechanism`, `scenario` and `method` as factors in display order
-#'   (apply_labels()), and mean_<stem>/mcse_<stem> for every stem in `cols`
-#' @param cols as ss_latex_table()
-#' @param ... passed to grouped_longtable()
-miss_metrics_table <- function(summary, cols, ...) {
-  body <- summary %>% arrange(mechanism, scenario, method)
+#' @param d tidy data frame: `group` (factor, display order), the `row_cols`,
+#'   the `spans` and `col` (factors or characters, columns in level/sort
+#'   order) and `cell` (character)
+#' @param row_cols row label columns, left to right, optionally named by their
+#'   header; their sort order is the row order
+#' @param spans spanning header columns nearest the column headers first (so
+#'   `c("metric", "mechanism")` puts mechanism on the top row). Plain text only
+#'   (see grouped_longtable(): a backslash is eaten, so write two for one)
+#' @param col the column header column
+#' @param block TRUE: the first row label is a sub-block, printed once with
+#'   space between blocks (grouped_longtable's `block`); FALSE: every row is its
+#'   own block
+#' @param ... passed to grouped_longtable(): caption, label, caption.short,
+#'   font_size, tabcolsep, landscape
+wide_table <- function(d, row_cols, spans = character(), col = "col",
+                       block = FALSE, ...) {
+  row_names <- if (is.null(names(row_cols))) row_cols else names(row_cols)
+  row_cols <- unname(row_cols)
+  key_cols <- c(rev(spans), col)
+  specs <- d %>%
+    distinct(across(all_of(key_cols))) %>%
+    arrange(across(all_of(key_cols)))
+  id <- function(x) do.call(paste, c(lapply(x[key_cols], as.character), sep = "\r"))
+  specs$.id <- id(specs)
+  d$.id <- id(d)
 
-  cells <- lapply(seq_len(nrow(cols)), function(i) {
-    fmt_mcse(body[[paste0("mean_", cols$stem[i])]],
-             body[[paste0("mcse_", cols$stem[i])]],
-             cols$digits[i])
+  wide <- d %>%
+    select(group, all_of(row_cols), .id, cell) %>%
+    pivot_wider(names_from = .id, values_from = cell) %>%
+    arrange(group, across(all_of(row_cols)))
+  cell_cols <- specs$.id
+  wide[cell_cols] <- lapply(wide[cell_cols], function(x) coalesce(x, "---"))
+  keep <- rowSums(sapply(wide[cell_cols], function(x) x != "---")) > 0
+  wide <- wide[keep, ]
+
+  tab <- bind_cols(
+    wide %>% transmute(across(all_of(row_cols), as.character)),
+    as_tibble(wide[cell_cols], .name_repair = "minimal")
+  )
+  header_above <- lapply(spans, function(s) {
+    r <- rle(as.character(specs[[s]]))
+    setNames(c(length(row_cols), r$lengths), c(" ", r$values))
   })
-  names(cells) <- cols$stem
-  cells <- as_tibble(cells)
-
-  keep <- rowSums(cells != "---") > 0
-  body <- body[keep, ]
-
-  tab <- bind_cols(
-    tibble(scenario = as.character(body$scenario),
-           method = as.character(body$method)),
-    cells[keep, ]
-  )
 
   grouped_longtable(
     tab,
-    col_names = c("Scenario", "Method", cols$header),
-    group = body$mechanism,
-    block = body$scenario,
-    header_above = col_group_headers(cols),
+    col_names = c(row_names, as.character(specs[[col]])),
+    group = wide$group,
+    block = if (block) as.character(wide[[row_cols[1]]]) else NULL,
+    header_above = if (length(header_above) > 0) header_above,
+    align = c(rep("l", length(row_cols)), rep("r", length(cell_cols))),
     ...
   )
 }
 
-#' Test table: rows scenario x test x model, one column per sample size
+#' Largest Monte Carlo SE of each metric, as caption text
 #'
-#' The same cells as a metrics table, turned so that a test's power reads
-#' across n. A row whose cells are all undefined (a test that is never run for
-#' that model, or never defined in that scenario) is dropped rather than
-#' printed as a row of dashes.
+#' Replaces an SE in every cell (Morris, White & Crowther 2019 accept MCSEs
+#' reported in summary when small against the differences discussed).
 #'
-#' @param summary output of summarise_metrics(), with `scenario`, `n` and
-#'   `model` as factors in display order, and mean_<stem>/mcse_<stem> for every
-#'   stem in `tests`
-#' @param tests named character vector: names are the stems, values the
-#'   display labels, in row order
-#' @param digits decimals for every cell
-#' @param ... passed to grouped_longtable()
-ss_test_table <- function(summary, tests, digits = 3, ...) {
-  long <- bind_rows(lapply(names(tests), function(stem) {
-    summary %>%
-      transmute(
-        scenario, n, model,
-        test = tests[[stem]],
-        cell = fmt_mcse(.data[[paste0("mean_", stem)]],
-                        .data[[paste0("mcse_", stem)]], digits)
-      )
-  })) %>%
-    mutate(test = factor(test, levels = unname(tests)))
-
-  body <- long %>%
-    arrange(n) %>%
-    pivot_wider(names_from = n, values_from = cell, names_sort = TRUE) %>%
-    filter(if_any(-c(scenario, model, test), ~ !is.na(.x) & .x != "---")) %>%
-    mutate(across(-c(scenario, model, test), ~ coalesce(.x, "---"))) %>%
-    arrange(scenario, test, model)
-
-  n_cols <- setdiff(names(body), c("scenario", "model", "test"))
-  tab <- body %>%
-    transmute(test = as.character(test), model = as.character(model),
-              across(all_of(n_cols)))
-
-  grouped_longtable(
-    tab,
-    col_names = c("Test", "Model", n_cols),
-    group = body$scenario,
-    block = body$test,
-    header_above = c(" " = 2, "Sample size" = length(n_cols)),
-    ...
-  )
+#' @param summary output of summarise_metrics() with mcse_<stem> columns
+#' @param stems named character vector: names are the stems, values the
+#'   metric's name in the sentence
+#' @param digits decimals per stem, recycled
+#' @return e.g. "Monte Carlo SEs were at most 0.007 (bias), 0.011 (MSE)."
+mcse_note <- function(summary, stems, digits = 3) {
+  digits <- rep_len(digits, length(stems))
+  worst <- vapply(seq_along(stems), function(i) {
+    x <- summary[[paste0("mcse_", names(stems)[i])]]
+    # rounded up, so "at most" holds in the displayed digits
+    formatC(ceiling(max(x, na.rm = TRUE) * 10^digits[i] - 1e-9) / 10^digits[i],
+            format = "f", digits = digits[i])
+  }, character(1))
+  paste0("Monte Carlo SEs were at most ",
+         paste0(worst, " (", unname(stems), ")", collapse = ", "), ".")
 }
 
-#' CI sweep table: rows scenario x n x model, one column per subsampling ratio
+#' Largest binomial Monte Carlo SE of a rejection rate or 0/1 coverage, as
+#' caption text
 #'
-#' One interval metric per table, so the CI studies' ten `CI_sf` values read
-#' across a row. A model in `span_models` (an interval that does not depend on
-#' the ratio) is printed once, in a cell spanning the ratio columns, instead
-#' of ten times over. That is only done if its ten cells really are identical,
-#' with a warning otherwise.
-#'
-#' @param summary output of summarise_metrics() grouped by scenario, n, model
-#'   and CI_sf, with `scenario`, `n` and `model` as factors in display order
-#'   (apply_labels()), and mean_<stem>/mcse_<stem>
-#' @param stem the metric
-#' @param digits decimals for every cell
-#' @param span_models display labels of the ratio-independent models
-#' @param ... passed to grouped_longtable()
-ci_sweep_table <- function(summary, stem, digits, span_models = character(), ...) {
-  body <- summary %>%
-    transmute(
-      scenario, n, model,
-      CI_sf = formatC(CI_sf, format = "f", digits = 2),
-      cell = fmt_mcse(.data[[paste0("mean_", stem)]],
-                      .data[[paste0("mcse_", stem)]], digits)
-    ) %>%
-    pivot_wider(names_from = CI_sf, values_from = cell, names_sort = TRUE) %>%
-    arrange(scenario, n, model)
-
-  sf_cols <- setdiff(names(body), c("scenario", "n", "model"))
-  cells <- as.matrix(body[sf_cols])
-  cells[is.na(cells)] <- "---"
-
-  # kbl() needs every row to have all its cells, so a spanned row's other
-  # cells are placeholders, removed (with their "&") from the LaTeX afterwards
-  placeholder <- "SPANNEDCELL"
-  span <- as.character(body$model) %in% span_models
-  same <- apply(cells, 1, function(r) all(r == r[1]))
-  if (any(span & !same)) {
-    warning(stem, ": ", paste(unique(body$model[span & !same]), collapse = ", "),
-            " varies with CI_sf, so it is printed per ratio", call. = FALSE)
-  }
-  span <- span & same & length(sf_cols) > 1
-  cells[span, 1] <- paste0("\\multicolumn{", length(sf_cols), "}{c}{",
-                           cells[span, 1], "}")
-  cells[span, -1] <- placeholder
-
-  tab <- bind_cols(
-    tibble(n = as.character(body$n), model = as.character(body$model)),
-    as_tibble(cells)
-  )
-
-  out <- grouped_longtable(
-    tab,
-    col_names = c("$n$", "Model", sf_cols),
-    group = body$scenario,
-    block = body$n,
-    header_above = c(" " = 2, "Subsampling ratio" = length(sf_cols)),
-    ...
-  )
-  gsub(paste0(" *& *", placeholder), "", out)
-}
-
-#' Missing-data table: rows mechanism x scenario x method, one column per model
-#'
-#' One metric per table, with the estimators across the columns, so the
-#' missing-data studies' 40 method x model cells per scenario and mechanism
-#' fold into 9 rows. Rows are grouped under a mechanism header, then by
-#' scenario. A row whose cells are all undefined is dropped (complete case and
-#' IPW in an incomplete-units table, multiple imputation in a test table), and
-#' so is such a column (the causal forest's PO independence test).
-#'
-#' @param summary output of summarise_metrics(), with `mechanism`, `scenario`,
-#'   `method` and `model` as factors in display order (apply_labels()), and
-#'   mean_<stem>/mcse_<stem>
-#' @param stem the metric
-#' @param digits decimals for every cell
-#' @param ... passed to grouped_longtable()
-miss_latex_table <- function(summary, stem, digits, ...) {
-  defined <- function(cell) !is.na(cell) & cell != "---"
-
-  long <- summary %>%
-    transmute(
-      mechanism, scenario, method, model,
-      cell = fmt_mcse(.data[[paste0("mean_", stem)]],
-                      .data[[paste0("mcse_", stem)]], digits)
-    ) %>%
-    group_by(model) %>%
-    filter(any(defined(cell))) %>%
-    group_by(mechanism, scenario, method) %>%
-    filter(any(defined(cell))) %>%
-    ungroup()
-
-  # arranged by model first, so the columns come out in its level order
-  body <- long %>%
-    arrange(model) %>%
-    pivot_wider(names_from = model, values_from = cell) %>%
-    mutate(across(-c(mechanism, scenario, method), ~ coalesce(.x, "---"))) %>%
-    arrange(mechanism, scenario, method)
-
-  model_cols <- setdiff(names(body), c("mechanism", "scenario", "method"))
-  tab <- body %>%
-    transmute(scenario = as.character(scenario), method = as.character(method),
-              across(all_of(model_cols)))
-
-  grouped_longtable(
-    tab,
-    col_names = c("Scenario", "Method", model_cols),
-    group = body$mechanism,
-    block = body$scenario,
-    header_above = c(" " = 2, "Estimator" = length(model_cols)),
-    ...
+#' sqrt(p(1 - p) / R) follows from the estimate, so it is at most 0.5 /
+#' sqrt(R). `runs` is the number of runs (a vector for several cell sizes).
+binom_mcse_note <- function(runs, what = "Monte Carlo SE") {
+  runs <- sort(unique(runs))
+  paste0(
+    what, " $= \\sqrt{p(1-p)/R}$ for an estimate $p$ over $R$ runs: ",
+    "at most ",
+    paste0(formatC(0.5 / sqrt(runs), format = "f", digits = 3), " for $R = ",
+           runs, "$", collapse = " and "),
+    "."
   )
 }
 
@@ -467,8 +373,7 @@ me_proxy_table <- function(summary, refs, stem, digits, ...) {
     mutate(across(all_of(cell_cols), ~ coalesce(.x, "---")))
 
   # kbl() needs every row to have all its cells, so a reference row's other
-  # cells are placeholders, removed (with their "&") from the LaTeX afterwards,
-  # as in ci_sweep_table()
+  # cells are placeholders, removed (with their "&") from the LaTeX afterwards
   placeholder <- "SPANNEDCELL"
   references <- refs %>%
     transmute(
