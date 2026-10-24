@@ -162,12 +162,29 @@ for (o in outcomes) {
       }
     }
 
+    # MSE cells whose SE is large against the mean get a dagger and their SE in
+    # the caption, and are left out of the stated maximum, so one noisy cell
+    # does not set it
+    flag <- if (o$diff) rep(FALSE, nrow(summ)) else summ$mcse_mse > 0.3 * summ$mean_mse
+    flag[is.na(flag)] <- FALSE
+    dagger_note <- if (any(flag)) {
+      paste0(" $^\\dagger$ Monte Carlo SE of the MSE: ",
+             paste0(summ$model[flag], ", ", summ$scenario[flag], ", $n = ",
+                    summ$n[flag], "$, ",
+                    fmt_num(summ$mcse_mse[flag], o$digits_mse), collapse = "; "),
+             ".")
+    } else ""
+    summ_max <- summ
+    summ_max$mcse_mse[flag] <- NA
+
     d <- bind_rows(lapply(seq_len(nrow(cols)), function(i) {
+      cell <- fmt_num(summ[[paste0("mean_", cols$stem[i])]], cols$digits[i])
+      if (cols$stem[i] == "mse") cell <- paste0(cell, ifelse(flag, "$^\\dagger$", ""))
       transmute(
         summ,
         group = scenario, model, n,
         metric = factor(cols$header[i], levels = cols$header),
-        cell = fmt_num(.data[[paste0("mean_", cols$stem[i])]], cols$digits[i])
+        cell = cell
       )
     }))
 
@@ -179,8 +196,8 @@ for (o in outcomes) {
       caption.short = short_caption_text(o, t$text),
       caption = caption_text(
         o, t$text, runs_per_cell(filter(metrics, scenario %in% t$scenarios)),
-        mcse_note(summ, setNames(cols$name, cols$stem), cols$digits),
-        t$note
+        mcse_note(summ_max, setNames(cols$name, cols$stem), cols$digits),
+        paste0(dagger_note, t$note)
       ),
       label = paste0(o$out, "_ss_", nm),
       # 12 numeric columns: 8pt, as every other appendix table
