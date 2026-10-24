@@ -154,7 +154,11 @@ for (o in outcomes) {
       if (any(noisy, na.rm = TRUE)) {
         message(o$out, "_ss_", nm, ": ", sum(noisy, na.rm = TRUE), " of ",
                 nrow(summ), " ", cols$header[i], " cells have an MCSE over 30% ",
-                "of the mean")
+                "of the mean:")
+        print(as.data.frame(summ[which(noisy), c("scenario", "n", "model")]) %>%
+                mutate(mean = summ[[paste0("mean_", s)]][which(noisy)],
+                       mcse = summ[[paste0("mcse_", s)]][which(noisy)]),
+              digits = 3)
       }
     }
 
