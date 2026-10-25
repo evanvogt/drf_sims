@@ -53,7 +53,11 @@ Full design in `README.md`.
 The four n = 500 cells of a run share W, X and U, so the `hte_mult` comparison
 is paired. The n cells are not. Every arm targets RMTL and is scored against
 `tau_RMTL1` / `tau_RMTL2`. The semi-oracle twins (`*_semi`) use their parent's
-outcome models with the true propensity 0.5.
+outcome models with the true propensity 0.5. The oracle DR-learner uses the
+true outcome models μ₀(x), μ₁(x) and the true propensity, fitted afterwards on
+the same runs (`snr_oracle_config.R`). It is still a pseudo-value DR-learner,
+so it keeps the pseudo-value noise and the stage-2 error and is the best a
+DR-learner on these pseudo-values can do with perfect nuisances.
 
 ```{r data}
 res_path <- if (nzchar(params$res_path)) {
@@ -83,14 +87,20 @@ population <- if (file.exists(population)) {
 }
 
 CF_ARM <- "pseudo_cf_whole_oob"
-# display order; each semi-oracle twin shares its parent's colour
+ORACLE_ARM <- "pseudo_dr_oracle"
+# display order; each semi-oracle twin shares its parent's colour, and the
+# oracle has its own
 ARMS <- c("pseudo_cf_whole_oob", "pseudo_dr_whole_oob",
-          "pseudo_dr_whole_oob_semi", "rsf_dr_oob", "rsf_dr_oob_semi")
+          "pseudo_dr_whole_oob_semi", "rsf_dr_oob", "rsf_dr_oob_semi",
+          ORACLE_ARM)
 SEMI_PAIRS <- c(pseudo_dr_whole_oob = "pseudo_dr_whole_oob_semi",
                 rsf_dr_oob = "rsf_dr_oob_semi")
+# the arms given the true propensity 0.5
+TRUE_PS_ARMS <- c(SEMI_PAIRS, ORACLE_ARM)
 ARM_BASE <- setNames(ARMS, ARMS)
 ARM_BASE[SEMI_PAIRS] <- names(SEMI_PAIRS)
-BASE_LABELS <- SURV_ARM_LABELS[c(CF_ARM, names(SEMI_PAIRS))]
+BASE_LABELS <- c(SURV_ARM_LABELS[c(CF_ARM, names(SEMI_PAIRS))],
+                 setNames("DR-oracle (true μ)", ORACLE_ARM))
 ARM_LABELS <- c(BASE_LABELS,
                 setNames(paste(BASE_LABELS[names(SEMI_PAIRS)], "(e = 0.5)"),
                          SEMI_PAIRS))[ARMS]
@@ -148,7 +158,7 @@ add_arm <- function(df, arms) {
       arm = factor(ARM_LABELS[framework], levels = ARM_LABELS[arms]),
       base = factor(BASE_LABELS[ARM_BASE[framework]], levels = BASE_LABELS),
       propensity = factor(
-        if_else(framework %in% SEMI_PAIRS, PROPENSITY_LABELS[2],
+        if_else(framework %in% TRUE_PS_ARMS, PROPENSITY_LABELS[2],
                 PROPENSITY_LABELS[1]),
         levels = PROPENSITY_LABELS
       ),
@@ -277,7 +287,10 @@ This is the comparison the study exists for. Each faint point is one run's
 RMSE of a DR arm divided by the same run's RMSE of the causal forest on
 pseudo-values (`rel_eff_snr.R`'s ratio). Below 1 (dashed), DR did better. The
 larger point is the geometric mean, exp(mean log ratio), with a 95% CI from the
-MCSE of the mean log ratio. The y axis is on a log scale.
+MCSE of the mean log ratio. The y axis is on a log scale. The oracle's ratio
+is the reference for the others: roughly the best a DR-learner on these
+pseudo-values does with perfect nuisances. An oracle ratio above 1 means the
+pseudo-value noise and stage 2 alone keep the DR-learner behind.
 
 ```{r ratio-plot, fig.height=8}
 run_ratios <- metrics %>%
@@ -380,4 +393,45 @@ plot_tabs(list(
                        title = "Paired difference in C-statistic, estimated − true propensity",
                        yref = 0))
 ))
+```
+
+## Cost of estimating the outcome model
+
+Paired per-run differences again, each semi-oracle twin minus the oracle, so
+both sides have the true propensity and differ only in μ̂ against the true μ.
+Each difference is coloured by the semi-oracle's parent arm. A positive RMSE
+difference means estimating the outcome model costs accuracy. A positive
+C-statistic difference means it helps.
+
+```{r oracle-plots, results="asis", fig.height=8}
+if (ORACLE_ARM %in% metrics$framework) {
+  paired_oracle <- metrics %>%
+    filter(framework %in% SEMI_PAIRS) %>%
+    select(n, hte_mult, target, run, framework, rmse, c_stat) %>%
+    inner_join(
+      metrics %>%
+        filter(framework == ORACLE_ARM) %>%
+        select(n, hte_mult, target, run, rmse_oracle = rmse,
+               c_stat_oracle = c_stat),
+      by = c("n", "hte_mult", "target", "run")
+    ) %>%
+    mutate(framework = ARM_BASE[framework],
+           rmse = rmse - rmse_oracle, c_stat = c_stat - c_stat_oracle)
+
+  plot_tabs(list(
+    list(tab = "RMSE", save = "snr_oracle_rmse.png",
+         plot = snr_plot(metric_est(paired_oracle, "rmse"),
+                         ylab = "RMSE difference",
+                         title = "Paired difference in RMSE, estimated − true outcome model",
+                         yref = 0)),
+    list(tab = "C-statistic",
+         plot = snr_plot(metric_est(paired_oracle, "c_stat"),
+                         ylab = "C-statistic difference",
+                         title = "Paired difference in C-statistic, estimated − true outcome model",
+                         yref = 0))
+  ))
+} else {
+  cat("No oracle arm in snr_metrics.RDS: run the oracle add-on",
+      "(README.md, \"Oracle add-on\") and snr_metrics.R again.")
+}
 ```
