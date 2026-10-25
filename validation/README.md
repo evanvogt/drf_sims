@@ -24,7 +24,9 @@ non-linear) on the correlated (rho = 0.5) set of their outcome, one trial of
 1000 split at eleven interim points, 100 runs, the same three estimators and
 the same four chunk comparisons — 4400 array jobs per arm. In the null every
 significant interaction test is a type I error, so it is the size reference for
-every replication rate in the other three. A
+every replication rate in the other three. That is why the null alone runs to
+1000 at the three landmark interim points (0.25, 0.5, 0.75): 2700 more jobs per
+arm, appended to the grid as rows 4401–7100, so 7100 in all. A
 `competing_risk/` sibling would slot in the same way: its own
 `<prefix>_val_*.R` file split, `jobscripts/` and README, sourcing
 `val_common.R`.

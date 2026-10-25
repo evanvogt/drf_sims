@@ -12,7 +12,7 @@ lives in `../val_common.R`.
 | scenarios | 1, 2, 3, 4 (`R/dgm_scenarios.R`, `DESC_10`): 1 the null, no HTE; 2 simple HTE, `b4 * X4`; 3 complex, `b3 * X3 + b4 * X4 + b45 * X4 * X5`; 4 non-linear, `b4 * cos(X4)` |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 per scenario — **4400 array jobs**, 1 h walltime (see Sizing the job) |
+| runs | 100 per scenario — **4400 array jobs** — then the null (scenario 1) to 1000 at interim_prop 0.25, 0.5 and 0.75, rows 4401–7100 (2700 jobs); 1 h walltime (see Sizing the job) |
 | folds | DR SuperLearner only: 5 for a chunk below 500 rows, else 10 |
 | results | `../results/validation/continuous/rho_0.5/scenario_<k>/1000/<interim_prop>/res_sim_<run>.RDS` |
 
@@ -196,6 +196,7 @@ there and keeps the two arms' tests the same.
 ```bash
 Rscript validation/continuous/cts_val_testing.R full   # do this first - see below
 qsub validation/continuous/jobscripts/cts_val_1.sh     # 1-4400
+qsub -J 4401-7100 validation/continuous/jobscripts/cts_val_1.sh   # the null's runs 101-1000
 Rscript study.R check validation/continuous/cts_val_config.R          # writes failed_ids.txt if any are missing
 qsub validation/continuous/jobscripts/cts_val_collect.sh
 qsub validation/continuous/jobscripts/cts_val_metrics.sh
@@ -215,7 +216,7 @@ validation/continuous validation/binary` (dry run, then `--apply`).
 
 ### Without the queue
 
-When the queue is slower than the work, `cts_val_run.R` runs the same 4400 rows
+When the queue is slower than the work, `cts_val_run.R` runs the same 7100 rows
 inside one interactive session instead. Request an RStudio session with 8 cores
 and 64gb, then:
 
@@ -226,7 +227,7 @@ source(here::here("validation", "continuous", "cts_val_run.R"))
 It runs 8 rows at a time, each as its own `Rscript cts_val_analysis.R <i> 1 1`
 subprocess — the identical command `cts_val_1.sh` gives one array index, so a
 row produced here and a row produced by the array are the same calculation and
-land in the same place. Budget 4400 × (the replicate time
+land in the same place. Budget (the number of rows still missing) × (the replicate time
 `cts_val_testing.R full` reports) / 8.
 
 Rows that already have a results file are skipped (the same missing-run logic

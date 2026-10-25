@@ -16,7 +16,7 @@ importance measures, `p_cts_adj`, the no-queue runner and job sizing — see
 | scenarios | 1: the null, `tau = bW`; 2: `tau = bW + b4 * tanh(X4)`, `b4 = 0.082`; 3: `bW + b3 * X3 + b4 * tanh(X4) + b45 * tanh(X4) * tanh(X5)`, `b3 = -0.102`, `b4 = -0.0255`, `b45 = 0.0255`; 4: `bW + b4 * cos(X4)`, `b4 = -0.204` (`R/dgm_scenarios.R`, `TE_RD`) |
 | n | 1000, **one** trial split into its first `n * interim_prop` participants and the rest |
 | interim_prop | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 per scenario — **4400 array jobs**, 1 h walltime (as continuous; check with `bin_val_testing.R full`) |
+| runs | 100 per scenario — **4400 array jobs** — then the null (scenario 1) to 1000 at interim_prop 0.25, 0.5 and 0.75, rows 4401–7100 (2700 jobs); 1 h walltime (as continuous; check with `bin_val_testing.R full`) |
 | folds | DR SuperLearner only: 5 for a chunk below 500 rows, else 10 |
 | results | `../results/validation/binary/rho_0.5/scenario_<k>/1000/<interim_prop>/res_sim_<run>.RDS` |
 
@@ -90,6 +90,7 @@ changed if the queue is ever slower than the work.
 ```bash
 Rscript validation/binary/bin_val_testing.R full   # do this first
 qsub validation/binary/jobscripts/bin_val_1.sh     # 1-4400
+qsub -J 4401-7100%100 validation/binary/jobscripts/bin_val_1.sh   # the null's runs 101-1000
 Rscript study.R check validation/binary/bin_val_config.R          # writes failed_ids.txt if any are missing
 qsub validation/binary/jobscripts/bin_val_collect.sh
 qsub validation/binary/jobscripts/bin_val_metrics.sh

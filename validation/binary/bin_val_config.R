@@ -9,28 +9,44 @@
 #
 # The same grid as continuous/cts_val_config.R, on the binary_corr_0.5 set:
 # correlated covariates at rho = 0.5, scenarios 1-4, one trial of 1000 split at
-# eleven interim points, 100 runs - 4 x 11 x 100 = 4400 rows. rho is a path
-# column with the "rho_" prefix the correlated studies use, so results sit under
-# rho_0.5/.
+# eleven interim points, 100 runs - 4 x 11 x 100 = 4400 rows - then the null
+# alone to 1000 runs at the three landmark interim points, rows 4401-7100
+# (3 x 900 = 2700; appended so rows 1-4400 keep their array indices - see
+# cts_val_config.R). rho is a path column with the "rho_" prefix the correlated
+# studies use, so results sit under rho_0.5/.
 
 library(here)
 source(here("R", "pipeline.R"))
+
+# round() is load-bearing, not cosmetic: interim_prop is a path_cols entry,
+# so its as.character() form becomes a results directory name. Unrounded,
+# seq(by = 0.05) yields values like 0.30000000000000004 and get_results()
+# can no longer match the directory back to its grid row.
+interim_props  <- round(seq(0.25, 0.75, by = 0.05), 2)
+landmark_props <- c(0.25, 0.5, 0.75)
 
 study <- study_config(
   name     = "validation/binary",
   prefix   = "bin_val",
   res_path = file.path(dirname(here()), "results", "validation", "binary"),
-  grid = expand.grid(
-    rho = 0.5,
-    scenario = 1:4,
-    n = 1000,
-    # round() is load-bearing, not cosmetic: interim_prop is a path_cols entry,
-    # so its as.character() form becomes a results directory name. Unrounded,
-    # seq(by = 0.05) yields values like 0.30000000000000004 and get_results()
-    # can no longer match the directory back to its grid row.
-    interim_prop = round(seq(0.25, 0.75, by = 0.05), 2),
-    run = c(1:100),
-    stringsAsFactors = FALSE
+  grid = rbind(
+    expand.grid(
+      rho = 0.5,
+      scenario = 1:4,
+      n = 1000,
+      interim_prop = interim_props,
+      run = c(1:100),
+      stringsAsFactors = FALSE
+    ),
+    # 1L, not 1: a double here would turn the whole scenario column double
+    expand.grid(
+      rho = 0.5,
+      scenario = 1L,
+      n = 1000,
+      interim_prop = landmark_props,
+      run = 101:1000,
+      stringsAsFactors = FALSE
+    )
   ),
   path_cols   = c("rho", "scenario", "n", "interim_prop"),
   path_prefix = c(rho = "rho_", scenario = "scenario_"),

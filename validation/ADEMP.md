@@ -87,10 +87,14 @@ Full factorial within each arm:
 | ρ | 0.5 |
 | n | 1000 |
 | `interim_prop` | 0.25 to 0.75 by 0.05 (11 points) |
-| runs | 100 |
+| runs | 100; in scenario 1, 1000 at `interim_prop` 0.25, 0.5 and 0.75 |
 
-That is 4 × 11 × 100 = 4400 array jobs per arm (`<prefix>_val_config.R`).
-Scenario 1 was added on 2026-10-12.
+That is 4 × 11 × 100 = 4400 array jobs per arm, plus 3 × 900 = 2700 for the
+null's extra runs: 7100 in all (`<prefix>_val_config.R`). Scenario 1 was
+added on 2026-10-12, and its extension to 1000 runs on 2026-10-25. The
+extension is appended to the grid, as rows 4401–7100, so the first 4400 array
+indices are unchanged. It covers only the three landmark points the report's
+tables use, because the null is the size reference for every replication rate.
 
 - Each run draws **one** trial of 1000 (`split_trial()`). Chunk 1 is its first
   `round(1000 · interim_prop)` rows and chunk 2 the rest. Rows are iid, so
@@ -210,13 +214,15 @@ inputs.
 
 ## Performance measures
 
-Computed per (arm, scenario, estimator, `interim_prop`) over 100 runs, HC3
-unless stated (`val_results.qmd`, one render per outcome and scenario). A
-proportion's Monte Carlo SE is `sqrt(p(1 − p) / runs)`; a mean's is
-`sd / sqrt(runs)`. At 100 runs that is at most 0.05 for a proportion, and
-about 0.022 at p = 0.05.
+Computed per (arm, scenario, estimator, `interim_prop`) over all the runs the
+cell has, HC3 unless stated (`val_results.qmd`, one render per outcome and
+scenario). That is 100, or 1000 at the null's landmark points. A proportion's
+Monte Carlo SE is `sqrt(p(1 − p) / runs)`; a mean's is `sd / sqrt(runs)`. At
+100 runs that is at most 0.05 for a proportion, and about 0.022 at p = 0.05.
+At 1000 runs it is about 0.007 at p = 0.05.
 
-- **Completeness:** runs present per cell, against the 100 expected.
+- **Completeness:** runs present per cell, against the number the grid
+  expects.
 - **Subgroup replication:** the proportion of runs with the chunk-2 interaction
   p < 0.05 and p < 0.10, for the top-10% and bottom-10% subgroups separately,
   with MCSE; and the empirical CDF of those p-values. Runs whose tree predicts

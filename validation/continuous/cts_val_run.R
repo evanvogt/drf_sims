@@ -8,7 +8,8 @@
 # Each row runs as its own `Rscript cts_val_analysis.R <i> 1 1` subprocess,
 # exactly as the array does, so no RNG, plan() or thread state carries between
 # rows. Rows with a results file are skipped, so re-sourcing resumes. Size a
-# session from cts_val_testing.R full's replicate time: 4400 x that / 8.
+# session from cts_val_testing.R full's replicate time: rows missing x that / 8
+# (7100 rows in all, 2700 of them the null's runs 101-1000).
 #
 # It never writes failed_ids.txt or edits cts_val_rerun.sh (study.R check's
 # job), so a resubmission list never points at rows this script already retried.

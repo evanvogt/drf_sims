@@ -45,6 +45,8 @@ dir.create(tab_path, showWarnings = FALSE, recursive = TRUE)
 ALPHA <- HTE_ALPHA
 DIGITS <- 2
 LANDMARKS <- c(0.25, 0.5, 0.75)
+# the null runs to 1000 at LANDMARKS, everything else 100 (cts_val_config.R)
+NULL_RUNS <- max(study$grid$run[study$grid$scenario == 1])
 MEASURE_LABELS <- c(tevim = "TE-VIM", shap = "TreeSHAP")
 SE_LABELS <- c(classical = "Classical", hc3 = "HC3")
 STAGE1_HEADER <- "Proportion of participants in stage 1"
@@ -135,7 +137,8 @@ sg_rate_caption <- function(s) {
     "treatment-by-subgroup interaction is tested (HC3 standard errors). A run ",
     "validates if $p < ", ALPHA, "$ with the interaction in the direction ",
     "stage 1 implied. Runs: the runs left after dropping those in which no ",
-    "stage 2 participant was predicted into the subgroup, out of 100, as the ",
+    "stage 2 participant was predicted into the subgroup, out of 100 (",
+    NULL_RUNS, " at 0.25, 0.50 and 0.75 in the null scenario), as the ",
     "range over the interim points. In the null scenario every validation is ",
     "a false positive, at an expected rate of ", ALPHA / 2, "."
   )
@@ -219,7 +222,7 @@ write_table(grouped_longtable(
     "number of runs, at three interim points (stage 1: the proportion of ",
     "participants in stage 1). Runs: the runs left after dropping those in ",
     "which no stage 2 participant was predicted into the subgroup, out of ",
-    "100. Same: $p < ", ALPHA, "$ (HC3) with the treatment-by-subgroup ",
+    "100 (", NULL_RUNS, " in the null scenario). Same: $p < ", ALPHA, "$ (HC3) with the treatment-by-subgroup ",
     "interaction in the direction stage 1's estimated CATEs implied (positive ",
     "for the top 10\\%, negative for the bottom 10\\%). Opposite: $p < ",
     ALPHA, "$ in the other direction. True same: the same contrast in stage ",
@@ -265,7 +268,9 @@ nominations <- nominations %>%
          cell = ifelse(coalesce(is_mod, FALSE), paste0("\\textbf{", cell, "}"), cell)) %>%
   apply_labels(SS_SCENARIO_LABELS)
 
-nom_runs <- run_range(count(top_var, measure, scenario, model, interim_prop)$n)
+nom_counts <- count(top_var, measure, scenario, model, interim_prop)
+nom_runs <- run_range(nom_counts$n[nom_counts$scenario != 1])
+nom_runs_null <- run_range(nom_counts$n[nom_counts$scenario == 1])
 
 for (m in names(MEASURE_LABELS)) {
   body <- nominations %>%
@@ -288,7 +293,8 @@ for (m in names(MEASURE_LABELS)) {
     caption = paste0(
       "Interim-analysis validation: the covariate stage 1 ranks most ",
       "important by ", MEASURE_LABELS[[m]], ", proportion of runs nominating ",
-      "one in each group, mean (Monte Carlo SE) over ", nom_runs, " runs, at ",
+      "one in each group, mean (Monte Carlo SE) over ", nom_runs, " runs (",
+      nom_runs_null, " in the null scenario), at ",
       "three interim points (stage 1: the proportion of participants in stage ",
       "1). Each row sums to 1. X4 modifies the effect in every scenario but ",
       "the null, X3 and X5 in the complex scenario only; elsewhere they are ",

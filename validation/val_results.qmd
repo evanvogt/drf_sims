@@ -85,7 +85,7 @@ has its own render of this file.
 | scenario | `r scenario` of 1–4, correlated `r params$outcome` set at rho = `r rho` (see below) |
 | n | 1000, one trial split into its first `n * interim_prop` participants and the rest |
 | `interim_prop` | 0.25 to 0.75 in steps of 0.05 — 11 interim points |
-| runs | 100 per scenario — **4400 array jobs** over the four scenarios |
+| runs | 100 per scenario and interim point, and in the null (scenario 1) 1000 at the landmark points 0.25, 0.5 and 0.75 — **`r nrow(study$grid)` array jobs** over the four scenarios |
 | folds | DR SuperLearner only: 5 for a stage below 500 rows, else 10 |
 | interaction tests | `r if (is_bin) "linear probability models" else "linear models"`, each with classical and HC3 standard errors. HC3 throughout, except the section comparing the two |
 
@@ -313,7 +313,11 @@ top_var_all <- add_interim_lab(top_var_all) %>%
 top_var   <- add_interim_lab(top_var)   %>%
   mutate(measure = label_factor(measure, MEASURE_LABELS))
 
-n_runs_expected <- study$n_sims
+# the runs the grid holds per interim point: 100, or 1000 at the null's landmark
+# points (the config's extension rows), so not study$n_sims
+runs_expected <- study$grid %>%
+  filter(scenario == !!scenario) %>%
+  count(interim_prop, name = "expected")
 n_covariates <- length(unique(var_imps$variables))
 
 # the three interim points the study ran before the grid was refined - used to
@@ -330,12 +334,14 @@ fig_name <- function(stem) paste0(P, "_val_", stem, "_sc", scenario, ".png")
 runs_present <- subgroups %>%
   distinct(interim_prop, model, run) %>%
   count(interim_prop, model, name = "runs") %>%
-  pivot_wider(names_from = model, values_from = runs)
+  pivot_wider(names_from = model, values_from = runs) %>%
+  left_join(runs_expected, by = "interim_prop") %>%
+  relocate(expected, .after = interim_prop)
 
-kable(runs_present,
-      caption = paste0("Replicates present per cell (", n_runs_expected,
-                       " expected)"))
+kable(runs_present, caption = "Replicates present per cell, against the number the grid expects")
 ```
+
+`r if (scenario == 1) "The null has 1000 runs at the landmark interim points (0.25, 0.5 and 0.75) and 100 elsewhere. Every summary below uses all the runs a point has, so the Monte Carlo intervals are narrower at those three points than along the rest of each curve." else ""`
 
 
 ## Subgroup persistence

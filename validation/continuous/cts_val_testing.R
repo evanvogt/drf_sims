@@ -7,8 +7,10 @@
 # On the cluster, check 9's timing also sizes the jobscript's walltime.
 #
 #   1. xgboost, SHAPforxgboost and sandwich load (used nowhere else in the repo)
-#   2. the 4400-row grid; no interim_prop stringifies to a float artefact (it
-#      becomes a directory name); trial size and Var(tau)
+#   2. the 7100-row grid (4400 rows of 100 runs, then the null to 1000 runs at
+#      the landmark points), rows 1-4400 unchanged; no interim_prop stringifies
+#      to a float artefact (it becomes a directory name); trial size and
+#      Var(tau)
 #   3. interaction_pval returns the W:v row, not the intercept (the old
 #      bottom_pval bug); interaction_pval_adj ignores a proxy of the modifier;
 #      interaction_test()'s est/se/p and the tau_slope() contrasts
@@ -66,8 +68,21 @@ cat("\n=== 2. the parameter grid ===\n")
 
 props <- unique(study$grid$interim_prop)
 
-report(nrow(study$grid) == 4400,
-       sprintf("grid is 4400 rows (got %d)", nrow(study$grid)))
+report(nrow(study$grid) == 7100,
+       sprintf("grid is 7100 rows (got %d)", nrow(study$grid)))
+# rows 1-4400 must stay the grid the first 100 runs were submitted against, or
+# their array indices (and results) would point at different rows
+grid_100 <- expand.grid(rho = 0.5, scenario = 1:4, n = 1000,
+                        interim_prop = interim_props, run = 1:100,
+                        stringsAsFactors = FALSE)
+report(identical(as.list(study$grid[1:4400, ]), as.list(grid_100)),
+       "rows 1-4400 are the 4 x 11 x 100 grid, in its original order")
+ext <- study$grid[-(1:4400), ]
+report(all(ext$scenario == 1) && setequal(ext$interim_prop, landmark_props) &&
+         identical(sort(unique(ext$run)), 101:1000),
+       "rows 4401-7100 are the null alone, landmark points, runs 101-1000")
+report(!anyDuplicated(study$grid[, c(study$path_cols, "run")]),
+       "no (combination, run) appears twice")
 report(identical(sort(unique(study$grid$scenario)), 1:4) &&
          identical(unique(study$grid$rho), 0.5),
        "scenarios 1-4, rho = 0.5 only")

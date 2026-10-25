@@ -8,7 +8,9 @@
 # the binary-specific parts.
 #
 #   1. the packages a row needs load, sandwich included
-#   2. the 4400-row grid; no interim_prop stringifies to a float artefact
+#   2. the 7100-row grid (4400 rows of 100 runs, then the null to 1000 runs at
+#      the landmark points), rows 1-4400 unchanged; no interim_prop stringifies
+#      to a float artefact
 #   3. robust = TRUE gives HC3 p-values (matches a hand-computed sandwich test)
 #   4. the binary DGM, scenarios 1-4: risks in [0, 1], tau a risk difference
 #   5. split_trial(): n1 / n - n1, nested across interim_prop
@@ -58,8 +60,21 @@ for (pkg in c("xgboost", "SHAPforxgboost", "sandwich",
 cat("\n=== 2. the parameter grid ===\n")
 
 props <- unique(study$grid$interim_prop)
-report(nrow(study$grid) == 4400,
-       sprintf("grid is 4400 rows (got %d)", nrow(study$grid)))
+report(nrow(study$grid) == 7100,
+       sprintf("grid is 7100 rows (got %d)", nrow(study$grid)))
+# rows 1-4400 must stay the grid the first 100 runs were submitted against, or
+# their array indices (and results) would point at different rows
+grid_100 <- expand.grid(rho = 0.5, scenario = 1:4, n = 1000,
+                        interim_prop = interim_props, run = 1:100,
+                        stringsAsFactors = FALSE)
+report(identical(as.list(study$grid[1:4400, ]), as.list(grid_100)),
+       "rows 1-4400 are the 4 x 11 x 100 grid, in its original order")
+ext <- study$grid[-(1:4400), ]
+report(all(ext$scenario == 1) && setequal(ext$interim_prop, landmark_props) &&
+         identical(sort(unique(ext$run)), 101:1000),
+       "rows 4401-7100 are the null alone, landmark points, runs 101-1000")
+report(!anyDuplicated(study$grid[, c(study$path_cols, "run")]),
+       "no (combination, run) appears twice")
 report(identical(sort(unique(study$grid$scenario)), 1:4) &&
          identical(unique(study$grid$rho), 0.5),
        "scenarios 1-4, rho = 0.5 only")
