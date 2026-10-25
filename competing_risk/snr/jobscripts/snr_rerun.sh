@@ -3,7 +3,7 @@
 # mix every n. study.R check rewrites -J to match failed_ids.txt.
 #PBS -l walltime=02:00:00
 #PBS -l select=1:ncpus=3:ompthreads=2:mem=32gb
-#PBS -J 1-208%100
+#PBS -J 1-1327%100
 #PBS -N snr_rerun
 #PBS -o logs_rerun/
 #PBS -j oe
