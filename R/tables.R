@@ -408,7 +408,8 @@ me_proxy_table <- function(summary, refs, stem, digits, ...) {
 #' column per measure
 #'
 #' Each (scenario, n) is a bold header row, then each design axis (score,
-#' propensity, fold regime, machine) a block of its levels.
+#' propensity score, data splitting, surrogate learner) a block of its levels,
+#' headed "Factor" as in the thesis.
 #'
 #' @param summary output of summarise_metrics() grouped by scenario, n, axis
 #'   and level, all factors in display order, with mean_<stem>/mcse_<stem> for
@@ -435,7 +436,7 @@ me_axis_table <- function(summary, cols, ...) {
 
   grouped_longtable(
     tab,
-    col_names = c("Axis", "Level", cols$header),
+    col_names = c("Factor", "Level", cols$header),
     group = group,
     block = body$axis,
     header_above = col_group_headers(cols),

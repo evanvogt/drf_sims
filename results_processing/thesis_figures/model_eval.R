@@ -42,8 +42,8 @@ dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
 # display labels for me_selection.R's score types, fold regimes and pipelines.
 # The order of each vector is the legend order.
-SCORE_LABELS <- c(dr = "DR", dr05 = "DR-π̃-fixed", inflt = "IF",
-                  inflt05 = "IF-π̃-fixed")
+SCORE_LABELS <- c(dr = "DR", dr05 = "DR-π-fixed", inflt = "IF",
+                  inflt05 = "IF-π-fixed")
 # a light and a dark shade per score family, the dark one fixed-π. All four
 # are rcartocolor::Safe colours, the thesis palette. Names are the labels above.
 METRIC_COLOURS <- setNames(c("#88CCEE", "#332288", "#CC6677", "#882255"),
@@ -54,15 +54,16 @@ PIPELINE_SHAPES <- setNames(c(16, 17), PIPELINE_LABELS)
 
 # the design-axis figure's axes: the column each is read from and its levels
 AXES <- list(
-  Metric = list(col = "score_family", labels = c(dr = "DR", inflt = "IF")),
-  Propensity = list(col = "pi_regime",
-                    labels = c(estimated = "π̃ estimated",
-                               fixed = "π̃ fixed")),
+  Score = list(col = "score_family", labels = c(dr = "DR", inflt = "IF")),
+  `Propensity score` = list(col = "pi_regime",
+                            labels = c(estimated = "π̃ estimated",
+                                       fixed = "π = 0.5")),
   `Data splitting` = list(col = "fold_type", labels = FOLD_LABELS),
-  Machine = list(col = "pipeline", labels = PIPELINE_LABELS)
+  `Surrogate learner` = list(col = "pipeline", labels = PIPELINE_LABELS)
 )
 
-REF_LINETYPES <- c(`Random pick` = "solid", `Best fixed choice` = "dashed")
+REF_LINETYPES <- c(`Random selection` = "solid",
+                   `Best fixed choice` = "dashed")
 
 FIG_HEIGHT <- 18
 
@@ -83,7 +84,7 @@ selection <- me_selection(metrics) %>%
 refs <- me_references(metrics) %>%
   group_by(scenario, n, ref) %>%
   summarise(value = mean(regret), .groups = "drop") %>%
-  mutate(ref = factor(c(random = "Random pick",
+  mutate(ref = factor(c(random = "Random selection",
                         best_fixed = "Best fixed choice")[as.character(ref)],
                       levels = names(REF_LINETYPES))) %>%
   arrange(ref)
@@ -116,7 +117,7 @@ proxy_figure <- function(metric, y_lab, hline = NULL) {
     shape_palette = scale_shape_manual(values = PIPELINE_SHAPES),
     hline = hline, dodge_width = 0.8, point_size = 1.5
   ) +
-    labs(x = "Sample size", colour = "Metric", shape = "Machine") +
+    labs(x = "Sample size", colour = "Score", shape = "Surrogate learner") +
     theme(legend.position = "bottom", legend.box = "vertical",
           axis.text.x = element_text(angle = 0))
 }
@@ -164,7 +165,7 @@ axis_fig <- point_range_plot(
     colour = "grey30", linewidth = 0.4
   ) +
   ref_linetype +
-  labs(x = NULL, colour = "Design axis") +
+  labs(x = NULL, colour = "Design factor") +
   theme(legend.position = "bottom", legend.box = "vertical",
         axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
 save_fig("me_axis_regret.png", fig_path, height = FIG_HEIGHT, plot = axis_fig)
@@ -207,14 +208,15 @@ not_ranked <- tidyr::expand_grid(
   transmute(scenario, n, proxy, rank = NOT_RANKED,
             runs = total - coalesce(ranked, 0L))
 
-# every possible rank, so a rank's colour does not depend on which ranks occur
+# every possible rank, so a rank's colour does not depend on which ranks occur;
+# Not ranked only when some run is, so it is in the legend only then
 rank_names <- as.character(seq_len(ME_N_CANDIDATES))
 rank_dist <- bind_rows(ranked, not_ranked) %>%
   filter(runs > 0) %>%
   left_join(total_runs, by = c("scenario", "n")) %>%
   mutate(
     prop = runs / total,
-    rank = factor(rank, levels = c(rank_names, NOT_RANKED)),
+    rank = factor(rank, levels = c(rank_names, intersect(NOT_RANKED, rank))),
     n = n_label(n)
   )
 
@@ -226,8 +228,9 @@ if (nrow(unranked) > 0) {
 }
 
 # viridis rather than the thesis palette: the rank is ordinal, and Safe would
-# give it unordered hues. Reversed, so the best ranks are the bright ones. Not
-# ranked is the last level, so it stacks at the foot of the bar, below rank 9.
+# give it unordered hues. Reversed, so the best ranks are the bright ones. The
+# stack is reversed so rank 1 sits on the axis; Not ranked, the last level,
+# goes on top, above rank 9.
 rank_colours <- c(
   setNames(scales::viridis_pal(direction = -1)(length(rank_names)),
            rank_names),
@@ -236,12 +239,13 @@ rank_colours <- c(
 
 # show.legend = TRUE, or a rank no pick took gets an empty legend key
 rank_fig <- ggplot(rank_dist, aes(x = proxy, y = prop, fill = rank)) +
-  geom_col(show.legend = TRUE) +
+  geom_col(position = position_stack(reverse = TRUE), show.legend = TRUE) +
   facet_grid(rows = vars(n), cols = vars(scenario)) +
   scale_fill_manual(values = rank_colours, drop = FALSE) +
   drf_theme() +
-  labs(x = "Proxy score", y = "Proportion of runs",
-       fill = "True rank of pick") +
+  labs(x = "Metric (score / data splitting / surrogate learner)",
+       y = "Proportion of simulated trials",
+       fill = "True rank of selected candidate") +
   guides(fill = guide_legend(nrow = 1)) +
   theme(legend.position = "bottom",
         axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
@@ -273,16 +277,24 @@ cand_dist <- bind_rows(cand_ranked, cand_not_ranked) %>%
   left_join(total_runs, by = c("scenario", "n")) %>%
   mutate(
     prop = runs / total,
-    rank = factor(rank, levels = c(rank_names, NOT_RANKED)),
+    rank = factor(rank, levels = c(rank_names, intersect(NOT_RANKED, rank))),
     n = n_label(n)
   )
 
+cand_unranked <- filter(cand_dist, rank == NOT_RANKED)
+if (nrow(cand_unranked) > 0) {
+  message("candidate bars with unranked runs (", nrow(cand_unranked), "):")
+  print(as.data.frame(select(cand_unranked, scenario, n, model, runs, total)),
+        row.names = FALSE)
+}
+
 cand_fig <- ggplot(cand_dist, aes(x = model, y = prop, fill = rank)) +
-  geom_col(show.legend = TRUE) +
+  geom_col(position = position_stack(reverse = TRUE), show.legend = TRUE) +
   facet_grid(rows = vars(n), cols = vars(scenario)) +
   scale_fill_manual(values = rank_colours, drop = FALSE) +
   drf_theme() +
-  labs(x = "Candidate", y = "Proportion of runs", fill = "True rank") +
+  labs(x = "Candidate", y = "Proportion of simulated trials",
+       fill = "True rank") +
   guides(fill = guide_legend(nrow = 1)) +
   theme(legend.position = "bottom",
         axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))

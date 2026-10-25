@@ -57,10 +57,11 @@ PIPELINE_LABELS <- c(xgb = "XGBoost", automl = "AutoML")
 
 AXES <- list(
   Score = list(col = "score_family", labels = c(dr = "DR", inflt = "IF")),
-  Propensity = list(col = "pi_regime",
-                    labels = c(estimated = "Estimated", fixed = "Fixed at 0.5")),
-  `Fold regime` = list(col = "fold_type", labels = FOLD_LABELS),
-  Machine = list(col = "pipeline", labels = PIPELINE_LABELS)
+  `Propensity score` = list(col = "pi_regime",
+                            labels = c(estimated = "estimated",
+                                       fixed = "fixed at 0.5")),
+  `Data splitting` = list(col = "fold_type", labels = FOLD_LABELS),
+  `Surrogate learner` = list(col = "pipeline", labels = PIPELINE_LABELS)
 )
 
 MEASURE_COLS <- c(hit = "hit", rank = "pick_rank", regret = "regret")
@@ -138,10 +139,11 @@ if (nrow(short_cells) > 0) {
   message("no proxy cell has failed runs")
 }
 
-proxy_runs_text <- paste0(count_range(total_runs$total), " runs per cell")
+proxy_runs_text <- paste0(count_range(total_runs$total),
+                          " simulated trials per cell")
 if (nrow(short_cells) > 0) {
   proxy_runs_text <- paste0(
-    proxy_runs_text, ", fewer for the ", short_proxies, " proxies (",
+    proxy_runs_text, ", fewer for the ", short_proxies, " metrics (",
     count_range(short_cells$runs), "; Table~\\ref{tab:me_runs})"
   )
 }
@@ -175,8 +177,8 @@ ref_summary <- bind_rows(
                       cols = MEASURE_COLS, binomial = "hit",
                       count_na = character())
 ) %>%
-  mutate(label = ifelse(ref == "random", "Random pick",
-                        paste0("Best fixed (", model, ")")))
+  mutate(label = ifelse(ref == "random", "Random selection",
+                        paste0("Best fixed choice (", model, ")")))
 
 axis_runs <- me_axis_runs(selection, AXES, unname(MEASURE_COLS))
 axis_summary <- axis_runs %>%
@@ -190,51 +192,50 @@ message("regret to ", regret_digits, " decimals")
 # ---- captions ----------------------------------------------------------------
 
 proxy_key <- paste0(
-  "Rows: the proxy's score, DR risk (DR) or the influence-corrected PEHE ",
-  "with the scoring nuisance's T-learner $\\hat\\mu_1 - \\hat\\mu_0$ as its ",
-  "surrogate (IF), with the scoring nuisance's estimated propensity, trimmed ",
-  "to $[0.05, 0.95]$, or with it fixed at the true 0.5 ($\\pi$-fixed). ",
-  "Columns: the rows the scoring nuisance is ",
-  "fit on, the candidate's training folds, predicting its held-out fold (CV), ",
-  "the held-out fold alone (Holdout; at $n = 250$ adjacent pairs of folds are ",
-  "pooled), or all $n$ rows (Whole); and its machine. Random pick: a ",
-  "candidate drawn uniformly at random. Best fixed: always deploying the ",
-  "named candidate, the one with the lowest mean regret in that scenario and ",
-  "$n$, chosen with hindsight."
+  "Rows: score (DR: the DR score; IF: the influence-function-corrected ",
+  "\\gls{pehe} with the T-learner surrogate $\\tilde{\\mu}_1 - ",
+  "\\tilde{\\mu}_0$), with the propensity score estimated by the surrogate ",
+  "pipeline and truncated to $[0.05, 0.95]$, or fixed at the randomisation ",
+  "probability of 0.5 ($\\pi$-fixed). Columns: data splitting for the ",
+  "surrogate's nuisance functions (CV: fitted on the candidate's training ",
+  "folds and predicted in its held-out fold; Holdout: fitted and predicted ",
+  "within the held-out fold, with adjacent pairs of folds pooled at ",
+  "$n = 250$; Whole: fitted and predicted in all $n$ participants), and ",
+  "surrogate nuisance learner (XGBoost or AutoML). Random selection: a ",
+  "candidate chosen uniformly at random. Best fixed choice: always selecting ",
+  "the named candidate, the one with the lowest mean regret in that scenario ",
+  "and $n$, identified with hindsight. Mean (Monte Carlo SE) over ",
+  proxy_runs_text, "."
 )
 
 MEASURES <- list(
   hit = list(
     file = "me_top1", digits = 2, short = "Top-1 selection accuracy",
     text = paste0(
-      "the proportion of runs in which the proxy's pick is the candidate ",
-      "with the lowest true PEHE, out of 9 (a random pick's is 1/9)"
+      "Top-1 selection accuracy of each metric: the proportion of simulated ",
+      "trials in which the selected candidate had the lowest true \\gls{pehe} ",
+      "of the nine (1/9 for random selection)."
     )
   ),
   rank = list(
     file = "me_rank", digits = 2, short = "True rank of the selected candidate",
     text = paste0(
-      "the true rank of the proxy's pick among the 9 candidates, 1 being the ",
-      "lowest true PEHE, tied candidates sharing the better rank (a random ",
-      "pick's is 5)"
+      "True rank of the candidate selected by each metric, from 1 (lowest ",
+      "true \\gls{pehe}) to 9, with tied candidates sharing the better rank ",
+      "(5 for random selection)."
     )
   ),
   regret = list(
     file = "me_regret", digits = regret_digits, short = "Regret",
     text = paste0(
-      "the true PEHE of the proxy's pick minus the lowest true PEHE among the ",
-      "candidates in the run"
+      "Regret of each metric: the true \\gls{pehe} of the selected candidate ",
+      "minus the lowest true \\gls{pehe} among the nine candidates in the ",
+      "same simulated trial."
     )
   )
 )
 
-caption_text <- function(m) {
-  paste0(
-    "Model evaluation, ", tolower(substr(m$short, 1, 1)), substring(m$short, 2),
-    " of the selection proxies: ", m$text, ". Mean (Monte Carlo SE) over ",
-    proxy_runs_text, ". ", proxy_key
-  )
-}
+caption_text <- function(m) paste(m$text, proxy_key)
 
 # ---- tables ------------------------------------------------------------------
 
@@ -260,7 +261,7 @@ for (stem in names(MEASURES)) {
 axis_cols <- tibble::tribble(
   ~stem,    ~header,                                   ~digits,
   "hit",    "\\shortstack[r]{Top-1\\\\accuracy}",      2,
-  "rank",   "\\shortstack[r]{True rank\\\\of pick}",   2,
+  "rank",   "\\shortstack[r]{True rank\\\\of selected}", 2,
   "regret", "Regret",                                  regret_digits
 )
 
@@ -268,9 +269,9 @@ axis_cols <- tibble::tribble(
 # proxy changes what the level averages over in that run, not the run count
 axis_missing <- if (nrow(short_cells) > 0) {
   paste0(
-    " The ", short_proxies, " proxies are missing from some runs ",
-    "(Table~\\ref{tab:me_runs}); in those runs, the levels they share are ",
-    "averaged over the proxies that remain."
+    " The ", short_proxies, " metrics are missing from some simulated ",
+    "trials (Table~\\ref{tab:me_runs}); in those trials, the levels they ",
+    "share are averaged over the metrics that remain."
   )
 } else {
   ""
@@ -278,17 +279,16 @@ axis_missing <- if (nrow(short_cells) > 0) {
 
 tex <- me_axis_table(
   axis_summary, axis_cols,
-  caption.short = "Model evaluation: selection by design axis",
+  caption.short = "Model evaluation: selection by design factor",
   caption = paste0(
-    "Model evaluation, selection by design axis: top-1 accuracy, true rank ",
-    "of the pick (1 = best of 9) and regret, each level of an axis averaged ",
-    "over the proxies that share it within each run, then over runs. Mean ",
-    "(Monte Carlo SE) over ",
-    runs_per_cell(axis_runs, c("scenario", "n", "axis", "level")),
-    " runs per cell; the SE counts runs. ",
-    "Averaged within a run, top-1 accuracy is a proportion rather than 0/1, ",
-    "so its SE is the general one. Fold regime: the rows the scoring ",
-    "nuisance is fit on, as in Table~\\ref{tab:me_top1}.", axis_missing
+    "Selection performance by design factor: top-1 accuracy, true rank of ",
+    "the selected candidate (1 = best of 9) and regret, for each level of ",
+    "one factor, averaged first over the metrics that share that level ",
+    "within each simulated trial and then over simulated trials. Because it ",
+    "is averaged within a trial, top-1 accuracy is a proportion rather than ",
+    "0 or 1. Factors as in Table~\\ref{tab:me_design}. Mean (Monte Carlo SE) ",
+    "over ", runs_per_cell(axis_runs, c("scenario", "n", "axis", "level")),
+    " simulated trials per cell.", axis_missing
   ),
   label = "me_axis",
   landscape = FALSE,
@@ -342,14 +342,15 @@ tex <- ss_latex_table(
   candidate_summary, fixed_cols,
   caption.short = "Model evaluation: the candidates as fixed choices",
   caption = paste0(
-    "Model evaluation, the candidates as fixed choices: each candidate's ",
-    "true PEHE, and its top-1 accuracy (the proportion of runs in which it is ",
-    "the candidate with the lowest true PEHE), true rank (1 = best of 9) and ",
-    "regret if it were always deployed. Mean (Monte Carlo SE) over ",
+    "Each candidate as a fixed choice: its true \\gls{pehe}, its top-1 ",
+    "accuracy (the proportion of simulated trials in which it had the lowest ",
+    "true \\gls{pehe}), its true rank (1 = best of 9) and its regret if it ",
+    "were always selected. Mean (Monte Carlo SE) over ",
     runs_per_cell(candidates, c("scenario", "n", "model")),
-    " runs per cell. In bold, the best fixed choice: the candidate with the ",
-    "lowest mean regret in that scenario and $n$, chosen with hindsight, and ",
-    "the Best fixed row of Tables~\\ref{tab:me_top1}--\\ref{tab:me_regret}."
+    " simulated trials per cell. In bold: the best fixed choice, the ",
+    "candidate with the lowest mean regret in that scenario and $n$, ",
+    "identified with hindsight, which is the Best fixed choice row of ",
+    "Tables~\\ref{tab:me_top1}--\\ref{tab:me_regret}."
   ),
   label = "me_fixed",
   landscape = FALSE,
@@ -373,21 +374,22 @@ runs_summary <- proxy_runs %>%
     mcse_runs = NA_real_
   )
 runs_refs <- total_runs %>%
-  mutate(ref = factor("total"), label = "All runs", mean_runs = total,
-         mcse_runs = NA_real_)
+  mutate(ref = factor("total"), label = "All simulated trials",
+         mean_runs = total, mcse_runs = NA_real_)
 
 tex <- me_proxy_table(
   runs_summary, runs_refs, "runs", 0,
-  caption.short = "Model evaluation: completed runs per proxy",
+  caption.short = "Model evaluation: completed simulated trials per metric",
   caption = paste0(
-    "Model evaluation, completed runs: the number of runs in which each ",
-    "selection proxy could be scored, the runs behind each cell of ",
-    "Tables~\\ref{tab:me_top1}--\\ref{tab:me_regret}. A proxy is missing from ",
-    "a run when its scoring nuisance returned missing values there, which ",
-    "leaves the proxy undefined for every candidate. All runs: the runs with ",
-    "a true PEHE for the candidates, the runs behind the Random pick and Best ",
-    "fixed rows and Tables~\\ref{tab:me_axis} and \\ref{tab:me_fixed}. Rows ",
-    "and columns as in Table~\\ref{tab:me_top1}."
+    "Completed simulated trials: the number of simulated trials in which ",
+    "each metric could be computed, behind each cell of ",
+    "Tables~\\ref{tab:me_top1}--\\ref{tab:me_regret}. A metric is missing ",
+    "from a simulated trial when the surrogate's nuisance functions returned ",
+    "missing values there, which leaves the metric undefined for every ",
+    "candidate. All simulated trials: those with a true \\gls{pehe} for the ",
+    "candidates, behind the Random selection and Best fixed choice rows and ",
+    "Tables~\\ref{tab:me_axis} and \\ref{tab:me_fixed}. Rows and columns as ",
+    "in Table~\\ref{tab:me_top1}."
   ),
   label = "me_runs",
   landscape = FALSE,
@@ -471,23 +473,24 @@ if (file.exists(population_file)) {
     group = pop$scenario,
     block = NULL,
     align = c("l", rep("r", nrow(pop_cols))),
-    caption.short = "Model evaluation: the IF score with oracle nuisances",
+    caption.short = paste0("Model evaluation: the IF score with the true ",
+                           "nuisance functions"),
     caption = paste0(
-      "Model evaluation, the IF score with oracle nuisances: five constructed ",
-      "CATE predictions scored on one sample of ", n_pop_text, " from each ",
-      "scenario, with the true $\\mu_0$, $\\mu_1$ and $\\pi = 0.5$ as the ",
-      "nuisances, so a score's departure from true PEHE is the score's own ",
-      "and not nuisance error. Each column is a loss; in parentheses, its ",
-      "rank among the five within the scenario (1 = lowest, ties sharing the ",
-      "better rank), the rows in order of true PEHE. DR: DR risk, the MSE ",
-      "against the pseudo-outcome. IF, true $\\tau$: the influence-corrected ",
-      "PEHE with the T-learner surrogate, which with oracle nuisances is ",
-      "$\\mu_1 - \\mu_0 = \\tau$. IF, pseudo-outcome: the same with the ",
+      "The IF score with the true nuisance functions: five constructed ",
+      "candidates scored in one sample of ", n_pop_text, " from each ",
+      "scenario, using the true $\\mu_0$, $\\mu_1$ and $\\pi = 0.5$, so that ",
+      "any departure from the true \\gls{pehe} is due to the score itself ",
+      "rather than to error in the nuisance functions. Each column is a ",
+      "score; in brackets, its rank among the five candidates within the ",
+      "scenario (1 = lowest; ties share the better rank). Rows are ordered by ",
+      "true \\gls{pehe}. DR: the DR score. IF, true $\\tau$: the IF score ",
+      "with the T-learner surrogate, which with the true nuisance functions ",
+      "equals $\\tau$. IF, pseudo-outcome: the IF score with the \\gls{dr} ",
       "pseudo-outcome as its surrogate. MSE vs $\\mu_1$: the candidate's mean ",
-      "squared distance from the true treated-arm mean. Candidates: the true ",
-      "CATE $\\tau$; the ATE $\\bar\\tau$; half-way between them; $\\mu_1$; ",
-      "and $\\tau + X_2$. Table~\\ref{tab:me_if_selection} is the same ",
-      "comparison on the simulated runs."
+      "squared distance from the true $\\mu_1$. Candidates: the true ",
+      "\\gls{cate} $\\tau$; the \\gls{ate} $\\bar{\\tau}$; half-way between ",
+      "them; $\\mu_1$; and $\\tau + X_2$. Table~\\ref{tab:me_if_selection} ",
+      "makes the same comparison in the simulated trials."
     ),
     label = "me_if_population",
     landscape = FALSE,
@@ -567,7 +570,7 @@ if_cols <- tibble::tribble(
   "dr",       "DR",                                          if_regret_digits,
   "infl",     "\\shortstack[r]{IF,\\\\pseudo-outcome}",      if_regret_digits,
   "inflt",    "\\shortstack[r]{IF,\\\\T-learner}",           if_regret_digits,
-  "random",   "\\shortstack[r]{Random\\\\pick}",             if_regret_digits,
+  "random",   "\\shortstack[r]{Random\\\\selection}",        if_regret_digits,
   "rho_pehe", "\\shortstack[r]{True\\\\PEHE}",               2,
   "rho_mu1",  "\\shortstack[r]{MSE\\\\vs $\\mu_1$}",          2
 )
@@ -583,8 +586,8 @@ names(if_cells) <- if_cols$stem
 # leaves that run out of its mean only, so say how many
 rho_na <- sum(is.na(if_wide$rho_pehe_inflt) | is.na(if_wide$rho_mu1_inflt))
 rho_na_text <- if (rho_na > 0) {
-  paste0(" The correlations leave out the ", rho_na, " run(s) in which the ",
-         "score tied across every candidate.")
+  paste0(" The correlations leave out the ", rho_na, " simulated trial(s) ",
+         "in which the score tied across every candidate.")
 } else {
   ""
 }
@@ -601,21 +604,21 @@ tex <- grouped_longtable(
   align = c("l", rep("r", nrow(if_cols))),
   caption.short = "Model evaluation: the IF score's surrogate",
   caption = paste0(
-    "Model evaluation, the IF score's surrogate, with the scoring nuisance ",
-    "fit by XGBoost in the CV fold regime and the propensity fixed at the ",
-    "true 0.5. Mean regret (the true PEHE of the pick minus the lowest among ",
-    "the 9 candidates in the run) of selecting by DR risk, by the IF score ",
-    "with the pseudo-outcome as its surrogate, by the IF score with the ",
-    "T-learner $\\hat\\mu_1 - \\hat\\mu_0$ as its surrogate, and of a ",
-    "candidate drawn uniformly at random. Then the Spearman correlation, ",
-    "across the 9 candidates within a run, of the T-learner IF score with ",
-    "the candidates' true PEHE and with their MSE against the true ",
-    "treated-arm mean $\\mu_1$. Mean (Monte Carlo SE) over ",
-    runs_per_cell(if_runs, c("scenario", "n", "score")), " runs per cell.",
-    rho_na_text, " The DR and IF, T-learner columns are the CV/XGBoost cells ",
-    "of Table~\\ref{tab:me_regret}'s DR-$\\pi$-fixed and IF-$\\pi$-fixed ",
-    "rows. Table~\\ref{tab:me_if_population} is the same comparison with ",
-    "oracle nuisances."
+    "The IF score with different surrogates in the simulated trials, with ",
+    "the surrogate's nuisance functions fitted by XGBoost on the candidates' ",
+    "training folds (CV) and the propensity score fixed at 0.5. Mean regret ",
+    "of selecting by the DR score, by the IF score with the \\gls{dr} ",
+    "pseudo-outcome as its surrogate, and by the IF score with the T-learner ",
+    "surrogate $\\tilde{\\mu}_1 - \\tilde{\\mu}_0$, and of random selection. ",
+    "Then the Spearman correlation, across the nine candidates within a ",
+    "simulated trial, of the IF score (T-learner surrogate) with the ",
+    "candidates' true \\gls{pehe} and with their mean squared distance from ",
+    "the true $\\mu_1$. Mean (Monte Carlo SE) over ",
+    runs_per_cell(if_runs, c("scenario", "n", "score")),
+    " simulated trials per cell.", rho_na_text, " The DR and IF (T-learner) ",
+    "columns repeat the CV, XGBoost, $\\pi$-fixed cells of ",
+    "Table~\\ref{tab:me_regret}; Table~\\ref{tab:me_if_population} makes the ",
+    "same comparison with the true nuisance functions."
   ),
   label = "me_if_selection",
   landscape = FALSE,
