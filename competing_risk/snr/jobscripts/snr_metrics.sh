@@ -1,6 +1,6 @@
 #!/bin/bash
 # Reads snr_all.RDS, as snr_collect.sh writes it. Single-threaded.
-#PBS -l walltime=00:30:00
+#PBS -l walltime=02:00:00
 #PBS -l select=1:ncpus=1:ompthreads=1:mem=32gb
 #PBS -N snr_metrics
 #PBS -j oe
