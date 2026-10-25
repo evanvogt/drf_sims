@@ -50,7 +50,7 @@ PAIRS <- list(drrf_cf = c("drrf", "cf"), drrf_sl = c("drrf", "SL1"),
               cf_sl = c("cf", "SL1"))
 PAIR_LABELS <- c(drrf_cf = "DR-RF vs CF", drrf_sl = "DR-RF vs DR-SL",
                  cf_sl = "CF vs DR-SL")
-SCORE_LABELS <- c(dr05 = "$\\pi$-fixed", dr = "$\\pi$ estimated")
+SCORE_LABELS <- c(dr05 = "$\\pi$-fixed", dr = "$\\tilde\\pi$ estimated")
 
 # ---- data --------------------------------------------------------------------
 
@@ -176,9 +176,9 @@ PEHE_NOTE <- paste0(
   "the causal forest (CF) and the DR-learner with SuperLearner nuisances and ",
   "second stage (DR-SL, candidate SL1 of the main study), scored by the DR ",
   "score in the simulated trials of Tables~\\ref{tab:me_top1}--",
-  "\\ref{tab:me_regret}, with XGBoost as the surrogate nuisance learner fit on ",
-  "the CV folds. DR-RF and CF are the learners of the sample-size study, fit ",
-  "to the same simulated trials. "
+  "\\ref{tab:me_regret}, with XGBoost as the surrogate nuisance learner, ",
+  "fitted on the learners' training folds (CV). DR-RF and CF are the learners ",
+  "of the sample-size study, fitted to the same simulated trials. "
 )
 
 main_cols <- bind_rows(
@@ -187,7 +187,8 @@ main_cols <- bind_rows(
          header = c("Top-1", "Regret", "DR-RF vs CF"),
          digits = c(2, 3, 2)),
   tibble(stem = c("regret_random", "regret_best_fixed"),
-         header = c("Random", "Best fixed"),
+         header = c("\\shortstack[r]{Random\\\\selection}",
+                    "\\shortstack[r]{Best fixed\\\\choice}"),
          digits = 3)
 )
 
@@ -197,19 +198,19 @@ tex <- cs_table(
                    "DR score, $\\\\pi$-fixed" = 3, "Regret references" = 2),
   caption.short = "Model evaluation: the case-study learners",
   caption = paste0(
-    "Model evaluation, the case-study learners: ", PEHE_NOTE,
-    "Mean true PEHE of each learner; then, selecting among the three by the ",
-    "DR score with the propensity fixed at the true 0.5 ($\\pi$-fixed), ",
-    "top-1 accuracy (the proportion of simulated trials in which the metric ",
-    "selects the learner with the lowest true PEHE; random selection's is ",
-    "1/3), regret (the true PEHE of the selected learner minus the lowest of ",
-    "the three) and the DR-RF vs CF ordering accuracy (the proportion of ",
-    "simulated trials in which the DR score orders DR-RF and CF as their true ",
-    "PEHE does). Regret references: random selection, and the best fixed ",
-    "choice, always deploying the learner with the lowest mean regret in that ",
-    "scenario and $n$, chosen with hindsight. Mean (Monte Carlo SE) over ",
-    trials, " simulated trials per cell; the SE of top-1 and ordering ",
-    "accuracy is the binomial one."
+    "The case-study learners: ", PEHE_NOTE,
+    "Mean true \\gls{pehe} of each learner; then, selecting among the three ",
+    "by the DR score with the propensity score fixed at the randomisation ",
+    "probability of 0.5 ($\\pi$-fixed), top-1 accuracy (the proportion of ",
+    "simulated trials in which the metric selects the learner with the ",
+    "lowest true \\gls{pehe}; 1/3 for random selection), regret (the true ",
+    "\\gls{pehe} of the selected learner minus the lowest of the three) and ",
+    "the DR-RF vs CF ordering accuracy (the proportion of simulated trials ",
+    "in which the DR score orders DR-RF and CF as their true \\gls{pehe} ",
+    "does). Random selection: a learner chosen uniformly at random. Best ",
+    "fixed choice: always selecting the learner with the lowest mean regret ",
+    "in that scenario and $n$, identified with hindsight. Mean (Monte Carlo ",
+    "SE) over ", trials, " simulated trials per cell."
   ),
   label = "me_cs_learners"
 )
@@ -239,19 +240,19 @@ print(as.data.frame(summary_all %>%
 if (write_extra) {
   tex <- cs_table(
     summary_all, extra_cols,
-    header_above = c(" " = 1, "DR score, $\\\\pi$ estimated" = 5,
+    header_above = c(" " = 1, "DR score, $\\\\tilde\\\\pi$ estimated" = 5,
                      "DR score, $\\\\pi$-fixed" = 2),
     caption.short = "Model evaluation: the case-study learners, further measures",
     caption = paste0(
-      "Model evaluation, the case-study learners, further measures: the ",
-      "learners and simulated trials of Table~\\ref{tab:me_cs_learners}. ",
-      "Selecting among the three by the DR score with the scoring nuisance's ",
-      "estimated propensity, trimmed to $[0.05, 0.95]$: top-1 accuracy, ",
-      "regret and the ordering accuracy of each pair; and with the propensity ",
-      "fixed at the true 0.5 ($\\pi$-fixed), the ordering accuracy of the two ",
-      "pairs not in Table~\\ref{tab:me_cs_learners}. Mean (Monte Carlo SE) ",
-      "over ", trials, " simulated trials per cell; the SE of top-1 and ",
-      "ordering accuracy is the binomial one."
+      "The case-study learners, further measures: the learners and simulated ",
+      "trials of Table~\\ref{tab:me_cs_learners}. Selecting among the three ",
+      "by the DR score with the propensity score estimated by the surrogate ",
+      "pipeline and truncated to $[0.05, 0.95]$: top-1 accuracy, regret and ",
+      "the ordering accuracy of each pair; and with the propensity score ",
+      "fixed at the randomisation probability of 0.5 ($\\pi$-fixed), the ",
+      "ordering accuracy of the two pairs not in ",
+      "Table~\\ref{tab:me_cs_learners}. Mean (Monte Carlo SE) over ", trials,
+      " simulated trials per cell."
     ),
     label = "me_cs_learners_extra"
   )
@@ -298,11 +299,11 @@ tex <- cs_table(
   header_above = c(" " = 1, "Mean true rank of 11" = 2),
   caption.short = "Model evaluation: the case-study learners among the candidates",
   caption = paste0(
-    "Model evaluation, the case-study learners among the candidates: the ",
-    "true rank of DR-RF and CF (Table~\\ref{tab:me_cs_learners}) by true PEHE ",
-    "among the nine candidates of Table~\\ref{tab:me_fixed} and these two, ",
-    "1 being the lowest, tied learners sharing the better rank. Descriptive ",
-    "only: the metrics select among the nine. Mean (Monte Carlo SE) over ",
+    "The case-study learners among the candidates: the true rank of DR-RF ",
+    "and CF (Table~\\ref{tab:me_cs_learners}) by true \\gls{pehe} among the ",
+    "nine candidates of Table~\\ref{tab:me_fixed} and these two (1 = lowest; ",
+    "ties share the better rank). Descriptive only: the metrics select among ",
+    "the nine. Mean (Monte Carlo SE) over ",
     runs_per_cell(distinct(eleven, scenario, n, run), c("scenario", "n")),
     " simulated trials per cell."
   ),
