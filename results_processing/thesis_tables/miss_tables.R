@@ -66,10 +66,10 @@ outcomes <- list(
 table_cols <- function(o) {
   tibble::tribble(
     ~stem,                   ~metric,                ~header,      ~digits,
-    "rel_efficiency_cu",     "Relative efficiency",  "Complete",   2,
-    "rel_efficiency_iu",     "Relative efficiency",  "Incomplete", 2,
-    "bias_diff_complete_cu", "CATE bias difference", "Complete",   o$digits_bias,
-    "bias_diff_complete_iu", "CATE bias difference", "Incomplete", o$digits_bias
+    "rel_efficiency_cu",     "Rel. eff.",             "CU", 2,
+    "rel_efficiency_iu",     "Rel. eff.",             "IU", 2,
+    "bias_diff_complete_cu", "$\\\\Delta$ CATE bias", "CU", o$digits_bias,
+    "bias_diff_complete_iu", "$\\\\Delta$ CATE bias", "IU", o$digits_bias
   )
 }
 
@@ -103,11 +103,12 @@ caption_text <- function(o, model, runs, mcse) {
   paste0(
     model, ", missing-covariate study, ", o$dir, " outcome: mean over ", runs,
     " runs per cell, by missingness mechanism. ", mcse, " Both metrics are ",
-    "against the complete-data arm, same run and estimator. Relative ",
-    "efficiency: MSE over its MSE, 1 is no loss. CATE bias difference: CATE ",
-    "bias (mean of the estimated minus true CATE) minus its CATE bias, 0 is ",
-    "no change. Complete: units with no amputed covariate; incomplete: the ",
-    "rest. MIM: missing indicator method. --- : not defined (complete case ",
+    "against the complete-data arm, same run and estimator. Rel. eff.: ",
+    "relative efficiency, MSE over its MSE, 1 is no loss. $\\Delta$ CATE ",
+    "bias: CATE bias difference, CATE bias (mean of the estimated minus true ",
+    "CATE) minus its CATE bias, 0 is no change. CU: complete units, with no ",
+    "amputed covariate; IU: incomplete units, the rest. MIM: missing ",
+    "indicator method. --- : not defined (complete case ",
     "and IPW drop the incomplete units)."
   )
 }
