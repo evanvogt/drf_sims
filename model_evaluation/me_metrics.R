@@ -251,11 +251,15 @@ if (is.na(which_study) || !which_study %in% c("main", "strategies", "split")) {
 }
 st <- me_study(which_study)
 
-# The compute-and-save step only runs once there's something to collect. This
-# guard lets me_testing.R source this file purely for calc_infl_score()/
-# calc_dr_risk()/me_per_model() without needing the collected file to exist.
+# The compute-and-save step only runs as `Rscript me_metrics.R`, and only once
+# there's something to collect. me_testing.R and me_cs_learners.R source this
+# file purely for calc_infl_score()/calc_dr_risk()/me_per_model(); sourced,
+# sys.nframe() is non-zero, so they never recompute and overwrite a tree's
+# metrics file as a side effect, even where the collected file exists.
 all_path <- file.path(st$res_path, paste0(st$prefix, "_all.RDS"))
-if (file.exists(all_path)) {
+if (sys.nframe() > 0L) {
+  # sourced for the definitions above
+} else if (file.exists(all_path)) {
   all_results_df <- readRDS(all_path)
 
   metrics <- compute_metrics(

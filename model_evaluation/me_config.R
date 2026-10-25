@@ -124,6 +124,37 @@ study_split <- study_config(
 # the remainder is both the evaluation set and the only data its nuisance sees.
 SPLIT_TRAIN_FRAC <- 0.8
 
+# ---- the case-study learners (me_cs_learners.R) -----------------------------
+# A supplementary analysis, not a fourth tree: the applied chapter's three
+# learners scored by the DR score in this study's simulated trials (ADEMP.md,
+# "The case-study learners"). Nothing is fit. drrf and cf are the sample-size
+# study's own production fits, read from its continuous runs at rho = 0.5:
+# run r there is run r here (same generator, both seeded setup_rng_stream(run)
+# straight before it), up to this study's standardised X, which grf's forests
+# are invariant to. SL1 is this study's own.
+#
+# Named by this study's id, valued by the sample-size results' field
+CS_LEARNERS <- c(drrf = "dr_random_forest", cf = "causal_forest", SL1 = "SL1")
+
+# the scoring nuisance: one pipeline and arm, as named in the strategies tree
+CS_PIPELINE <- "xgb"
+CS_ARM <- "cv_shared"
+
+CS_RES_PATH <- file.path(dirname(here()), "results", "correlated",
+                         "model_evaluation_cs_learners")
+
+# sample_size/continuous/cts_corr_config.R's tree, for combo_dir() only: its
+# path_cols and prefixes, over this study's grid at rho = 0.5 (me_dgms.R's
+# ME_RHO). Not sourced from there - that file defines its own `study`.
+study_ss_cts <- study_config(
+  name     = "continuous (sample size, rho = 0.5)",
+  prefix   = "cts_corr",
+  res_path = file.path(dirname(here()), "results", "correlated", "continuous"),
+  grid     = cbind(study$grid, rho = 0.5),
+  path_cols   = c("rho", "scenario", "n"),
+  path_prefix = c(rho = "rho_", scenario = "scenario_")
+)
+
 #' The study object named by a CLI argument
 #'
 #' me_check.R, me_collect.R and me_metrics.R all serve three result trees now,

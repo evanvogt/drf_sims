@@ -274,3 +274,38 @@ The report reads the strategies tree. It covers the `whole`, `cv_shared` and
 `holdout` arms and leaves out the calibration family. It also reports
 completeness: the runs missing per cell, and any ranking that scored fewer
 than 9 candidates. The split tree is scored by `me_metrics.R split`.
+
+## The case-study learners (supplementary)
+
+A separate analysis, `me_cs_learners.R`, that leaves the 9-candidate study
+and its trees as they are. It asks one question: does the DR score order the
+applied chapter's three learners the way their true PEHE does?
+
+- **Learners.** `drrf` is DR-RF and `cf` the causal forest, both the
+  sample-size study's production fits (`R/cate_models.R`, `cate_methods()`):
+  whole-sample out-of-bag fits that do not use the fold assignment. `SL1` is
+  DR-SL, this study's own fit.
+- **No refitting.** Run r here is the same simulated trial as run r of the
+  sample-size study's continuous, ρ = 0.5 runs. Both draw it with the same
+  generator straight after `setup_rng_stream(run)`. This study standardises
+  X, and grf's forests do not change under that, so `drrf` and `cf` are read
+  from that study's saved runs. The script checks Y, W, the true τ and the
+  scaled X run by run, and stops on any mismatch.
+- **Scoring.** The DR score only (`dr`, `dr05`), with the XGBoost pipeline
+  in the `cv_shared` arm, read from the strategies tree. All three learners
+  are scored against the same `phi`/`phi05` by `me_per_model()`, so `SL1`'s
+  scores must equal the strategies tree's exactly, which the script checks.
+- **Measures**, per simulated trial over the 3 learners, then averaged with
+  their MCSE (binomial for 0/1 measures):
+  - mean true PEHE of each learner;
+  - top-1 accuracy (random selection 1/3);
+  - regret, with the random-selection and best-fixed-choice references;
+  - pairwise ordering accuracy: whether `sign(Δ DR score) = sign(Δ true PEHE)`
+    for DR-RF vs CF (the key one), DR-RF vs DR-SL and CF vs DR-SL.
+- **Rank among 11.** Also, descriptively, the true-PEHE rank of `drrf` and
+  `cf` among the 9 candidates plus these 2. Selection is not re-run over 11.
+
+Output: `results/correlated/model_evaluation_cs_learners/me_cs_metrics.RDS`.
+The tables come from `results_processing/thesis_tables/me_cs_tables.R`:
+`me_cs_learners.tex` and `me_cs_ranks.tex`, plus `me_cs_learners_extra.tex`
+(the estimated-π version and the other two pairs) when asked for.

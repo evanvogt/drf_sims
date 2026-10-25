@@ -23,6 +23,7 @@ is in [`ADEMP.md`](ADEMP.md).
 | `me_strategies.R` | second pass over completed runs — fits all three arms (`whole`, `cv_shared`, `holdout`) without refitting the candidates, writes to `model_evaluation_strategies` |
 | `me_strategies_verify.R` | proves that pass carried the candidates, data, truth and `fold_info` through bit-identically and that all three arms are complete (no NA prediction, finite phi with π trimmed), and tallies the runs with a propensity of exactly 0 or 1 |
 | `me_split.R` | the 80:20 arm — the only script that refits the candidates |
+| `me_cs_learners.R` | the case-study learners (DR-RF, CF, DR-SL) scored by the DR score: reads the strategies tree and the sample-size study's matching runs, fits nothing, writes `me_cs_metrics.RDS` (`ADEMP.md`, "The case-study learners") |
 | `me_check.R` | finds missing runs, writes `jobscripts/failed_ids.txt`, and updates `-J` and the resource request in the rerun jobscript. Takes a tree: `main` (default) / `strategies` / `split` |
 | `me_collect.R` | gathers per-run files into `<prefix>_all.RDS`. Same tree argument |
 | `me_metrics.R` | computes `<prefix>_metrics.RDS` (reuses `R/metrics.R::compute_metrics()`). Same tree argument |
@@ -86,6 +87,21 @@ qsub -v TREE=split model_evaluation/jobscripts/me_metrics.sh
 ```bash
 quarto render model_evaluation/me_results.qmd   # the report - needs me_metrics.RDS
 ```
+
+The case-study learners, after the strategies tree's metrics exist. It is one
+job, not an array: nothing is fit, it only reads each strategies run and the
+sample-size study's matching continuous run (ρ = 0.5), and it exits non-zero
+if a dataset differs or SL1's scores do not reproduce the strategies tree's:
+
+```bash
+qsub model_evaluation/jobscripts/me_cs_learners.sh                 # writes me_cs_metrics.RDS
+Rscript results_processing/thesis_tables/me_cs_tables.R            # me_cs_learners.tex, me_cs_ranks.tex
+Rscript results_processing/thesis_tables/me_cs_tables.R "" "" "" extra   # + me_cs_learners_extra.tex
+```
+
+`me_cs_tables.R` always prints the estimated-π version and the other two
+pairwise accuracies, and writes them as `me_cs_learners_extra.tex` only when
+its fourth argument is `extra` (an empty argument keeps that path's default).
 
 **Rerunning part of a derived tree.** `me_check.R strategies` / `split` runs
 `check_failed(..., write = FALSE)`: `study_strat`'s grid is all 1200 rows (the
