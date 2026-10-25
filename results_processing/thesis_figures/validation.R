@@ -13,6 +13,11 @@
 #   val_topvar        is stage 1's top covariate a true modifier, and does it
 #                     interact in stage 2 (spline projection)? null line 5%
 #
+# The rates are unconditional: over every run, a run without a stage 2 test (no
+# one predicted into the subgroup, or a leverage-1 row under HC3) counting as a
+# miss. The null lines are therefore upper bounds. val_sg_shrinkage alone is
+# over the tested runs, so its two contrasts average the same runs.
+#
 # Each is saved as <stem>.png (each panel its own y axis: compare by the labels,
 # not the heights) and <stem>_shared_y.png, in ../results/thesis_figures/validation/.
 #
@@ -68,7 +73,7 @@ modifiers <- bind_rows(lapply(sort(unique(study$grid$scenario)), function(s) {
   mutate(is_mod = TRUE)
 
 # est / ref1 / true2 and the p-value of each subgroup test, one row per
-# run x subgroup
+# run x subgroup - every run, with p NA where there was no stage 2 test
 DIR_PATTERN <- "^(p|est|ref1|true2)_(.+)$"
 sg_long <- subgroups %>%
   rename(p_top = top_pval, p_bottom = bottom_pval) %>%
@@ -78,7 +83,6 @@ sg_long <- subgroups %>%
     names_to = c(".value", "test"),
     names_pattern = DIR_PATTERN
   ) %>%
-  filter(!is.na(p)) %>%
   mutate(
     test = factor(
       c(top = "Top 10%", bottom = "Bottom 10%")[test],
@@ -238,7 +242,8 @@ sg_rate <- sg_long %>%
   group_by(scenario, test, model, interim_prop) %>%
   summarise(
     runs = n(),
-    mean = mean(p < ALPHA & sign(est) == sign(ref1)),
+    # a run without a test is not validated, rather than dropped
+    mean = mean(coalesce(p < ALPHA & sign(est) == sign(ref1), FALSE)),
     mcse = sqrt(mean * (1 - mean) / runs),
     .groups = "drop"
   )
@@ -259,8 +264,10 @@ save_both(sg_rate_fig, "val_sg_direction", "test")
 
 # ---- subgroup contrast: stage 1's claim and the truth, DR-RandomForest ---------
 
+# the tested runs only: ref1 exists without a stage 2 subgroup but true2 does
+# not, so over every run the two lines would average different runs
 sg_shrink <- sg_long %>%
-  filter(model == MODEL_LABELS[["dr_random_forest"]]) %>%
+  filter(!is.na(p), model == MODEL_LABELS[["dr_random_forest"]]) %>%
   pivot_longer(c(ref1, true2), names_to = "quantity", values_to = "value") %>%
   mutate(
     quantity = label_factor(
@@ -303,14 +310,13 @@ topvar_rate <- bind_rows(
       hit = is_mod
     ),
   top_var %>%
-    filter(!is.na(p_proj)) %>%
     transmute(
       scenario,
       model,
       measure,
       interim_prop,
       panel = "proj",
-      hit = p_proj < ALPHA
+      hit = coalesce(p_proj < ALPHA, FALSE)
     )
 ) %>%
   group_by(scenario, panel, model, measure, interim_prop) %>%

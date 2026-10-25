@@ -9,9 +9,11 @@
 #   direction stage 1 implied (the sign of ref1).
 # - HC3 standard errors everywhere but val_sg_se, which compares the two. Every
 #   proportion is one 0/1 per run, so it takes the binomial MCSE.
-# - A subgroup test exists only when stage 1's tree predicts someone into the
-#   subgroup in stage 2; runs without one drop from that cell. Under HC3 a
-#   leverage-1 row can also lose the p-value, and a message counts those.
+# - Rates are unconditional: over every run in the cell, a run without a stage 2
+#   test counting as not validated (not rejected). A test is missing when stage
+#   1's tree predicts nobody into the subgroup in stage 2, or under HC3 when a
+#   leverage-1 row loses the p-value; a message counts the second kind. The null
+#   reference rates (alpha / 2, alpha) are therefore upper bounds.
 # - In the nomination tables a covariate group is bold where it modifies the
 #   effect in that scenario (te_uses()).
 #
@@ -109,18 +111,18 @@ sg_long <- metrics$subgroups %>%
 no_p <- sg_long %>% filter(!is.na(est), is.na(p)) %>% count(se)
 if (nrow(no_p) > 0) {
   message("subgroup tests with a non-empty stage 2 subgroup but no p-value ",
-          "(dropped as well): ",
+          "(counted as not validated): ",
           paste0(no_p$se, " ", no_p$n, collapse = ", "))
 }
 
-# the runs with a stage 2 test
-sg_tested <- filter(sg_long, !is.na(p))
-sg_hc3 <- filter(sg_tested, se == "hc3")
+# every run, tested or not: a missing p is NA, and coalesce() turns the NA a
+# comparison with it gives into "not validated" rather than dropping the run
+sg_hc3 <- filter(sg_long, se == "hc3")
 
 # ---- subgroup validated in stage 1's direction, every interim point ----------
 
 sg_rate <- sg_hc3 %>%
-  mutate(validated = p < ALPHA & sign(est) == sign(ref1)) %>%
+  mutate(validated = coalesce(p < ALPHA & sign(est) == sign(ref1), FALSE)) %>%
   summarise_metrics(c("test", "scenario", "model", "interim_prop"),
                     cols = c(validated = "validated"),
                     binomial = "validated", count_na = character()) %>%
@@ -136,11 +138,11 @@ sg_rate_caption <- function(s) {
     "covariates and predicts the subgroup into stage 2, where the ",
     "treatment-by-subgroup interaction is tested (HC3 standard errors). A run ",
     "validates if $p < ", ALPHA, "$ with the interaction in the direction ",
-    "stage 1 implied. Runs: the runs left after dropping those in which no ",
-    "stage 2 participant was predicted into the subgroup, out of 100 (",
-    NULL_RUNS, " at 0.25, 0.50 and 0.75 in the null scenario), as the ",
-    "range over the interim points. In the null scenario every validation is ",
-    "a false positive, at an expected rate of ", ALPHA / 2, "."
+    "stage 1 implied; a run in which no stage 2 participant was predicted ",
+    "into the subgroup has no test and counts as not validated. Runs: 100 (",
+    NULL_RUNS, " at 0.25, 0.50 and 0.75 in the null scenario), as the range ",
+    "over the interim points. In the null scenario every validation is a ",
+    "false positive, at a rate of at most ", ALPHA / 2, "."
   )
 }
 
@@ -183,7 +185,7 @@ COUNT_STATS <- c("runs", "sig_same", "sig_opp", "true_same")
 
 sg_counts <- sg_hc3 %>%
   filter(interim_prop %in% LANDMARKS) %>%
-  mutate(sig = p < ALPHA,
+  mutate(sig = coalesce(p < ALPHA, FALSE),
          same = sign(est) == sign(ref1),
          true_same = ifelse(abs(true2) < 1e-8, NA, sign(true2) == sign(ref1))) %>%
   group_by(scenario, model, interim_prop, test) %>%
@@ -220,16 +222,17 @@ write_table(grouped_longtable(
   caption = paste0(
     "Interim-analysis validation: direction of the stage 2 subgroup tests, ",
     "number of runs, at three interim points (stage 1: the proportion of ",
-    "participants in stage 1). Runs: the runs left after dropping those in ",
-    "which no stage 2 participant was predicted into the subgroup, out of ",
-    "100 (", NULL_RUNS, " in the null scenario). Same: $p < ", ALPHA, "$ (HC3) with the treatment-by-subgroup ",
+    "participants in stage 1). Runs: every run, 100 (", NULL_RUNS, " in the ",
+    "null scenario), including those in which no stage 2 participant was ",
+    "predicted into the subgroup and so had no test, which count in neither ",
+    "Same nor Opposite. Same: $p < ", ALPHA, "$ (HC3) with the treatment-by-subgroup ",
     "interaction in the direction stage 1's estimated CATEs implied (positive ",
     "for the top 10\\%, negative for the bottom 10\\%). Opposite: $p < ",
     ALPHA, "$ in the other direction. True same: the same contrast in stage ",
     "2's true CATEs has the direction stage 1 implied, whether or not the ",
     "test is significant; it has no direction in the null scenario, where ",
     "the true CATE is constant. In the null, Same and Opposite are each ",
-    "expected at ", ALPHA / 2, " of Runs."
+    "expected at no more than ", ALPHA / 2, " of Runs."
   ),
   caption.short = "Interim-analysis validation: direction of the subgroup tests",
   label = "val_sg_counts",
@@ -312,9 +315,11 @@ for (m in names(MEASURE_LABELS)) {
 
 # ---- subgroup tests, classical vs HC3 standard errors ------------------------
 
-se_rate <- sg_tested %>%
+# over every run, so both kinds share a denominator: a leverage-1 run has a
+# classical p but no HC3 one, and counts as not rejected under HC3
+se_rate <- sg_long %>%
   filter(interim_prop %in% LANDMARKS) %>%
-  mutate(rejected = p < ALPHA) %>%
+  mutate(rejected = coalesce(p < ALPHA, FALSE)) %>%
   summarise_metrics(c("scenario", "test", "model", "interim_prop", "se"),
                     cols = c(rej = "rejected"), binomial = "rej",
                     count_na = character())
@@ -349,9 +354,10 @@ write_table(grouped_longtable(
     "Interim-analysis validation: the stage 2 subgroup tests under classical ",
     "and HC3 standard errors, proportion of runs with $p < ", ALPHA, "$ in ",
     "either direction, mean (Monte Carlo SE), at three interim points. Over ",
-    "the runs in which at least one stage 2 participant was predicted into ",
-    "the subgroup. In the null scenario this is the type I error rate, ",
-    "nominally ", ALPHA, "."
+    "every run; a run with no test (no stage 2 participant predicted into the ",
+    "subgroup, or under HC3 a leverage-one observation) counts as not ",
+    "rejected. In the null scenario this is the type I error rate, at most ",
+    ALPHA, "."
   ),
   caption.short = "Interim-analysis validation: classical vs HC3 standard errors",
   label = "val_sg_se",
