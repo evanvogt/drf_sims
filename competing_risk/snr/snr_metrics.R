@@ -10,6 +10,11 @@
 # (semi-oracle twins included) divided by the same run's RMSE of
 # pseudo_cf_whole_oob, rel_eff_snr.R's ratio. Below 1, DR did better.
 #
+# The oracle DR-learner (snr_oracle_config.R) is its own study with its own
+# collected file. When snr_oracle_all.RDS exists its arm is merged into each
+# run here, matched on scenario, n, hte_mult and run, and scored with the rest;
+# a run with no oracle file just lacks that arm.
+#
 # Writes to the results folder:
 #   snr_metrics.RDS  one row per (scenario, n, hte_mult, run, framework, target)
 #   snr_ratios.RDS   per (scenario, n, hte_mult, target, framework): the run-level RMSE
@@ -19,6 +24,10 @@
 library(here)
 source(here("competing_risk", "snr", "snr_config.R"))
 source(here("R", "metrics.R"))
+
+# its own environment: the oracle config reassigns `study`
+oracle <- new.env()
+source(here("competing_risk", "snr", "snr_oracle_config.R"), local = oracle)
 
 CF_ARM <- "pseudo_cf_whole_oob"
 TRUTH  <- c(RMTL1 = "tau_RMTL1", RMTL2 = "tau_RMTL2")
@@ -39,7 +48,7 @@ association <- function(est, true) {
 
 #' One run's metrics: a row per (framework, target) the run carries
 score_run <- function(sim_res, scenario) {
-  map_dfr(intersect(SNR_MODELS, names(sim_res)), function(framework) {
+  map_dfr(intersect(c(SNR_MODELS, oracle$ORACLE_ARM), names(sim_res)), function(framework) {
     fw <- sim_res[[framework]]
     map_dfr(intersect(names(TRUTH), names(fw)), function(target) {
       est  <- fw[[target]]
@@ -55,6 +64,32 @@ score_run <- function(sim_res, scenario) {
 
 message("Reading snr_all.RDS...")
 all_results_df <- readRDS(file.path(study$res_path, "snr_all.RDS"))
+
+oracle_file <- file.path(oracle$study$res_path, "snr_oracle_all.RDS")
+if (file.exists(oracle_file)) {
+  message("Merging ", oracle$ORACLE_ARM, " from snr_oracle_all.RDS...")
+  oracle_df <- readRDS(oracle_file)
+  cell_key <- function(df) paste(df$scenario, df$n, df$hte_mult, sep = "_")
+  oracle_cells <- setNames(oracle_df$results, cell_key(oracle_df))
+  all_results_df$results <- map2(
+    all_results_df$results, cell_key(all_results_df),
+    function(results, key) {
+      cell <- oracle_cells[[key]]
+      if (is.null(cell)) return(results)
+      by_run <- setNames(cell, vapply(cell, function(x) as.character(x$run), ""))
+      map(results, function(entry) {
+        found <- by_run[[as.character(entry$run)]]
+        if (!is.null(found)) {
+          entry$result[[oracle$ORACLE_ARM]] <- found$result[[oracle$ORACLE_ARM]]
+        }
+        entry
+      })
+    }
+  )
+  rm(oracle_df, oracle_cells)
+} else {
+  message("No snr_oracle_all.RDS - scoring without ", oracle$ORACLE_ARM)
+}
 
 metrics <- bind_rows(pmap(
   list(all_results_df$results, all_results_df$scenario, all_results_df$n,

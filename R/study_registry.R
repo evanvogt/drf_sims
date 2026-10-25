@@ -24,7 +24,8 @@ study_registry <- data.frame(
     "competing_risk/single_event",
     "validation/binary",
     "competing_risk/snr",
-    "correlated/binary/snr"
+    "correlated/binary/snr",
+    "competing_risk/snr/oracle"
   ),
   config_path = c(
     "competing_risk/surv_config.R",
@@ -43,7 +44,8 @@ study_registry <- data.frame(
     "competing_risk/single_event/se_config.R",
     "validation/binary/bin_val_config.R",
     "competing_risk/snr/snr_config.R",
-    "sample_size/snr/bin_snr_config.R"
+    "sample_size/snr/bin_snr_config.R",
+    "competing_risk/snr/snr_oracle_config.R"
   ),
   stringsAsFactors = FALSE
 )

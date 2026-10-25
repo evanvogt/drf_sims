@@ -88,6 +88,32 @@ reuse their parent's outcome models, so each pair differs only in the
 propensity. They show how much of any DR gap comes from estimating e(x). RMSTc
 is not fitted, because `rel_eff_snr.R` has no SNR for it.
 
+### Oracle add-on
+
+`pseudo_dr_oracle` is the DR-learner with the true μ₀(x), μ₁(x) (the per-unit
+`RMTL*_0` / `RMTL*_1` in `truth`) and e(x) = 0.5, and the same whole-sample OOB
+stage 2. One arm covers both DR-learners: they share the pseudo-values in the
+correction term and differ only in μ̂. It is still a pseudo-value DR-learner,
+so it removes nuisance error but keeps the pseudo-value noise and the stage-2
+error. Production vs semi-oracle is the cost of estimating e(x), semi-oracle vs
+oracle the cost of estimating μ, and oracle vs CF what is left with both known.
+
+It is fitted after the fact from the saved runs, not in `snr_analysis.R`: each
+`res_sim_<run>.RDS` holds `data` and `truth`, and `pseudo_all()` draws no RNG,
+so nothing is rerun and there is no RSF. `snr_oracle_config.R` is its own study
+on the same grid (row i is row i of `snr_config.R`), with results in
+`../results/competing_risk_snr_oracle/` and only the arm's τ̂ in each file. The
+stage-2 forests are seeded with `setup_rng_stream(run)`. `snr_metrics.R` merges
+`snr_oracle_all.RDS` into each run when it exists, so the oracle appears in
+`snr_metrics.RDS` and `snr_ratios.RDS` like any other arm.
+`snr_results.qmd` does not plot it yet (`ARMS` leaves it out).
+
+Checked on 4 × n = 5,000 draws of scenario 7: the oracle pseudo-outcome
+regressed on the true τ has slope 1.08 (SE 0.05) for Event 1 and 1.09 (0.11)
+for Event 2, and the mean of po − τ is within one SE of 0. Its SD is 7× SD(τ)
+for Event 1 and 16× for Event 2, so the pseudo-value noise dominates the
+nuisance error at these SNRs.
+
 ## Running it
 
 On the cluster, from `competing_risk/snr/jobscripts/` (run
@@ -104,14 +130,23 @@ qsub -J 3701-3702 snr_6.sh    # scenarios 1-6, n = 4000: two first
 qsub -J 3703-4300 snr_6.sh    # then the rest
 Rscript ../../../study.R check competing_risk/snr/snr_config.R        # writes failed_ids.txt, points snr_rerun.sh at it
 qsub snr_rerun.sh             # only if the check found failures
+qsub snr_oracle_1.sh          # oracle add-on, once the main runs are all in
+Rscript ../../../study.R check competing_risk/snr/snr_oracle_config.R # writes failed_ids_oracle.txt
+qsub snr_oracle_rerun.sh      # only if that check found failures
 qsub snr_collect.sh
-qsub snr_metrics.sh
+qsub snr_oracle_collect.sh
+qsub snr_metrics.sh           # after both collects
 ```
+
+`snr_oracle_1.sh` steps its array by 100 (`-J 1-4300:100`), so each of its 43
+subjobs fits one cell: `Rscript snr_oracle_analysis.R <first> 100 2`. A row
+whose main result file is missing is skipped and shows up in the oracle check.
 
 Local smoke test, from `competing_risk/snr/`: `Rscript snr_analysis.R 1`
 (scenario 7 baseline, run 1, about 30 s), `Rscript snr_analysis.R 301` (×3,
 run 1) or `Rscript snr_analysis.R 701` (scenario 1, run 1). Each writes a
-result under `../results/competing_risk_snr/`.
+result under `../results/competing_risk_snr/`. After `snr_analysis.R 1`,
+`Rscript snr_oracle_analysis.R 1` fits the oracle on it (about 2 s).
 
 `snr_population.R` writes `snr_population.RDS`, the population SNR of every
 scenario × `hte_mult` cell (no cluster, about 15 s).
