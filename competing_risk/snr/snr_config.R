@@ -5,18 +5,26 @@
 # array index handed to snr_analysis.R is a row number of `grid`, so `grid`
 # must never be filtered or reordered after construction.
 #
-# One factor at a time from a baseline (scenario 7, n = 500, hte_mult = 1),
-# not factorial. Run varies fastest, so each cell is a contiguous block of 100:
-#   rows   1-400  n = 500, hte_mult 1, 1.5, 2, 3  (jobscripts/snr_1.sh)
-#   rows 401-600  n = 1000, 2000, hte_mult 1      (jobscripts/snr_2.sh)
-#   rows 601-700  n = 4000, hte_mult 1            (jobscripts/snr_3.sh)
-# Index 1 is the baseline run 1, 301 hte_mult 3 run 1, 601 n = 4000 run 1.
+# One factor at a time from a baseline (n = 500, hte_mult = 1), not factorial,
+# for each of the seven scenarios. Run varies fastest, so each cell is a
+# contiguous block of 100. Scenarios 1 and 2 have no X3 effect (b3_1 = b3_2 =
+# 0), so hte_mult would change nothing and they get the n axis only. Scenario 7
+# came first and keeps rows 1-700; the others were appended, because the grid
+# must not be reordered.
+#   rows    1-400   scenario 7, n = 500, hte_mult 1, 1.5, 2, 3   (jobscripts/snr_1.sh)
+#   rows  401-600   scenario 7, n = 1000, 2000, hte_mult 1       (snr_2.sh)
+#   rows  601-700   scenario 7, n = 4000, hte_mult 1             (snr_3.sh)
+#   rows  701-900   scenarios 1-2, n = 500, hte_mult 1           (snr_4.sh,
+#   rows  901-2500  scenarios 3-6, n = 500, hte_mult 1, 1.5, 2, 3  both blocks)
+#   rows 2501-3700  scenarios 1-6, n = 1000, 2000, hte_mult 1    (snr_5.sh)
+#   rows 3701-4300  scenarios 1-6, n = 4000, hte_mult 1          (snr_6.sh)
+# Index 1 is scenario 7 baseline run 1, 301 hte_mult 3 run 1, 601 n = 4000 run 1.
 # The n blocks get their own jobscripts because rfsrc's memory grows roughly
 # with n^2 (see README.md, Resources).
 #
 # A run is seeded by its run index alone (setup_rng_stream(run)), as in the
-# main study, so the four n = 500 cells of a run share W, X and U and are
-# paired. The n cells are not.
+# main study, so the n = 500 cells of a run within a scenario share W, X and U
+# and are paired. The n cells are not.
 #
 # Results live in results/competing_risk_snr/, not under results/competing_risk/:
 # R/archive_old_results.R tars and removes that whole tree.
@@ -25,7 +33,9 @@ library(here)
 source(here("R", "pipeline.R"))
 
 # Fixed for every row: the main study's primary covariates (rho = 0.5) with
-# censoring on, in its one scenario with HTE on both events
+# censoring on. The scenario is a grid column. SNR_SCENARIO is the one with HTE
+# on both events, the baseline the check started from and the default of
+# snr_results.qmd.
 SNR_SCENARIO  <- 7
 SNR_RHO       <- 0.5
 SNR_CENSORING <- TRUE
@@ -48,11 +58,15 @@ study <- study_config(
   prefix   = "snr",
   res_path = file.path(dirname(here()), "results", "competing_risk_snr"),
   grid = rbind(
-    expand.grid(run = SNR_RUNS, hte_mult = c(1, 1.5, 2, 3), n = 500),
-    expand.grid(run = SNR_RUNS, n = c(1000, 2000, 4000), hte_mult = 1)
-  )[, c("n", "hte_mult", "run")],
-  path_cols   = c("n", "hte_mult"),
-  path_prefix = c(hte_mult = "hte_"),
+    expand.grid(run = SNR_RUNS, hte_mult = c(1, 1.5, 2, 3), scenario = 7, n = 500),
+    expand.grid(run = SNR_RUNS, hte_mult = 1, scenario = 7, n = c(1000, 2000, 4000)),
+    expand.grid(run = SNR_RUNS, hte_mult = 1, scenario = 1:2, n = 500),
+    expand.grid(run = SNR_RUNS, hte_mult = c(1, 1.5, 2, 3), scenario = 3:6, n = 500),
+    expand.grid(run = SNR_RUNS, scenario = 1:6, n = c(1000, 2000), hte_mult = 1),
+    expand.grid(run = SNR_RUNS, scenario = 1:6, n = 4000, hte_mult = 1)
+  )[, c("scenario", "n", "hte_mult", "run")],
+  path_cols   = c("scenario", "n", "hte_mult"),
+  path_prefix = c(scenario = "scenario_", hte_mult = "hte_"),
   n_sims      = length(SNR_RUNS),
   failed_file = here("competing_risk", "snr", "jobscripts", "failed_ids.txt")
 )

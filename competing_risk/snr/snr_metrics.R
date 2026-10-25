@@ -11,8 +11,8 @@
 # pseudo_cf_whole_oob, rel_eff_snr.R's ratio. Below 1, DR did better.
 #
 # Writes to the results folder:
-#   snr_metrics.RDS  one row per (n, hte_mult, run, framework, target)
-#   snr_ratios.RDS   per (n, hte_mult, target, framework): the run-level RMSE
+#   snr_metrics.RDS  one row per (scenario, n, hte_mult, run, framework, target)
+#   snr_ratios.RDS   per (scenario, n, hte_mult, target, framework): the run-level RMSE
 #                    ratios summarised - median and IQR, and the geometric mean
 #                    exp(mean log ratio) with the MCSE of the mean log ratio
 
@@ -38,7 +38,7 @@ association <- function(est, true) {
 }
 
 #' One run's metrics: a row per (framework, target) the run carries
-score_run <- function(sim_res) {
+score_run <- function(sim_res, scenario) {
   map_dfr(intersect(SNR_MODELS, names(sim_res)), function(framework) {
     fw <- sim_res[[framework]]
     map_dfr(intersect(names(TRUTH), names(fw)), function(target) {
@@ -46,7 +46,7 @@ score_run <- function(sim_res) {
       true <- sim_res$truth[[TRUTH[[target]]]]
       bind_cols(
         tibble(framework = framework, target = target),
-        select(cate_metrics(est, true, SNR_SCENARIO), -c(corr, spearman)),
+        select(cate_metrics(est, true, scenario), -c(corr, spearman)),
         association(est, true)
       )
     })
@@ -57,11 +57,12 @@ message("Reading snr_all.RDS...")
 all_results_df <- readRDS(file.path(study$res_path, "snr_all.RDS"))
 
 metrics <- bind_rows(pmap(
-  list(all_results_df$results, all_results_df$n, all_results_df$hte_mult),
-  function(results, n, hte_mult) {
+  list(all_results_df$results, all_results_df$scenario, all_results_df$n,
+       all_results_df$hte_mult),
+  function(results, scenario, n, hte_mult) {
     map_dfr(results, function(entry) {
-      mutate(score_run(entry$result), n = n, hte_mult = hte_mult,
-             run = entry$run, .before = 1)
+      mutate(score_run(entry$result, scenario), scenario = scenario, n = n,
+             hte_mult = hte_mult, run = entry$run, .before = 1)
     })
   }
 )) %>%
@@ -71,15 +72,15 @@ rm(all_results_df)
 # paired per-run ratio to the causal forest, then summarised per cell
 ratios <- metrics %>%
   filter(framework != CF_ARM) %>%
-  select(n, hte_mult, run, target, framework, rmse) %>%
+  select(scenario, n, hte_mult, run, target, framework, rmse) %>%
   inner_join(
     metrics %>%
       filter(framework == CF_ARM) %>%
-      select(n, hte_mult, run, target, rmse_cf = rmse),
-    by = c("n", "hte_mult", "run", "target")
+      select(scenario, n, hte_mult, run, target, rmse_cf = rmse),
+    by = c("scenario", "n", "hte_mult", "run", "target")
   ) %>%
   mutate(ratio = rmse / rmse_cf) %>%
-  group_by(n, hte_mult, target, framework) %>%
+  group_by(scenario, n, hte_mult, target, framework) %>%
   summarise(
     runs       = n(),
     median     = median(ratio),
@@ -90,7 +91,7 @@ ratios <- metrics %>%
     prop_dr_better = mean(ratio < 1),
     .groups = "drop"
   ) %>%
-  arrange(target, framework, n, hte_mult)
+  arrange(scenario, target, framework, n, hte_mult)
 
 print(as.data.frame(ratios), digits = 3)
 

@@ -119,6 +119,6 @@ queue" above), `surv_metrics.R`; check and collect are the root `study.R`.
 population truths, X3 separation) for each ρ.
 `single_event/` is a separate, smaller study: event 1 with event 2 removed,
 reusing this study's arms (see its README).
-`snr/` is a small signal-to-noise check: scenario 7 with the X3 effect scaled
-(`generate_surv_data(hte_mult = )`) or n raised, the pseudo-value CF against the
+`snr/` is a signal-to-noise check: each scenario with the X3 effect scaled
+(`generate_surv_data(hte_mult = )`, scenarios 3-7) or n raised, the pseudo-value CF against the
 production DR-learners and their semi-oracle twins (see its README).

@@ -1,8 +1,8 @@
 ##########
 # Title: competing-risk SNR check - DR-learners vs pseudo-value CF
 ##########
-# competing_risk/surv_analysis.R on one scenario, with the X3 effect scaled by
-# hte_mult and only the arms in SNR_MODELS (snr_config.R). Same arguments:
+# competing_risk/surv_analysis.R on the grid row's scenario, with the X3 effect
+# scaled by hte_mult and only the arms in SNR_MODELS (snr_config.R). Same arguments:
 #   Rscript snr_analysis.R <i> [workers] [grf_threads]
 
 # Report failures on STDOUT, with the call stack - see surv_analysis.R for why.
@@ -46,6 +46,7 @@ horizon <- survival_scenario_params$event_horizon[1]
 param <- study$grid[i, ]
 print(param)
 
+scenario <- param$scenario
 n <- param$n
 hte_mult <- param$hte_mult
 run <- param$run
@@ -65,7 +66,7 @@ metaplan <- plan(multisession, workers = workers)
 on.exit(plan(metaplan), add = TRUE)
 
 gen <- generate_surv_data(
-  scenario = SNR_SCENARIO,
+  scenario = scenario,
   n = n,
   rho = SNR_RHO,
   censoring = SNR_CENSORING,

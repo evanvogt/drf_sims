@@ -81,6 +81,10 @@ message("wrote ", out_file)
 # ---- competing risks -----------------------------------------------------------
 
 surv <- readRDS(file.path(surv_res_path, "snr_population.RDS"))
+# the population file now carries every scenario; this table is scenario 7's
+# (an older file without the column is scenario 7 only)
+if (!"scenario" %in% names(surv)) surv$scenario <- 7
+surv <- filter(surv, scenario == 7)
 e1 <- filter(surv, target == "Event 1") %>% arrange(hte_mult)
 e2 <- filter(surv, target == "Event 2") %>% arrange(hte_mult)
 

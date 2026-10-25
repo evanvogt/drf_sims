@@ -10,19 +10,24 @@ directions, one at a time: a larger X3 effect (higher SNR) and a larger n
 
 | | |
 |---|---|
-| scenario | 7 (HTE on both events), from `../surv_dgm.R` |
+| scenario | 1–7 from `../surv_dgm.R`; 7 (HTE on both events) is the baseline the check started from |
 | ρ | 0.5 (the main study's primary) |
 | censoring | TRUE |
 | runs | 100 per cell |
-| array | **700 jobs**: 1–400 `snr_1.sh`, 401–600 `snr_2.sh`, 601–700 `snr_3.sh` |
+| array | **4,300 jobs**: scenario 7 is 1–700 (1–400 `snr_1.sh`, 401–600 `snr_2.sh`, 601–700 `snr_3.sh`); scenarios 1–6 are 701–4300 (701–2500 `snr_4.sh`, 2501–3700 `snr_5.sh`, 3701–4300 `snr_6.sh`) |
 | horizon | 28 |
-| results | `../results/competing_risk_snr/<n>/hte_<mult>/` |
+| results | `../results/competing_risk_snr/scenario_<k>/<n>/hte_<mult>/` |
 
 ## Design
 
-The cells are one factor at a time from the baseline, not a factorial grid:
+The cells are one factor at a time from the baseline (n = 500, `hte_mult` 1),
+not a factorial grid, in each scenario. Scenarios 1 and 2 have no X3 effect
+modifier (`b3_1 = b3_2 = 0`), so `hte_mult` changes nothing there and they get
+the n axis only: 4 cells. Scenarios 3–7 get all 7 cells below. Scenario 7 is
+shown; the others are the same cells with their own treatment effects (SNR in
+the population table, `snr_population.R`).
 
-| rows | n | `hte_mult` | E1 HR, X3 = 0 / 1 | E2 HR, X3 = 0 / 1 | SNR Event 1 / Event 2 |
+| scenario 7 rows | n | `hte_mult` | E1 HR, X3 = 0 / 1 | E2 HR, X3 = 0 / 1 | SNR Event 1 / Event 2 |
 |---|---|---|---|---|---|
 | 1–100 | 500 | 1 (baseline) | 1.42 / 2.86 | 0.70 / 0.35 | 0.29 / 0.13 |
 | 101–200 | 500 | 1.5 | 1.42 / 4.06 | 0.70 / 0.25 | 0.43 / 0.17 |
@@ -31,6 +36,21 @@ The cells are one factor at a time from the baseline, not a factorial grid:
 | 401–500 | 1000 | 1 | as baseline | | 0.29 / 0.13 |
 | 501–600 | 2000 | 1 | | | |
 | 601–700 | 4000 | 1 | | | |
+
+The grid, by block (run varies fastest, 100 runs per cell):
+
+| rows | scenarios | n | `hte_mult` | jobscript |
+|---|---|---|---|---|
+| 1–400 | 7 | 500 | 1, 1.5, 2, 3 | `snr_1.sh` |
+| 401–600 | 7 | 1000, 2000 | 1 | `snr_2.sh` |
+| 601–700 | 7 | 4000 | 1 | `snr_3.sh` |
+| 701–900 | 1, 2 | 500 | 1 | `snr_4.sh` |
+| 901–2500 | 3, 4, 5, 6 | 500 | 1, 1.5, 2, 3 | `snr_4.sh` |
+| 2501–3700 | 1–6 | 1000, 2000 | 1 | `snr_5.sh` |
+| 3701–4300 | 1–6 | 4000 | 1 | `snr_6.sh` |
+
+Scenario 7 kept rows 1–700 when the other scenarios were added, so its row
+numbers did not move. Its results folder did gain a `scenario_7/` level.
 
 SNR is `rel_eff_snr.R`'s definition, population values at ρ = 0.5. SNR is a
 population quantity, so the n cells all sit at one SNR. Read them against n.
@@ -45,9 +65,9 @@ population quantity, so the n cells all sit at one SNR. Read them against n.
   still leaves about 2% of the treated arm event-free at 28. That is about 4
   treated units per run past 28 with censoring on, so expect roughly 1 run in
   100 to fail that way in the ×3 cell.
-- **Seeding** is `setup_rng_stream(run)`, as in the main study. The four
-  n = 500 cells of a run share W, X and U, so the `hte_mult` comparison is
-  paired. The n cells are not. The baseline is rerun here rather than reused
+- **Seeding** is `setup_rng_stream(run)`, as in the main study. The n = 500
+  cells of a run within one scenario share W, X and U, so the `hte_mult`
+  comparison is paired. The n cells are not. The baseline is rerun here rather than reused
   from the main array, because running a subset of arms moves the RNG stream
   of every arm fitted after the ones left out.
 
@@ -74,10 +94,14 @@ On the cluster, from `competing_risk/snr/jobscripts/` (run
 `Rscript make_log_dirs.R` from the repo root first):
 
 ```bash
-qsub snr_1.sh                 # 1-400, n = 500
-qsub snr_2.sh                 # 401-600, n = 1000 / 2000
-qsub -J 601-602 snr_3.sh      # n = 4000: two first, see Resources
+qsub snr_1.sh                 # 1-400, scenario 7, n = 500
+qsub snr_2.sh                 # 401-600, scenario 7, n = 1000 / 2000
+qsub snr_4.sh                 # 701-2500, scenarios 1-6, n = 500
+qsub snr_5.sh                 # 2501-3700, scenarios 1-6, n = 1000 / 2000
+qsub -J 601-602 snr_3.sh      # scenario 7, n = 4000: two first, see Resources
 qsub -J 603-700 snr_3.sh      # then the rest (command-line -J overrides the script's)
+qsub -J 3701-3702 snr_6.sh    # scenarios 1-6, n = 4000: two first
+qsub -J 3703-4300 snr_6.sh    # then the rest
 Rscript ../../../study.R check competing_risk/snr/snr_config.R        # writes failed_ids.txt, points snr_rerun.sh at it
 qsub snr_rerun.sh             # only if the check found failures
 qsub snr_collect.sh
@@ -85,9 +109,14 @@ qsub snr_metrics.sh
 ```
 
 Local smoke test, from `competing_risk/snr/`: `Rscript snr_analysis.R 1`
-(the baseline, run 1, about 30 s) or `Rscript snr_analysis.R 301` (×3, run 1).
+(scenario 7 baseline, run 1, about 30 s), `Rscript snr_analysis.R 301` (×3,
+run 1) or `Rscript snr_analysis.R 701` (scenario 1, run 1). Each writes a
+result under `../results/competing_risk_snr/`.
 
-`snr_metrics.R` writes `snr_metrics.RDS` (one row per n × `hte_mult` × run ×
+`snr_population.R` writes `snr_population.RDS`, the population SNR of every
+scenario × `hte_mult` cell (no cluster, about 15 s).
+
+`snr_metrics.R` writes `snr_metrics.RDS` (one row per scenario × n × `hte_mult` × run ×
 arm × event: `cate_metrics()` plus Pearson, Spearman and C) and
 `snr_ratios.RDS`. The ratios file holds each run's RMSE of every DR arm divided
 by the same run's `pseudo_cf_whole_oob` RMSE, summarised per cell (median, IQR,
@@ -109,7 +138,12 @@ versions (rfsrc 3.2.2 vs 3.9.0), so treat these as rough guides:
 Nearly all of the memory and over half the time at n = 2000 goes on the
 competing-risks RSF (`rsf_fit`, `ntime = 0`). It keeps every unique event time
 in every terminal node, so its memory grows roughly as n². Extrapolating, the
-n = 4000 cell needs around 25–30gb. `snr_3.sh` asks for 64gb and 2h as
-headroom, since that number is not measured. Submit one or two indices first
-and read the `.o` file before submitting the rest. `snr_rerun.sh` is sized like
-`snr_3.sh`, because a rerun list can mix every n.
+n = 4000 cell needs around 25–30gb. `snr_3.sh` and `snr_6.sh` ask for 32gb and
+2h, since that number is not measured. Submit one or two indices first and read
+the `.o` file before submitting the rest. `snr_rerun.sh` is sized like them,
+because a rerun list can mix every n.
+
+The timings and memory above are scenario 7's. The other scenarios have not
+been timed. `snr_4.sh` and `snr_6.sh` copy `snr_1.sh` and `snr_3.sh`'s
+resources, and `snr_5.sh` asks for 12gb rather than `snr_2.sh`'s 8gb, since
+8gb is the n = 2000 peak.

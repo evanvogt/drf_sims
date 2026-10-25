@@ -5,6 +5,7 @@ date: "`r Sys.Date()`"
 params:
   res_path: ""
   fig_dir: ""
+  scenario: 7
 format:
   html:
     toc: true
@@ -13,8 +14,10 @@ format:
 ---
 
 <!--
-Reads snr_metrics.RDS and snr_ratios.RDS (snr_metrics.R). From competing_risk/snr/:
-  quarto render snr_results.qmd
+Reads snr_metrics.RDS and snr_ratios.RDS (snr_metrics.R) and snr_population.RDS
+(snr_population.R), for one scenario. From competing_risk/snr/:
+  quarto render snr_results.qmd                   # scenario 7
+  quarto render snr_results.qmd -P scenario:3 --output snr_results_3.html
 The params point it at another results / figure folder, e.g. for a mock run:
   quarto render snr_results.qmd -P res_path:<dir> -P fig_dir:<dir>
 -->
@@ -33,6 +36,7 @@ knitr::opts_chunk$set(
 library(here)
 library(knitr)
 source(here("R", "figures.R"))
+source(here("competing_risk", "surv_dgm.R"))
 ```
 
 ## Does the DR-learner close the gap on the causal forest with more signal?
@@ -40,8 +44,9 @@ source(here("R", "figures.R"))
 In the main competing-risk study the DR-learners lose to the causal forest on
 pseudo-values almost everywhere. Every scenario × event cell there has
 SD(τ)/SD(noise) of at most 0.29 (`results_processing/thesis_figures/rel_eff_snr.R`).
-This check moves away from the baseline (scenario 7, ρ = 0.5, censoring on,
-n = 500) one factor at a time: a larger X3 effect (`hte_mult`, more signal at
+This page is scenario `r params$scenario` (`r survival_scenario_params$description[params$scenario]`).
+The check moves away from the baseline (ρ = 0.5, censoring on, n = 500) one
+factor at a time: a larger X3 effect (`hte_mult`, more signal at
 n = 500) and a larger n (more data at the baseline signal). 100 runs per cell.
 Full design in `README.md`.
 
@@ -61,10 +66,21 @@ figdir <- if (nzchar(params$fig_dir)) {
 } else {
   file.path(dirname(here()), "results", "all_figures", "competing_risk_snr")
 }
+SCEN <- as.integer(params$scenario)
+figdir <- file.path(figdir, paste0("scenario_", SCEN))
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 
-metrics <- readRDS(file.path(res_path, "snr_metrics.RDS"))
-ratios <- readRDS(file.path(res_path, "snr_ratios.RDS"))
+metrics <- readRDS(file.path(res_path, "snr_metrics.RDS")) %>%
+  filter(scenario == SCEN)
+ratios <- readRDS(file.path(res_path, "snr_ratios.RDS")) %>%
+  filter(scenario == SCEN)
+stopifnot(nrow(metrics) > 0)
+population <- file.path(res_path, "snr_population.RDS")
+population <- if (file.exists(population)) {
+  readRDS(population) %>% filter(scenario == SCEN)
+} else {
+  NULL
+}
 
 CF_ARM <- "pseudo_cf_whole_oob"
 # display order; each semi-oracle twin shares its parent's colour
@@ -85,17 +101,22 @@ ARM_COLOURS <- setNames(
 )
 PROPENSITY_LABELS <- c("Estimated", "True (0.5)")
 
-# the design (README.md): population SNR at rho = 0.5, Event 1 / Event 2. The
-# n cells all sit at the baseline's SNR
-HTE_LEVELS <- c(1, 1.5, 2, 3)
-N_LEVELS <- c(500, 1000, 2000, 4000)
-SNR_E1 <- c(0.29, 0.43, 0.57, 0.79)
-SNR_E2 <- c(0.13, 0.17, 0.20, 0.23)
+# the design (README.md): the cells this scenario has (scenarios 1-2 have no
+# HTE multiplier axis). Population SNR at rho = 0.5, Event 1 / Event 2, from
+# snr_population.R; the n cells all sit at the baseline's SNR
+HTE_LEVELS <- sort(unique(metrics$hte_mult))
+N_LEVELS <- sort(unique(metrics$n))
+snr_label <- function(m) {
+  if (is.null(population)) return("")
+  s <- population %>% filter(hte_mult == m)
+  sprintf("\n%.2f / %.2f", s$snr[s$target == "Event 1"],
+          s$snr[s$target == "Event 2"])
+}
 
 # both factors go on one numeric x, hte_mult at 1-4 and n at 11-14, so a
 # single facet_grid() can show them side by side with free x and one y per row
 X_BREAKS <- c(seq_along(HTE_LEVELS), 10 + seq_along(N_LEVELS))
-X_LABELS <- c(sprintf("×%s\n%.2f / %.2f", HTE_LEVELS, SNR_E1, SNR_E2),
+X_LABELS <- c(paste0("×", HTE_LEVELS, vapply(HTE_LEVELS, snr_label, "")),
               format(N_LEVELS, big.mark = ","))
 PANEL_LABELS <- c(
   hte = "More signal: HTE multiplier at n = 500\n(SNR Event 1 / Event 2)",
