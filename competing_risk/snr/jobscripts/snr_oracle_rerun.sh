@@ -2,9 +2,9 @@
 # One grid row per subjob, from failed_ids_oracle.txt. study.R check (on
 # snr_oracle_config.R) rewrites -J to match it, and lifts the resources above
 # snr_oracle_1.sh's - far more than one row needs, which is harmless.
-#PBS -l walltime=02:00:00
-#PBS -l select=1:ncpus=2:ompthreads=2:mem=4gb
-#PBS -J 1-2%100
+#PBS -l walltime=04:00:00
+#PBS -l select=1:ncpus=3:ompthreads=2:mem=10gb
+#PBS -J 1-700
 #PBS -N snr_oracle_rerun
 #PBS -o logs_oracle_rerun/
 #PBS -j oe
