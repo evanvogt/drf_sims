@@ -1,12 +1,10 @@
 ##########
 # title: LaTeX table for the thesis chapter - binary SNR check, population truth
 ##########
-# Appendix table for sample_size/snr/ (bin_snr_metrics.R): per scenario and HTE
-# multiplier, the population truth behind the signal-to-noise axis. Reads only
-# bin_snr_population.RDS; no simulation output.
-#
-# The competing-risk check's design table (hazard ratios, SNR) is typed in from
-# competing_risk/snr/README.md: that study saves no population file.
+# Appendix tables for the two signal-to-noise checks: per HTE multiplier, the
+# population truth behind the SNR axis. Reads only bin_snr_population.RDS
+# (sample_size/snr/bin_snr_metrics.R) and snr_population.RDS
+# (competing_risk/snr/snr_population.R); no simulation output.
 #
 # Writes to ../results/thesis_tables/:
 #   bin_snr_population.tex
@@ -14,7 +12,7 @@
 # \input{} with \usepackage{booktabs, longtable, array}.
 #
 #   cd results_processing/thesis_tables; Rscript snr_tables.R
-#   Rscript snr_tables.R [population dir] [table dir]   # mock smoke run
+#   Rscript snr_tables.R [binary dir] [table dir] [competing-risk dir]   # mock smoke run
 
 library(here)
 source(here("R", "figures.R"))
@@ -27,6 +25,8 @@ res_path <- if (length(args) >= 1) args[1] else
   file.path(dirname(path), "results", "correlated", "binary_snr")
 tab_path <- if (length(args) >= 2) args[2] else
   file.path(dirname(path), "results", "thesis_tables")
+surv_res_path <- if (length(args) >= 3) args[3] else
+  file.path(dirname(path), "results", "competing_risk_snr")
 dir.create(tab_path, showWarnings = FALSE, recursive = TRUE)
 
 population <- readRDS(file.path(res_path, "bin_snr_population.RDS"))
@@ -79,24 +79,23 @@ grouped_longtable(
 message("wrote ", out_file)
 
 # ---- competing risks -----------------------------------------------------------
-# competing_risk/snr/ saves no population file: its design (hazard ratios and
-# population SNR at rho = 0.5, from rel_eff_snr.R's definition) is the table in
-# competing_risk/snr/README.md, copied here. Update both together.
 
-surv <- tibble(
-  hte_mult = c(1, 1.5, 2, 3),
-  e1_hr = c("1.42 / 2.86", "1.42 / 4.06", "1.42 / 5.75", "1.42 / 11.6"),
-  e2_hr = c("0.70 / 0.35", "0.70 / 0.25", "0.70 / 0.17", "0.70 / 0.09"),
-  snr1 = c(0.29, 0.43, 0.57, 0.79),
-  snr2 = c(0.13, 0.17, 0.20, 0.23)
-)
+surv <- readRDS(file.path(surv_res_path, "snr_population.RDS"))
+e1 <- filter(surv, target == "Event 1") %>% arrange(hte_mult)
+e2 <- filter(surv, target == "Event 2") %>% arrange(hte_mult)
+
+#' "x0 / x1" at three significant figures
+hr_pair <- function(d) {
+  sig3 <- function(x) formatC(x, digits = 3, format = "fg", flag = "#")
+  paste(sig3(d$hr_x3_0), "/", sig3(d$hr_x3_1))
+}
 
 tab <- tibble(
-  hte = paste0("$\\times ", surv$hte_mult, "$"),
-  e1_hr = surv$e1_hr,
-  e2_hr = surv$e2_hr,
-  snr1 = num(surv$snr1, 2),
-  snr2 = num(surv$snr2, 2)
+  hte = paste0("$\\times ", e1$hte_mult, "$"),
+  e1_hr = hr_pair(e1),
+  e2_hr = hr_pair(e2),
+  snr1 = num(e1$snr, 2),
+  snr2 = num(e2$snr, 2)
 )
 
 out_file <- file.path(tab_path, "surv_snr_population.tex")

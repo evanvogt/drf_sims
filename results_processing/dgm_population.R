@@ -13,6 +13,9 @@
 # is, in days. One copula draw serves all three outcomes; competing risks use
 # its first DGM_N_POP_SURV rows.
 #
+# l_moments() and surv_moment_grid() give the SNR of the competing-risk check
+# and rel_eff_snr.R (SD(tau) / SD(noise)).
+#
 # Source R/figures.R first (it loads dplyr and tidyr).
 
 source(here::here("R", "dgm_scenarios.R"))
@@ -170,4 +173,69 @@ surv_summary <- function(spop) {
       x3_effect = mean(tau_x3),
       .groups = "drop"
     )
+}
+
+#' The first two moments of L_k = (h - T)+ 1(D = k) given (x, w)
+#'
+#' E[L_k] = int_0^h (h - t) f_k(t) dt and E[L_k^2] = int_0^h (h - t)^2 f_k(t) dt,
+#' f_k = S_all h_k the subdensity of event k (surv_dgm.R's hazards). E[L_k] is
+#' the RMTL of event k, which truth_individual() gets by the nested integral of
+#' the CIF.
+#'
+#' @param params one row of survival_scenario_params
+#' @param scale1,scale2 the two events' Weibull scales at (x, w)
+#' @return c(m1_1, var_1, m1_2, var_2), the mean and variance for each event
+l_moments <- function(params, scale1, scale2) {
+  h <- params$event_horizon
+  shapes <- c(params$shape1, params$shape2)
+  scales <- c(scale1, scale2)
+  out <- numeric(0)
+  for (k in 1:2) {
+    f <- function(t) {
+      exp(-cum_haz_all(t, params$shape1, params$shape2, scale1, scale2)) *
+        hazard(t, shapes[k], scales[k])
+    }
+    m1 <- integrate(function(t) (h - t) * f(t), 0, h)$value
+    m2 <- integrate(function(t) (h - t)^2 * f(t), 0, h)$value
+    out[paste0(c("m1_", "var_"), k)] <- c(m1, m2 - m1^2)
+  }
+  out
+}
+
+#' l_moments() in both arms on surv_truth_grid()'s X2 x X1 x X3 grid
+#'
+#' @return the grid, with per event k: tau_RMTLk (the CATE) and noise_k, the
+#'   variance of L_k averaged over the two arms
+surv_moment_grid <- function(params, X2_grid = seq(-4.5, 4.5, length.out = 41)) {
+  grid <- expand.grid(X2 = X2_grid, X1 = 0:1, X3 = 0:1)
+  # the scales as surv_truth() builds them
+  log_s1_0 <- log(params$scale1_base) + params$b1_1 * grid$X1 + params$b2_1 * grid$X2
+  log_s2_0 <- log(params$scale2_base) + params$b1_2 * grid$X1 + params$b2_2 * grid$X2
+  log_s1_1 <- log_s1_0 + params$bW_1 + params$b3_1 * grid$X3
+  log_s2_1 <- log_s2_0 + params$bW_2 + params$b3_2 * grid$X3
+  arm <- function(ls1, ls2) {
+    t(mapply(function(a, b) l_moments(params, exp(a), exp(b)), ls1, ls2))
+  }
+  m0 <- arm(log_s1_0, log_s2_0)
+  m1 <- arm(log_s1_1, log_s2_1)
+
+  # E[L_k] is the RMTL: check it against truth_individual() at a few cells
+  for (i in c(1, 62, 123, 164)) {
+    ti <- truth_individual(params$shape1, params$shape2,
+                           exp(log_s1_1[i]), exp(log_s1_0[i]),
+                           exp(log_s2_1[i]), exp(log_s2_0[i]),
+                           params$event_horizon)
+    stopifnot(
+      abs(m1[i, "m1_1"] - ti$RMTL1_1) < 1e-4, abs(m0[i, "m1_1"] - ti$RMTL1_0) < 1e-4,
+      abs(m1[i, "m1_2"] - ti$RMTL2_1) < 1e-4, abs(m0[i, "m1_2"] - ti$RMTL2_0) < 1e-4
+    )
+  }
+
+  mutate(
+    grid,
+    tau_RMTL1 = m1[, "m1_1"] - m0[, "m1_1"],
+    tau_RMTL2 = m1[, "m1_2"] - m0[, "m1_2"],
+    noise_1 = 0.5 * (m0[, "var_1"] + m1[, "var_1"]),
+    noise_2 = 0.5 * (m0[, "var_2"] + m1[, "var_2"])
+  )
 }
