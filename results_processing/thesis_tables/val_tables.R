@@ -125,24 +125,23 @@ sg_rate <- sg_hc3 %>%
   mutate(validated = coalesce(p < ALPHA & sign(est) == sign(ref1), FALSE)) %>%
   summarise_metrics(c("test", "scenario", "model", "interim_prop"),
                     cols = c(validated = "validated"),
-                    binomial = "validated", count_na = character()) %>%
-  left_join(count(sg_hc3, test, scenario, model, interim_prop, name = "runs"),
-            by = c("test", "scenario", "model", "interim_prop"))
+                    binomial = "validated", count_na = character())
 
 sg_rate_caption <- function(s) {
   paste0(
     "Interim-analysis validation, ", SG_LABELS[[s]], " responder subgroup: ",
-    "proportion of runs in which the subgroup validates in stage 2, mean ",
-    "(Monte Carlo SE). Stage 1's estimated CATEs define its top and bottom ",
+    "proportion of runs in which the subgroup validates in stage 2, with the ",
+    "largest Monte Carlo SE in each scenario beside its name (binomial, ",
+    "$\\sqrt{p(1-p)/R}$ over $R$ runs). Stage 1's estimated CATEs define its top and bottom ",
     "10\\% of responders; a classification tree learns them from the ",
     "covariates and predicts the subgroup into stage 2, where the ",
     "treatment-by-subgroup interaction is tested (HC3 standard errors). A run ",
     "validates if $p < ", ALPHA, "$ with the interaction in the direction ",
     "stage 1 implied; a run in which no stage 2 participant was predicted ",
-    "into the subgroup has no test and counts as not validated. Runs: 100 (",
-    NULL_RUNS, " at 0.25, 0.50 and 0.75 in the null scenario), as the range ",
-    "over the interim points. In the null scenario every validation is a ",
-    "false positive, at a rate of at most ", ALPHA / 2, "."
+    "into the subgroup has no test and counts as not validated. Over 100 ",
+    "runs (", NULL_RUNS, " at 0.25, 0.50 and 0.75 in the null scenario). In ",
+    "the null scenario every validation is a false positive, at a rate of at ",
+    "most ", ALPHA / 2, "."
   )
 }
 
@@ -150,31 +149,39 @@ for (s in names(SG_LABELS)) {
   d <- filter(sg_rate, test == s)
   interim_cols <- interim_label(sort(unique(d$interim_prop)))
 
+  # the means alone, so the table fits a portrait page; the scenario header
+  # carries its largest MCSE, which differs a lot between scenarios
+  caps <- d %>%
+    group_by(scenario) %>%
+    summarise(cap = mcse_cap(mcse_validated), .groups = "drop")
+  sc_header <- setNames(paste0(caps$scenario, " (MCSE $\\leq$ ", caps$cap, ")"),
+                        caps$scenario)
+
   body <- d %>%
     transmute(scenario, model, interim = interim_label(interim_prop),
-              cell = fmt_mcse(mean_validated, mcse_validated, DIGITS)) %>%
+              cell = fmt_num(mean_validated, DIGITS)) %>%
     pivot_wider(names_from = interim, values_from = cell, names_sort = TRUE) %>%
-    left_join(d %>% group_by(scenario, model) %>%
-                summarise(runs = run_range(runs), .groups = "drop"),
-              by = c("scenario", "model")) %>%
-    arrange(scenario, model)
+    arrange(scenario, model) %>%
+    mutate(scenario = factor(sc_header[as.character(scenario)],
+                             levels = sc_header[levels(droplevels(scenario))]))
 
   tab <- body %>%
-    transmute(model = as.character(model), runs,
+    transmute(model = as.character(model),
               across(all_of(interim_cols), ~ coalesce(.x, "---")))
 
   name <- paste0("val_sg_", s)
   write_table(grouped_longtable(
     tab,
-    col_names = c("Estimator", "Runs", interim_cols),
+    col_names = c("Estimator", interim_cols),
     group = body$scenario,
     block = NULL,
-    header_above = c(" " = 2, setNames(length(interim_cols), STAGE1_HEADER)),
-    align = c("l", "r", rep("r", length(interim_cols))),
+    header_above = c(" " = 1, setNames(length(interim_cols), STAGE1_HEADER)),
+    align = c("l", rep("r", length(interim_cols))),
     caption = sg_rate_caption(s),
     caption.short = paste0("Interim-analysis validation: ", SG_LABELS[[s]],
                            " subgroup validated"),
-    label = name
+    label = name,
+    landscape = FALSE
   ), name)
 }
 

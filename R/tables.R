@@ -254,13 +254,17 @@ wide_table <- function(d, row_cols, spans = character(), col = "col",
 mcse_note <- function(summary, stems, digits = 3) {
   digits <- rep_len(digits, length(stems))
   worst <- vapply(seq_along(stems), function(i) {
-    x <- summary[[paste0("mcse_", names(stems)[i])]]
-    # rounded up, so "at most" holds in the displayed digits
-    formatC(ceiling(max(x, na.rm = TRUE) * 10^digits[i] - 1e-9) / 10^digits[i],
-            format = "f", digits = digits[i])
+    mcse_cap(summary[[paste0("mcse_", names(stems)[i])]], digits[i])
   }, character(1))
   paste0("Monte Carlo SEs were at most ",
          paste0(worst, " (", unname(stems), ")", collapse = ", "), ".")
+}
+
+#' The largest of `x`, rounded up to `digits` decimals so "at most" holds in
+#' the displayed digits, as text
+mcse_cap <- function(x, digits = 3) {
+  formatC(ceiling(max(x, na.rm = TRUE) * 10^digits - 1e-9) / 10^digits,
+          format = "f", digits = digits)
 }
 
 #' Largest binomial Monte Carlo SE of a rejection rate or 0/1 coverage, as
