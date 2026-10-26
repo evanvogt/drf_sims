@@ -3,10 +3,17 @@
 ##########
 # DR learners vs causal forest as heterogeneity grows relative to noise, at
 # rho = 0.5. Each point is one run's RMSE(DR) / RMSE(causal forest) (log scale,
-# below 1 = DR better) against the DGM's SD(tau) / SD(noise); the outlined
-# point is the group median. Rows: continuous / binary (sample_size/, scenarios
-# 1-4, 5-10 in *_supp) and competing risks (pseudo-value arms vs the causal
-# forest on the same pseudo-values, both events).
+# below 1 = DR better) against the DGM's SD(tau) / SD(noise), also on a log
+# scale; the outlined point is the group median, and each scenario is labelled
+# with its SD(tau) / SD(noise). Rows: continuous / binary (sample_size/,
+# scenarios 1-4, 5-10 in *_supp; DR-RF and DR-SL) and competing risks
+# (DR-RF on PV, DR-RSF and the oracle DR-learner vs the causal forest on the
+# same pseudo-values, both events).
+#
+# The competing-risk oracle comes from the SNR check's baseline cells
+# (competing_risk/snr/, n = 500, hte_mult 1, censoring on; 100 runs), the only
+# study that fits it. Its ratio is against that study's own causal forest in
+# the same run, so it has censoring "Yes" only.
 #
 # x comes from the DGM code alone, over dgm_population.R's population.
 # SD(noise) is the noise given (X, W): s_err (continuous), sqrt(E[p(1 - p)])
@@ -40,21 +47,22 @@ SCENARIO_SETS_CB <- list(main = 1:4, supp = 5:10)
 # the sample-size studies' file prefixes, which also name the figures
 PREFIX <- c(continuous = "cts", binary = "bin")
 
-# DR arm -> its family, the facet row. The comparator of each outcome is CF_ARM
-DR_FAMILIES <- c(
-  dr_random_forest = "RF",
-  dr_superlearner = "SL",
-  pseudo_dr_whole_oob = "RF",
-  sl_dr_whole = "SL",
-  rsf_dr_oob = "RSF"
+# each outcome's DR arms, the facet rows in order. The comparator is CF_ARM
+SURV_ORACLE_ARM <- "pseudo_dr_oracle"
+DR_ARMS <- list(
+  continuous = c("dr_random_forest", "dr_superlearner"),
+  binary = c("dr_random_forest", "dr_superlearner"),
+  surv = c("pseudo_dr_whole_oob", "rsf_dr_oob", SURV_ORACLE_ARM)
 )
 CF_ARM <- c(continuous = "causal_forest", binary = "causal_forest",
             surv = "pseudo_cf_whole_oob")
-ARM_LABELS <- c(MODEL_LABELS, SURV_ARM_LABELS)
+# snr_results.qmd's label for the oracle
+ARM_LABELS <- c(MODEL_LABELS, SURV_ARM_LABELS,
+                setNames("DR-oracle (true μ)", SURV_ORACLE_ARM))
 
 OUTCOME_TITLES <- c(continuous = "Continuous", binary = "Binary",
                     surv = "Competing risks")
-X_LAB <- "SD(τ) / SD(noise)"
+X_LAB <- "SD(τ) / SD(noise), log scale"
 Y_LAB <- c(
   continuous = "RMSE ratio, DR / causal forest",
   binary = "RMSE ratio, DR / causal forest",
@@ -64,6 +72,13 @@ EVENTS <- c(tau_RMTL1 = "Event 1", tau_RMTL2 = "Event 2")
 
 # the n / censoring offset, as a share of the panel's x range
 X_OFFSET <- 0.012
+# where an SD(tau) / SD(noise) of 0 (no HTE) sits, left of the smallest
+# positive one, as a share of the positive range on the log scale
+ZERO_GAP <- 0.3
+# the scenario labels' size-2.5 characters across a panel, about right for
+# the ~10 cm panels of the combined figure; sets how close two labels can sit
+# before they are stacked
+LABEL_CHARS_PER_PANEL <- 60
 
 # ---- x axis: SD(tau) / SD(noise) ---------------------------------------------
 
@@ -138,7 +153,7 @@ pair_ratios <- function(metrics, outcome, arm_col, keys) {
     filter(.data[[arm_col]] == CF_ARM[[outcome]]) %>%
     select(all_of(keys), rmse_cf = rmse)
   pairs <- m %>%
-    filter(.data[[arm_col]] %in% names(DR_FAMILIES)) %>%
+    filter(.data[[arm_col]] %in% DR_ARMS[[outcome]]) %>%
     select(all_of(keys), arm = all_of(arm_col), rmse) %>%
     inner_join(cf, by = keys) %>%
     mutate(ratio = rmse / rmse_cf)
@@ -146,12 +161,12 @@ pair_ratios <- function(metrics, outcome, arm_col, keys) {
   if (any(bad)) {
     message(outcome, ": ", sum(bad), " run pairs with an NA or zero RMSE dropped")
   }
+  # facet rows in DR_ARMS order, labelled with the arm's own name
+  model_levels <- unname(ARM_LABELS[DR_ARMS[[outcome]]])
   pairs[!bad, ] %>%
     mutate(
       outcome = outcome,
-      # facet rows in family order, labelled with the arm's own name
-      family = factor(DR_FAMILIES[arm], levels = unique(DR_FAMILIES)),
-      model = factor(ARM_LABELS[arm], levels = unique(ARM_LABELS[names(DR_FAMILIES)]))
+      model = factor(ARM_LABELS[arm], levels = model_levels)
     )
 }
 
@@ -167,12 +182,45 @@ for (outcome in DGM_OUTCOMES) {
 m <- read_if_present(file.path(res_root, "competing_risk", "surv_metrics.RDS"))
 if (!is.null(m)) {
   m <- filter(m, target %in% EVENTS)
-  ratios$surv <- pair_ratios(m, "surv", "framework",
-                             c("scenario", "n", "censoring", "target", "run")) %>%
+  surv_keys <- c("scenario", "n", "censoring", "target", "run")
+  ratios$surv <- pair_ratios(m, "surv", "framework", surv_keys)
+  # the oracle, from the SNR check's baseline cells (see the header). Only it
+  # and the causal forest are taken, so each is paired within its own study
+  snr_m <- read_if_present(file.path(res_root, "competing_risk_snr", "snr_metrics.RDS"))
+  if (!is.null(snr_m)) {
+    snr_m <- snr_m %>%
+      filter(n == 500, hte_mult == 1, target %in% EVENTS,
+             framework %in% c(CF_ARM[["surv"]], SURV_ORACLE_ARM)) %>%
+      mutate(rho = DGM_RHO, censoring = TRUE)
+    ratios$surv <- bind_rows(ratios$surv,
+                             pair_ratios(snr_m, "surv", "framework", surv_keys))
+  }
+  ratios$surv <- ratios$surv %>%
     left_join(select(snr_surv, scenario, target, snr), by = c("scenario", "target"))
 }
 
 # ---- figures -----------------------------------------------------------------
+
+#' A stacking tier (0 = nearest the data) for each label in one row of
+#' labels: left to right, each goes on the lowest tier whose last label ends
+#' before it starts. A label's width is its length in characters at
+#' LABEL_CHARS_PER_PANEL characters across the panel's x range
+#'
+#' @param x label centres, in x units
+#' @param label the label text
+#' @param x_span the panel's x range
+label_tiers <- function(x, label, x_span) {
+  half <- nchar(label) * x_span / LABEL_CHARS_PER_PANEL / 2
+  tier <- integer(length(x))
+  ends <- numeric(0)
+  for (i in order(x)) {
+    t <- which(ends < x[i] - half[i])[1]
+    if (is.na(t)) t <- length(ends) + 1
+    ends[t] <- x[i] + half[i]
+    tier[i] <- t - 1L
+  }
+  tier
+}
 
 #' One outcome's panel: per-run ratios, group medians, one row per DR family
 #'
@@ -189,37 +237,69 @@ snr_plot <- function(d, outcome) {
     d <- mutate(d, group = factor(n, levels = DGM_N_LEVELS), event = "all")
     group_lab <- "Sample size"
   }
-  # the group's offset from the true x, centred on it. Competing risks' x runs
-  # from 0.006 to 0.3 with half its scenario x event cells below 0.05, so it
-  # goes on a log scale and the offset is multiplicative. Continuous / binary
-  # scenario 1 has x = 0, so they stay linear
+  # x is log10(SD(tau) / SD(noise)), plotted on a plain continuous scale so
+  # that continuous / binary scenario 1 (no HTE, x = 0) can have a slot of its
+  # own, ZERO_GAP to the left of the smallest positive x and labelled "0"
+  pos <- d$snr > 0
+  lx_range <- range(log10(d$snr[pos]))
+  zero_at <- lx_range[1] - ZERO_GAP * diff(lx_range)
+  d$lx <- ifelse(pos, log10(d$snr), zero_at)
+  # the group's offset from the true x, centred on it
   k <- nlevels(d$group)
   shift <- (as.integer(d$group) - (k + 1) / 2) * X_OFFSET
-  d$x <- if (surv) {
-    d$snr * 10^(shift * diff(range(log10(d$snr))))
-  } else {
-    d$snr + shift * diff(range(d$snr))
-  }
+  d$x <- d$lx + shift * diff(range(d$lx))
 
   med <- d %>%
     group_by(model, scenario, event, group, x) %>%
-    summarise(ratio = median(ratio), .groups = "drop")
-  # one scenario label per scenario (x event), above its highest median
+    summarise(ratio = median(ratio), snr = mean(snr), .groups = "drop")
+  # one label per scenario (x event): the scenario and its SD(tau) / SD(noise),
+  # averaged over n for binary, where it moves a little with n. They sit above
+  # the panel's highest median, and for competing risks Event 2's sit below its
+  # lowest, so the two events' labels don't collide. Labels that would overlap
+  # are stacked (label_tiers())
+  x_span <- diff(range(d$x))
   lab <- med %>%
     group_by(model, scenario, event) %>%
-    summarise(x = if (surv) exp(mean(log(x))) else mean(x),
-              ratio = max(ratio), .groups = "drop")
+    summarise(x = mean(x), snr = mean(snr), .groups = "drop") %>%
+    mutate(label = paste0("S", scenario, ": ", signif(snr, 2)),
+           above = !(surv & event == EVENTS[[2]])) %>%
+    left_join(med %>%
+                group_by(model) %>%
+                summarise(top = max(ratio), bottom = min(ratio)),
+              by = "model") %>%
+    group_by(model, above) %>%
+    mutate(tier = label_tiers(x, label, x_span)) %>%
+    ungroup() %>%
+    mutate(ratio = if_else(above, top, bottom),
+           vjust = if_else(above, -1 - 1.3 * tier, 2 + 1.3 * tier))
+
+  # log ticks over the positive range, plus the zero slot if there is one
+  ticks <- scales::breaks_log(n = 6)(10^lx_range)
+  tol <- 0.02 * diff(lx_range)
+  ticks <- ticks[log10(ticks) >= lx_range[1] - tol & log10(ticks) <= lx_range[2] + tol]
+  breaks <- log10(ticks)
+  labels <- format(ticks, drop0trailing = TRUE, scientific = FALSE, trim = TRUE)
+  has_zero <- any(!pos)
+  if (has_zero) {
+    breaks <- c(zero_at, breaks)
+    labels <- c("0\n(no HTE)", labels)
+  }
 
   p <- ggplot(d, aes(x, ratio, colour = group)) +
-    geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50") +
-    geom_point(size = 0.4, alpha = 0.1)
+    geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50")
+  # a dotted line marks the jump in the axis between the zero slot and the log
+  # range
+  if (has_zero) {
+    p <- p + geom_vline(xintercept = (zero_at + lx_range[1]) / 2,
+                        linetype = "dotted", colour = "grey60")
+  }
+  p <- p + geom_point(size = 0.4, alpha = 0.1)
   # the medians: filled circles, or for competing risks a shape per event
   p <- if (surv) {
     p +
       geom_point(data = med, aes(fill = group, shape = event), colour = "black",
                  size = 2) +
       scale_shape_manual(values = c(21, 24)) +
-      scale_x_log10() +
       guides(fill = "none",
              shape = guide_legend(override.aes = list(fill = "grey60")))
   } else {
@@ -228,9 +308,12 @@ snr_plot <- function(d, outcome) {
                  size = 2, show.legend = FALSE)
   }
   p +
-    geom_text(data = lab, aes(label = scenario), colour = "black", size = 2.5,
-              vjust = -1) +
+    geom_text(data = lab, aes(label = label, vjust = vjust), colour = "black",
+              size = 2.5) +
     facet_wrap(~ model, ncol = 1) +
+    # room for the outermost scenario labels, which centre on their points
+    scale_x_continuous(breaks = breaks, labels = labels, minor_breaks = NULL,
+                       expand = expansion(mult = 0.08)) +
     scale_y_log10() +
     drf_scale() +
     scale_fill_paletteer_d("rcartocolor::Safe") +
@@ -262,9 +345,9 @@ if (!is.null(ratios$surv)) {
            plot = figs$surv)
 }
 
-# the main figure: continuous and binary over the top two rows (RF, SL), so
-# their rows line up with competing risks', which has a third (RSF); the
-# legends gather in the cell left below them
+# the main figure: continuous and binary (DR-RF, DR-SL) over the top two rows
+# of competing risks' three (DR-RF on PV, DR-RSF, oracle); the legends gather
+# in the cell left below them
 if (all(c("cts", "bin", "surv") %in% names(figs))) {
   figs$combined <- figs$cts + figs$bin + figs$surv + guide_area() +
     plot_layout(
