@@ -7,13 +7,9 @@
 # scale; the outlined point is the group median, and each scenario is labelled
 # with its SD(tau) / SD(noise). Rows: continuous / binary (sample_size/,
 # scenarios 1-4, 5-10 in *_supp; DR-RF and DR-SL) and competing risks
-# (DR-RF on PV, DR-RSF and the oracle DR-learner vs the causal forest on the
-# same pseudo-values, both events).
-#
-# The competing-risk oracle comes from the SNR check's baseline cells
-# (competing_risk/snr/, n = 500, hte_mult 1, censoring on; 100 runs), the only
-# study that fits it. Its ratio is against that study's own causal forest in
-# the same run, so it has censoring "Yes" only.
+# (DR-RF on PV and DR-RSF vs the causal forest on the same pseudo-values, both
+# events). Main-study results only: the SNR check (competing_risk/snr/, with
+# its oracle DR-learner) has its own figures in snr_results.qmd.
 #
 # x comes from the DGM code alone, over dgm_population.R's population.
 # SD(noise) is the noise given (X, W): s_err (continuous), sqrt(E[p(1 - p)])
@@ -48,17 +44,14 @@ SCENARIO_SETS_CB <- list(main = 1:4, supp = 5:10)
 PREFIX <- c(continuous = "cts", binary = "bin")
 
 # each outcome's DR arms, the facet rows in order. The comparator is CF_ARM
-SURV_ORACLE_ARM <- "pseudo_dr_oracle"
 DR_ARMS <- list(
   continuous = c("dr_random_forest", "dr_superlearner"),
   binary = c("dr_random_forest", "dr_superlearner"),
-  surv = c("pseudo_dr_whole_oob", "rsf_dr_oob", SURV_ORACLE_ARM)
+  surv = c("pseudo_dr_whole_oob", "rsf_dr_oob")
 )
 CF_ARM <- c(continuous = "causal_forest", binary = "causal_forest",
             surv = "pseudo_cf_whole_oob")
-# snr_results.qmd's label for the oracle
-ARM_LABELS <- c(MODEL_LABELS, SURV_ARM_LABELS,
-                setNames("DR-oracle (true μ)", SURV_ORACLE_ARM))
+ARM_LABELS <- c(MODEL_LABELS, SURV_ARM_LABELS)
 
 OUTCOME_TITLES <- c(continuous = "Continuous", binary = "Binary",
                     surv = "Competing risks")
@@ -182,20 +175,8 @@ for (outcome in DGM_OUTCOMES) {
 m <- read_if_present(file.path(res_root, "competing_risk", "surv_metrics.RDS"))
 if (!is.null(m)) {
   m <- filter(m, target %in% EVENTS)
-  surv_keys <- c("scenario", "n", "censoring", "target", "run")
-  ratios$surv <- pair_ratios(m, "surv", "framework", surv_keys)
-  # the oracle, from the SNR check's baseline cells (see the header). Only it
-  # and the causal forest are taken, so each is paired within its own study
-  snr_m <- read_if_present(file.path(res_root, "competing_risk_snr", "snr_metrics.RDS"))
-  if (!is.null(snr_m)) {
-    snr_m <- snr_m %>%
-      filter(n == 500, hte_mult == 1, target %in% EVENTS,
-             framework %in% c(CF_ARM[["surv"]], SURV_ORACLE_ARM)) %>%
-      mutate(rho = DGM_RHO, censoring = TRUE)
-    ratios$surv <- bind_rows(ratios$surv,
-                             pair_ratios(snr_m, "surv", "framework", surv_keys))
-  }
-  ratios$surv <- ratios$surv %>%
+  ratios$surv <- pair_ratios(m, "surv", "framework",
+                             c("scenario", "n", "censoring", "target", "run")) %>%
     left_join(select(snr_surv, scenario, target, snr), by = c("scenario", "target"))
 }
 
@@ -341,21 +322,17 @@ for (outcome in intersect(DGM_OUTCOMES, names(ratios))) {
 }
 if (!is.null(ratios$surv)) {
   figs$surv <- snr_plot(ratios$surv, "surv")
-  save_fig("rel_eff_snr_surv.png", fig_path, width = 15, height = 20,
+  save_fig("rel_eff_snr_surv.png", fig_path, width = 15, height = 15,
            plot = figs$surv)
 }
 
-# the main figure: continuous and binary (DR-RF, DR-SL) over the top two rows
-# of competing risks' three (DR-RF on PV, DR-RSF, oracle); the legends gather
-# in the cell left below them
+# the main figure: the three outcomes side by side, two rows each (DR-RF,
+# DR-SL; DR-RF on PV, DR-RSF), the legends gathered below
 if (all(c("cts", "bin", "surv") %in% names(figs))) {
-  figs$combined <- figs$cts + figs$bin + figs$surv + guide_area() +
-    plot_layout(
-      design = c(area(1, 1, 2, 1), area(1, 2, 2, 2), area(1, 3, 3, 3),
-                 area(3, 1, 3, 2)),
-      guides = "collect"
-    )
-  save_fig("rel_eff_snr.png", fig_path, width = 33, height = 20,
+  figs$combined <- (figs$cts | figs$bin | figs$surv) +
+    plot_layout(guides = "collect") &
+    theme(legend.position = "bottom")
+  save_fig("rel_eff_snr.png", fig_path, width = 33, height = 16,
            plot = figs$combined)
 } else {
   message("rel_eff_snr.png skipped: it needs all three outcomes' metrics")
