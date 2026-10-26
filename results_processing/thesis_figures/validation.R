@@ -11,7 +11,11 @@
 #   val_sg_shrinkage_<model>  each model's claimed contrast (ref1) against its
 #                     true stage 2 value (true2): winner's curse is ref1 > true2
 #   val_topvar        is stage 1's top covariate a true modifier, and does it
-#                     interact in stage 2 (spline projection)? null line 5%
+#                     interact in stage 2 (spline projection)? null line 5%.
+#                     Grey dotted, bottom row: the one-stage comparator
+#                     (cts_val_onestage.R, spline form, whole trial, Holm) -
+#                     in the null, any covariate rejected; elsewhere, the
+#                     smallest-p covariate is a true modifier and rejected
 #
 # The rates are unconditional: over every run, a run without a stage 2 test (no
 # one predicted into the subgroup, or a leverage-1 row under HC3) counting as a
@@ -22,7 +26,7 @@
 # Each is saved as <stem>.png (each panel its own y axis: compare by the labels,
 # not the heights) and <stem>_shared_y.png, in ../results/thesis_figures/validation/.
 #
-#   Rscript validation.R [metrics.RDS] [figure dir]   # mock smoke run
+#   Rscript validation.R [metrics.RDS] [figure dir] [onestage.RDS]   # mock smoke run
 
 library(here)
 library(ggh4x)
@@ -42,6 +46,11 @@ fig_path <- if (length(args) >= 2) {
   args[2]
 } else {
   file.path(dirname(path), "results", "thesis_figures", "validation")
+}
+onestage_file <- if (length(args) >= 3) {
+  args[3]
+} else {
+  file.path(study$res_path, "cts_val_onestage.RDS")
 }
 dir.create(fig_path, showWarnings = FALSE, recursive = TRUE)
 
@@ -336,6 +345,29 @@ topvar_rate <- bind_rows(
   ) %>%
   mutate(panel = label_factor(panel, TOPVAR_PANELS))
 
+# the one-stage comparator, one value per scenario: the spline form, which the
+# projection test matches. In the null any rejection (the family-wise error),
+# elsewhere the smallest-p covariate a true modifier and rejected after Holm
+onestage_ref <- if (file.exists(onestage_file)) {
+  readRDS(onestage_file)$summary %>%
+    filter(
+      form == "spline",
+      measure == if_else(scenario == 1, "any_rejected", "top_correct")
+    ) %>%
+    transmute(
+      scenario = factor(
+        SS_SCENARIO_LABELS[as.character(scenario)],
+        levels = levels(topvar_rate$scenario)
+      ),
+      panel = factor(TOPVAR_PANELS[["proj"]], levels = TOPVAR_PANELS),
+      yintercept = mean
+    )
+} else {
+  message("no one-stage comparator at ", onestage_file,
+          ": val_topvar drawn without its line")
+  NULL
+}
+
 topvar_fig <- ribbon_lines(topvar_rate, "model", linetype = "measure") +
   geom_hline(
     data = null_ref(
@@ -346,6 +378,16 @@ topvar_fig <- ribbon_lines(topvar_rate, "model", linetype = "measure") +
     aes(yintercept = yintercept),
     linetype = "dashed"
   ) +
+  {
+    if (!is.null(onestage_ref)) {
+      geom_hline(
+        data = onestage_ref,
+        aes(yintercept = yintercept),
+        linetype = "dotted",
+        colour = "grey50"
+      )
+    }
+  } +
   # the ribbon would otherwise paint a grey box behind each linetype key
   guides(linetype = guide_legend(override.aes = list(fill = NA))) +
   labs(

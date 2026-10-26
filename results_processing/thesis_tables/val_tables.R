@@ -17,11 +17,15 @@
 # - In the nomination tables a covariate group is bold where it modifies the
 #   effect in that scenario (te_uses()).
 #
-# Writes to ../results/thesis_tables/: val_sg_top, val_sg_bottom,
-# val_sg_counts, val_nom_tevim, val_nom_shap, val_sg_se (.tex). \input{} with
-# \usepackage{booktabs, longtable, pdflscape, array}.
+# - val_onestage is the one-stage comparator (cts_val_onestage.R): every
+#   candidate tested in the whole trial, Holm-corrected, on the same trials.
+#   Skipped with a message if its results file is missing.
 #
-#   Rscript val_tables.R [metrics.RDS] [table dir]   # mock smoke run
+# Writes to ../results/thesis_tables/: val_sg_top, val_sg_bottom,
+# val_sg_counts, val_nom_tevim, val_nom_shap, val_sg_se, val_onestage (.tex).
+# \input{} with \usepackage{booktabs, longtable, pdflscape, array}.
+#
+#   Rscript val_tables.R [metrics.RDS] [table dir] [onestage.RDS]   # mock smoke run
 
 library(here)
 source(here("R", "figures.R"))
@@ -41,6 +45,11 @@ tab_path <- if (length(args) >= 2) {
   args[2]
 } else {
   file.path(dirname(path), "results", "thesis_tables")
+}
+onestage_file <- if (length(args) >= 3) {
+  args[3]
+} else {
+  file.path(study$res_path, "cts_val_onestage.RDS")
 }
 dir.create(tab_path, showWarnings = FALSE, recursive = TRUE)
 
@@ -370,3 +379,66 @@ write_table(grouped_longtable(
   label = "val_sg_se",
   landscape = FALSE
 ), "val_sg_se")
+
+# ---- one-stage full-trial comparator -----------------------------------------
+
+FORM_LABELS <- c(spline = "Spline", linear = "Linear")
+# the trial-level measures, then each true modifier rejected (mod_rejected)
+ONESTAGE_COLS <- c(any_rejected = "Any", top_correct = "Top",
+                   any_mod_rejected = "Any modifier",
+                   any_nonmod_rejected = "Any other")
+ONESTAGE_MODS <- c("X3", "X4", "X5")
+
+if (!file.exists(onestage_file)) {
+  message("no one-stage comparator at ", onestage_file, ": val_onestage skipped")
+} else {
+  onestage <- readRDS(onestage_file)$summary %>%
+    mutate(key = if_else(measure == "mod_rejected", covariate, measure),
+           cell = fmt_mcse(mean, mcse, DIGITS),
+           form = factor(form, levels = names(FORM_LABELS))) %>%
+    apply_labels(SS_SCENARIO_LABELS)
+
+  onestage_cols <- c(names(ONESTAGE_COLS), ONESTAGE_MODS)
+  body <- onestage %>%
+    select(scenario, form, key, cell) %>%
+    pivot_wider(names_from = key, values_from = cell) %>%
+    arrange(scenario, form)
+  for (cc in setdiff(onestage_cols, names(body))) body[[cc]] <- NA_character_
+
+  tab <- body %>%
+    transmute(form = unname(FORM_LABELS[as.character(form)]),
+              across(all_of(onestage_cols), ~ coalesce(.x, "---")))
+
+  write_table(grouped_longtable(
+    tab,
+    col_names = c("Interaction", unname(ONESTAGE_COLS), ONESTAGE_MODS),
+    group = body$scenario,
+    block = NULL,
+    header_above = c(" " = 1,
+                     "Covariates rejected" = length(ONESTAGE_COLS),
+                     "Each modifier rejected" = length(ONESTAGE_MODS)),
+    align = c("l", rep("r", length(onestage_cols))),
+    caption = paste0(
+      "Interim-analysis validation, one-stage comparator: every candidate ",
+      "covariate tested for an interaction with treatment in the whole trial ",
+      "of ", unique(study$grid$n), ", on the same trials the two-stage runs ",
+      "split, proportion of runs, mean (Monte Carlo SE) over ",
+      run_range(onestage$runs), " runs. The nine candidates are X1--X5, ",
+      "X01--X03 and X04/X05 as one three-level factor; each is tested by an ",
+      "HC3 Wald test of the treatment interaction terms of $Y \\sim W \\times ",
+      "g(X)$, with $g$ a natural spline with 4 degrees of freedom (Spline, ",
+      "the form stage 2's projection test takes) or $g(X) = X$ (Linear), and ",
+      "the nine $p$-values are Holm-corrected to a family-wise ",
+      "$\\alpha = ", ALPHA, "$. Any: at least one covariate rejected, in the ",
+      "null scenario the family-wise error rate, at most ", ALPHA, ". Top: ",
+      "the covariate with the smallest $p$-value is a true modifier and is ",
+      "rejected. Any modifier, Any other: at least one true modifier, or at ",
+      "least one other covariate, rejected. Each modifier rejected: X4 ",
+      "modifies the effect in every scenario but the null, X3 and X5 in the ",
+      "complex scenario only."
+    ),
+    caption.short = "Interim-analysis validation: one-stage comparator",
+    label = "val_onestage",
+    landscape = FALSE
+  ), "val_onestage")
+}
