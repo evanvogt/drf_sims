@@ -8,15 +8,16 @@
 #
 #   val_sg_direction  top / bottom 10% subgroup validates in stage 2 (p < 0.05,
 #                     in stage 1's direction); null line alpha / 2
-#   val_sg_shrinkage  DR-RandomForest's claimed contrast (ref1) against its true
-#                     stage 2 value (true2): winner's curse is ref1 > true2
+#   val_sg_shrinkage_<model>  each model's claimed contrast (ref1) against its
+#                     true stage 2 value (true2): winner's curse is ref1 > true2
 #   val_topvar        is stage 1's top covariate a true modifier, and does it
 #                     interact in stage 2 (spline projection)? null line 5%
 #
 # The rates are unconditional: over every run, a run without a stage 2 test (no
 # one predicted into the subgroup, or a leverage-1 row under HC3) counting as a
 # miss. The null lines are therefore upper bounds. val_sg_shrinkage alone is
-# over the tested runs, so its two contrasts average the same runs.
+# over the tested runs, so its two contrasts average the same runs. <model> is
+# the model's key in MODEL_LABELS, e.g. val_sg_shrinkage_dr_random_forest.
 #
 # Each is saved as <stem>.png (each panel its own y axis: compare by the labels,
 # not the heights) and <stem>_shared_y.png, in ../results/thesis_figures/validation/.
@@ -262,12 +263,12 @@ sg_rate_fig <- ribbon_lines(sg_rate, "model") +
   )
 save_both(sg_rate_fig, "val_sg_direction", "test")
 
-# ---- subgroup contrast: stage 1's claim and the truth, DR-RandomForest ---------
+# ---- subgroup contrast: stage 1's claim and the truth, per model ---------------
 
 # the tested runs only: ref1 exists without a stage 2 subgroup but true2 does
 # not, so over every run the two lines would average different runs
 sg_shrink <- sg_long %>%
-  filter(!is.na(p), model == MODEL_LABELS[["dr_random_forest"]]) %>%
+  filter(!is.na(p)) %>%
   pivot_longer(c(ref1, true2), names_to = "quantity", values_to = "value") %>%
   mutate(
     quantity = label_factor(
@@ -275,22 +276,29 @@ sg_shrink <- sg_long %>%
       c(ref1 = "Stage 1 estimate", true2 = "Stage 2 truth")
     )
   ) %>%
-  group_by(scenario, test, quantity, interim_prop) %>%
+  group_by(scenario, test, model, quantity, interim_prop) %>%
   summarise(
     mean = mean(value, na.rm = TRUE),
     mcse = sd(value, na.rm = TRUE) / sqrt(sum(!is.na(value))),
     .groups = "drop"
   )
 
-sg_shrink_fig <- ribbon_lines(sg_shrink, "quantity", proportion = FALSE) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  labs(
-    x = X_LAB,
-    y = "Mean contrast (subgroup − rest)",
-    colour = NULL,
-    fill = NULL
-  )
-save_both(sg_shrink_fig, "val_sg_shrinkage", "test")
+# one figure per model, named by its key in MODEL_LABELS
+for (m in levels(droplevels(sg_shrink$model))) {
+  key <- coalesce(names(MODEL_LABELS)[match(m, MODEL_LABELS)], m)
+  sg_shrink_fig <- sg_shrink %>%
+    filter(model == m) %>%
+    select(-model) %>%
+    ribbon_lines("quantity", proportion = FALSE) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(
+      x = X_LAB,
+      y = "Mean contrast (subgroup − rest)",
+      colour = NULL,
+      fill = NULL
+    )
+  save_both(sg_shrink_fig, paste0("val_sg_shrinkage_", key), "test")
+}
 
 # ---- top covariate: a true modifier, and does it replicate ---------------------
 
