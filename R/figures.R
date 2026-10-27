@@ -33,13 +33,13 @@ MODEL_LABELS <- c(
 
 METHOD_LABELS <- c(
   complete_data = "Complete data",
-  complete_cases = "Complete case",
+  complete_cases = "CC",
   IPW = "IPW",
   none = "MIA",
   missing_indicator = "MIM",
-  mean_imputation = "Mean imputation",
+  mean_imputation = "Mean",
   missforest = "missForest",
-  regression = "Regression imputation",
+  regression = "Regression",
   multiple_imputation = "MI"
 )
 
