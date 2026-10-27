@@ -97,8 +97,8 @@ MISS_SCENARIO_LABELS <- c(
 # bootstrap intervals. These are the values cts_miss_ci_metrics.R writes to the
 # `strategy` column.
 STRATEGY_LABELS <- c(
-  pooled = "Pooled quantiles",
-  mib = "MI bootstrap (Rubin)",
+  pooled = "Pooled",
+  mib = "MIB",
   hybrid = "Hybrid"
 )
 
