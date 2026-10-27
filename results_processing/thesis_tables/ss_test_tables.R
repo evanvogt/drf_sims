@@ -6,8 +6,8 @@
 # the paired difference rho = 0.5 minus rho = 0, scenarios 1-4 (main) and 5-10
 # (supp). Continuous and binary outcome sit side by side in one table, cells
 # the rate alone, with the Monte Carlo SE in the caption. The two-sided BLP
-# test and the CATE-independence test are summarised in the chapter's text and
-# figures, not tabulated.
+# test is shown in the chapter's figures and the CATE-independence test
+# summarised in its text; neither is tabulated.
 #
 # - Rejection is p < HTE_ALPHA, 0/1 per run (binomial MCSE sqrt(p(1-p)/R)). NA
 #   p-values are left out of the denominator, and out of a pair.

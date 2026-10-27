@@ -157,8 +157,7 @@ POWER_TARGET <- 0.8
 HTE_TESTS <- c(
   BLP_p_os = "BLP (one-sided, HC3)",
   BLP_p = "BLP (two-sided)",
-  indep_po = "PO independence",
-  indep_cate = "CATE independence"
+  indep_po = "PO independence"
 )
 
 TRUE_LAB <- "True values"
@@ -171,8 +170,7 @@ TRUE_LAB <- "True values"
 #' difference in the 0/1 rejection, so each point is the change in rejection
 #' rate, with a dashed line at 0 throughout.
 #'
-#' The "True values" series is the BLP and CATE independence tests run on the
-#' true CATE and true nuisances (<prefix>_corr_true_cate_tests.RDS, see
+#' The "True values" series is the BLP tests run on the true CATE and true nuisances (<prefix>_corr_true_cate_tests.RDS, see
 #' true_cate_test_row() in R/cate_models.R). The true CATE is constant in the
 #' null scenario, so those tests have no true series there. There is no
 #' true-value PO test: DR-oracle's own indep_po already tests the true
@@ -213,7 +211,7 @@ rejection_figure <- function(
     ) %>%
     filter(!(model == "dr_oracle" & test == "indep_po"))
 
-  true_cols <- c("BLP_p", "BLP_p_os", "indep_cate")
+  true_cols <- c("BLP_p", "BLP_p_os")
   truth <- bind_rows(
     true_tests %>%
       select(rho, run, scenario, n, all_of(true_cols)) %>%
@@ -311,7 +309,7 @@ rejection_figure <- function(
     paste0(prefix, "_corr", suffix, if (diff) "_rhodiff", "_rejection.png"),
     fig_path,
     width = width,
-    height = 18,
+    height = 14,
     plot = fig
   )
   fig
