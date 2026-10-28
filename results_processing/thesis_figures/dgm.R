@@ -14,6 +14,7 @@
 #   dgm_m0_cate.png           the control mean (risk) against tau - ATE
 #   dgm_surv_cate.png         competing risks: the subdistribution and net RMST
 #                             CATE of each event by X3
+#   dgm_surv_cate_points.png  the same, as jittered points
 #
 #   cd results_processing/thesis_figures; Rscript dgm.R   # a few minutes
 
@@ -170,18 +171,48 @@ surv_varying <- spop %>%
   ungroup()
 
 surv_dodge <- position_dodge(width = 0.8)
+# what the violin and points versions share: the mean over every draw on top,
+# and the facets, scales and theme
+surv_mean <- stat_summary(data = spop, aes(fill = estimand), fun = mean,
+                          geom = "point", position = surv_dodge, size = 1.8,
+                          shape = 21, colour = "black", stroke = 0.3)
+surv_common <- list(
+  facet_grid(event ~ scenario, scales = "free_y",
+             labeller = labeller(scenario = function(x) sub(", ", ",\n", x))),
+  scale_fill_paletteer_d("rcartocolor::Safe"),
+  labs(x = NULL, y = "CATE on the RMST to 28 days (days)", colour = NULL,
+       fill = NULL),
+  drf_theme(),
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank())
+)
+
 ggplot(spop, aes(X3, tau, fill = estimand)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
   geom_violin(data = surv_varying, position = surv_dodge, scale = "width",
               width = 0.75, alpha = 0.7, colour = "grey30", linewidth = 0.25) +
-  stat_summary(fun = mean, geom = "point", position = surv_dodge, size = 1.8,
-               shape = 21, colour = "black", stroke = 0.3) +
-  facet_grid(event ~ scenario, scales = "free_y",
-             labeller = labeller(scenario = function(x) sub(", ", ",\n", x))) +
-  scale_fill_paletteer_d("rcartocolor::Safe") +
-  labs(x = NULL, y = "CATE on the RMST to 28 days (days)", fill = NULL) +
-  drf_theme() +
-  theme(legend.position = "bottom",
-        panel.grid.major.x = element_blank(),
-        panel.grid.minor = element_blank())
+  surv_mean +
+  surv_common
 save_fig("dgm_surv_cate.png", fig_path, width = 33, height = 15)
+
+# ---- 5b. the same, as jittered points ---------------------------------------------
+# N_PLOT draws, not all DGM_N_POP_SURV: the tails show as single points, and a
+# constant CATE (no effect on that event's own hazard) as a band at its value,
+# where the violin version has only the mean
+
+set.seed(DGM_SEED)
+surv_pts <- filter(spop, id %in% sample(unique(spop$id), N_PLOT))
+
+ggplot(surv_pts, aes(X3, tau, colour = estimand)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_point(position = position_jitterdodge(jitter.width = 0.6,
+                                             dodge.width = 0.8,
+                                             seed = DGM_SEED),
+             size = 0.3, alpha = 0.08) +
+  surv_mean +
+  drf_scale() +
+  guides(colour = guide_legend(override.aes = list(size = 2, alpha = 1)),
+         fill = "none") +
+  surv_common
+save_fig("dgm_surv_cate_points.png", fig_path, width = 33, height = 15)
