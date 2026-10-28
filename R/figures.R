@@ -53,10 +53,10 @@ MECHANISM_LABELS <- c(
 
 # the four scenarios the sample-size chapters report, by their scenario index
 SS_SCENARIO_LABELS <- c(
-  `1` = "Null",
-  `2` = "Simple",
-  `3` = "Complex",
-  `4` = "Non-linear"
+  `1` = "S1: Null",
+  `2` = "S2: Simple",
+  `3` = "S3: Complex",
+  `4` = "S4: Non-linear"
 )
 
 # the remaining sample-size scenarios, reported in the supplementary tables
@@ -117,13 +117,13 @@ SURV_SCENARIO_LABELS <- c(
 )
 
 SURV_SCENARIO_PLOT_LABELS <- c(
-  `1` = "ATE EOI",
-  `2` = "ATE CE",
-  `3` = "HTE EOI",
-  `4` = "HTE EOI, ATE CE",
-  `5` = "HTE CE",
-  `6` = "HTE CE, ATE EOI",
-  `7` = "HTE EOI&CE"
+  `1` = "S1: ATE EOI",
+  `2` = "S2: ATE CE",
+  `3` = "S3: HTE EOI",
+  `4` = "S4: HTE EOI, ATE CE",
+  `5` = "S5: HTE CE",
+  `6` = "S6: HTE CE, ATE EOI",
+  `7` = "S7: HTE EOI&CE"
 )
 
 SURV_CENSORING_LABELS <- c(`TRUE` = "Yes", `FALSE` = "No")

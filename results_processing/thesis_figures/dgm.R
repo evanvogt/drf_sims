@@ -12,7 +12,7 @@
 #   dgm_cate_dist.png         the distribution of tau - ATE
 #   dgm_cate_sc3_surface.png  scenario 3's tau - ATE over (X4, X5) by X3
 #   dgm_m0_cate.png           the control mean (risk) against tau - ATE
-#   dgm_surv_cate.png         competing risks: the subdistribution and net RMST
+#   dgm_surv_cate.png         competing risks: the subdistribution and net RMTL
 #                             CATE of each event by X3
 #   dgm_surv_cate_points.png  the same, as jittered points
 #
@@ -150,16 +150,20 @@ m0_plot <- function(outcome_label, x_lab) {
     m0_plot("Binary", "Control risk m0(x)"))
 save_fig("dgm_m0_cate.png", fig_path)
 
-# ---- 5. competing risks: subdistribution and net RMST CATE by X3 ------------------
-# Both on the RMST scale, so they read the same way round - positive: treatment
-# delays the event. The subdistribution RMST CATE is the RMTL CATE negated
+# ---- 5. competing risks: subdistribution and net RMTL CATE by X3 ------------------
+# Both on the RMTL scale, so they read the same way round - positive: treatment
+# brings the event forward. The net RMTL CATE is the net RMST CATE negated
+# (surv_population() has net_RMST only), which keeps it near the subdistribution
+# RMTL CATE
 
-SURV_ESTIMAND_PLOT_LABELS <- c(sub_RMST = "Subdistribution RMST (−RMTL)",
-                               net_RMST = "Net RMST (cause-specific)")
+SURV_ESTIMAND_PLOT_LABELS <- c(RMTL = "Δ RMTL = −Δ RMST",
+                               net_RMTL = "Δ net RMTL = −Δ net RMST")
 EVENT_LABELS <- c(`Event 1` = "Event of interest", `Event 2` = "Competing event")
 
-spop <- surv_population(cv, estimands = names(SURV_ESTIMAND_PLOT_LABELS)) %>%
+spop <- surv_population(cv, estimands = c("RMTL", "net_RMST")) %>%
   mutate(
+    tau = ifelse(estimand == "net_RMST", -tau, tau),
+    estimand = ifelse(estimand == "net_RMST", "net_RMTL", estimand),
     estimand = label_factor(estimand, SURV_ESTIMAND_PLOT_LABELS),
     event = label_factor(event, EVENT_LABELS),
     scenario = label_factor(scenario, SURV_SCENARIO_PLOT_LABELS),
@@ -187,7 +191,7 @@ surv_common <- list(
              labeller = labeller(scenario = function(x) sub(", ", ",\n", x))),
   drf_scale(),
   scale_fill_paletteer_d("rcartocolor::Safe"),
-  labs(x = NULL, y = "RMST CATE, 28-day horizon (days)", colour = NULL,
+  labs(x = NULL, y = "Restricted mean time CATE, 28-day horizon (days)", colour = NULL,
        fill = NULL),
   drf_theme(),
   theme(legend.position = "bottom",
