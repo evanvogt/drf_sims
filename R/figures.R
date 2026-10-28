@@ -107,23 +107,23 @@ STRATEGY_LABELS <- c(
 # competing_risk/ADEMP.md for the tables, and surv_results.qmd's short ones
 # for figure strips, where seven sit side by side.
 SURV_SCENARIO_LABELS <- c(
-  `1` = "Scenario 1: ATE on E1 only",
-  `2` = "Scenario 2: ATE on E2 only",
-  `3` = "Scenario 3: HTE on E1, no ATE on E2",
-  `4` = "Scenario 4: HTE on E1, ATE on E2",
-  `5` = "Scenario 5: HTE on E2, no ATE on E1",
-  `6` = "Scenario 6: HTE on E2, ATE on E1",
+  `1` = "Scenario 1: ATE on EOI only",
+  `2` = "Scenario 2: ATE on CE only",
+  `3` = "Scenario 3: HTE on EOI, no ATE on CE",
+  `4` = "Scenario 4: HTE on EOI, ATE on CE",
+  `5` = "Scenario 5: HTE on CE, no ATE on EOI",
+  `6` = "Scenario 6: HTE on CE, ATE on EOI",
   `7` = "Scenario 7: HTE on both"
 )
 
 SURV_SCENARIO_PLOT_LABELS <- c(
-  `1` = "ATE E1",
-  `2` = "ATE E2",
-  `3` = "HTE E1",
-  `4` = "HTE E1, ATE E2",
-  `5` = "HTE E2",
-  `6` = "HTE E2, ATE E1",
-  `7` = "HTE E1&2"
+  `1` = "ATE EOI",
+  `2` = "ATE CE",
+  `3` = "HTE EOI",
+  `4` = "HTE EOI, ATE CE",
+  `5` = "HTE CE",
+  `6` = "HTE CE, ATE EOI",
+  `7` = "HTE EOI&CE"
 )
 
 SURV_CENSORING_LABELS <- c(`TRUE` = "Yes", `FALSE` = "No")
