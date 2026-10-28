@@ -31,15 +31,16 @@
 #     the environment (grf 2.4.0 on the cluster) has changed since then
 #   - the two rules differ only on the worst runs: the units the old rule dropped
 #
-# Interactively on the cluster, from competing_risk/, after extracting the
-# archive's scenario_<k>/500/censor_<TRUE|FALSE> folders:
-#   Rscript csf_sh_tail_check.R --old ~/cr_sept/competing_risk --out ~/csf_sh_tail
+# Interactively on the cluster. --label is the folder under results/_archive/
+# holding the pre-2026-10-01 competing_risk.tar; the cells needed are extracted
+# from it into a temporary folder, so nothing needs untarring by hand:
+#   Rscript competing_risk/csf_sh_tail_check.R --label <archive folder>
 # Options: --scenarios 1,3,4  --events 2  --top 10  --reps 3  --threads 1
+#          --current <surv_metrics.RDS> (default: the live tree's)
 # Step 2 is 2 x top x reps x 2 rules csf_sh fits per (scenario, event), at a
 # few seconds each: about 360 fits at the defaults.
-#          --current <surv_metrics.RDS> (default: the live tree's)
 # Writes old_per_run.csv, summary_old.csv, refit.csv, summary_refit.csv and
-# summary_current.csv to --out.
+# summary_current.csv to results/competing_risk_csf_sh_tail/.
 
 library(here)
 library(dplyr)
@@ -53,11 +54,12 @@ opt <- function(name, default) {
   i <- match(paste0("--", name), args)
   if (is.na(i)) default else args[i + 1]
 }
-old_dir <- opt("old", NA)
-if (is.na(old_dir)) stop("--old <extracted pre-2026-10-01 competing_risk/ folder> is required")
-old_dir   <- path.expand(old_dir)
-out_dir   <- path.expand(opt("out", "csf_sh_tail"))
-cur_file  <- path.expand(opt("current", file.path(study$res_path, "surv_metrics.RDS")))
+label <- opt("label", NA)
+if (is.na(label)) stop("--label <folder under results/_archive/ with the pre-2026-10-01 tree> is required")
+res_root  <- file.path(dirname(here()), "results")
+old_tar   <- file.path(res_root, "_archive", label, "competing_risk.tar")
+out_dir   <- file.path(res_root, "competing_risk_csf_sh_tail")
+cur_file  <- opt("current", file.path(study$res_path, "surv_metrics.RDS"))
 scenarios <- as.integer(strsplit(opt("scenarios", "1,3,4"), ",")[[1]])
 events    <- as.integer(strsplit(opt("events", "2"), ",")[[1]])
 top       <- as.integer(opt("top", "10"))
@@ -65,6 +67,24 @@ reps      <- as.integer(opt("reps", "3"))
 threads   <- as.integer(opt("threads", "1"))
 horizon   <- 28
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Only the requested scenarios' run files. tar = "internal", as in
+# validation/continuous/cts_val_dgm_check.R: the archive carries bsdtar extended
+# headers that some system tars complain about.
+if (!file.exists(old_tar)) stop("archive not found: ", old_tar)
+message("Extracting scenarios ", paste(scenarios, collapse = ", "), " from ", old_tar, "...")
+members <- suppressWarnings(utils::untar(old_tar, list = TRUE, tar = "internal"))
+wanted <- grep(paste0("^(\\./)?competing_risk/scenario_(", paste(scenarios, collapse = "|"),
+                      ")/500/censor_(TRUE|FALSE)/res_sim_\\d+\\.RDS$"),
+               members, value = TRUE)
+if (length(wanted) == 0) {
+  stop("no competing_risk/scenario_<k>/500/censor_<TRUE|FALSE>/res_sim_*.RDS in ", old_tar,
+       " - is it the pre-2026-10-01 tree (no rho_ level)?")
+}
+exdir <- tempfile("csf_sh_tail_")
+dir.create(exdir)
+suppressWarnings(utils::untar(old_tar, files = wanted, exdir = exdir, tar = "internal"))
+old_dir <- file.path(exdir, "competing_risk")
 
 old_file <- function(scenario, censoring, run) {
   file.path(old_dir, paste0("scenario_", scenario), "500",
