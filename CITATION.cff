@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below."
+title: "drf_sims: simulation studies for causal machine learning methods for heterogeneous treatment effects"
+authors:
+  - family-names: Van Vogt
+    given-names: Ellie
+    affiliation: Imperial College London
+    orcid: "https://orcid.org/0000-0002-5188-0613"
+repository-code: "https://github.com/evanvogt/drf_sims"
+license: MIT
+version: "1.0.0"
+date-released: "2026-10-28"
+# doi: 10.5281/zenodo.XXXXXXX
