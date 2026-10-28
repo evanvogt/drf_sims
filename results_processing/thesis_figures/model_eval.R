@@ -57,7 +57,7 @@ AXES <- list(
   Score = list(col = "score_family", labels = c(dr = "DR", inflt = "IF")),
   `Propensity score` = list(col = "pi_regime",
                             labels = c(estimated = "π̃ estimated",
-                                       fixed = "π = 0.5")),
+                                       fixed = "π-fixed")),
   `Data splitting` = list(col = "fold_type", labels = FOLD_LABELS),
   `Surrogate learner` = list(col = "pipeline", labels = PIPELINE_LABELS)
 )
