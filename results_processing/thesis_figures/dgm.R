@@ -171,14 +171,21 @@ surv_varying <- spop %>%
   ungroup()
 
 surv_dodge <- position_dodge(width = 0.8)
-# what the violin and points versions share: the mean over every draw on top,
-# and the facets, scales and theme
+# what the violin and points versions share: each estimand's ATE as a dotted
+# line under the data, the X3 group means over every draw on top, and the
+# facets, scales and theme
+surv_ate <- geom_hline(
+  data = summarise(spop, ate = mean(tau), .by = c(scenario, estimand, event)),
+  aes(yintercept = ate, colour = estimand),
+  linetype = "dotted", linewidth = 0.5, show.legend = FALSE
+)
 surv_mean <- stat_summary(data = spop, aes(fill = estimand), fun = mean,
                           geom = "point", position = surv_dodge, size = 1.8,
                           shape = 21, colour = "black", stroke = 0.3)
 surv_common <- list(
   facet_grid(event ~ scenario, scales = "free_y",
              labeller = labeller(scenario = function(x) sub(", ", ",\n", x))),
+  drf_scale(),
   scale_fill_paletteer_d("rcartocolor::Safe"),
   labs(x = NULL, y = "RMST CATE, 28-day horizon (days)", colour = NULL,
        fill = NULL),
@@ -189,6 +196,7 @@ surv_common <- list(
 
 ggplot(spop, aes(X3, tau, fill = estimand)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+  surv_ate +
   geom_violin(data = surv_varying, position = surv_dodge, scale = "width",
               width = 0.75, alpha = 0.7, colour = "grey30", linewidth = 0.25) +
   surv_mean +
@@ -205,12 +213,12 @@ surv_pts <- filter(spop, id %in% sample(unique(spop$id), N_PLOT))
 
 ggplot(surv_pts, aes(X3, tau, colour = estimand)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+  surv_ate +
   geom_point(position = position_jitterdodge(jitter.width = 0.6,
                                              dodge.width = 0.8,
                                              seed = DGM_SEED),
              size = 0.3, alpha = 0.08) +
   surv_mean +
-  drf_scale() +
   guides(colour = guide_legend(override.aes = list(size = 2, alpha = 1)),
          fill = "none") +
   surv_common
