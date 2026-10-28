@@ -118,12 +118,14 @@ x_labels <- function(b) {
   }, character(1))
 }
 
-#' The ratio figure for one set of arms: a row per arm, Event 1 and Event 2
+#' The ratio figure for one set of arms: a row per arm, EOI and CE
 #' side by side, each with its two panels
 snr_checks_plot <- function(arms) {
   d <- est %>%
     filter(framework %in% arms) %>%
-    mutate(arm = factor(ARM_LABELS[framework], levels = ARM_LABELS[arms]))
+    mutate(arm = factor(ARM_LABELS[framework], levels = ARM_LABELS[arms]),
+           target = factor(recode(target, "Event 1" = "EOI", "Event 2" = "CE"),
+                           levels = c("EOI", "CE")))
   # each scenario's label at its right-hand end of the "more signal" panel
   ends <- d %>%
     filter(panel == PANEL_LABELS[["signal"]]) %>%

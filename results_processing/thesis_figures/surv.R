@@ -101,7 +101,8 @@ summarise_view <- function(runs) {
       ),
       scenario = label_factor(scenario, SURV_SCENARIO_PLOT_LABELS),
       censoring = label_factor(censoring, SURV_CENSORING_LABELS),
-      target = factor(target, levels = TARGETS)
+      target = factor(target, levels = TARGETS,
+                      labels = c("EOI", "CE", "Combined"))
     ) %>%
     summarise_metrics(
       c("scenario", "censoring", "model", "estimand", "target"),

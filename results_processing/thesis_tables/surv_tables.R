@@ -6,7 +6,7 @@
 # by its semi-oracle twin), and one secondary table
 # per family with several arms (raw values, then paired differences between
 # arms that differ by one factor). Cells are "mean (MCSE)" of CATE bias, RMSE
-# and Pearson, Event 1 then Event 2.
+# and Pearson, EOI then CE.
 #
 # - Arms target different truths (ADEMP.md, "Estimands"): ipw and csf_cs the net
 #   RMST CATE (daggered), csf_sh the subdistribution RMST, the pseudo-value arms
@@ -252,7 +252,7 @@ c(
     "analysis. \\gls{rmtl}: positive when treatment brings the event forward. ",
     "Net \\gls{rmst}: negative when treatment brings the event forward. ",
     "Control-arm values ($\\rho = ", RHOS[[1]]$rho, "$): \\gls{rmtl} ",
-    ctrl[["tau_RMTL1"]], " (event 1) and ", ctrl[["tau_RMTL2"]], " (event 2); ",
+    ctrl[["tau_RMTL1"]], " (EOI) and ", ctrl[["tau_RMTL2"]], " (CE); ",
     "net \\gls{rmst} ", ctrl[["tau_RMST1_cs"]], " and ", ctrl[["tau_RMST2_cs"]],
     ".}"
   ),
@@ -261,7 +261,7 @@ c(
   "\\toprule",
   paste0(" & & \\multicolumn{2}{l}{\\gls{rmtl}} & \\multicolumn{2}{l}{Net ",
          "\\gls{rmst}} \\\\ \\cmidrule(lr){3-4} \\cmidrule(lr){5-6}"),
-  "Scenario & $\\rho$ & Event 1 & Event 2 & Event 1 & Event 2 \\\\ \\midrule",
+  "Scenario & $\\rho$ & EOI & CE & EOI & CE \\\\ \\midrule",
   truth_rows,
   "\\bottomrule",
   "\\end{tabular}",
@@ -301,7 +301,7 @@ label_rows <- function(df, arms) {
     mutate(
       scenario = label_factor(scenario, SURV_SCENARIO_LABELS),
       censoring = label_factor(censoring, SURV_CENSORING_LABELS),
-      target = factor(target, levels = TARGETS),
+      target = factor(target, levels = TARGETS, labels = c("EOI", "CE")),
       arm = factor(arms[framework], levels = unname(arms))
     )
 }
@@ -347,7 +347,7 @@ for (r in RHOS) {
       caption = paste0(
         "CATE estimation by estimator family, competing-risks study, $n = 500$, ",
         r$text, ": mean (Monte Carlo SE) over ",
-        runs_per_cell(main, run_cols), " runs per cell. Event 1, event 2: ",
+        runs_per_cell(main, run_cols), " runs per cell. EOI, CE: ",
         "the CATE on that event's restricted mean time to the horizon of 28 ",
         "days. Rows marked $\\dagger$ are scored against the net ",
         "(cause-specific) RMST CATE, CSF subdistribution against the ",

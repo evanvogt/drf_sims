@@ -105,7 +105,7 @@ tab <- tibble(
 out_file <- file.path(tab_path, "surv_snr_population.tex")
 grouped_longtable(
   tab,
-  col_names = c("HTE multiplier", "Event 1", "Event 2", "Event 1", "Event 2"),
+  col_names = c("HTE multiplier", "EOI", "CE", "EOI", "CE"),
   group = factor(rep("Scenario 7", nrow(tab))),
   block = NULL,
   header_above = c(" " = 1, "Hazard ratio, $X_3 = 0 / 1$" = 2,

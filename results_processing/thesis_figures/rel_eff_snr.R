@@ -212,7 +212,8 @@ snr_plot <- function(d, outcome) {
   if (surv) {
     d <- mutate(d,
                 group = label_factor(censoring, SURV_CENSORING_LABELS),
-                event = factor(target, levels = EVENTS))
+                event = factor(target, levels = EVENTS,
+                               labels = c("EOI", "CE")))
     group_lab <- "Censoring"
   } else {
     d <- mutate(d, group = factor(n, levels = DGM_N_LEVELS), event = "all")
@@ -235,7 +236,7 @@ snr_plot <- function(d, outcome) {
     summarise(ratio = median(ratio), snr = mean(snr), .groups = "drop")
   # one label per scenario (x event): the scenario and its SD(tau) / SD(noise),
   # averaged over n for binary, where it moves a little with n. They sit above
-  # the panel's highest median, and for competing risks Event 2's sit below its
+  # the panel's highest median, and for competing risks CE's sit below its
   # lowest, so the two events' labels don't collide. Labels that would overlap
   # are stacked (label_tiers())
   x_span <- diff(range(d$x))
@@ -243,7 +244,7 @@ snr_plot <- function(d, outcome) {
     group_by(model, scenario, event) %>%
     summarise(x = mean(x), snr = mean(snr), .groups = "drop") %>%
     mutate(label = paste0("S", scenario, ": ", signif(snr, 2)),
-           above = !(surv & event == EVENTS[[2]])) %>%
+           above = !(surv & event == "CE")) %>%
     left_join(med %>%
                 group_by(model) %>%
                 summarise(top = max(ratio), bottom = min(ratio)),
