@@ -39,8 +39,9 @@ ESTIMAND_SHAPES <- setNames(c(17, 16), ESTIMAND_LABELS)
 # second line of a difference figure's y labels
 DIFF_LAB <- "ρ = 0.5 − ρ = 0"
 
-# seven scenario columns, so wider than save_fig()'s standard 21cm
-FIG_WIDTH <- 33
+# seven scenario columns, so wider than save_fig()'s standard 21cm, but kept
+# narrow enough not to shrink too far on a portrait A4 page
+FIG_WIDTH <- 25
 FIG_HEIGHT <- 20
 EVENTS_ONLY_HEIGHT <- 15  # two event rows rather than three
 
@@ -99,7 +100,9 @@ summarise_view <- function(runs) {
                 ESTIMAND_LABELS[["net"]], ESTIMAND_LABELS[["sub"]]),
         levels = ESTIMAND_LABELS
       ),
-      scenario = label_factor(scenario, SURV_SCENARIO_PLOT_LABELS),
+      # two-effect labels on two lines, to fit the narrow panels
+      scenario = label_factor(scenario,
+                              sub(", ", ",\n", SURV_SCENARIO_PLOT_LABELS)),
       censoring = label_factor(censoring, SURV_CENSORING_LABELS),
       target = factor(target, levels = TARGETS,
                       labels = c("EOI", "CE", "Combined"))
