@@ -180,11 +180,10 @@ surv_common <- list(
   facet_grid(event ~ scenario, scales = "free_y",
              labeller = labeller(scenario = function(x) sub(", ", ",\n", x))),
   scale_fill_paletteer_d("rcartocolor::Safe"),
-  labs(x = NULL, y = "CATE on the RMST to 28 days (days)", colour = NULL,
+  labs(x = NULL, y = "RMST CATE, 28-day horizon (days)", colour = NULL,
        fill = NULL),
   drf_theme(),
   theme(legend.position = "bottom",
-        panel.grid.major.x = element_blank(),
         panel.grid.minor = element_blank())
 )
 
