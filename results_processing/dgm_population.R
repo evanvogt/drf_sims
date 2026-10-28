@@ -4,8 +4,8 @@
 # The DGMs' true CATE over a trial population, shared by thesis_figures/dgm.R
 # and thesis_tables/dgm_tables.R so a figure and a table use the same draws.
 # Reads no simulation output. rho = 0.5 only: continuous_corr_0.5 and
-# binary_corr_0.5 scenarios 1-4, and competing risks' 7 scenarios (RMTL CATE,
-# both events).
+# binary_corr_0.5 scenarios 1-4, and competing risks' 7 scenarios (RMTL,
+# subdistribution and net RMST CATE, both events).
 #
 # Continuous / binary tau is reported as tau(x) - ATE, which does not depend on
 # n (calibrate_bW() moves only the location); the ATE per n is in
@@ -123,7 +123,17 @@ cate_summary <- function(pop, cv) {
   }))
 }
 
-#' Competing-risk RMTL CATE of each event at each draw, all 7 scenarios
+# the surv_truth() CATE columns per estimand and event. RMTL and the
+# subdistribution RMST (horizon - RMTL, so its CATE is the RMTL's negated) are
+# the scale most arms target; net_RMST the cause-specific scale the
+# SURV_NET_ARMS (R/figures.R) are scored against
+SURV_ESTIMAND_COLS <- list(
+  RMTL = c(tau_RMTL1 = "Event 1", tau_RMTL2 = "Event 2"),
+  sub_RMST = c(tau_RMST1 = "Event 1", tau_RMST2 = "Event 2"),
+  net_RMST = c(tau_RMST1_cs = "Event 1", tau_RMST2_cs = "Event 2")
+)
+
+#' Competing-risk CATE of each event at each draw, all 7 scenarios
 #'
 #' surv_truth_grid() per scenario (numerical integration, in parallel), then
 #' interpolated to the draws in X2 within each (X1, X3) cell
@@ -131,22 +141,28 @@ cate_summary <- function(pop, cv) {
 #'
 #' @param cv output of dgm_covariates(); its first DGM_N_POP_SURV rows are used
 #' @param workers future workers for the grid truth
-#' @return long tibble: scenario, event ("Event 1", "Event 2"), id, X3, tau
-#'   (days) and tau_x3 = tau(X1, X2, X3 = 1) - tau(X1, X2, X3 = 0), the effect of
-#'   switching X3 with X1 and X2 held
-surv_population <- function(cv, workers = min(6, max(1, parallelly::availableCores() - 1))) {
+#' @param estimands names of SURV_ESTIMAND_COLS. The grid truth has every
+#'   estimand already, so another one costs only its interpolation
+#' @return long tibble: scenario, estimand, event ("Event 1", "Event 2"), id,
+#'   X3, tau (days) and tau_x3 = tau(X1, X2, X3 = 1) - tau(X1, X2, X3 = 0), the
+#'   effect of switching X3 with X1 and X2 held
+surv_population <- function(cv, workers = min(6, max(1, parallelly::availableCores() - 1)),
+                            estimands = "RMTL") {
   oplan <- future::plan(future::multisession, workers = workers)
   on.exit(future::plan(oplan), add = TRUE)
 
   cv <- cv[seq_len(min(DGM_N_POP_SURV, nrow(cv))), ]
-  events <- c(tau_RMTL1 = "Event 1", tau_RMTL2 = "Event 2")
+  cols <- unlist(unname(SURV_ESTIMAND_COLS[estimands]))
+  col_estimand <- rep(estimands, lengths(SURV_ESTIMAND_COLS[estimands]))
   one <- rep(1, nrow(cv))
   bind_rows(lapply(survival_scenario_params$scenario, function(s) {
     gt <- surv_truth_grid(survival_scenario_params[survival_scenario_params$scenario == s, ])
-    bind_rows(lapply(names(events), function(col) {
+    bind_rows(lapply(seq_along(cols), function(i) {
+      col <- names(cols)[i]
       tibble(
         scenario = s,
-        event = unname(events[col]),
+        estimand = col_estimand[i],
+        event = unname(cols[i]),
         id = cv$id,
         X3 = cv$X3,
         tau = surv_truth_at_draws(gt, col, cv$X1, cv$X2, cv$X3),
@@ -157,14 +173,14 @@ surv_population <- function(cv, workers = min(6, max(1, parallelly::availableCor
   }))
 }
 
-#' Per scenario x event summaries of the competing-risk truth
+#' Per scenario x estimand x event summaries of the competing-risk truth
 #'
 #' @param spop output of surv_population()
 #' @return tibble: mean and SD of tau, its mean within X3 = 0 and X3 = 1, and
 #'   the standardised X3 effect E[tau_x3] (surv_dgm_check.R section 3)
 surv_summary <- function(spop) {
   spop %>%
-    group_by(scenario, event) %>%
+    group_by(scenario, estimand, event) %>%
     summarise(
       mean_tau = mean(tau),
       sd_tau = sd(tau),

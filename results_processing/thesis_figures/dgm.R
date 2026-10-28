@@ -12,7 +12,8 @@
 #   dgm_cate_dist.png         the distribution of tau - ATE
 #   dgm_cate_sc3_surface.png  scenario 3's tau - ATE over (X4, X5) by X3
 #   dgm_m0_cate.png           the control mean (risk) against tau - ATE
-#   dgm_surv_cate.png         competing risks: the RMTL CATE of each event by X3
+#   dgm_surv_cate.png         competing risks: the subdistribution and net RMST
+#                             CATE of each event by X3
 #
 #   cd results_processing/thesis_figures; Rscript dgm.R   # a few minutes
 
@@ -148,24 +149,39 @@ m0_plot <- function(outcome_label, x_lab) {
     m0_plot("Binary", "Control risk m0(x)"))
 save_fig("dgm_m0_cate.png", fig_path)
 
-# ---- 5. competing risks: RMTL CATE by X3 ------------------------------------------
+# ---- 5. competing risks: subdistribution and net RMST CATE by X3 ------------------
+# Both on the RMST scale, so they read the same way round - positive: treatment
+# delays the event. The subdistribution RMST CATE is the RMTL CATE negated
 
-spop <- surv_population(cv) %>%
+SURV_ESTIMAND_PLOT_LABELS <- c(sub_RMST = "Subdistribution RMST (−RMTL)",
+                               net_RMST = "Net RMST (cause-specific)")
+EVENT_LABELS <- c(`Event 1` = "Event of interest", `Event 2` = "Competing event")
+
+spop <- surv_population(cv, estimands = names(SURV_ESTIMAND_PLOT_LABELS)) %>%
   mutate(
+    estimand = label_factor(estimand, SURV_ESTIMAND_PLOT_LABELS),
+    event = label_factor(event, EVENT_LABELS),
     scenario = label_factor(scenario, SURV_SCENARIO_PLOT_LABELS),
-    X3 = factor(X3, levels = 0:1)
+    X3 = label_factor(X3, X3_LABELS)
   )
 surv_varying <- spop %>%
-  group_by(scenario, event, X3) %>%
+  group_by(scenario, estimand, event, X3) %>%
   filter(sd(tau) > 1e-8) %>%
   ungroup()
 
-ggplot(spop, aes(X3, tau)) +
+surv_dodge <- position_dodge(width = 0.8)
+ggplot(spop, aes(X3, tau, fill = estimand)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
-  geom_violin(data = surv_varying, scale = "width", fill = "grey85",
-              colour = "grey40") +
-  stat_summary(fun = mean, geom = "point", size = 1.8) +
-  facet_grid(event ~ scenario, scales = "free_y") +
-  labs(x = "X3", y = "CATE on the RMTL to 28 days (days)") +
-  drf_theme()
-save_fig("dgm_surv_cate.png", fig_path, width = 33, height = 14)
+  geom_violin(data = surv_varying, position = surv_dodge, scale = "width",
+              width = 0.75, alpha = 0.7, colour = "grey30", linewidth = 0.25) +
+  stat_summary(fun = mean, geom = "point", position = surv_dodge, size = 1.8,
+               shape = 21, colour = "black", stroke = 0.3) +
+  facet_grid(event ~ scenario, scales = "free_y",
+             labeller = labeller(scenario = function(x) sub(", ", ",\n", x))) +
+  scale_fill_paletteer_d("rcartocolor::Safe") +
+  labs(x = NULL, y = "CATE on the RMST to 28 days (days)", fill = NULL) +
+  drf_theme() +
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank())
+save_fig("dgm_surv_cate.png", fig_path, width = 33, height = 15)
