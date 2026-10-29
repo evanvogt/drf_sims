@@ -20,9 +20,14 @@
 # - val_onestage is the one-stage comparator (cts_val_onestage.R): every
 #   candidate tested in the whole trial, Holm-corrected, on the same trials.
 #   Skipped with a message if its results file is missing.
+# - val_compare is the main-text table: one row per scenario, the one-stage
+#   spline + Holm results beside DR-RF's two-stage projection-test confirmation
+#   at the landmarks, means only with each row's largest MCSE in its own column.
+#   A float, not a longtable. Skipped with val_onestage.
 #
 # Writes to ../results/thesis_tables/: val_sg_top, val_sg_bottom,
-# val_sg_counts, val_nom_tevim, val_nom_shap, val_sg_se, val_onestage (.tex).
+# val_sg_counts, val_nom_tevim, val_nom_shap, val_sg_se, val_onestage,
+# val_compare (.tex).
 # \input{} with \usepackage{booktabs, longtable, pdflscape, array}.
 #
 #   Rscript val_tables.R [metrics.RDS] [table dir] [onestage.RDS]   # mock smoke run
@@ -441,4 +446,107 @@ if (!file.exists(onestage_file)) {
     label = "val_onestage",
     landscape = FALSE
   ), "val_onestage")
+
+  # ---- main text: one stage against two-stage confirmation -------------------
+
+  # one row per scenario: the one-stage spline + Holm results, then DR-RF's
+  # projection test of the top covariate at the landmarks, per measure. In the
+  # null the modifier column is any covariate rejected, the family-wise error
+  COMPARE_MODEL <- "dr_random_forest"
+  COMPARE_MEASURES <- c(tevim = "TE-VIM", shap = "CATE-SHAP")
+
+  one_spline <- filter(readRDS(onestage_file)$summary, form == "spline")
+  one_cells <- one_spline %>%
+    mutate(key = case_when(
+      scenario == 1 & measure == "any_rejected" ~ "mod",
+      scenario != 1 & measure == "any_mod_rejected" ~ "mod",
+      scenario != 1 & measure == "any_nonmod_rejected" ~ "nonmod"
+    )) %>%
+    filter(!is.na(key)) %>%
+    transmute(scenario, key, mean, mcse)
+
+  # a run without a test (constant spline) counts as not confirmed
+  two_cells <- top_var %>%
+    filter(model == COMPARE_MODEL) %>%
+    mutate(confirmed = coalesce(p_proj < ALPHA, FALSE)) %>%
+    summarise_metrics(c("scenario", "measure", "interim_prop"),
+                      cols = c(conf = "confirmed"), binomial = "conf",
+                      count_na = character()) %>%
+    transmute(scenario,
+              key = paste(measure, interim_label(interim_prop), sep = "__"),
+              mean = mean_conf, mcse = mcse_conf)
+
+  compare_cols <- c("mod", "nonmod",
+                    paste(rep(names(COMPARE_MEASURES), each = length(LANDMARKS)),
+                          interim_label(LANDMARKS), sep = "__"))
+  compare <- bind_rows(one_cells, two_cells)
+  body <- compare %>%
+    mutate(cell = fmt_num(mean, DIGITS)) %>%
+    select(scenario, key, cell) %>%
+    pivot_wider(names_from = key, values_from = cell) %>%
+    left_join(compare %>%
+                group_by(scenario) %>%
+                summarise(max_mcse = mcse_cap(mcse, DIGITS), .groups = "drop"),
+              by = "scenario") %>%
+    arrange(scenario) %>%
+    apply_labels(SS_SCENARIO_LABELS)
+  for (cc in setdiff(compare_cols, names(body))) body[[cc]] <- NA_character_
+
+  tab <- body %>%
+    transmute(scenario = as.character(scenario),
+              across(all_of(compare_cols), ~ coalesce(.x, "---")),
+              max_mcse)
+
+  two_runs <- count(filter(top_var, model == COMPARE_MODEL),
+                    scenario, measure, interim_prop)
+  tex <- kbl(
+    tab,
+    format = "latex",
+    booktabs = TRUE,
+    escape = FALSE,
+    position = "htbp",
+    col.names = c("Scenario", "Modifier", "Non-modifier",
+                  rep(interim_label(LANDMARKS), length(COMPARE_MEASURES)),
+                  "Max MCSE"),
+    align = c("l", rep("r", length(compare_cols) + 1)),
+    linesep = "",
+    caption = paste0(
+      "Interim-analysis validation: the one-stage analysis against two-stage ",
+      "confirmation, proportion of runs. One stage (Holm): every candidate ",
+      "covariate tested for a spline interaction with treatment in all ",
+      unique(study$grid$n), " participants of the same trials, Holm-corrected ",
+      "to a family-wise $\\alpha = ", ALPHA, "$ (Table~\\ref{tab:val_onestage}). ",
+      "Modifier: at least one true effect modifier rejected, and in the null ",
+      "scenario any covariate rejected, the family-wise error rate. ",
+      "Non-modifier: at least one other covariate rejected; these are ",
+      "correlated with a modifier, so not all are false positives. Two stage: ",
+      "the covariate ranked most important at stage 1 by TE-VIM or CATE-SHAP ",
+      "(\\gls{dr}-learner with random forests) has stage 2 projection test ",
+      "$p < ", ALPHA, "$ (HC3), by the proportion of participants in stage 1; ",
+      "a run with no test counts as not confirmed. In the null scenario both ",
+      "are type I error rates, nominal ", ALPHA, ". Over ",
+      run_range(two_runs$n[two_runs$scenario != 1]), " runs (two-stage null: ",
+      run_range(two_runs$n[two_runs$scenario == 1]), "; one-stage null: ",
+      run_range(one_spline$runs[one_spline$scenario == 1]),
+      "). Max MCSE: the largest binomial Monte Carlo SE, ",
+      "$\\sqrt{p(1-p)/R}$ over $R$ runs, of the row's cells. Other estimators: ",
+      "Figure~\\ref{fig:val_topvar}."
+    ),
+    caption.short = paste0("Interim-analysis validation: one-stage analysis ",
+                           "and two-stage confirmation"),
+    label = "val_compare"
+  ) %>%
+    add_header_above(c(" " = 1, "One stage (Holm)" = 2,
+                       setNames(rep(length(LANDMARKS), length(COMPARE_MEASURES)),
+                                COMPARE_MEASURES),
+                       " " = 1)) %>%
+    add_header_above(c(" " = 3,
+                       "Two stage, DR-RF: proportion in stage 1" =
+                         length(LANDMARKS) * length(COMPARE_MEASURES),
+                       " " = 1)) %>%
+    kable_styling(font_size = 10)
+  # 4pt padding, inside its own group: at the default 6pt it takes 94% of the
+  # text width
+  write_table(paste0("{\\setlength{\\tabcolsep}{4pt}\n", tex, "\n}\n"),
+              "val_compare")
 }

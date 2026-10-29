@@ -212,6 +212,7 @@ handle_missingness <- function(data, method, n_imp = 50) {
     "missforest" = {
       # within each arm, with Y as a predictor (leaving Y and W out flattens
       # the HTE - see impute_by_arm)
+      oob <- list()
       imputed <- impute_by_arm(data, function(df) {
         # missForest wants binary columns as factors (Y too, for a binary
         # outcome), so round-trip them
@@ -221,13 +222,24 @@ handle_missingness <- function(data, method, n_imp = 50) {
             bin <- length(unique_vals) == 2 && all(unique_vals %in% c(0, 1))
             if (bin) factor(x, levels = c(0, 1)) else x
           }))
-        mf_imputed <- missForest(df)
+        # variablewise only changes how the OOB error is reported (per column:
+        # MSE, or PFC for a factor), not the imputations
+        mf_imputed <- missForest(df, variablewise = TRUE)
+        oob[[length(oob) + 1]] <<- data.frame(variable = names(df),
+                                              measure = names(mf_imputed$OOBerror),
+                                              error = unname(mf_imputed$OOBerror))
         as.data.frame(lapply(mf_imputed$ximp, function(x) {
           if (is.factor(x)) as.numeric(as.character(x)) else x
         }))
       })
+      # impute_by_arm imputes, in sorted order, the arms with any NA
+      arms <- sort(unique(data$W))
+      arms <- arms[vapply(arms, function(a) anyNA(data[data$W == a, names(data) != "W"]),
+                          logical(1))]
+      oob <- do.call(rbind, Map(function(a, e) cbind(arm = a, e), arms, oob))
+      rownames(oob) <- NULL
       message("Imputation with missForest complete")
-      list(data = imputed)
+      list(data = imputed, oob = oob)
     },
     "regression" = {
       # single deterministic regression imputation, within each arm, each
