@@ -15,6 +15,8 @@
 #   dgm_surv_cate.png         competing risks: the subdistribution and net RMTL
 #                             CATE of each event by X3
 #   dgm_surv_cate_points.png  the same, as jittered points
+#   dgm_surv_events.png       competing risks: the share of each first event by
+#                             day 28, by arm and X3
 #
 #   cd results_processing/thesis_figures; Rscript dgm.R   # a few minutes
 
@@ -227,3 +229,68 @@ ggplot(surv_pts, aes(X3, tau, colour = estimand)) +
          fill = "none") +
   surv_common
 save_fig("dgm_surv_cate_points.png", fig_path, width = 33, height = 15)
+
+# ---- 6. competing risks: first event by day 28, by arm and X3 ---------------------
+# F_j(28 | x, w) on surv_truth_grid()'s (X2, X1, X3) grid in each arm, by
+# integrating S_all * h_j (surv_dgm.R's hazards), then interpolated to the same
+# draws as section 5 (surv_truth_at_draws()) and averaged within arm x X3. No
+# censoring: the shares are of the DGM, not of an observed trial
+
+EVENT_FILL_LABELS <- c(eoi = "Event of interest", ce = "Competing event",
+                       none = "Neither")
+ARM_LABELS <- c(`0` = "Control", `1` = "Treated")
+
+#' F_1 and F_2 at the horizon for each (X1, X2, X3) row under arm w
+cif_horizon <- function(params, X1, X2, X3, w) {
+  scale1 <- exp(log(params$scale1_base) + params$b1_1 * X1 + params$b2_1 * X2 +
+                  w * (params$bW_1 + params$b3_1 * X3))
+  scale2 <- exp(log(params$scale2_base) + params$b1_2 * X1 + params$b2_2 * X2 +
+                  w * (params$bW_2 + params$b3_2 * X3))
+  h <- params$event_horizon
+  out <- mapply(function(s1, s2) {
+    S_all <- function(t) exp(-cum_haz_all(t, params$shape1, params$shape2, s1, s2))
+    c(F1 = integrate(function(t) S_all(t) * hazard(t, params$shape1, s1), 0, h)$value,
+      F2 = integrate(function(t) S_all(t) * hazard(t, params$shape2, s2), 0, h)$value)
+  }, scale1, scale2)
+  as.data.frame(t(out))
+}
+
+surv_cv <- cv[seq_len(DGM_N_POP_SURV), ]
+cif_grid <- expand.grid(X2 = seq(-4.5, 4.5, length.out = 41), X1 = 0:1, X3 = 0:1)
+
+events <- bind_rows(lapply(survival_scenario_params$scenario, function(s) {
+  p <- survival_scenario_params[survival_scenario_params$scenario == s, ]
+  bind_rows(lapply(0:1, function(w) {
+    gt <- bind_cols(cif_grid, cif_horizon(p, cif_grid$X1, cif_grid$X2, cif_grid$X3, w))
+    tibble(
+      X3 = surv_cv$X3,
+      eoi = surv_truth_at_draws(gt, "F1", surv_cv$X1, surv_cv$X2, surv_cv$X3),
+      ce = surv_truth_at_draws(gt, "F2", surv_cv$X1, surv_cv$X2, surv_cv$X3)
+    ) %>%
+      summarise(eoi = mean(eoi), ce = mean(ce), .by = X3) %>%
+      mutate(scenario = s, arm = w, none = 1 - eoi - ce)
+  }))
+})) %>%
+  pivot_longer(c(eoi, ce, none), names_to = "event", values_to = "prop") %>%
+  mutate(
+    event = label_factor(event, EVENT_FILL_LABELS),
+    arm = label_factor(arm, ARM_LABELS),
+    scenario = label_factor(scenario, SURV_SCENARIO_PLOT_LABELS),
+    X3 = label_factor(X3, X3_LABELS)
+  )
+
+safe <- as.character(paletteer::paletteer_d("rcartocolor::Safe"))
+ggplot(events, aes(arm, prop, fill = event)) +
+  geom_col(position = position_stack(reverse = TRUE), width = 0.7,
+           colour = "grey30", linewidth = 0.2) +
+  facet_grid(X3 ~ scenario,
+             labeller = labeller(scenario = function(x) sub(", ", ",\n", x))) +
+  scale_fill_manual(values = c(safe[1], safe[2], "grey85")) +
+  scale_y_continuous(labels = scales::percent,
+                     expand = expansion(mult = c(0, 0.02))) +
+  labs(x = NULL, y = "First event by day 28", fill = NULL) +
+  drf_theme() +
+  theme(legend.position = "bottom",
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor = element_blank())
+save_fig("dgm_surv_events.png", fig_path, width = 33, height = 13)
