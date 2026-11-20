@@ -129,11 +129,11 @@ on_axes <- function(df) {
 }
 
 #' The arm's label and dodged x
-add_arm <- function(df, arms) {
+add_arm <- function(df, arms, labels = ARM_LABELS) {
   k <- length(arms)
   df %>%
     mutate(
-      arm = factor(ARM_LABELS[model], levels = ARM_LABELS[arms]),
+      arm = factor(labels[model], levels = labels[arms]),
       x = pos + (match(model, arms) - (k + 1) / 2) * 0.7 / k
     )
 }
@@ -145,14 +145,18 @@ add_arm <- function(df, arms) {
 #' @param runs optional scenario, n, hte_mult, model, value: per-run points
 #'   drawn faintly behind the estimates
 #' @param yref a dashed reference line, NA for none
-snr_plot <- function(est, ylab, title, runs = NULL, yref = NA, log_y = FALSE) {
-  arms <- intersect(ARMS, unique(est$model))
+#' @param labels,colours,legend the series' labels (named by `model`, in
+#'   display order), their colours (named by label) and the legend title, for a
+#'   plot whose series are not the arms
+snr_plot <- function(est, ylab, title, runs = NULL, yref = NA, log_y = FALSE,
+                     labels = ARM_LABELS, colours = ARM_COLOURS, legend = "Arm") {
+  arms <- intersect(names(labels), unique(est$model))
   # scenario 1 has no HTE, so no SNR to print
   snr_lab <- snr_cells %>%
     filter(scenario %in% unique(est$scenario), scenario != 1) %>%
     on_axes() %>%
     mutate(label = sprintf("SNR %.2f", snr))
-  est <- est %>% on_axes() %>% add_arm(arms)
+  est <- est %>% on_axes() %>% add_arm(arms, labels)
   p <- ggplot(est, aes(x, est, colour = arm, group = arm))
   if (!is.na(yref)) {
     p <- p + geom_hline(yintercept = yref, linetype = "dashed",
@@ -162,7 +166,7 @@ snr_plot <- function(est, ylab, title, runs = NULL, yref = NA, log_y = FALSE) {
     set.seed(1)
     runs <- runs %>%
       on_axes() %>%
-      add_arm(arms) %>%
+      add_arm(arms, labels) %>%
       mutate(x = x + runif(n(), -0.3, 0.3) * 0.7 / length(arms))
     p <- p + geom_point(data = runs, aes(y = value), shape = 16, size = 0.4,
                         alpha = 0.15, show.legend = FALSE)
@@ -179,12 +183,12 @@ snr_plot <- function(est, ylab, title, runs = NULL, yref = NA, log_y = FALSE) {
     facet_grid(scenario ~ panel, scales = "free", space = "free_x") +
     scale_x_continuous(breaks = X_BREAKS, labels = X_LABELS,
                        expand = expansion(add = 0.4)) +
-    scale_colour_manual(values = ARM_COLOURS) +
+    scale_colour_manual(values = colours) +
     drf_theme() +
     theme(legend.position = "bottom",
           panel.grid.minor = element_blank(),
           panel.grid.major.x = element_blank()) +
-    labs(title = title, x = NULL, y = ylab, colour = "Arm")
+    labs(title = title, x = NULL, y = ylab, colour = legend)
   # extra room at the bottom so the SNR text clears the data
   y_expand <- expansion(mult = c(0.12, 0.05))
   p + if (log_y) {
@@ -440,26 +444,41 @@ of a run share W, X and the control-arm outcomes, and p0 depends on neither
 the scenario nor the effect modifiers, so the propensity and control-risk fits
 are the same in every n = 500 cell of a run: those two are flat across the
 left panel by construction, and only the treated-risk and marginal-mean errors
-move with the HTE multiplier.
+move with the HTE multiplier. The outcome models share one plot: each DR-RF
+arm's forest is scored against its own arm's true risk (p0 or p1), and the
+causal forest's marginal mean against (p0 + p1) / 2.
 
 ```{r nuisance-plots, results="asis", fig.height=10}
-nuis_specs <- list(
-  list(tab = "Propensity", col = "ps_rmse", save = "bin_snr_nuis_ps.png",
-       title = "RMSE of the propensity, against the true 0.5"),
-  list(tab = "Control risk μ0", col = "mu0_rmse",
-       title = "RMSE of the control-arm outcome model, against p0"),
-  list(tab = "Treated risk μ1", col = "mu1_rmse",
-       title = "RMSE of the treated-arm outcome model, against p1"),
-  list(tab = "Marginal mean", col = "m_rmse",
-       title = "RMSE of the marginal outcome model, against (p0 + p1) / 2")
-)
-# metric_est() drops the all-NA cells, so each tab shows only the arms with that model
 nuis <- filter(metrics, model %in% c("causal_forest", "dr_random_forest"))
-plot_tabs(lapply(nuis_specs, function(s) {
-  list(tab = s$tab, save = s$save,
-       plot = snr_plot(metric_est(nuis, s$col), ylab = "Mean RMSE",
-                       title = s$title))
-}))
+
+# one series per outcome model in place of the arm: the CF's marginal mean and
+# DR-RF's two per-arm forests
+OUTCOME_LABELS <- c(m_rmse   = "CF: marginal mean m(x)",
+                    mu0_rmse = "DR-RF: control arm μ0(x)",
+                    mu1_rmse = "DR-RF: treated arm μ1(x)")
+# the CF and DR-RF arm colours, and Safe's wine (a darker DR-RF rose) for the
+# treated arm, so the two DR-RF forests read as one learner
+OUTCOME_COLOURS <- setNames(
+  c(ARM_COLOURS[ARM_LABELS[c("causal_forest", "dr_random_forest")]],
+    as.character(paletteer::paletteer_d("rcartocolor::Safe")[9])),
+  OUTCOME_LABELS
+)
+outcome <- nuis %>%
+  select(scenario, n, hte_mult, run, all_of(names(OUTCOME_LABELS))) %>%
+  pivot_longer(all_of(names(OUTCOME_LABELS)), names_to = "model",
+               values_to = "value") %>%
+  filter(!is.na(value))
+
+plot_tabs(list(
+  list(tab = "Propensity", save = "bin_snr_nuis_ps.png",
+       plot = snr_plot(metric_est(nuis, "ps_rmse"), ylab = "Mean RMSE",
+                       title = "RMSE of the propensity, against the true 0.5")),
+  list(tab = "Outcome models", save = "bin_snr_nuis_outcome.png",
+       plot = snr_plot(metric_est(outcome, "value"), ylab = "Mean RMSE",
+                       title = "RMSE of the outcome models, against the true risks",
+                       labels = OUTCOME_LABELS, colours = OUTCOME_COLOURS,
+                       legend = "Outcome model"))
+))
 ```
 
 ## DR-RandomForest against the DR-semi-oracle
