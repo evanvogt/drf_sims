@@ -114,7 +114,7 @@ Local smoke test, from `sample_size/snr/`:
 arguments are `<i> [grf_threads]`. There is no `workers` argument, because
 only the SuperLearner arm uses a future plan.
 
-`bin_snr_metrics.R` writes three files:
+`bin_snr_metrics.R` writes four files:
 
 - `bin_snr_population.RDS`: per (scenario, `hte_mult`), bW, the ATE, SD(τ),
   SD(noise), SNR and the share clamped.
@@ -129,6 +129,12 @@ only the SuperLearner arm uses a future plan.
   run's `causal_forest` RMSE, summarised per cell (median, IQR, geometric mean
   with the MCSE of the mean log ratio, and the share of runs where the arm did
   better), with the cell's SNR.
+- `bin_snr_nuisance_hist.RDS`: every unit's nuisance estimates (`source` =
+  `causal_forest` or `dr_random_forest`) and their truths (`source` =
+  `truth`), pooled over a cell's runs and counted in 0.01-wide bins on [0, 1]
+  (`mid` is the bin's centre), per scenario × n × `hte_mult` × `nuisance`
+  (`ps`, `m`, `mu0`, `mu1`). The propensity's truth, a constant 0.5, has no
+  rows. The report draws these as histograms.
 
 ## Resources
 

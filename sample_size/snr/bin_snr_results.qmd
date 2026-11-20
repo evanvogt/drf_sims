@@ -13,8 +13,8 @@ format:
 ---
 
 <!--
-Reads bin_snr_population.RDS, bin_snr_metrics.RDS and bin_snr_ratios.RDS
-(bin_snr_metrics.R). From sample_size/snr/:
+Reads bin_snr_population.RDS, bin_snr_metrics.RDS, bin_snr_ratios.RDS and
+bin_snr_nuisance_hist.RDS (bin_snr_metrics.R). From sample_size/snr/:
   quarto render bin_snr_results.qmd
 The params point it at another results / figure folder, e.g. for a mock run:
   quarto render bin_snr_results.qmd -P res_path:<dir> -P fig_dir:<dir>
@@ -69,6 +69,7 @@ dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 population <- readRDS(file.path(res_path, "bin_snr_population.RDS"))
 metrics <- readRDS(file.path(res_path, "bin_snr_metrics.RDS"))
 ratios <- readRDS(file.path(res_path, "bin_snr_ratios.RDS"))
+nuis_hist <- readRDS(file.path(res_path, "bin_snr_nuisance_hist.RDS"))
 
 CF_ARM <- "causal_forest"
 # display order
@@ -79,6 +80,18 @@ ARM_LABELS <- MODEL_LABELS[ARMS]
 ARM_COLOURS <- setNames(
   as.character(paletteer::paletteer_d("rcartocolor::Safe")[seq_along(ARMS)]),
   ARM_LABELS
+)
+# the outcome models, one series each: the CF's marginal mean and DR-RF's two
+# per-arm forests. CF and DR-RF keep their arm colours, and the treated arm
+# takes Safe's wine (a darker DR-RF rose), so the two DR-RF forests read as one
+# learner
+OUTCOME_LABELS <- c(m   = "CF: marginal mean m(x)",
+                    mu0 = "DR-RF: control arm μ0(x)",
+                    mu1 = "DR-RF: treated arm μ1(x)")
+OUTCOME_COLOURS <- setNames(
+  c(ARM_COLOURS[ARM_LABELS[c("causal_forest", "dr_random_forest")]],
+    as.character(paletteer::paletteer_d("rcartocolor::Safe")[9])),
+  OUTCOME_LABELS
 )
 
 # as corr_outcome_results.qmd, so the reports read side by side
@@ -257,6 +270,83 @@ population %>%
   kable(digits = 3,
         col.names = c("Scenario", "HTE ×", "bW", "ATE", "SD(τ)", "SD(noise)",
                       "SNR", "Treated risk clamped"))
+```
+
+### Estimated nuisances against the truth
+
+Every unit's nuisance estimate, pooled over a cell's runs, against the same
+units' truth in grey: p0, p1 or (p0 + p1) / 2. The true propensity is 0.5 for
+every unit, so it is a dashed line. Shares are of the cell's units, in bins of
+0.01. The first four columns are the HTE multipliers at n = 500, the last three
+the larger n at ×1. Matching histograms mean the estimates have the right
+spread, not that each unit's estimate is right: that is the RMSE under
+Nuisance models.
+
+```{r nuisance-hist, results="asis", fig.height=10}
+HIST_CELLS <- c("n = 500, ×1", paste0("×", HTE_LEVELS[-1]),
+                paste0("n = ", prettyNum(N_LEVELS[-1], big.mark = ",")))
+
+#' Pooled histogram of one nuisance's estimates (lines) against the same
+#' units' truth (grey bars), a row per scenario and a column per cell
+#'
+#' @param nu "ps", "m", "mu0" or "mu1"
+#' @param labels the estimates' legend labels, named by source (the arm)
+#' @param colours their colours, named by label
+#' @param vline a truth drawn as a dashed line, NA for none
+nuis_hist_plot <- function(nu, labels, colours, title, vline = NA) {
+  df <- nuis_hist %>%
+    filter(nuisance == nu) %>%
+    group_by(scenario, n, hte_mult, source) %>%
+    mutate(share = count / sum(count)) %>%
+    ungroup() %>%
+    mutate(
+      cell = factor(case_when(
+        n == 500 & hte_mult == 1 ~ HIST_CELLS[1],
+        n == 500 ~ paste0("×", hte_mult),
+        TRUE ~ paste0("n = ", prettyNum(n, big.mark = ","))
+      ), levels = HIST_CELLS),
+      scenario = factor(SCENARIO_LABELS[as.character(scenario)],
+                        levels = SCENARIO_LABELS)
+    )
+  truth <- filter(df, source == "truth")
+  est <- df %>%
+    filter(source != "truth") %>%
+    mutate(source = factor(labels[source], levels = labels))
+  p <- ggplot(mapping = aes(mid, share))
+  if (nrow(truth) > 0) p <- p + geom_col(data = truth, aes(fill = "Truth"))
+  if (!is.na(vline)) {
+    p <- p + geom_vline(xintercept = vline, linetype = "dashed", colour = "grey40")
+  }
+  p +
+    geom_line(data = est, aes(colour = source), linewidth = 0.5) +
+    facet_grid(scenario ~ cell, scales = "free_y") +
+    scale_x_continuous(n.breaks = 3) +
+    scale_fill_manual(values = c(Truth = "grey75")) +
+    scale_colour_manual(values = colours) +
+    drf_theme() +
+    theme(legend.position = "bottom", panel.grid.minor = element_blank()) +
+    labs(title = title, x = "Value", y = "Share of the cell's units",
+         colour = "Estimate", fill = NULL)
+}
+
+plot_tabs(list(
+  list(tab = "Propensity", save = "bin_snr_nuis_hist_ps.png",
+       plot = nuis_hist_plot("ps", ARM_LABELS[c("causal_forest", "dr_random_forest")],
+                             ARM_COLOURS, "Estimated propensities; the truth is 0.5 (dashed)",
+                             vline = 0.5)),
+  list(tab = "Marginal mean",
+       plot = nuis_hist_plot("m", c(causal_forest = OUTCOME_LABELS[["m"]]),
+                             OUTCOME_COLOURS,
+                             "Estimated marginal mean against the true (p0 + p1) / 2")),
+  list(tab = "Control risk",
+       plot = nuis_hist_plot("mu0", c(dr_random_forest = OUTCOME_LABELS[["mu0"]]),
+                             OUTCOME_COLOURS,
+                             "Estimated control-arm risk against the true p0")),
+  list(tab = "Treated risk",
+       plot = nuis_hist_plot("mu1", c(dr_random_forest = OUTCOME_LABELS[["mu1"]]),
+                             OUTCOME_COLOURS,
+                             "Estimated treated-arm risk against the true p1"))
+))
 ```
 
 ## Results coverage
@@ -451,22 +541,12 @@ causal forest's marginal mean against (p0 + p1) / 2.
 ```{r nuisance-plots, results="asis", fig.height=10}
 nuis <- filter(metrics, model %in% c("causal_forest", "dr_random_forest"))
 
-# one series per outcome model in place of the arm: the CF's marginal mean and
-# DR-RF's two per-arm forests
-OUTCOME_LABELS <- c(m_rmse   = "CF: marginal mean m(x)",
-                    mu0_rmse = "DR-RF: control arm μ0(x)",
-                    mu1_rmse = "DR-RF: treated arm μ1(x)")
-# the CF and DR-RF arm colours, and Safe's wine (a darker DR-RF rose) for the
-# treated arm, so the two DR-RF forests read as one learner
-OUTCOME_COLOURS <- setNames(
-  c(ARM_COLOURS[ARM_LABELS[c("causal_forest", "dr_random_forest")]],
-    as.character(paletteer::paletteer_d("rcartocolor::Safe")[9])),
-  OUTCOME_LABELS
-)
+# one series per outcome model (OUTCOME_LABELS) in place of the arm
 outcome <- nuis %>%
-  select(scenario, n, hte_mult, run, all_of(names(OUTCOME_LABELS))) %>%
-  pivot_longer(all_of(names(OUTCOME_LABELS)), names_to = "model",
-               values_to = "value") %>%
+  select(scenario, n, hte_mult, run,
+         all_of(paste0(names(OUTCOME_LABELS), "_rmse"))) %>%
+  pivot_longer(-c(scenario, n, hte_mult, run), names_to = "model",
+               names_pattern = "(.*)_rmse", values_to = "value") %>%
   filter(!is.na(value))
 
 plot_tabs(list(
