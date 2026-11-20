@@ -119,7 +119,12 @@ only the SuperLearner arm uses a future plan.
 - `bin_snr_population.RDS`: per (scenario, `hte_mult`), bW, the ATE, SD(τ),
   SD(noise), SNR and the share clamped.
 - `bin_snr_metrics.RDS`: one row per scenario × n × `hte_mult` × run × model,
-  with `cate_metrics()` and `hte_test_metrics()`.
+  with `cate_metrics()` and `hte_test_metrics()`, and the RMSE against the
+  truth of the nuisances the arm is built on: `ps_rmse` (propensity, against
+  0.5), `mu0_rmse` / `mu1_rmse` (per-arm outcome models, against p0 / p1) and
+  `m_rmse` (marginal mean, against (p0 + p1) / 2). Only `causal_forest`
+  (propensity, marginal mean) and `dr_random_forest` (propensity, per-arm
+  outcome models) have them; the rest are NA.
 - `bin_snr_ratios.RDS`: each run's RMSE of every other arm divided by the same
   run's `causal_forest` RMSE, summarised per cell (median, IQR, geometric mean
   with the MCSE of the mean log ratio, and the share of runs where the arm did

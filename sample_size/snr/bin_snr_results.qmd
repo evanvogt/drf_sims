@@ -424,6 +424,44 @@ plot_tabs(lapply(power_specs, function(s) {
 }))
 ```
 
+## Nuisance models
+
+The RMSE against the truth of the first-stage estimates each arm is built on,
+over all n units of a run, mean ± 95% CI (1.96 × MCSE). W is drawn
+Bernoulli(0.5), so the true propensity is 0.5 everywhere and the propensity
+RMSE is pure estimation noise. The causal forest's nuisances are grf's own
+propensity and the marginal mean E[Y | X] = (p0 + p1) / 2 that it centres on.
+DR-RandomForest's are `nuisance_rf()`'s propensity (trimmed to [0.05, 0.95])
+and per-arm outcome forests, which T-RandomForest shares. A unit's own-arm
+prediction is out-of-bag; the other arm's comes from a forest that never saw
+it, and both enter the pseudo-outcome. The outcome errors are on the risk
+scale, so read them against SD(τ) in the population table. The n = 500 cells
+of a run share W, X and the control-arm outcomes, and p0 depends on neither
+the scenario nor the effect modifiers, so the propensity and control-risk fits
+are the same in every n = 500 cell of a run: those two are flat across the
+left panel by construction, and only the treated-risk and marginal-mean errors
+move with the HTE multiplier.
+
+```{r nuisance-plots, results="asis", fig.height=10}
+nuis_specs <- list(
+  list(tab = "Propensity", col = "ps_rmse", save = "bin_snr_nuis_ps.png",
+       title = "RMSE of the propensity, against the true 0.5"),
+  list(tab = "Control risk μ0", col = "mu0_rmse",
+       title = "RMSE of the control-arm outcome model, against p0"),
+  list(tab = "Treated risk μ1", col = "mu1_rmse",
+       title = "RMSE of the treated-arm outcome model, against p1"),
+  list(tab = "Marginal mean", col = "m_rmse",
+       title = "RMSE of the marginal outcome model, against (p0 + p1) / 2")
+)
+# metric_est() drops the all-NA cells, so each tab shows only the arms with that model
+nuis <- filter(metrics, model %in% c("causal_forest", "dr_random_forest"))
+plot_tabs(lapply(nuis_specs, function(s) {
+  list(tab = s$tab, save = s$save,
+       plot = snr_plot(metric_est(nuis, s$col), ylab = "Mean RMSE",
+                       title = s$title))
+}))
+```
+
 ## DR-RandomForest against the DR-semi-oracle
 
 Paired per-run differences, DR-RandomForest minus DR-semi-oracle (true

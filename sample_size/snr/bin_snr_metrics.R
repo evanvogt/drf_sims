@@ -2,7 +2,8 @@
 # title: metrics - correlated binary SNR check
 ##########
 # As ../binary/bin_corr_metrics.R for the SNR_MODELS arms, plus each run's RMSE
-# ratio to causal_forest (below 1 = better), as in competing_risk/snr/.
+# ratio to causal_forest (below 1 = better), as in competing_risk/snr/, and the
+# RMSE against the truth of the nuisance estimates each arm is built on.
 #
 # The SNR on x is SD(tau) / sqrt(E[p(1 - p)]), as in rel_eff_snr.R, but from the
 # clamped truth over one seeded draw of POP_N covariates (te_moments() knows
@@ -11,7 +12,8 @@
 # Writes to the results folder:
 #   bin_snr_population.RDS  per (scenario, hte_mult): bW, ATE, SD(tau),
 #                           SD(noise), SNR and the share clamped
-#   bin_snr_metrics.RDS     one row per (scenario, n, hte_mult, run, model)
+#   bin_snr_metrics.RDS     one row per (scenario, n, hte_mult, run, model),
+#                           with the nuisance RMSEs (nuisance_metrics())
 #   bin_snr_ratios.RDS      RMSE ratios per (scenario, n, hte_mult, model):
 #                           median, IQR, geometric mean, MCSE of the mean log
 #
@@ -60,6 +62,41 @@ rm(pop_cv)
 message("Population SNR per cell:")
 print(as.data.frame(population), digits = 3)
 
+# ---- nuisance accuracy ----------------------------------------------------------
+
+#' RMSE against the truth of the nuisance estimates one arm is built on, over
+#' all n units
+#'
+#' The true propensity is 0.5 (W ~ rbinom(n, 1, 0.5)) and the true marginal
+#' mean E[Y | X] is (p0 + p1) / 2. causal_forest has grf's own propensity and
+#' marginal mean; dr_random_forest has nuisance_rf()'s propensity (trimmed) and
+#' per-arm outcome forests, with Y1.hat recovered through t_learner_tau(). A
+#' unit's own-arm prediction is OOB, the other arm's comes from a forest that
+#' never saw it, and both enter the pseudo-outcome. Every other arm gets NA:
+#' t_random_forest shares dr_random_forest's fits, the oracles' are the truth,
+#' and dr_semi_oracle's forests are nuisance_rf()'s estimator again.
+nuisance_metrics <- function(model_res, model, sim_res) {
+  tr <- sim_res$truth
+  rmse <- function(est, truth) if (is.null(est)) NA_real_ else sqrt(mean((est - truth)^2))
+  # the oracle's outcome model is the truth, so a mismatch means truth and data are misaligned
+  if (model == "dr_oracle") stopifnot(isTRUE(all.equal(model_res$Y0.hat, tr$p0)))
+  nuis <- switch(model,
+    causal_forest = list(W.hat = model_res$W.hat, m = model_res$Y.hat.cf),
+    dr_random_forest = {
+      rf <- sim_res$nuisances_rf
+      list(W.hat = rf$W.hat, Y0.hat = rf$Y0.hat,
+           Y1.hat = rf$Y0.hat + t_learner_tau(rf, sim_res$data$Y, sim_res$data$W))
+    },
+    list()
+  )
+  tibble(
+    ps_rmse  = rmse(nuis$W.hat, 0.5),
+    mu0_rmse = rmse(nuis$Y0.hat, tr$p0),
+    mu1_rmse = rmse(nuis$Y1.hat, tr$p1),
+    m_rmse   = rmse(nuis$m, (tr$p0 + tr$p1) / 2)
+  )
+}
+
 # ---- per-run metrics ------------------------------------------------------------
 
 message("Reading bin_snr_all.RDS...")
@@ -71,7 +108,8 @@ metrics <- compute_metrics(
   per_model = function(model_res, true_tau, model, sim_res, keys) {
     bind_cols(
       cate_metrics(model_res$tau, true_tau, keys$scenario),
-      hte_test_metrics(model_res, sim_res, model)
+      hte_test_metrics(model_res, sim_res, model),
+      nuisance_metrics(model_res, model, sim_res)
     )
   }
 )
